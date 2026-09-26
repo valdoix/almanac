@@ -402,6 +402,7 @@ export const PANEL_CSS = `
 .almp .timeline .ev::before{content:"";position:absolute;left:-17px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--alm-accent);box-shadow:0 0 0 3px var(--alm-panel)}
 .almp .timeline .ev small{display:block;font:500 10.5px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
 .alm-hudw{width:100%;height:100%;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:linear-gradient(90deg,#1c2146,#3a3060 60%,#6a4a6a);color:#fff;font:500 11.5px/1 var(--alm-font-mono);box-shadow:0 10px 26px -12px rgba(0,0,0,.7);cursor:grab;overflow:hidden;white-space:nowrap}
+.alm-hudw__dim{opacity:.7;font-style:italic}
 .alm-sz{font-size:14px}
 .alm-sz .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
 @media (max-width:560px){.alm-sz .grid{grid-template-columns:1fr}}

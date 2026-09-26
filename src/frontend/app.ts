@@ -32,6 +32,8 @@ export class AlmanacApp {
   codexKind = "";
   editing: string | null = null;
   creator: CreatorUI;
+  status: "nochat" | "waiting" | "stalled" | "ok" = "nochat";
+  hudProblem = "";
 
   constructor(ctx: SpindleFrontendContext, root: HTMLElement) {
     this.ctx = ctx;
@@ -52,6 +54,12 @@ export class AlmanacApp {
     this.ctx.sendToBackend({ chatId: this.view?.chatId, ...msg });
   }
 
+  setStatus(s: AlmanacApp["status"]) {
+    if (s === this.status) return;
+    this.status = s;
+    if (!this.view || s === "nochat") this.render();
+  }
+
   setView(v: any) {
     this.view = v;
     this.render();
@@ -61,7 +69,12 @@ export class AlmanacApp {
     const v = this.view;
     const tabs = `<div class="tabs" role="tablist">${TABS.map((t) => `<button role="tab" data-tab="${t}" aria-selected="${t === this.tab}">${TAB_LABEL[t]}</button>`).join("")}</div>`;
     if (!v) {
-      this.root.innerHTML = `${tabs}<div class="empty">Open a chat to see its Almanac.</div>`;
+      const msg = this.status === "nochat"
+        ? `Open a chat to see its Almanac.`
+        : this.status === "stalled"
+          ? `The Ledger hasn't answered yet. Check that ALMANAC Ledger is enabled in Extensions and has its permissions, then retry.<div class="row" style="justify-content:center;margin-top:10px"><button class="btn primary" data-act="retryState">Retry</button></div>`
+          : `Reading this chat…`;
+      this.root.innerHTML = `${tabs}<div class="empty">${msg}</div>`;
       return;
     }
     let body = "";
@@ -258,7 +271,7 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
 <h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "weekdays: …; months: Name (30), …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 10000)}</label><label class="f">Simulator connection id${txt("simConnection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
 <h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection id${txt("sidecarConnection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label></div>
-<h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]])}</label>${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
+<h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]])}</label>${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${e(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
   }
 
   // -------------------------------------------------------------------------
@@ -290,6 +303,8 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
       case "sessionZero": this.ctx.events.emit("almanac:sessionZero", { chatId: this.view?.chatId }); break;
       case "repairLast": this.send({ type: "repairLast" }); break;
       case "rebuild": this.send({ type: "rebuild" }); break;
+      case "retryState": this.ctx.events.emit("almanac:retryState", {}); break;
+      case "grantPanels": this.ctx.events.emit("almanac:grantPanels", {}); break;
       case "edit": this.editing = id ?? null; this.render(); break;
       case "cancelEdit": this.editing = null; this.render(); break;
       case "saveRecord": {

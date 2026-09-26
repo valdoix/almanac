@@ -1,0 +1,576 @@
+<title>Almanac Drawer Directions</title>
+<meta name="description" content="Three redesigns of the ALMANAC Ledger drawer navigation, as clickable mockups.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Gloock&family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=Manrope:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=Nunito:wght@400;600;800&family=Schibsted+Grotesk:wght@400;500;700&family=Syne:wght@500;700;800&display=swap">
+<style>
+/* ── Showcase chrome: a single dark look, matching the Lumiverse host ── */
+:root{
+  color-scheme:dark;
+  --bg:#111216; --bg-2:#17181d; --ink:#ecebe6; --muted:#9b9990; --line:#2a2b31; --hi:#e9c77b;
+  --sans:"Schibsted Grotesk","Segoe UI",system-ui,sans-serif; --mono:"DM Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);padding-inline:16px;padding-block:0 64px}
+.wrap{max-width:1320px;margin:0 auto}
+header.top{padding-block:48px 28px;display:grid;gap:14px;max-width:760px}
+.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+h1{font:700 clamp(30px,5vw,46px)/1.05 var(--sans);letter-spacing:-.02em;margin:0;text-wrap:balance}
+.lede{color:#c9c7bf;margin:0;max-width:64ch}
+.problem{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.problem .was{font:500 12px/1 var(--mono);padding:9px 12px;border-radius:10px;background:#1d1f25;border:1px solid var(--line);color:#a9a69c;white-space:nowrap;overflow:hidden;max-width:300px;
+  -webkit-mask:linear-gradient(90deg,#000 80%,transparent);mask:linear-gradient(90deg,#000 80%,transparent)}
+.problem small{color:var(--muted)}
+section.dir{border-top:1px solid var(--line);padding-block:40px;display:grid;grid-template-columns:minmax(0,1fr);gap:26px}
+.dir>div:first-child{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:8px 40px;align-items:start}
+.dir>div:first-child>ul,.dir>div:first-child>.swatches,.dir>div:first-child>.faces{grid-column:2}
+.dir>div:first-child>ul{grid-row:1/span 3}
+@media (max-width:860px){.dir>div:first-child{grid-template-columns:1fr}.dir>div:first-child>*{grid-column:1!important;grid-row:auto!important}}
+.dir .num{font:500 11px/1 var(--mono);letter-spacing:.18em;color:var(--muted);text-transform:uppercase}
+.dir h2{margin:10px 0 8px;font:700 30px/1.1 var(--sans);letter-spacing:-.01em}
+.dir .pitch{margin:0 0 16px;color:#d2cfc6}
+.dir ul{margin:0;padding-left:18px;display:grid;gap:8px;color:#bdbab1}
+.dir ul b{color:var(--ink);font-weight:500}
+.swatches{display:flex;gap:6px;margin-top:18px;flex-wrap:wrap}
+.swatches i{width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,.12)}
+.faces{margin-top:10px;font:500 11px/1.5 var(--mono);color:var(--muted)}
+.frames{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+.frames>div{flex:0 0 auto;width:min(400px,100%)}
+.frames>div:has(.small){width:min(300px,100%)}
+.fcap{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;display:flex;gap:8px;align-items:center}
+.fcap em{font-style:normal;color:var(--hi)}
+.try{font:500 11px/1 var(--mono);color:var(--hi);margin:0 0 14px}
+.cmp{border-top:1px solid var(--line);padding-block:40px}
+.cmp h2{font:700 24px/1.2 var(--sans);margin:0 0 16px}
+.tbl{overflow-x:auto}
+table.c{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+table.c th,table.c td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+table.c th{font:500 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+table.c td:first-child{color:var(--muted)}
+.note{color:var(--muted);font-size:13px;margin-top:14px;max-width:80ch}
+
+/* ── Drawer frame (a Lumiverse side drawer, 400 × 720) ── */
+.frame{position:relative;width:100%;height:720px;border-radius:16px;overflow:hidden;background:#15171c;border:1px solid #2b2d34;
+  box-shadow:0 40px 80px -40px rgba(0,0,0,.9),0 0 0 6px #0c0d10}
+.frame.small{height:460px}
+.host{height:40px;display:flex;align-items:center;gap:10px;padding:0 14px;background:#1b1d23;border-bottom:1px solid #2b2d34;font:500 12px/1 var(--sans);color:#aeb0b8}
+.host .dots{display:flex;gap:5px}.host .dots i{width:8px;height:8px;border-radius:50%;background:#34363e}
+.host b{color:#e4e5ea;font-weight:500}
+.host .x{margin-left:auto;opacity:.6}
+.app{position:absolute;inset:40px 0 0 0;overflow:hidden}
+.frame button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.frame button:focus-visible,.frame input:focus-visible{outline:2px solid var(--acc,#e9c77b);outline-offset:2px}
+.scroll{overflow-y:auto;scrollbar-width:thin}
+svg.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* ── Shared page content (each design re-skins it through its own tokens) ── */
+.ct{color:var(--ink);font-family:var(--body);font-size:13.5px;line-height:1.5}
+.ct .sec{margin:18px 0 8px;font:500 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px}
+.ct .sec::after{content:"";flex:1;height:1px;background:var(--line)}
+.ct .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.ct .stack{display:grid;gap:8px}
+.ct .muted{color:var(--muted)}
+.ct .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:var(--panel-2);border:1px solid var(--line);font:500 10.5px/1.3 var(--mono);color:var(--muted)}
+.ct .pill.warn{color:var(--warn);border-color:color-mix(in oklab,var(--warn) 40%,var(--line))}
+.ct .pill.good{color:var(--good);border-color:color-mix(in oklab,var(--good) 40%,var(--line))}
+.ct .pills{display:flex;flex-wrap:wrap;gap:5px}
+.ct .btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.ct .btn{padding:7px 11px;border-radius:calc(var(--r) - 4px);background:var(--panel-2);border:1px solid var(--line);font:500 11.5px/1 var(--mono);color:var(--ink)}
+.ct .btn.pri{background:var(--acc);color:var(--on-acc);border-color:transparent}
+.ct .sky{border-radius:var(--r);padding:14px;color:#fff;position:relative;overflow:hidden;
+  background:linear-gradient(170deg,#10163a 0%,#2b2a5a 55%,#5a3f6e 100%)}
+.ct .sky::before{content:"";position:absolute;inset:0;opacity:.35;background:repeating-linear-gradient(105deg,transparent 0 9px,rgba(200,215,255,.35) 9px 10px,transparent 10px 23px);pointer-events:none}
+.ct .sky .t{position:relative;font:400 24px/1.1 var(--display);margin:8px 0 10px}
+.ct .sky .g{position:relative;display:flex;flex-wrap:wrap;gap:5px}
+.ct .sky .g span{padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);font:500 10.5px/1.2 var(--mono)}
+.ct .fc{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;text-align:center}
+.ct .fc div{display:grid;gap:2px;padding:6px 0;border-radius:8px;background:var(--panel-2)}
+.ct .fc small{font:500 9.5px/1 var(--mono);color:var(--muted)}
+.ct .fc b{font:600 12px/1 var(--mono)}
+.ct .fc span{font-size:13px;line-height:1.1}
+.ct .who{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center}
+.ct .av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:700 14px/1 var(--display);color:#fff;background:var(--c);box-shadow:0 0 0 2px var(--panel),0 0 0 3.5px color-mix(in oklab,var(--c) 55%,transparent)}
+.ct .nm{font-weight:600}
+.ct .mood{font-size:12px;color:var(--muted)}
+.ct .meter{display:grid;grid-template-columns:52px 1fr;gap:6px;align-items:center;font:500 10px/1 var(--mono);color:var(--muted);margin-top:6px}
+.ct .meter i{display:block;height:6px;border-radius:9px;background:var(--panel-2);position:relative;overflow:hidden}
+.ct .meter i::after{content:"";position:absolute;inset:0;width:calc(var(--v)*100%);background:var(--c,var(--acc));border-radius:9px}
+.ct ul.ls{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.ct ul.ls li{display:flex;gap:8px;align-items:baseline}
+.ct ul.ls li::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--acc);transform:translateY(-1px)}
+.ct ul.ls li.due::before{background:var(--warn)}
+.ct .bar{display:flex;height:10px;border-radius:9px;overflow:hidden;background:var(--panel-2)}
+.ct .graph{width:100%;height:auto;display:block}
+.ct .graph text{font:600 11px var(--body);fill:var(--ink)}
+.ct .graph .lab{font:500 9.5px var(--mono);fill:var(--muted)}
+.ct table.km{width:100%;border-collapse:collapse;font-size:12.5px}
+.ct table.km th,.ct table.km td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:center}
+.ct table.km td:first-child,.ct table.km th:first-child{text-align:left}
+.ct .k{font:600 11px/1 var(--mono)}.ct .k.y{color:var(--good)}.ct .k.q{color:var(--warn)}.ct .k.n{color:var(--bad)}.ct .k.u{color:var(--muted);opacity:.6}
+.ct .ring{--n:3;--of:6;width:42px;height:42px;border-radius:50%;flex:none;display:grid;place-items:center;font:600 11px/1 var(--mono);
+  background:radial-gradient(closest-side,var(--panel) 72%,transparent 74%),conic-gradient(var(--c,var(--bad)) calc(var(--n)/var(--of)*100%),var(--panel-2) 0)}
+.ct .row{display:flex;gap:10px;align-items:center}
+.ct .grow{flex:1;min-width:0}
+.ct .rec .hd{display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap}
+.ct .kind{font:500 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--acc)}
+.ct .field{display:grid;gap:4px;font:500 10.5px/1.3 var(--mono);color:var(--muted)}
+.ct .field span.in{display:block;padding:8px 10px;border-radius:calc(var(--r) - 4px);border:1px solid var(--line);background:var(--panel-2);font:400 13px/1.4 var(--body);color:var(--ink)}
+.ct .tog{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.ct .tog:last-child{border-bottom:0}
+.ct .sw{width:34px;height:20px;border-radius:99px;background:var(--acc);position:relative;flex:none}
+.ct .sw::after{content:"";position:absolute;top:3px;right:3px;width:14px;height:14px;border-radius:50%;background:#fff}
+.ct .sw.off{background:var(--panel-2);border:1px solid var(--line)}.ct .sw.off::after{right:auto;left:3px;background:var(--muted)}
+.ct .tl{position:relative;display:grid;gap:12px;padding-left:18px}
+.ct .tl::before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:var(--line)}
+.ct .tl div{position:relative}
+.ct .tl div::before{content:"";position:absolute;left:-17px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--panel);border:2px solid var(--acc)}
+.ct .tl small{display:block;font:500 10px/1.3 var(--mono);color:var(--muted)}
+.ct .feed{display:grid;gap:6px}
+.ct .feed div{display:grid;grid-template-columns:34px 1fr;gap:8px;align-items:center;padding:7px 8px;border-radius:calc(var(--r) - 4px);background:var(--panel-2)}
+.ct .feed div.in{outline:1px solid color-mix(in oklab,var(--good) 55%,transparent)}
+.ct .feed b.sc{font:600 12px/1 var(--mono);text-align:center;color:var(--muted)}
+.ct .feed div.in b.sc{color:var(--good)}
+
+/* ═════════ 1 · BOOKMARKS ═════════ */
+.d1{--bg:#1b1612;--panel:#241e18;--panel-2:#2d261f;--ink:#efe3cc;--muted:#a8977c;--line:#3b3127;--acc:#d6aa5b;--on-acc:#1b1612;
+  --good:#8fbf7a;--warn:#e0a54a;--bad:#e07a6a;--r:8px;--display:"IM Fell English",Georgia,serif;--body:"Newsreader",Georgia,serif}
+.d1 .app{display:grid;grid-template-columns:62px minmax(0,1fr);background:#140f0c}
+.d1 .spine{position:relative;padding:10px 0 12px;background:linear-gradient(90deg,#120d0a,#1c1510 80%,#0d0a08);border-right:1px solid #2c231b;display:flex;flex-direction:column;gap:10px}
+.d1 .spine .grp{display:grid;gap:3px}
+.d1 .rib{--rc:#a3413a;position:relative;display:grid;justify-items:center;gap:3px;padding:6px 0 5px;margin-right:6px;color:#b9a88d;border-radius:0 6px 6px 0;transition:margin .18s,background .18s,color .18s}
+.d1 .rib::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:3px;border-radius:0 3px 3px 0;background:var(--rc);opacity:.85}
+.d1 .rib span{font:400 9.5px/1 "IM Fell English SC",Georgia,serif;letter-spacing:.04em}
+.d1 .rib:hover{color:#f3e6ce;background:rgba(255,255,255,.03)}
+.d1 .rib[aria-current="page"]{margin-right:-1px;color:#1b1612;background:var(--rc);z-index:2;box-shadow:4px 3px 10px -4px rgba(0,0,0,.8)}
+.d1 .rib[aria-current="page"]::before{display:none}
+.d1 .rib[aria-current="page"]::after{content:"";position:absolute;right:-9px;top:0;bottom:0;width:10px;background:var(--rc);clip-path:polygon(0 0,100% 0,35% 50%,100% 100%,0 100%)}
+.d1 .page{position:relative;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:
+  radial-gradient(120% 60% at 100% 0,rgba(214,170,91,.06),transparent 60%),var(--bg)}
+.d1 .rh{padding:14px 18px 4px 22px;display:flex;justify-content:space-between;font:400 10px/1 "IM Fell English SC",Georgia,serif;letter-spacing:.2em;color:var(--muted)}
+.d1 .folio{padding:0 18px 0 22px;display:flex;align-items:baseline;gap:10px;border-bottom:1px double var(--line);padding-bottom:10px;box-shadow:0 3px 0 -2px var(--line)}
+.d1 .folio h3{margin:0;font:400 32px/1.1 var(--display);color:#f6ead2}
+.d1 .folio em{font:italic 400 16px/1 var(--display);color:var(--acc)}
+.d1 .folio small{margin-left:auto;font:italic 400 12px/1.2 var(--body);color:var(--muted);text-align:right}
+.d1 .body{padding:4px 18px 18px 22px}
+.d1 .turn{display:flex;justify-content:space-between;align-items:center;padding:9px 16px 10px 22px;border-top:1px solid var(--line);background:#18130f;font:italic 400 13px/1 var(--display);color:var(--muted)}
+.d1 .turn button{display:flex;gap:6px;align-items:center;color:#d8c7a6}
+.d1 .turn button:hover{color:var(--acc)}
+.d1 .turn .pg{font:400 10px/1 "IM Fell English SC",serif;letter-spacing:.2em}
+.d1 .ct .card{background:linear-gradient(var(--panel),#211b16);box-shadow:inset 0 0 0 1px rgba(255,255,255,.015)}
+.d1 .ct .sec{font:400 12px/1 "IM Fell English SC",Georgia,serif;letter-spacing:.14em;color:var(--acc)}
+.d1 .ct .sec::before{content:"❧";font-size:13px}
+.d1 .ct .sky{border:1px solid #4a3c2c;box-shadow:inset 0 0 0 4px rgba(20,15,12,.35)}
+.d1 .empty{display:grid;place-items:center;text-align:center;padding:40px 26px;color:var(--muted)}
+.d1 .empty .orn{font:400 46px/1 var(--display);color:var(--acc);opacity:.7}
+.d1 .empty h4{margin:12px 0 6px;font:400 22px/1.2 var(--display);color:var(--ink)}
+.d1 .empty p{margin:0;font:italic 400 14px/1.5 var(--body)}
+.d1 .spine.dim .rib{opacity:.35;pointer-events:none}
+
+/* ═════════ 2 · ORRERY ═════════ */
+.d2{--bg:#090c1d;--panel:rgba(255,255,255,.045);--panel-2:rgba(255,255,255,.075);--ink:#eef0ff;--muted:#99a2c6;--line:rgba(190,200,255,.12);--acc:#7fe0d2;--on-acc:#062220;
+  --good:#7fe0a8;--warn:#ffc46b;--bad:#ff8fa3;--r:16px;--display:"Syne","Segoe UI",sans-serif;--body:"Manrope","Segoe UI",sans-serif}
+.d2 .app{background:radial-gradient(90% 50% at 50% 115%,rgba(127,224,210,.12),transparent 70%),var(--bg);display:grid;grid-template-rows:auto minmax(0,1fr)}
+.d2 .skyhead{position:relative;padding:14px 16px 12px;background:linear-gradient(175deg,#141a44 0%,#2e2c62 60%,#4a3a6e 100%);overflow:hidden}
+.d2 .skyhead::before{content:"";position:absolute;inset:0;background:
+  radial-gradient(1px 1px at 12% 20%,#fff,transparent),radial-gradient(1px 1px at 80% 30%,#fff,transparent),radial-gradient(1.5px 1.5px at 62% 12%,#fff,transparent),radial-gradient(1px 1px at 35% 45%,#fffc,transparent),
+  repeating-linear-gradient(105deg,transparent 0 11px,rgba(200,215,255,.18) 11px 12px,transparent 12px 26px);opacity:.8}
+.d2 .skyhead>*{position:relative}
+.d2 .sh1{display:flex;align-items:flex-end;gap:12px}
+.d2 .clock{font:800 38px/0.9 var(--display);letter-spacing:-.02em;color:#fff}
+.d2 .date{font:500 11px/1.35 var(--mono);color:#c8ccf0}
+.d2 .moon{margin-left:auto;width:36px;height:36px;border-radius:50%;background:radial-gradient(circle at 62% 40%,#f5edd8 0 45%,#b8b0a0 70%);box-shadow:-9px 0 0 0 rgba(20,26,68,.85) inset,0 0 24px rgba(245,237,216,.35)}
+.d2 .place{margin-top:8px;font:500 11.5px/1.3 var(--body);color:#dfe2ff;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.d2 .place span{padding:3px 8px;border-radius:99px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14)}
+.d2 .seg{display:flex;gap:4px;margin-top:12px;padding:4px;border-radius:14px;background:rgba(6,9,26,.45);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px)}
+.d2 .seg button{flex:1;display:flex;justify-content:center;align-items:center;gap:6px;padding:8px 4px;border-radius:10px;font:600 12px/1 var(--body);color:#aab2d8}
+.d2 .seg button svg{width:15px;height:15px}
+.d2 .seg button[aria-current="page"]{background:rgba(255,255,255,.14);color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.16) inset}
+.d2 .gname{font:700 10px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--acc);margin:14px 0 0}
+.d2 .main{padding:4px 16px 110px}
+.d2 .main h3{font:700 22px/1.1 var(--display);margin:10px 0 2px}
+.d2 .dock{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:flex-end;gap:2px;padding:6px 8px;border-radius:26px;
+  background:rgba(22,27,58,.82);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(14px);box-shadow:0 18px 40px -12px rgba(0,0,0,.8);z-index:5}
+.d2 .pl{width:62px;display:grid;justify-items:center;gap:4px;padding:6px 0 4px;border-radius:18px;color:#a3abd3;font:600 10px/1 var(--body)}
+.d2 .pl .orb{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,color-mix(in oklab,var(--pc) 70%,#fff),var(--pc) 60%,color-mix(in oklab,var(--pc) 60%,#000));color:#0b1030;box-shadow:0 0 0 0 var(--pc);transition:box-shadow .2s}
+.d2 .pl .orb svg{width:16px;height:16px;stroke-width:1.9}
+.d2 .pl.on{color:#fff}
+.d2 .pl.on .orb{box-shadow:0 0 0 3px rgba(9,12,29,.9),0 0 0 5px var(--pc),0 0 18px var(--pc)}
+.d2 .sun{width:58px;height:58px;margin:0 4px 2px;border-radius:50%;display:grid;place-items:center;color:#3a1c00;transform:translateY(-12px);
+  background:radial-gradient(circle at 38% 32%,#fff3c4,#ffc46b 45%,#f08a3c);box-shadow:0 0 0 4px rgba(9,12,29,.95),0 0 26px rgba(255,196,107,.6)}
+.d2 .sun.on{box-shadow:0 0 0 4px rgba(9,12,29,.95),0 0 0 6px #ffc46b,0 0 34px rgba(255,196,107,.9)}
+.d2 .sun small{display:block;font:800 9px/1 var(--display);letter-spacing:.1em;margin-top:1px}
+.d2 .veil{position:absolute;inset:0;background:rgba(5,7,18,.55);backdrop-filter:blur(2px);z-index:4}
+.d2 .orbit{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);width:300px;height:150px;z-index:6}
+.d2 .orbit::before{content:"";position:absolute;left:10px;right:10px;top:22px;height:260px;border-radius:50%;border:1px dashed rgba(190,200,255,.25)}
+.d2 .orbit .ttl{position:absolute;left:0;right:0;bottom:6px;text-align:center;font:700 10px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--pc)}
+.d2 .moonb{position:absolute;width:88px;display:grid;justify-items:center;gap:6px;font:700 12px/1.1 var(--body);color:#fff;animation:rise .22s ease-out both}
+.d2 .moonb .m{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:rgba(30,36,78,.95);border:1px solid var(--pc);color:var(--pc);box-shadow:0 0 18px -4px var(--pc)}
+.d2 .moonb:hover .m{background:var(--pc);color:#0b1030}
+.d2 .moonb small{font:500 9.5px/1.2 var(--mono);color:var(--muted)}
+@keyframes rise{from{opacity:0;transform:translateY(14px) scale(.9)}}
+@media (prefers-reduced-motion:reduce){.d2 .moonb{animation:none}}
+.d2 .ct .card{backdrop-filter:blur(6px)}
+.d2 .ct .sec{color:#b7bfe6}
+.d2 .empty{display:grid;justify-items:center;text-align:center;padding:50px 30px 0}
+.d2 .empty .dial{width:120px;height:120px;border-radius:50%;border:1px dashed rgba(190,200,255,.3);display:grid;place-items:center;position:relative}
+.d2 .empty .dial::before{content:"";width:14px;height:14px;border-radius:50%;background:#ffc46b;box-shadow:0 0 22px #ffc46b}
+.d2 .empty .dial::after{content:"";position:absolute;top:-5px;left:50%;width:10px;height:10px;border-radius:50%;background:#7fe0d2;box-shadow:0 0 12px #7fe0d2;transform-origin:0 65px;animation:orb 8s linear infinite}
+@keyframes orb{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.d2 .empty .dial::after{animation:none}}
+.d2 .empty h4{margin:18px 0 6px;font:700 20px/1.2 var(--display);color:#fff}
+.d2 .empty p{margin:0;color:var(--muted);font-size:13.5px}
+
+/* ═════════ 3 · TAROT DECK ═════════ */
+.d3{--bg:#1e1429;--panel:#fffaf0;--panel-2:#f4ead8;--ink:#2b1d36;--muted:#7d6c83;--line:#e7d9c1;--acc:#e8514e;--on-acc:#fff;
+  --good:#1f9469;--warn:#c98410;--bad:#d13f52;--r:14px;--display:"Gloock",Georgia,serif;--body:"Nunito","Segoe UI",sans-serif;
+  --s1:#e8514e;--s2:#2aa198;--s3:#7b5cff;--s4:#e3a21a}
+.d3 .app{background:radial-gradient(120% 70% at 50% 0,#2d1f3d,#1a1124 70%);color:#f4ecff;font-family:var(--body)}
+.d3 .home{position:absolute;inset:0;padding:14px 14px 20px}
+.d3 .hbar{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.d3 .hbar h3{margin:0;font:400 22px/1 var(--display);color:#fff}
+.d3 .hbar small{display:block;font:600 11px/1.3 var(--body);color:#b9a8cc;margin-top:3px}
+.d3 .find{margin-left:auto;display:flex;align-items:center;gap:6px;padding:8px 11px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font:600 12px/1 var(--body);color:#e6dcf3}
+.d3 .find kbd{font:500 10px/1 var(--mono);padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.12)}
+.d3 .feature{width:100%;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;text-align:left;padding:12px;border-radius:16px;color:#fff;margin-bottom:6px;
+  background:linear-gradient(135deg,#1c2150,#4a3470 70%,#8a4d6a);box-shadow:0 10px 24px -12px rgba(0,0,0,.8),inset 0 0 0 1px rgba(255,255,255,.12)}
+.d3 .feature .ro{font:400 26px/1 var(--display);color:#ffd98a;width:34px;text-align:center}
+.d3 .feature b{display:block;font:400 19px/1.1 var(--display)}
+.d3 .feature small{display:block;font:600 11px/1.35 var(--body);color:#d8cdee;margin-top:3px}
+.d3 .feature .go{font:700 11px/1 var(--mono);padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.14)}
+.d3 .suit{display:flex;align-items:center;gap:8px;margin:14px 2px 7px;font:800 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--sc)}
+.d3 .suit::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,color-mix(in oklab,var(--sc) 50%,transparent),transparent)}
+.d3 .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.d3 .tc{position:relative;aspect-ratio:5/6;max-width:100%;border-radius:12px;background:var(--panel);color:var(--ink);display:grid;grid-template-rows:auto 1fr auto;padding:7px 8px 8px;text-align:left;
+  box-shadow:0 8px 18px -10px rgba(0,0,0,.9),inset 0 0 0 1px rgba(0,0,0,.04);transition:transform .16s ease}
+.d3 .tc::before{content:"";position:absolute;inset:4px;border-radius:9px;border:1px solid color-mix(in oklab,var(--sc) 35%,transparent);pointer-events:none}
+.d3 .tc:hover{transform:translateY(-3px) rotate(-1deg)}
+.d3 .tc .ro{font:400 12px/1 var(--display);color:var(--sc)}
+.d3 .tc .gl{display:grid;place-items:center}
+.d3 .tc .gl i{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklab,var(--sc) 14%,#fff);color:var(--sc)}
+.d3 .tc .gl svg{width:22px;height:22px}
+.d3 .tc b{font:400 14px/1 var(--display)}
+.d3 .tc small{display:block;font:700 9.5px/1.2 var(--body);color:var(--muted);margin-top:3px}
+.d3 .tc .badge{position:absolute;top:6px;right:7px;min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:var(--sc);color:#fff;font:800 10px/17px var(--body);text-align:center}
+.d3 .view{position:absolute;inset:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+.d3 .vbar{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.d3 .back{display:flex;align-items:center;gap:4px;padding:7px 10px 7px 7px;border-radius:10px;background:rgba(255,255,255,.08);font:700 12px/1 var(--body);color:#eadff7}
+.d3 .vtitle{min-width:0}
+.d3 .vtitle b{display:block;font:400 20px/1 var(--display);color:#fff}
+.d3 .vtitle small{font:800 9.5px/1 var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--sc)}
+.d3 .vbar .find{padding:8px}
+.d3 .sheet{margin:0 10px;border-radius:18px 18px 12px 12px;background:var(--panel);box-shadow:0 20px 40px -20px rgba(0,0,0,.9),inset 0 3px 0 var(--sc);padding:4px 14px 16px}
+.d3 .hand{position:relative;height:84px;display:flex;justify-content:center;align-items:flex-end;gap:0;padding-bottom:8px}
+.d3 .mc{--rot:0deg;width:58px;height:74px;margin:0 -5px;border-radius:9px;background:var(--panel);color:var(--ink);display:grid;justify-items:center;align-content:center;gap:4px;
+  transform:rotate(var(--rot)) translateY(var(--y,8px));transform-origin:50% 120%;box-shadow:0 6px 14px -6px rgba(0,0,0,.9);border:2px solid transparent;transition:transform .16s}
+.d3 .mc svg{width:18px;height:18px;color:var(--sc)}
+.d3 .mc span{font:400 10px/1 var(--display)}
+.d3 .mc:hover{--y:0px}
+.d3 .mc[aria-current="page"]{--y:-6px;border-color:var(--sc);z-index:2}
+.d3 .mc.deck{background:repeating-linear-gradient(45deg,#3a2754 0 6px,#44305f 6px 12px);color:#ffd98a;border-color:#ffd98a55}
+.d3 .mc.deck svg{color:#ffd98a}
+.d3 .mc.deck span{color:#ffd98a}
+.d3 .pal{position:absolute;inset:0;z-index:9;background:rgba(14,8,22,.7);backdrop-filter:blur(3px);padding:60px 16px 16px}
+.d3 .pbox{background:var(--panel);border-radius:16px;overflow:hidden;box-shadow:0 30px 60px -20px #000}
+.d3 .pbox input{width:100%;border:0;border-bottom:1px solid var(--line);padding:14px 16px;font:600 15px/1 var(--body);background:transparent;color:var(--ink);outline:none}
+.d3 .pbox .res{max-height:390px;overflow:auto;padding:6px}
+.d3 .pbox .res button{width:100%;display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;text-align:left;padding:8px 10px;border-radius:10px;color:var(--ink)}
+.d3 .pbox .res button:hover,.d3 .pbox .res button.sel{background:var(--panel-2)}
+.d3 .pbox .res i{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:color-mix(in oklab,var(--sc) 15%,#fff);color:var(--sc)}
+.d3 .pbox .res i svg{width:16px;height:16px}
+.d3 .pbox .res b{font:400 15px/1 var(--display)}
+.d3 .pbox .res small{font:700 10px/1 var(--body);color:var(--muted)}
+.d3 .pbox .res em{font:800 9px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;font-style:normal;color:var(--sc)}
+.d3 .pbox .hint{padding:8px 14px;border-top:1px solid var(--line);font:500 10.5px/1 var(--mono);color:var(--muted)}
+.d3 .ct .card{background:#fff;box-shadow:0 1px 0 var(--line)}
+.d3 .ct .sec{font:800 10px/1 var(--body);letter-spacing:.18em;color:var(--sc,var(--acc))}
+.d3 .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px}
+.d3 .stackd{position:relative;width:110px;height:140px;margin:0 auto 18px}
+.d3 .stackd i{position:absolute;inset:0;border-radius:12px;background:repeating-linear-gradient(45deg,#3a2754 0 7px,#46315f 7px 14px);border:2px solid #ffd98a66;box-shadow:0 10px 20px -10px #000}
+.d3 .stackd i:nth-child(1){transform:rotate(-9deg) translateX(-10px)}.d3 .stackd i:nth-child(2){transform:rotate(5deg) translateX(8px)}
+.d3 .stackd i:nth-child(3){display:grid;place-items:center;font:400 34px/1 var(--display);color:#ffd98a}
+.d3 .empty h4{margin:0 0 6px;font:400 22px/1.2 var(--display);color:#fff}
+.d3 .empty p{margin:0;color:#b9a8cc;font-size:13.5px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">ALMANAC Ledger · drawer redesign</span>
+    <h1>Three ways to reach thirteen pages in a narrow drawer</h1>
+    <p class="lede">The drawer has 13 pages (Now, Cast, Bonds, Knowledge, Codex, Chronicle, Timeline, World, Lore, Creator, Recall, Craft and Settings) in a panel about 400px wide. One scrolling row of tabs can't hold them, so half the pages are hidden off the right edge. Each direction below groups them the same way and solves the problem differently. Every mockup is clickable.</p>
+    <div class="problem"><span class="was">Now  <b style="color:#ecebe6">Cast</b>  Bonds  Knowledge  Codex  Chr</span><small>Today: the bar is cut off at "Chr…", and there's no hint that more pages exist.</small></div>
+  </header>
+
+  <section class="dir" id="bookmarks">
+    <div>
+      <span class="num">Direction 1</span>
+      <h2>Bookmarks</h2>
+      <p class="pitch">The Almanac as a bound book. Every page has a ribbon on the spine, so all 13 are always visible and one tap away.</p>
+      <ul>
+        <li><b>Ribbon rail.</b> An icon and a short label per page, in four colour-coded bundles: Scene, Story, Library, Engine.</li>
+        <li><b>Folio header.</b> The page title and its chapter numeral, plus a live one-line summary.</li>
+        <li><b>Page turns.</b> Previous and next at the foot, to read the book in order.</li>
+      </ul>
+      <div class="swatches"><i style="background:#1b1612"></i><i style="background:#efe3cc"></i><i style="background:#d6aa5b"></i><i style="background:#a3413a"></i><i style="background:#4d7a55"></i><i style="background:#4b5d9a"></i><i style="background:#b8862e"></i></div>
+      <div class="faces">IM Fell English · Newsreader · DM Mono</div>
+    </div>
+    <div>
+      <p class="try">Try it: tap any ribbon, or turn the page at the bottom.</p>
+      <div class="frames">
+        <div><p class="fcap"><em>●</em> Live · Now</p><div class="frame d1" data-d="1" data-page="now"><div class="host"><span class="dots"><i></i><i></i><i></i></span><b>Almanac</b><span class="x">✕</span></div><div class="app"></div></div></div>
+        <div><p class="fcap"><em>●</em> Live · Bonds</p><div class="frame d1" data-d="1" data-page="bonds"><div class="host"><span class="dots"><i></i><i></i><i></i></span><b>Almanac</b><span class="x">✕</span></div><div class="app"></div></div></div>
+        <div><p class="fcap">No chat open</p><div class="frame d1 small" data-d="1" data-empty="1"><div class="host"><span class="dots"><i></i><i></i><i></i></span><b>Almanac</b><span class="x">✕</span></div><div class="app"></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="orrery">
+    <div>
+      <span class="num">Direction 2</span>
+      <h2>Orrery</h2>
+      <p class="pitch">The drawer as a small planetarium. The live sky sits on top, and a dock of planets at the bottom holds the pages, like a phone app.</p>
+      <ul>
+        <li><b>Sun button.</b> The centre of the dock always jumps back to Now.</li>
+        <li><b>Four planets.</b> People, Story, Library and Engine. Tapping one fans out its pages as moons on an orbit.</li>
+        <li><b>Sibling switcher.</b> Under the sky, a switcher for the current group's pages (never more than three), so neighbouring pages are always one tap away.</li>
+      </ul>
+      <div class="swatches"><i style="background:#090c1d"></i><i style="background:#2e2c62"></i><i style="background:#ffc46b"></i><i style="background:#7fe0d2"></i><i style="background:#ff8fa3"></i><i style="background:#a99bff"></i></div>
+      <div class="faces">Syne · Manrope · DM Mono</div>
+    </div>
+    <div>
+      <p class="try">Try it: tap a planet to open its orbit, then pick a moon. The sun takes you home.</p>
+      <div class="frames">
+        <div><p class="fcap"><em>●</em> Live · Now</p><div class="frame d2" data-d="2" data-page="now"><div class="host"><span class="dots"><i></i><i></i><i></i></span><b>Almanac</b><span class="x">✕</span></div><div class="app"></div></div></div>
+        <div><p class="fcap"><em>●</em> Live · Story orbit open</p><div class="frame d2" data-d="2" data-page="chronicle" data-open="story"><div class="host"><span class="dots"><i></i><i></i><i></i></span><b>Almanac</b><span class="x">✕</span></div><div class="app"></div></div></div>
+        <div><p class="fcap">No chat open</p><div class="frame d2 small" data-d="2" data-empty="1"><div class="host"><span class="dots"><i></i><i></i><i></i></span><b>Almanac</b><span class="x">✕</span></div><div class="app"></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="deck">
+    <div>
+      <span class="num">Direction 3</span>
+      <h2>Tarot Deck</h2>
+      <p class="pitch">The drawer opens on a spread of cards, each showing a live count. Open a card and the rest of its suit stays in your hand at the bottom.</p>
+      <ul>
+        <li><b>The spread.</b> Now is the featured card. The other 12 are four suits of three, with badges for what needs attention (due debts, rejected ledger lines).</li>
+        <li><b>Your hand.</b> Inside a page, the fanned cards switch between the suit's pages or go back to the deck.</li>
+        <li><b>Draw a card.</b> Search jumps to any page by name. Press <code>/</code> or tap the search button.</li>
+      </ul>
+      <div class="swatches"><i style="background:#1e1429"></i><i style="background:#fffaf0"></i><i style="background:#e8514e"></i><i style="background:#2aa198"></i><i style="background:#7b5cff"></i><i style="background:#e3a21a"></i></div>
+      <div class="faces">Gloock · Nunito · DM Mono</div>
+    </div>
+    <div>
+      <p class="try">Try it: pick a card, use the hand, or search with "Draw".</p>
+      <div class="frames">
+        <div><p class="fcap"><em>●</em> Live · The spread</p><div class="frame d3" data-d="3" data-page="home"><div class="host"><span class="dots"><i></i><i></i><i></i></span><b>Almanac</b><span class="x">✕</span></div><div class="app"></div></div></div>
+        <div><p class="fcap"><em>●</em> Live · Cast, with the hand</p><div class="frame d3" data-d="3" data-page="cast"><div class="host"><span class="dots"><i></i><i></i><i></i></span><b>Almanac</b><span class="x">✕</span></div><div class="app"></div></div></div>
+        <div><p class="fcap">No chat open</p><div class="frame d3 small" data-d="3" data-empty="1"><div class="host"><span class="dots"><i></i><i></i><i></i></span><b>Almanac</b><span class="x">✕</span></div><div class="app"></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cmp">
+    <h2>Side by side</h2>
+    <div class="tbl"><table class="c">
+      <tr><th></th><th>Bookmarks</th><th>Orrery</th><th>Tarot Deck</th></tr>
+      <tr><td>Taps to any page</td><td>1, always</td><td>1 within a group or to Now; 2 across groups</td><td>1 within a suit; 2 via the deck; search for anything</td></tr>
+      <tr><td>All pages visible at once</td><td>Yes, on the rail</td><td>No, only the current group</td><td>On the spread</td></tr>
+      <tr><td>Width left for content</td><td>About 340px (the rail takes 62px)</td><td>Full width</td><td>Full width</td></tr>
+      <tr><td>Scene at a glance</td><td>On the Now page</td><td>Always, in the sky header</td><td>On the featured card</td></tr>
+      <tr><td>Needs-attention signals</td><td>In each page's summary line</td><td>Glow on the planet</td><td>Badges on the cards</td></tr>
+      <tr><td>Character</td><td>Warm, literary, calm</td><td>Atmospheric, app-like</td><td>Playful, collectible</td></tr>
+      <tr><td>Best for</td><td>Power users who hop between pages</td><td>Watching the live scene while playing</td><td>New players who are still exploring</td></tr>
+    </table></div>
+    <p class="note">All three use the same four groups: Scene (Now, Cast, Bonds, Knowledge), Story (Chronicle, Timeline, World), Library (Codex, Lore, Creator) and Engine (Recall, Craft, Settings). The page content uses the extension's real data shapes and is re-skinned by each direction. The chosen design would keep the extension's skins (Almanac, Solar, Nocturne…) by mapping its colours onto the same tokens.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+const IC = {
+  now:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
+  cast:'<circle cx="9" cy="8" r="3"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.3-.3 4.3 1 5 3.8"/>',
+  bonds:'<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 7h7M7.2 9.2l3.6 6.6M16.8 9.2l-3.6 6.6"/>',
+  knowledge:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+  chronicle:'<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5Z"/><path d="M12 6.5v13"/>',
+  timeline:'<path d="M7 3v18"/><circle cx="7" cy="7" r="2"/><circle cx="7" cy="16" r="2"/><path d="M11 7h9M11 16h6"/>',
+  world:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5Z"/>',
+  codex:'<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+  lore:'<path d="M7 4h11v13a3 3 0 0 1-3 3H6"/><path d="M7 4a2 2 0 0 0-2 2v2h2M6 20a2 2 0 0 0 2-2v-1h10"/><path d="M10 9h5M10 12.5h5"/>',
+  creator:'<path d="M20 4c-7 1-12 6-13.5 13.5L5 20"/><path d="M20 4c-.5 5-3.5 9.5-9 11"/><path d="m9 13.5 3 3"/>',
+  recall:'<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5.5 5.5"/><path d="M10.5 7.5v3l2 1.5"/>',
+  craft:'<path d="M4 20 15 9"/><path d="m14 5 1-2 1 2 2 1-2 1-1 2-1-2-2-1Z"/><path d="m19 12 .6 1.4L21 14l-1.4.6L19 16l-.6-1.4L17 14l1.4-.6Z"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
+  left:'<path d="m14.5 6-6 6 6 6"/>', right:'<path d="m9.5 6 6 6-6 6"/>', grid:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+};
+const svg = (k, cls = "ic") => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;
+
+const PAGES = {
+  now:{label:"Now", sum:"Day 3 · 21:40 · heavy rain"}, cast:{label:"Cast", sum:"4 people · 3 present", badge:""}, bonds:{label:"Bonds", sum:"5 bonds · 2 changed tonight"}, knowledge:{label:"Knowledge", sum:"6 facts · 1 dramatic irony"},
+  chronicle:{label:"Chronicle", sum:"2 chapters · 71% raw"}, timeline:{label:"Timeline", sum:"9 milestones · 1 forecast"}, world:{label:"World", sum:"3 threads · 1 due", badge:"1"},
+  codex:{label:"Codex", sum:"42 records · 3 locked"}, lore:{label:"Lore", sum:"3 books · 4 to review", badge:"4"}, creator:{label:"Creator", sum:"Draft: Lowmarket guide"},
+  recall:{label:"Recall", sum:"8 considered · 5 injected"}, craft:{label:"Craft", sum:"Try: sensory anchor"}, settings:{label:"Settings", sum:"Ledger on · strict", badge:""},
+};
+const GROUPS = [
+  {id:"scene", label:"Scene", c1:"#a3413a", c2:"#e8514e", pc:"#ff8fa3", pages:["now","cast","bonds","knowledge"]},
+  {id:"story", label:"Story", c1:"#4d7a55", c2:"#2aa198", pc:"#7fe0d2", pages:["chronicle","timeline","world"]},
+  {id:"library", label:"Library", c1:"#4b5d9a", c2:"#7b5cff", pc:"#a99bff", pages:["codex","lore","creator"]},
+  {id:"engine", label:"Engine", c1:"#b8862e", c2:"#e3a21a", pc:"#ffc46b", pages:["recall","craft","settings"]},
+];
+const ORDER = GROUPS.flatMap(g => g.pages);
+const groupOf = p => GROUPS.find(g => g.pages.includes(p));
+const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII"];
+const roman = p => ROMAN[ORDER.indexOf(p)];
+
+const P = { Mara:"#e07a5f", Kael:"#6c8ebf", Joss:"#8fbf6c", Wren:"#c9a2e8" };
+const av = n => `<span class="av" style="--c:${P[n]}">${n[0]}</span>`;
+const meter = (k, v, c) => `<div class="meter" style="--c:${c}"><span>${k}</span><i style="--v:${v}"></i></div>`;
+
+const C = {
+  now: () => `<div class="sky"><div class="g"><span>Day 3 · Tue 14 Oct 1923</span><span>21:40</span><span>☂ heavy rain · 9°C</span></div><div class="t">Salt in the Wound</div><div class="g"><span>Lowmarket › Rusty Flagon › back room</span><span>🌖 waning gibbous</span><span>scene 7 · conflict</span></div></div>
+    <div class="sec">Next hours</div><div class="fc">${[["22","☂",9],["00","☂",8],["02","☁",8],["04","☁",7],["06","⛅",7],["08","☀",9]].map(([t,g,d])=>`<div><small>${t}:00</small><span>${g}</span><b>${d}°</b></div>`).join("")}</div>
+    <div class="sec">Present</div><div class="stack">
+      <div class="card who">${av("Mara")}<div><div class="nm">Mara</div><div class="mood">wary-curious · by the fire</div></div><span class="pill">spotlight</span></div>
+      <div class="card who">${av("Kael")}<div><div class="nm">Kael</div><div class="mood">resentful · at the bar</div></div><span class="pill">periphery</span></div></div>
+    <div class="sec">Owed and due</div><ul class="ls"><li>Mara owes Wren a favour</li><li class="due">Harbourmaster's letter due by Day 4 dawn</li></ul>
+    <div class="btns"><button class="btn pri">Session Zero</button><button class="btn">Repair last ledger</button><button class="btn">Rebuild</button></div>`,
+  cast: () => `<div class="stack">${[["Mara","wary-curious","by the fire","spotlight",[["trust",.6],["fatigue",.4]],["soaked","holds locket"]],["Kael","resentful","at the bar","periphery",[["temper",.7],["drink",.3]],["cold towards Wren"]],["Joss","anxious","→ the yard","left",[["nerve",.3]],["running an errand"]],["Wren","—","back room","you",[],["player"]]].map(([n,m,w,t,ms,tags])=>`<div class="card"><div class="who">${av(n)}<div><div class="nm">${n}</div><div class="mood">${m} · ${w}</div></div><span class="pill">${t}</span></div>${ms.map(([k,v])=>meter(k,v,P[n])).join("")}<div class="pills" style="margin-top:8px">${tags.map(x=>`<span class="pill">${x}</span>`).join("")}</div></div>`).join("")}</div>`,
+  bonds: () => `<svg class="graph" viewBox="0 0 320 210" role="img" aria-label="Relationship graph">
+      <defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 8 4 0 8Z" fill="context-stroke"/></marker></defs>
+      <path d="M160 52 160 150" stroke="#8fbf7a" stroke-width="3" marker-end="url(#ah)" fill="none"/>
+      <path d="M262 150 Q220 90 180 50" stroke="#e07a6a" stroke-width="2.5" marker-end="url(#ah)" fill="none"/>
+      <path d="M262 160 Q220 175 182 170" stroke="#e0a54a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ah)" fill="none"/>
+      <path d="M58 150 Q100 90 140 50" stroke="#e79ac0" stroke-width="2" marker-end="url(#ah)" fill="none"/>
+      <path d="M140 172 Q100 180 70 168" stroke="#8fbf7a" stroke-width="1.5" marker-end="url(#ah)" fill="none" opacity=".6"/>
+      <text class="lab" x="166" y="104">trust +1</text><text class="lab" x="226" y="92">resent +1</text><text class="lab" x="206" y="190">suspects</text><text class="lab" x="52" y="96">fond</text>
+      ${[["Mara",160,34],["Wren",160,168],["Kael",276,156],["Joss",44,156]].map(([n,x,y])=>`<circle cx="${x}" cy="${y}" r="18" fill="${P[n]}"/><text x="${x}" y="${y+4}" text-anchor="middle" style="fill:#fff;font-size:13px">${n[0]}</text><text x="${x}" y="${y+32}" text-anchor="middle">${n}</text>`).join("")}
+    </svg>
+    <div class="field" style="margin-top:6px">Timeline · now<div class="bar" style="height:6px"><i style="width:100%;background:var(--acc)"></i></div></div>
+    <div class="sec">All bonds</div><div class="stack">${[["Mara → Wren","trust +1","he gave the locket back","good"],["Kael → Mara","resentment +1","she defended Wren","warn"],["Kael → Wren","suspicion","thinks Wren stole the locket","warn"]].map(([a,b,c,t])=>`<div class="card rec"><div class="hd"><b class="grow">${a}</b><span class="pill ${t}">${b}</span></div><div class="muted">${c}</div></div>`).join("")}</div>`,
+  knowledge: () => `<table class="km"><tr><th>Fact</th>${["Mara","Kael","Joss","Wren"].map(n=>`<th>${av(n)}</th>`).join("")}</tr>
+    ${[["Gate password is heron",["y","u","u","y"]],["Wren stole the locket <span class='muted'>(false)</span>",["u","n","u","u"]],["Cargo was never Vance's",["q","u","u","u"]],["Joss owes Tam money",["u","u","y","u"]]].map(([f,cs])=>`<tr><td>${f}</td>${cs.map(c=>`<td><span class="k ${c}">${{y:"✓",n:"✗",q:"?",u:"—"}[c]}</span></td>`).join("")}</tr>`).join("")}</table>
+    <div class="card" style="margin-top:12px"><b>Dramatic irony</b><div class="muted">Kael is certain Wren stole the locket. It isn't true.</div></div>`,
+  chronicle: () => `<div class="card"><div class="bar"><i style="width:9%;background:#7b5bd6"></i><i style="width:20%;background:var(--acc)"></i><i style="width:71%;background:var(--panel-2)"></i></div><div class="muted" style="margin-top:6px;font-size:12px">arcs 9% · chapters 20% · raw 71%</div><div class="btns"><button class="btn pri">Summarise now</button></div></div>
+    <div class="sec">Chapters</div><div class="stack">${[["Chapter 2","The Locket Changes Hands","msgs 19–34 · Day 2 night"],["Chapter 1","Rain on Lowmarket","msgs 1–18 · Day 1 – Day 2"]].map(([k,t,m])=>`<div class="card rec"><div class="hd"><span class="kind">${k}</span></div><b>${t}</b><div class="muted" style="font-size:12px">${m}</div></div>`).join("")}</div>`,
+  timeline: () => `<div class="sec">Ahead</div><div class="card">Vance's men reach the Flagon by Day 4 · <span class="pill warn">forecast</span></div>
+    <div class="sec">Milestones</div><div class="tl">${[["Day 3 21:40 · bond","Mara defends Wren to Kael"],["Day 3 21:28 · item","The locket returns to Mara"],["Day 2 23:10 · secret","Mara tells Wren the gate password"],["Day 1 19:00 · meet","Wren arrives at the Rusty Flagon"]].map(([s,t])=>`<div><small>${s}</small>${t}</div>`).join("")}</div>`,
+  world: () => `<div class="sec">Faction clocks</div><div class="stack"><div class="card row"><span class="ring" style="--n:4;--of:6">4/6</span><div class="grow"><b>Vance Shipping</b><div class="muted">Find the missing cargo</div></div></div><div class="card row"><span class="ring" style="--n:2;--of:8;--c:var(--acc)">2/8</span><div class="grow"><b>Harbour Watch</b><div class="muted">Crack down on Lowmarket</div></div></div></div>
+    <div class="sec">Threads</div><ul class="ls"><li>Lost locket · Mara owes Wren a favour</li><li class="due">The harbourmaster's letter · due</li><li>Who took the ledger?</li></ul>
+    <div class="sec">Items</div><div class="pills"><span class="pill">Locket · Mara</span><span class="pill">Room key · Wren</span><span class="pill">Letter · Mara</span></div>`,
+  codex: () => `<div class="field"><span class="in">Search the Codex…</span></div><div class="pills" style="margin:10px 0"><span class="pill good">all 42</span><span class="pill">people 9</span><span class="pill">places 11</span><span class="pill">objects 8</span></div>
+    <div class="stack">${[["person","Mara Quill","Keeps the Rusty Flagon. Owes nothing, forgives less.","🔒"],["place","The Rusty Flagon","Lowmarket tavern; back room has a second door to the yard.",""],["object","The locket","Silver, clasp bent where it was forced.",""]].map(([k,n,s,l])=>`<div class="card rec"><div class="hd"><span class="kind">${k}</span><b class="grow">${n}</b>${l?`<span class="pill">${l} locked</span>`:""}</div><div class="muted">${s}</div></div>`).join("")}</div>`,
+  lore: () => `<div class="btns" style="margin-top:0"><button class="btn pri">Re-read lorebooks</button><button class="btn">Classify 4 unclear</button></div>
+    <div class="sec">Books</div><div class="stack">${[["Lowmarket Streets","character","native",38],["ALMANAC · The Flagon","chat mirror","managed",42],["House rules","global","assisted",6]].map(([n,s,m,c])=>`<div class="card rec"><div class="hd"><b class="grow">${n}</b><span class="pill">${s}</span></div><div class="muted" style="font-size:12px">${c} entries · activation: <b style="color:var(--ink)">${m}</b></div></div>`).join("")}</div>`,
+  creator: () => `<div class="card"><div class="kind">Step 2 of 4 · Outline</div><b style="display:block;margin:4px 0 10px">Lowmarket: a district guide</b>
+    <div class="stack"><div class="field">Scope<span class="in">Streets, taverns and the harbour of Lowmarket, 1923</span></div><div class="field">Entries planned<span class="in">14 places · 6 people · 3 factions</span></div></div>
+    <div class="btns"><button class="btn pri">Draft entries</button><button class="btn">Back</button></div></div>`,
+  recall: () => `<div class="pills"><span class="pill">tier: scene</span><span class="pill">≈ 612 tokens</span><span class="pill">21:40</span></div>
+    <div class="sec">Considered</div><div class="feed">${[[92,"The locket","named in the last message",1],[81,"Kael Brandt","present · resentment changed",1],[74,"Harbourmaster's letter","open thread",1],[40,"The river gate","keyword only · far away",0]].map(([s,n,r,i])=>`<div class="${i?"in":""}"><b class="sc">${s}</b><div><b>${n}</b><br><small class="muted">${r}</small></div></div>`).join("")}</div>`,
+  craft: () => `<div class="card"><div class="sec" style="margin-top:0">Next reply is told</div>Avoid <span class="pill">"the air thick with"</span> <span class="pill">opening on weather</span><div style="margin-top:8px">Try: <b>a sensory anchor</b></div></div>
+    <div class="sec">Last six replies</div><div class="stack">${meter("dialogue",.55,"var(--acc)")}${meter("interior",.25,"var(--acc)")}${meter("action",.6,"var(--acc)")}</div>`,
+  settings: () => `<div class="card">${[["Ledger in this chat",1],["Repair missing ledgers",1],["Summarise old turns",1],["Show last ledger to the model",0],["Off-screen world",1]].map(([l,on])=>`<div class="tog"><span>${l}</span><span class="sw${on?"":" off"}"></span></div>`).join("")}</div>
+    <div class="sec">Look</div><div class="field">Skin<span class="in">Follow the preset (Auto by genre)</span></div>`,
+};
+const content = p => `<div class="ct">${C[p]()}</div>`;
+
+// ── Direction 1: Bookmarks ──
+function d1(f) {
+  const app = f.querySelector(".app");
+  const empty = f.dataset.empty;
+  const p = f.dataset.page || "now";
+  const rail = GROUPS.map(g => `<div class="grp" role="group" aria-label="${g.label}">${g.pages.map(k => `<button class="rib" style="--rc:${g.c1}" data-go="${k}" ${!empty && k === p ? 'aria-current="page"' : ""} title="${PAGES[k].label}">${svg(k)}<span>${PAGES[k].label}</span></button>`).join("")}</div>`).join("");
+  if (empty) {
+    app.innerHTML = `<nav class="spine dim">${rail}</nav><div class="page"><div class="empty"><div><div class="orn">❦</div><h4>The pages are blank</h4><p>Open a chat and the Almanac starts writing.</p></div></div></div>`;
+    return;
+  }
+  const i = ORDER.indexOf(p), g = groupOf(p);
+  const prev = ORDER[(i + ORDER.length - 1) % ORDER.length], next = ORDER[(i + 1) % ORDER.length];
+  app.innerHTML = `<nav class="spine" aria-label="Almanac pages">${rail}</nav>
+    <div class="page"><div><div class="rh"><span>ALMANAC · ${g.label.toUpperCase()}</span><span>THE RUSTY FLAGON</span></div>
+      <div class="folio"><em>${roman(p).toLowerCase()}.</em><h3>${PAGES[p].label}</h3><small>${PAGES[p].sum}</small></div></div>
+      <div class="body scroll">${content(p)}</div>
+      <div class="turn"><button data-go="${prev}">${svg("left")}${PAGES[prev].label}</button><span class="pg">${i + 1} / 13</span><button data-go="${next}">${PAGES[next].label}${svg("right")}</button></div></div>`;
+}
+
+// ── Direction 2: Orrery ──
+function d2(f) {
+  const app = f.querySelector(".app");
+  if (f.dataset.empty) {
+    app.innerHTML = `<div class="empty"><div class="dial"></div><h4>No sky yet</h4><p>Open a chat to set the clock turning.</p></div>`;
+    return;
+  }
+  const p = f.dataset.page || "now", open = f.dataset.open || "";
+  const g = groupOf(p);
+  const DOCK = [{id:"people", label:"People", pc:"#ff8fa3", pages:["cast","bonds","knowledge"], ic:"cast"}, {id:"story", label:"Story", pc:"#7fe0d2", pages:GROUPS[1].pages, ic:"chronicle"}, null, {id:"library", label:"Library", pc:"#a99bff", pages:GROUPS[2].pages, ic:"codex"}, {id:"engine", label:"Engine", pc:"#ffc46b", pages:GROUPS[3].pages, ic:"settings"}];
+  const cur = DOCK.find(x => x && x.pages.includes(p));
+  const seg = cur ? `<div class="gname" style="color:${cur.pc}">${cur.label}</div><div class="seg" role="tablist">${cur.pages.map(k => `<button role="tab" data-go="${k}" ${k === p ? 'aria-current="page"' : ""}>${svg(k)}${PAGES[k].label}</button>`).join("")}</div>` : "";
+  const dock = DOCK.map(x => x ? `<button class="pl${cur === x ? " on" : ""}" style="--pc:${x.pc}" data-orbit="${x.id}" aria-expanded="${open === x.id}"><span class="orb">${svg(x.ic)}</span>${x.label}</button>` : `<button class="sun${p === "now" ? " on" : ""}" data-go="now" aria-label="Now"><span>${svg("now")}<small>NOW</small></span></button>`).join("");
+  const og = DOCK.find(x => x && x.id === open);
+  const pos = [[6, 58], [106, 8], [206, 58]];
+  const orbit = og ? `<div class="veil" data-close="1"></div><div class="orbit" style="--pc:${og.pc}">${og.pages.map((k, j) => `<button class="moonb" style="left:${pos[j][0]}px;top:${pos[j][1]}px;animation-delay:${j * 40}ms" data-go="${k}"><span class="m">${svg(k)}</span>${PAGES[k].label}<small>${PAGES[k].sum.split(" · ")[0]}</small></button>`).join("")}<div class="ttl">${og.label}</div></div>` : "";
+  app.innerHTML = `<div class="skyhead"><div class="sh1"><div class="clock">21:40</div><div class="date">Day 3 · Tuesday<br>14 October 1923</div><div class="moon" title="Waning gibbous"></div></div>
+      <div class="place"><span>☂ heavy rain · 9°C</span><span>Rusty Flagon › back room</span><span>conflict</span></div>${seg}</div>
+    <div class="main scroll">${p === "now" ? "" : `<h3>${PAGES[p].label}</h3><div class="muted" style="font-size:12px;color:var(--muted)">${PAGES[p].sum}</div>`}${p === "now" ? content("now").replace(/<div class="sky">[\s\S]*?<\/div><\/div>/, "") : content(p)}</div>
+    <nav class="dock" aria-label="Almanac pages">${dock}</nav>${orbit}`;
+}
+
+// ── Direction 3: Tarot Deck ──
+function d3(f) {
+  const app = f.querySelector(".app");
+  if (f.dataset.empty) {
+    app.innerHTML = `<div class="empty"><div><div class="stackd"><i></i><i></i><i>✦</i></div><h4>The deck is shuffled</h4><p>Open a chat to deal the first hand.</p></div></div>`;
+    return;
+  }
+  const p = f.dataset.page || "home";
+  const pal = f.dataset.pal ? palette(f) : "";
+  if (p === "home") {
+    const suits = GROUPS.map((g, gi) => ({ ...g, pages: gi === 0 ? g.pages.slice(1) : g.pages }));
+    app.innerHTML = `<div class="home scroll"><div class="hbar"><div><h3>Tonight's spread</h3><small>The Rusty Flagon · 13 cards</small></div><button class="find" data-pal="1">${svg("search")}Draw <kbd>/</kbd></button></div>
+      <button class="feature" data-go="now"><span class="ro">0</span><span><b>Now · Salt in the Wound</b><small>21:40 · heavy rain · Mara and Kael present · conflict</small></span><span class="go">Open</span></button>
+      ${suits.map(g => `<div class="suit" style="--sc:${g.c2}">${g.label}</div><div class="row3">${g.pages.map(k => `<button class="tc" style="--sc:${g.c2}" data-go="${k}">${PAGES[k].badge ? `<span class="badge">${PAGES[k].badge}</span>` : ""}<span class="ro">${roman(k)}</span><span class="gl"><i>${svg(k)}</i></span><span><b>${PAGES[k].label}</b><small>${PAGES[k].sum.split(" · ")[0]}</small></span></button>`).join("")}</div>`).join("")}</div>${pal}`;
+    return;
+  }
+  const g = groupOf(p);
+  const hand = (g.id === "scene" ? g.pages : ["now", ...g.pages]);
+  const rots = [-12, -4, 4, 12, 18];
+  app.innerHTML = `<div class="view" style="--sc:${g.c2}"><div class="vbar"><button class="back" data-go="home">${svg("left")}Deck</button><div class="vtitle"><small>${g.label} · ${roman(p) || "0"}</small><b>${PAGES[p].label}</b></div><button class="find" style="margin-left:auto" data-pal="1" aria-label="Draw a card">${svg("search")}</button></div>
+    <div class="sheet scroll">${content(p)}</div>
+    <div class="hand"><button class="mc deck" style="--rot:-16deg" data-go="home">${svg("grid")}<span>Deck</span></button>${hand.map((k, j) => `<button class="mc" style="--rot:${rots[j]}deg;--sc:${groupOf(k).c2}" data-go="${k}" ${k === p ? 'aria-current="page"' : ""}>${svg(k)}<span>${PAGES[k].label}</span></button>`).join("")}</div></div>${pal}`;
+}
+function palette(f) {
+  const q = (f.dataset.q || "").toLowerCase();
+  const list = ORDER.filter(k => !q || PAGES[k].label.toLowerCase().includes(q) || PAGES[k].sum.toLowerCase().includes(q));
+  return `<div class="pal" data-close="1"><div class="pbox"><input id="pal-${f.dataset.uid}" placeholder="Draw a card… try “bonds” or “due”" value="${f.dataset.q || ""}" aria-label="Search pages">
+    <div class="res">${list.map((k, j) => `<button class="${j === 0 ? "sel" : ""}" style="--sc:${groupOf(k).c2}" data-go="${k}"><i>${svg(k)}</i><span><b>${PAGES[k].label}</b><br><small>${PAGES[k].sum}</small></span><em>${groupOf(k).label}</em></button>`).join("") || `<div style="padding:14px;color:var(--muted)">No card by that name.</div>`}</div>
+    <div class="hint">↵ open · esc close</div></div></div>`;
+}
+
+const R = { 1: d1, 2: d2, 3: d3 };
+document.querySelectorAll(".frame").forEach((f, i) => {
+  f.dataset.uid = i;
+  const draw = () => R[f.dataset.d](f);
+  draw();
+  f.addEventListener("click", ev => {
+    const t = ev.target;
+    const go = t.closest("[data-go]");
+    if (go) { f.dataset.page = go.dataset.go; delete f.dataset.open; delete f.dataset.pal; delete f.dataset.q; draw(); const s = f.querySelector(".scroll"); if (s) s.scrollTop = 0; return; }
+    const orb = t.closest("[data-orbit]");
+    if (orb) { f.dataset.open = f.dataset.open === orb.dataset.orbit ? "" : orb.dataset.orbit; draw(); return; }
+    if (t.closest("[data-pal]")) { f.dataset.pal = "1"; draw(); f.querySelector(".pal input")?.focus(); return; }
+    if (t.matches("[data-close]")) { delete f.dataset.open; delete f.dataset.pal; delete f.dataset.q; draw(); }
+  });
+  f.addEventListener("input", ev => {
+    if (!ev.target.matches(".pal input")) return;
+    f.dataset.q = ev.target.value; draw();
+    const inp = f.querySelector(".pal input"); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
+  });
+  f.addEventListener("keydown", ev => {
+    if (ev.key === "Escape" && (f.dataset.pal || f.dataset.open)) { delete f.dataset.pal; delete f.dataset.open; delete f.dataset.q; draw(); }
+    else if (ev.key === "Enter" && ev.target.matches(".pal input")) { const b = f.querySelector(".res button"); if (b) b.click(); }
+    else if (ev.key === "/" && f.dataset.d === "3" && !f.dataset.pal && !f.dataset.empty) { ev.preventDefault(); f.dataset.pal = "1"; draw(); f.querySelector(".pal input")?.focus(); }
+  });
+  f.tabIndex = -1;
+});
+})();
+</script>

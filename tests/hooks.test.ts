@@ -9,6 +9,7 @@ const files = new Map<string, string>();
 const macros = new Map<string, string>();
 const chatVars = new Map<string, string>();
 const hooks: Record<string, any> = {};
+const sent: any[] = [];
 const CHAT = "chat-1";
 const USER = "user-1";
 
@@ -47,7 +48,8 @@ const spindle: any = new Proxy({
   registerMessageContentProcessor: (fn: any) => void (hooks.render = fn),
   generate: { quiet: async () => { throw new Error("no model in tests"); } },
   on: () => () => {},
-  sendToFrontend: () => {},
+  sendToFrontend: (p: unknown) => void sent.push(p),
+  onFrontendMessage: (fn: any) => void (hooks.frontend = fn),
 }, { get: (t: any, k: string) => (k in t ? t[k] : loose(k)) });
 
 let parse: (s: string) => any;
@@ -62,6 +64,7 @@ beforeAll(async () => {
   h.registerWorldInfoInterceptor();
   h.registerPromptInterceptor();
   h.registerRenderProcessor();
+  (await import("../src/backend/bridge")).registerBridge();
 });
 
 const CHARTER = "<almanac>\nYou are ALMANAC: narrator, director, and every living person in this story except Wren.\n</almanac>";
@@ -123,5 +126,13 @@ describe("extension hooks with the preset", () => {
     const p = parse(SAMPLE_REPLY);
     expect(p.unknown).toEqual([]);
     expect(p.ops.at(-1).op).toBe("mode");
+  });
+
+  test("the drawer's hello gets a state view the host can post (structured-clone safe)", async () => {
+    sent.length = 0;
+    await hooks.frontend({ type: "hello", chatId: CHAT }, USER);
+    const st = sent.find((m) => m?.type === "state");
+    expect(st?.view?.chatId).toBe(CHAT);
+    expect(() => structuredClone(st)).not.toThrow();
   });
 });

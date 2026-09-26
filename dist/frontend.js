@@ -413,6 +413,8 @@ class AlmanacApp {
   codexKind = "";
   editing = null;
   creator;
+  status = "nochat";
+  hudProblem = "";
   constructor(ctx, root) {
     this.ctx = ctx;
     this.root = root;
@@ -429,6 +431,13 @@ class AlmanacApp {
   send(msg) {
     this.ctx.sendToBackend({ chatId: this.view?.chatId, ...msg });
   }
+  setStatus(s) {
+    if (s === this.status)
+      return;
+    this.status = s;
+    if (!this.view || s === "nochat")
+      this.render();
+  }
   setView(v) {
     this.view = v;
     this.render();
@@ -437,7 +446,8 @@ class AlmanacApp {
     const v = this.view;
     const tabs = `<div class="tabs" role="tablist">${TABS.map((t) => `<button role="tab" data-tab="${t}" aria-selected="${t === this.tab}">${TAB_LABEL[t]}</button>`).join("")}</div>`;
     if (!v) {
-      this.root.innerHTML = `${tabs}<div class="empty">Open a chat to see its Almanac.</div>`;
+      const msg = this.status === "nochat" ? `Open a chat to see its Almanac.` : this.status === "stalled" ? `The Ledger hasn't answered yet. Check that ALMANAC Ledger is enabled in Extensions and has its permissions, then retry.<div class="row" style="justify-content:center;margin-top:10px"><button class="btn primary" data-act="retryState">Retry</button></div>` : `Reading this chat…`;
+      this.root.innerHTML = `${tabs}<div class="empty">${msg}</div>`;
       return;
     }
     let body = "";
@@ -615,7 +625,7 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
 <h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "weekdays: …; months: Name (30), …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 1e4)}</label><label class="f">Simulator connection id${txt("simConnection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
 <h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection id${txt("sidecarConnection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label></div>
-<h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]])}</label>${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
+<h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]])}</label>${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${escapeHtml(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
   }
   onClick(ev) {
     const t = ev.target;
@@ -653,6 +663,12 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
         break;
       case "rebuild":
         this.send({ type: "rebuild" });
+        break;
+      case "retryState":
+        this.ctx.events.emit("almanac:retryState", {});
+        break;
+      case "grantPanels":
+        this.ctx.events.emit("almanac:grantPanels", {});
         break;
       case "edit":
         this.editing = id ?? null;
@@ -1177,6 +1193,7 @@ var PANEL_CSS = `
 .almp .timeline .ev::before{content:"";position:absolute;left:-17px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--alm-accent);box-shadow:0 0 0 3px var(--alm-panel)}
 .almp .timeline .ev small{display:block;font:500 10.5px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
 .alm-hudw{width:100%;height:100%;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:linear-gradient(90deg,#1c2146,#3a3060 60%,#6a4a6a);color:#fff;font:500 11.5px/1 var(--alm-font-mono);box-shadow:0 10px 26px -12px rgba(0,0,0,.7);cursor:grab;overflow:hidden;white-space:nowrap}
+.alm-hudw__dim{opacity:.7;font-style:italic}
 .alm-sz{font-size:14px}
 .alm-sz .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
 @media (max-width:560px){.alm-sz .grid{grid-template-columns:1fr}}
@@ -1337,33 +1354,75 @@ function setup(ctx) {
   });
   const app = new AlmanacApp(ctx, tab.root);
   app.render();
+  let gotStateFor;
+  let retry = null;
+  const requestState = (attempt = 0) => {
+    if (retry)
+      clearTimeout(retry);
+    retry = null;
+    const chatId = ctx.getActiveChat().chatId;
+    app.setStatus(chatId ? attempt >= 4 ? "stalled" : "waiting" : "nochat");
+    renderHud(app.view);
+    if (!chatId)
+      return;
+    ctx.sendToBackend({ type: attempt === 0 ? "hello" : "getState", chatId });
+    const delays = [900, 2000, 4000, 8000, 15000, 30000];
+    retry = setTimeout(() => {
+      if (gotStateFor !== ctx.getActiveChat().chatId)
+        requestState(attempt + 1);
+    }, delays[Math.min(attempt, delays.length - 1)]);
+  };
   let hud = null;
+  let hudOn = true;
   const ensureHud = (on) => {
+    hudOn = on;
     try {
       if (on && !hud) {
         hud = ctx.ui.createFloatWidget({ width: 300, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, tooltip: "ALMANAC · Now", chromeless: true });
         hud.root.addEventListener("click", () => tab.activate());
+        app.hudProblem = "";
       } else if (!on && hud) {
         hud.destroy();
         hud = null;
       }
-    } catch {
+    } catch (err) {
       hud = null;
+      app.hudProblem = /PERMISSION/i.test(String(err)) ? "permission" : String(err?.message ?? err);
+      app.render();
     }
+    renderHud(app.view);
   };
   const renderHud = (v) => {
     if (!hud)
       return;
-    if (!v || !v.enabled) {
+    const chatId = ctx.getActiveChat().chatId;
+    if (!chatId || !hudOn) {
       hud.setVisible(false);
       return;
     }
     hud.setVisible(true);
+    if (!v || v.chatId !== chatId) {
+      hud.setSize(210, 40);
+      hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>\uD83D\uDD70 ALMANAC</span><span class="alm-hudw__dim">${app.status === "stalled" ? "no answer yet" : "connecting…"}</span></div>`;
+      return;
+    }
+    if (!v.enabled) {
+      hud.setSize(230, 40);
+      hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>\uD83D\uDD70 ALMANAC</span><span class="alm-hudw__dim">off in this chat</span></div>`;
+      return;
+    }
     const n = v.now;
     const present = v.cast.filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).slice(0, 5);
+    hud.setSize(300, 40);
     hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>\uD83D\uDD70 ${escapeHtml(n.time ?? "—")}</span>${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.condition)}</span>` : ""}<span>\uD83D\uDCCD ${escapeHtml(n.place[n.place.length - 1] ?? "—")}</span>${present.map((c) => `<span class="alm-mini" style="--c:${escapeHtml(c.color)}" title="${escapeHtml(c.name)}${c.mood?.name ? ` · ${escapeHtml(c.mood.name)}` : ""}">${escapeHtml(initials(c.name))}</span>`).join("")}</div>`;
   };
   const applyView = (v) => {
+    gotStateFor = v ? v.chatId : null;
+    if (retry && v) {
+      clearTimeout(retry);
+      retry = null;
+    }
+    app.setStatus(v ? "ok" : ctx.getActiveChat().chatId ? "waiting" : "nochat");
     app.setView(v);
     if (v) {
       document.documentElement.setAttribute("data-alm-skin", v.theme || "almanac");
@@ -1374,11 +1433,13 @@ function setup(ctx) {
       }
       if (v.settings && v.settings.fonts !== fontsOn)
         setFonts(!!v.settings.fonts);
-      ensureHud(!!v.settings?.hud && v.enabled);
+      if (v.settings && !!v.settings.hud !== hudOn)
+        ensureHud(!!v.settings.hud);
       tab.setBadge(v.counts?.unverified ? String(v.counts.unverified) : null);
     }
     renderHud(v);
   };
+  ensureHud(true);
   removers.push(ctx.onBackendMessage((raw) => {
     const m = raw;
     if (!m || typeof m.type !== "string")
@@ -1412,6 +1473,13 @@ function setup(ctx) {
     if (chatId)
       openSessionZero(ctx, chatId, app.view?.chatId === chatId ? app.view?.config : null);
   }));
+  removers.push(ctx.events.on("almanac:retryState", () => requestState()));
+  removers.push(ctx.events.on("almanac:grantPanels", async () => {
+    try {
+      await ctx.permissions.request(["ui_panels"], { reason: "Show the floating Now widget (time, weather, place and who is present)." });
+      ensureHud(true);
+    } catch {}
+  }));
   removers.push(ctx.events.on("almanac:settings", (p) => {
     if (p && "hud" in p)
       ensureHud(!!p.hud);
@@ -1432,9 +1500,19 @@ function setup(ctx) {
     }));
     removers.push(() => action.destroy());
   } catch {}
-  tab.onActivate(() => ctx.sendToBackend({ type: "getState", chatId: ctx.getActiveChat().chatId }));
-  removers.push(ctx.events.on("CHAT_SWITCHED", () => setTimeout(() => ctx.sendToBackend({ type: "getState", chatId: ctx.getActiveChat().chatId }), 150)));
-  ctx.sendToBackend({ type: "hello", chatId: ctx.getActiveChat().chatId });
+  tab.onActivate(() => requestState(gotStateFor === ctx.getActiveChat().chatId ? 1 : 0));
+  removers.push(ctx.events.on("CHAT_SWITCHED", () => setTimeout(() => {
+    gotStateFor = undefined;
+    requestState();
+  }, 150)));
+  let boots = 0;
+  const boot = () => {
+    if (ctx.getActiveChat().chatId || ++boots > 10)
+      requestState();
+    else
+      setTimeout(boot, 500);
+  };
+  boot();
   return () => {
     for (const r of removers) {
       try {
@@ -1443,6 +1521,8 @@ function setup(ctx) {
     }
     speakerStyle?.();
     fontStyle?.();
+    if (retry)
+      clearTimeout(retry);
     hud?.destroy();
     tab.destroy();
     document.documentElement.removeAttribute("data-alm-skin");

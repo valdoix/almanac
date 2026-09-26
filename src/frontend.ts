@@ -44,35 +44,79 @@ export function setup(ctx: SpindleFrontendContext) {
   const app = new AlmanacApp(ctx, tab.root);
   app.render();
 
-  // Floating "Now" HUD (ui_panels)
+  // Asking for the chat's state. The first "hello" can be lost when the drawer
+  // loads before the backend worker is up, so keep asking (with backoff) until a
+  // view for the active chat arrives.
+  let gotStateFor: string | null | undefined;
+  let retry: ReturnType<typeof setTimeout> | null = null;
+  const requestState = (attempt = 0) => {
+    if (retry) clearTimeout(retry);
+    retry = null;
+    const chatId = ctx.getActiveChat().chatId;
+    app.setStatus(chatId ? (attempt >= 4 ? "stalled" : "waiting") : "nochat");
+    renderHud(app.view);
+    if (!chatId) return;
+    ctx.sendToBackend({ type: attempt === 0 ? "hello" : "getState", chatId });
+    const delays = [900, 2000, 4000, 8000, 15000, 30000];
+    retry = setTimeout(() => {
+      if (gotStateFor !== ctx.getActiveChat().chatId) requestState(attempt + 1);
+    }, delays[Math.min(attempt, delays.length - 1)]);
+  };
+
+  // Floating "Now" widget (ui_panels). Shown whenever a chat is open and the
+  // widget is switched on; it says so when the Ledger is off or still connecting.
   let hud: ReturnType<SpindleFrontendContext["ui"]["createFloatWidget"]> | null = null;
+  let hudOn = true;
   const ensureHud = (on: boolean) => {
+    hudOn = on;
     try {
       if (on && !hud) {
         hud = ctx.ui.createFloatWidget({ width: 300, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, tooltip: "ALMANAC · Now", chromeless: true });
         hud.root.addEventListener("click", () => tab.activate());
+        app.hudProblem = "";
       } else if (!on && hud) {
         hud.destroy();
         hud = null;
       }
-    } catch {
-      hud = null; // no ui_panels permission
+    } catch (err) {
+      hud = null;
+      app.hudProblem = /PERMISSION/i.test(String(err)) ? "permission" : String((err as Error)?.message ?? err);
+      app.render();
     }
+    renderHud(app.view);
   };
 
   const renderHud = (v: any) => {
     if (!hud) return;
-    if (!v || !v.enabled) {
+    const chatId = ctx.getActiveChat().chatId;
+    if (!chatId || !hudOn) {
       hud.setVisible(false);
       return;
     }
     hud.setVisible(true);
+    if (!v || v.chatId !== chatId) {
+      hud.setSize(210, 40);
+      hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>🕰 ALMANAC</span><span class="alm-hudw__dim">${app.status === "stalled" ? "no answer yet" : "connecting…"}</span></div>`;
+      return;
+    }
+    if (!v.enabled) {
+      hud.setSize(230, 40);
+      hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>🕰 ALMANAC</span><span class="alm-hudw__dim">off in this chat</span></div>`;
+      return;
+    }
     const n = v.now;
     const present = v.cast.filter((c: any) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).slice(0, 5);
+    hud.setSize(300, 40);
     hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>🕰 ${e(n.time ?? "—")}</span>${n.weather ? `<span>${e(n.weather.glyph)} ${e(n.weather.condition)}</span>` : ""}<span>📍 ${e(n.place[n.place.length - 1] ?? "—")}</span>${present.map((c: any) => `<span class="alm-mini" style="--c:${e(c.color)}" title="${e(c.name)}${c.mood?.name ? ` · ${e(c.mood.name)}` : ""}">${e(initials(c.name))}</span>`).join("")}</div>`;
   };
 
   const applyView = (v: any) => {
+    gotStateFor = v ? v.chatId : null;
+    if (retry && v) {
+      clearTimeout(retry);
+      retry = null;
+    }
+    app.setStatus(v ? "ok" : ctx.getActiveChat().chatId ? "waiting" : "nochat");
     app.setView(v);
     if (v) {
       document.documentElement.setAttribute("data-alm-skin", v.theme || "almanac");
@@ -82,11 +126,12 @@ export function setup(ctx: SpindleFrontendContext) {
         lastSpeakerCss = v.speakerCss;
       }
       if (v.settings && v.settings.fonts !== fontsOn) setFonts(!!v.settings.fonts);
-      ensureHud(!!v.settings?.hud && v.enabled);
+      if (v.settings && !!v.settings.hud !== hudOn) ensureHud(!!v.settings.hud);
       tab.setBadge(v.counts?.unverified ? String(v.counts.unverified) : null);
     }
     renderHud(v);
   };
+  ensureHud(true);
 
   removers.push(
     ctx.onBackendMessage((raw) => {
@@ -119,6 +164,15 @@ export function setup(ctx: SpindleFrontendContext) {
     const chatId = p?.chatId ?? ctx.getActiveChat().chatId;
     if (chatId) openSessionZero(ctx, chatId, app.view?.chatId === chatId ? app.view?.config : null);
   }));
+  removers.push(ctx.events.on("almanac:retryState", () => requestState()));
+  removers.push(ctx.events.on("almanac:grantPanels", async () => {
+    try {
+      await ctx.permissions.request(["ui_panels"], { reason: "Show the floating Now widget (time, weather, place and who is present)." } as any);
+      ensureHud(true);
+    } catch {
+      /* declined */
+    }
+  }));
   removers.push(ctx.events.on("almanac:settings", (p: any) => {
     if (p && "hud" in p) ensureHud(!!p.hud);
     if (p && "fonts" in p) setFonts(!!p.fonts);
@@ -141,9 +195,18 @@ export function setup(ctx: SpindleFrontendContext) {
     /* optional */
   }
 
-  tab.onActivate(() => ctx.sendToBackend({ type: "getState", chatId: ctx.getActiveChat().chatId }));
-  removers.push(ctx.events.on("CHAT_SWITCHED", () => setTimeout(() => ctx.sendToBackend({ type: "getState", chatId: ctx.getActiveChat().chatId }), 150)));
-  ctx.sendToBackend({ type: "hello", chatId: ctx.getActiveChat().chatId });
+  tab.onActivate(() => requestState(gotStateFor === ctx.getActiveChat().chatId ? 1 : 0));
+  removers.push(ctx.events.on("CHAT_SWITCHED", () => setTimeout(() => {
+    gotStateFor = undefined;
+    requestState();
+  }, 150)));
+  // getActiveChat() can be empty for a moment on a fresh page load.
+  let boots = 0;
+  const boot = () => {
+    if (ctx.getActiveChat().chatId || ++boots > 10) requestState();
+    else setTimeout(boot, 500);
+  };
+  boot();
 
   return () => {
     for (const r of removers) {
@@ -155,6 +218,7 @@ export function setup(ctx: SpindleFrontendContext) {
     }
     speakerStyle?.();
     fontStyle?.();
+    if (retry) clearTimeout(retry);
     hud?.destroy();
     tab.destroy();
     document.documentElement.removeAttribute("data-alm-skin");
