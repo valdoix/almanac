@@ -667,7 +667,36 @@ export function parseVtks(text: string): { kind: string; title: string; meta: st
   return out;
 }
 
+/**
+ * Speech written as a script label — `Buffy#1|flat: "Words."` (also bold,
+ * bracketed or without a tone) — instead of the mark `[spk=Buffy#1|flat]"Words."[/spk]`.
+ * Matches at the start of a line only; `$3` name, `$4` slot, `$5` tone, `$6` the rest.
+ */
+export const SPEAKER_LABEL = /(^|\n)([ \t]*)(?:\*\*|__)?\[?([A-Z\u00C0-\u00D6\u00D8-\u00DE?][^\n\[\]#|:*_"\u201C=<>]{0,59}?)[ \t]*#(\d{1,2})[ \t]*(?:\|[ \t]*([a-z]+)[ \t]*)?\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[ \t]*([^\n]*)/g;
+
+/** Rewrites script-label speech into [spk] marks: the quoted line is wrapped (narration before it stays), or the whole rest of the line when it has no quotes. */
+export function fixSpeakerLabels(text: string): string {
+  if (!/#\d/.test(text)) return text;
+  return text.replace(SPEAKER_LABEL, (all, lead: string, ws: string, name: string, slot: string, tone: string | undefined, rest: string) => {
+    const mark = `[spk=${name.trim()}#${slot}${tone ? `|${tone}` : ""}]`;
+    const q = /(["\u201C][^"\u201C\u201D\n]{1,1200}["\u201D])/.exec(rest);
+    if (q) return `${lead}${ws}${rest.slice(0, q.index)}${mark}${q[1]}[/spk]${rest.slice(q.index + q[1].length)}`;
+    const words = rest.trim();
+    if (!words || /["\u201C\u201D]/.test(words)) return all;
+    return `${lead}${ws}${mark}"${words}"[/spk]`;
+  });
+}
+
+/** True when a reply labels speech as `Name#N|tone:` instead of using [spk] marks. */
+export function hasSpeakerLabels(text: string): boolean {
+  SPEAKER_LABEL.lastIndex = 0;
+  const hit = SPEAKER_LABEL.test(text);
+  SPEAKER_LABEL.lastIndex = 0;
+  return hit;
+}
+
 export function parseSpeakers(text: string): { name: string; slot?: number }[] {
+  text = fixSpeakerLabels(text);
   const seen = new Map<string, { name: string; slot?: number }>();
   const re = /\[(?:spk|thk)=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|[^\]]*)?\]/g;
   let m: RegExpExecArray | null;

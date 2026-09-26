@@ -135,4 +135,20 @@ describe("extension hooks with the preset", () => {
     expect(st?.view?.chatId).toBe(CHAT);
     expect(() => structuredClone(st)).not.toThrow();
   });
+
+  test("speech labelled Name#N|tone: becomes a speaker mark on display and in the history the model reads", async () => {
+    const labelled = SAMPLE_REPLY.replace(`[spk=Joss#3]"I'll just— the cart."[/spk]`, `Joss#3|flat: "I'll just— the cart."`);
+    expect(labelled).toContain("Joss#3|flat:");
+    const shown = await hooks.render({ chatId: CHAT, userId: USER, messageId: "m2", content: labelled, isUser: false, origin: "render" });
+    expect(shown.content).toContain(`[spk=Joss#3|flat]"I'll just— the cart."[/spk]`);
+    expect(shown.content).not.toContain("Joss#3|flat:");
+    const res = await hooks.prompt([
+      { role: "system", content: CHARTER },
+      { role: "assistant", content: `Buffy#1|flat: "Great. Another one."` },
+      { role: "user", content: "I shrug." },
+    ], { chatId: CHAT, userId: USER, generationType: "normal" });
+    const out = Array.isArray(res) ? res : res.messages;
+    const hist = out.find((m: any) => m.role === "assistant");
+    expect(hist.content).toBe(`[spk=Buffy#1|flat]"Great. Another one."[/spk]`);
+  });
 });

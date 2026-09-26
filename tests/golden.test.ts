@@ -78,3 +78,38 @@ describe("preset build", () => {
     expect(linked?.slice(6, 11)).toEqual(["06", "42", "18", "10", "🌖 waning gibbous"]);
   });
 });
+
+describe("speaker labels", () => {
+  const INPUTS = [
+    `Buffy#1|flat: "Great. Another one."`,
+    `The door slammed.\nBuffy#1|flat: "Great." She rolled her eyes.`,
+    `**Willow#2|whisper:** "Did you hear that?"`,
+    `Giles#3: "Good heavens."`,
+    `Xander#4|sly: Nice outfit.`,
+    `[Buffy#1|cold]: "Leave."`,
+    `Buffy#1|flat: *sighs* "Fine."`,
+    `Spike#5|sly: “Evening, Slayer.”`,
+    `mood Mara: guarded | V-1`,
+    `<t who="Mara#2" cue="x">thought</t>`,
+    `[spk=Buffy#1|flat]"Already fine."[/spk]`,
+  ];
+  test("the preset's repair rules and the extension's helper agree", async () => {
+    const { fixSpeakerLabels } = await import("../src/core/dsl");
+    const scripts = buildPreset().extensions.regex_scripts
+      .filter((s: any) => s.script_id.startsWith("alm-spk-label-") && s.script_id !== "alm-spk-label-plain")
+      .sort((a: any, b: any) => a.sort_order - b.sort_order);
+    expect(scripts.length).toBe(4);
+    for (const s of scripts) expect(s.target).toEqual(["response", "display", "prompt"]);
+    const ungate = (f: string) => f.replace(/^\{\{if::[\s\S]*?\}\}\{\{else\}\}\(\?!\)\{\{\/if\}\}/, "");
+    for (const input of INPUTS) {
+      let out = input;
+      for (const s of scripts) out = out.replace(new RegExp(ungate(s.find_regex), s.flags), s.replace_string);
+      expect(out).toBe(fixSpeakerLabels(input));
+    }
+    expect(fixSpeakerLabels(INPUTS[0])).toBe(`[spk=Buffy#1|flat]"Great. Another one."[/spk]`);
+  });
+  test("the speech instruction forbids labels", () => {
+    const craft = buildPreset().blocks.find((b: any) => b.content?.includes("[spk=Name#N]"));
+    expect(craft?.content).toContain("never write Name#N: or Name#N|tone:");
+  });
+});

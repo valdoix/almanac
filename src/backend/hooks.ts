@@ -4,7 +4,7 @@
 
 import type { InterceptorResultDTO, LlmMessageDTO } from "lumiverse-spindle-types";
 import { splice, validateUnits } from "../core/chronicle";
-import { extractLedgerBlock } from "../core/dsl";
+import { extractLedgerBlock, fixSpeakerLabels } from "../core/dsl";
 import { renderDrawer, plateSuffix } from "../core/render";
 import { sidecarPrompt } from "../core/prompts";
 import { hash, plainProse } from "../core/util";
@@ -165,6 +165,14 @@ export function registerPromptInterceptor() {
         save(chatId, "meta", userId);
       }
       if (!isEnabled(meta, settings)) return msgs;
+      // Speech labelled `Name#N|tone:` in earlier replies teaches the model the
+      // wrong shape (and outlives the [spk] marks thinned from older turns).
+      for (let i = 0; i < msgs.length; i++) {
+        if (msgs[i].role !== "assistant") continue;
+        const t = textOf(msgs[i]);
+        const f = fixSpeakerLabels(t);
+        if (f !== t) msgs[i] = setText(msgs[i], f);
+      }
       if (genType === "impersonate") return msgs;
 
       let plan = lastPlan(chatId);
@@ -200,7 +208,7 @@ export function registerPromptInterceptor() {
         const planText = await runSidecar(msgs, plan.tier, L.names.user, settings, userId);
         if (planText) inserts.push({ at: lastUserIdx, msg: { role: "system", content: `<director-plan>\n${planText}\n</director-plan>\nFollow this plan. Do not repeat it; write the reply.` }, name: "ALMANAC · Director plan" });
       }
-      const noteText = plan.formatExample ? `${plan.note}\n${plan.formatExample}` : plan.note;
+      const noteText = [plan.note, plan.speechFix, plan.formatExample].filter(Boolean).join("\n");
       inserts.push({ at: lastUserIdx, msg: { role: "system", content: noteText }, name: "ALMANAC · Now" });
 
       // Apply inserts from the end so indices stay valid; then compute breakdown indices.
@@ -256,11 +264,15 @@ export function registerRenderProcessor() {
   if (!has("chat_mutation")) return;
   host.registerMessageContentProcessor(async (ctx) => {
     if (ctx.origin !== "render" || ctx.isUser || !ctx.messageId) return;
-    if (!/<ledger\b|🗓/u.test(ctx.content)) return;
+    const labelled = /#\d/.test(ctx.content);
+    if (!labelled && !/<ledger\b|🗓/u.test(ctx.content)) return;
     try {
       const files = await loadChat(ctx.chatId, ctx.userId);
       const settings = await loadSettings(ctx.userId);
       if (!isEnabled(files.meta, settings)) return;
+      // `Name#N|tone: "…"` → a proper speaker mark, so the voice card draws.
+      const fixed = labelled ? fixSpeakerLabels(ctx.content) : ctx.content;
+      if (!/<ledger\b|🗓/u.test(fixed)) return fixed !== ctx.content ? { content: fixed } : undefined;
       const L = ledgerFor(ctx.chatId, ctx.userId);
       const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}`;
       const hit = renderCache.get(key);
@@ -269,7 +281,7 @@ export function registerRenderProcessor() {
       const state = L.stateAt(ctx.messageId, files.meta, settings, files.side);
       if (!state) return;
       const al = L.almanac(files.meta, settings, state);
-      let content = ctx.content;
+      let content = fixed;
       // Plate enrichment: exact sun times and moon phase on the header line.
       if (al) content = content.replace(/^([ \t]*🗓[^\n]*?)(\s*⟪[^⟫]*⟫)?[ \t]*$/mu, (_m, line) => `${line}${plateSuffix(al)}`);
       const block = extractLedgerBlock(content);

@@ -74,6 +74,24 @@ const inside = (open: string, close: string) => `(?=(?:(?!${open})[\\s\\S])*?${c
 const TONE_LINE = (c: string, p: string) => `{{switch::${c}::whisper::font-style:italic;opacity:.8::breathless::font-style:italic;opacity:.85::murmur::font-style:italic::shout::font-weight:700;font-size:1.13em::sob::font-style:italic::cold::letter-spacing:.04em::sly::font-style:italic::sing::font-style:italic;text-decoration:underline wavy color-mix(in oklab,${p} 55%,transparent);text-underline-offset:5px::flat::opacity:.85::}}`;
 const TONE_BUBBLE = (c: string, p: string) => `{{switch::${c}::whisper::border-style:dashed;background:transparent::breathless::border-style:dashed;background:transparent::shout::border-width:2.5px;border-color:${p};box-shadow:4px 4px 0 color-mix(in oklab,${p} 35%,transparent);transform:rotate(-.5deg)::tender::box-shadow:0 0 22px -6px ${p}::sob::box-shadow:0 0 22px -6px ${p}::cold::background:color-mix(in oklab,#9fd3ff 14%,transparent);border-color:color-mix(in oklab,#9fd3ff 55%,transparent)::flat::background:color-mix(in oklab,${p} 5%,transparent)::}}`;
 
+// A script-style speaker label at the start of a line: Name#N|tone:  (bold or bracketed too).
+const LABEL = R`(^|\n)([ \t]*)(?:\*\*|__)?\[?([A-ZÀ-ÖØ-Þ?][^\n\[\]#|:*_"“=<>]{0,59}?)[ \t]*#(\d{1,2})[ \t]*`;
+const LABEL_END = R`[ \t]*\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[ \t]*`;
+const LABEL_TARGETS: Target[] = ["response", "display", "prompt"];
+const LABEL_FIXES: RegexDef[] = [
+  { id: "alm-spk-label-tq", name: "Speaker labels → marks (tone, quoted)", layer: "response", target: LABEL_TARGETS, order: 18, macros: "find",
+    find: gate(COLOR_ON) + LABEL + R`\|[ \t]*([a-z]+)` + LABEL_END + R`([^"“\n]*?)(["“][^"“”\n]{1,1200}["”])`, rep: "$1$2$6[spk=$3#$4|$5]$7[/spk]",
+    description: "Buffy#1|flat: \"Words.\" → [spk=Buffy#1|flat]\"Words.\"[/spk]. Narration between the label and the quote stays." },
+  { id: "alm-spk-label-q", name: "Speaker labels → marks (quoted)", layer: "response", target: LABEL_TARGETS, order: 18, macros: "find",
+    find: gate(COLOR_ON) + LABEL + LABEL_END + R`([^"“\n]*?)(["“][^"“”\n]{1,1200}["”])`, rep: "$1$2$5[spk=$3#$4]$6[/spk]" },
+  { id: "alm-spk-label-tu", name: "Speaker labels → marks (tone, unquoted)", layer: "response", target: LABEL_TARGETS, order: 19, macros: "find",
+    find: gate(COLOR_ON) + LABEL + R`\|[ \t]*([a-z]+)` + LABEL_END + R`(?![^\n]*["“”])([^\n]*\S)`, rep: "$1$2[spk=$3#$4|$5]\"$6\"[/spk]" },
+  { id: "alm-spk-label-u", name: "Speaker labels → marks (unquoted)", layer: "response", target: LABEL_TARGETS, order: 19, macros: "find",
+    find: gate(COLOR_ON) + LABEL + LABEL_END + R`(?![^\n]*["“”])([^\n]*\S)`, rep: "$1$2[spk=$3#$4]\"$5\"[/spk]" },
+  { id: "alm-spk-label-plain", name: "Speaker labels → plain names (dialogue blocks off)", layer: "response", target: LABEL_TARGETS, order: 18, macros: "find",
+    find: gate(`{{eq::{{getchatvar::alm_ui_color}}::0}}`) + LABEL + R`(?:\|[ \t]*[a-z]+)?` + LABEL_END, rep: "$1$2$3: " },
+];
+
 // Speaker mark: [spk=Name#N|tone]"…"[/spk]  (closing tag optional up to the next mark/blank line)
 const SPK = R`\[spk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*([a-z]+))?\]`;
 const SPK_BODY = R`([\s\S]*?)(?:\[\/spk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)`;
@@ -109,6 +127,11 @@ export const REGEX: RegexDef[] = [
     find: R`(<ledger>[\s\S]*?<\/ledger>)\s*(?=\S)([\s\S]+?)\s*$`, rep: "$2\n\n$1",
     description: "The router reads the mode line at the end of the message, so anything written after the ledger moves above it.",
   },
+  // Speech written as a script label — Buffy#1|flat: "Words." — instead of the mark.
+  // Runs on new replies, on how older ones display, and on the history the model
+  // reads (older [spk] marks are thinned, so a leftover label would be the only
+  // example it sees and it would copy it).
+  ...LABEL_FIXES,
   {
     id: "alm-spk-before", name: "Speaker tags · name before the quote", layer: "response", target: ["response"], order: 20, macros: "find",
     find: gate(COLOR_ON) + R`(^|[.!?]\s+|\n)((?!(?:She|He|They|It|We|I|You|The|A|An|This|That|Then|But|And|When|Her|His|Their)\b)[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]*(?:[ \t]+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]*){0,2})([ \t]+(?:said|says|asked|asks|replied|replies|answered|answers|whispered|whispers|murmured|murmurs|muttered|mutters|called|calls|shouted|shouts|snapped|snaps|breathed|breathes|added|adds|warned|warns|insisted|insists|admitted|admits|offered|offers|continued|continues|laughed|laughs|sighed|sighs)(?:[ \t]+[a-z]+ly)?[ \t]*[,:][ \t]*)(?!\[spk)(["“][^"“”\n]{1,1200}["”])`,

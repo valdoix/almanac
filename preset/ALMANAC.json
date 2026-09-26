@@ -2,7 +2,7 @@
   "name": "ALMANAC",
   "description": "A living-world roleplay preset: deep characters with private minds, autonomous NPCs who relate to each other, a knowledge firewall, real time and weather, genre contracts that change the story, a sealed persona, and a line-based ledger that drives trackers and memory. Works alone; pairs with the ALMANAC Ledger extension for verified state, chapters, recall and a deterministic almanac.",
   "coverUrl": null,
-  "presetVersion": "1.0.0",
+  "presetVersion": "1.0.1",
   "schemaVersion": 2,
   "samplerOverrides": {
     "enabled": true,
@@ -1919,7 +1919,7 @@
       "characterTagTrigger": [],
       "group": null,
       "categoryMode": null,
-      "content": "[PRESENTATION — the page renders these marks; write them exactly]\n{{if::{{var::dialogue_color}}}}Speech: wrap each unbroken line of speech whose speaker is certain: [spk=Name#N]\"Words.\"[/spk]\nName exactly as established; #N is that person's voice number{{if::{{getvar::alm_linked}}}} from this roster: {{almVoices}}. Anyone new takes an unused number from 1 to 12{{else}} — give each new speaker an unused number from 1 to 12 and keep it for the whole story; {{user}} is 0{{/if}}. When delivery matters, add a tone after a bar: [spk=Name#N|whisper] — whisper, murmur, shout, sing, sob, cold, tender, sly, breathless, flat. Narration stays outside the wrapper; a line that begins a paragraph becomes a voice card, a line mid-sentence becomes a chip. An unseen or uncertain speaker is [spk=?].{{if::{{getvar::alm_sealed}}}} Tag {{user}}'s words only when quoting what the player wrote.{{/if}}\n{{/if}}{{if::{{eq::{{var::inner_voice}}::prose}}}}A thought on the page: [thk=Name#N]the thought[/thk]\n{{/if}}Words a character reads in passing — a sign, a carving, a screen: [txt=sign]THE GILDED STAG[/txt] (kinds: sign, screen, neon, chalk).\n{{if::{{ne::{{var::vtk}}::off}}}}Visual artifacts: when something with words or data enters the scene, show the thing itself, then return to prose.\n[vtk=kind|Title|detail]\ncontent\n[/vtk]\nKinds: {{var::vtk_kinds}}. Inside: » Name: message and « message (phone thread, received and sent) · Item .... price (menus, receipts) · → leg · time (routes) · [redacted] · [sig=Name] · [stamp=TEXT] · ## headline (news) · > command (screens) · ♪ lyric line (songs) · [card=Name|upright] (omens){{if::{{var::meters}}}} · [meter=Label|current|max] one per line{{/if}}.\n{{switch::{{var::vtk}}::rare::Use one only when the story turns on a document or screen.::balanced::Use one whenever a readable object is present and worth seeing.::frequent::Use them freely — letters, screens, menus and signs make the world tangible.}} An artifact is something a character could hold and read — never a menu of choices, a stat dump or commentary.{{if::{{ne::{{var::ledger}}::off}}}} File each one with an artifact line in the ledger.{{/if}}\n{{/if}}{{if::{{eq::{{var::inner_voice}}::register}}}}Unspoken register — after the prose, the private thoughts of {{switch::{{var::thoughts_scope}}::spotlight::one or two present characters whose hidden tension changes the beat::shift::present characters whose stance changed this beat::present::everyone present, one line each}}:\n<unspoken>\n<t who=\"Name#N\" cue=\"the visible tell in the prose\">A first-person thought in their own voice.</t>\n</unspoken>\nOne or two sentences each{{if::{{var::persona_thoughts}}}}; include one for {{user}} — the one place you may voice {{user}}'s private thought, deciding nothing {{user}} does or says{{else}}{{if::{{getvar::alm_sealed}}}}; never {{user}}{{/if}}{{/if}}. The cue must be visible in the prose. Nothing in the register is known to anyone but its owner.\n{{/if}}",
+      "content": "[PRESENTATION — the page renders these marks; write them exactly]\n{{if::{{var::dialogue_color}}}}Speech: wrap each unbroken line of speech whose speaker is certain: [spk=Name#N]\"Words.\"[/spk]\nName exactly as established; #N is that person's voice number{{if::{{getvar::alm_linked}}}} from this roster: {{almVoices}}. Anyone new takes an unused number from 1 to 12{{else}} — give each new speaker an unused number from 1 to 12 and keep it for the whole story; {{user}} is 0{{/if}}. When delivery matters, add a tone after a bar: [spk=Name#N|whisper] — whisper, murmur, shout, sing, sob, cold, tender, sly, breathless, flat. Narration stays outside the wrapper; a line that begins a paragraph becomes a voice card, a line mid-sentence becomes a chip. An unseen or uncertain speaker is [spk=?]. The mark is the only speaker label: never write Name#N: or Name#N|tone: in front of a line, and never a bare \"Name:\" script line.{{if::{{getvar::alm_sealed}}}} Tag {{user}}'s words only when quoting what the player wrote.{{/if}}\n{{/if}}{{if::{{eq::{{var::inner_voice}}::prose}}}}A thought on the page: [thk=Name#N]the thought[/thk]\n{{/if}}Words a character reads in passing — a sign, a carving, a screen: [txt=sign]THE GILDED STAG[/txt] (kinds: sign, screen, neon, chalk).\n{{if::{{ne::{{var::vtk}}::off}}}}Visual artifacts: when something with words or data enters the scene, show the thing itself, then return to prose.\n[vtk=kind|Title|detail]\ncontent\n[/vtk]\nKinds: {{var::vtk_kinds}}. Inside: » Name: message and « message (phone thread, received and sent) · Item .... price (menus, receipts) · → leg · time (routes) · [redacted] · [sig=Name] · [stamp=TEXT] · ## headline (news) · > command (screens) · ♪ lyric line (songs) · [card=Name|upright] (omens){{if::{{var::meters}}}} · [meter=Label|current|max] one per line{{/if}}.\n{{switch::{{var::vtk}}::rare::Use one only when the story turns on a document or screen.::balanced::Use one whenever a readable object is present and worth seeing.::frequent::Use them freely — letters, screens, menus and signs make the world tangible.}} An artifact is something a character could hold and read — never a menu of choices, a stat dump or commentary.{{if::{{ne::{{var::ledger}}::off}}}} File each one with an artifact line in the ledger.{{/if}}\n{{/if}}{{if::{{eq::{{var::inner_voice}}::register}}}}Unspoken register — after the prose, the private thoughts of {{switch::{{var::thoughts_scope}}::spotlight::one or two present characters whose hidden tension changes the beat::shift::present characters whose stance changed this beat::present::everyone present, one line each}}:\n<unspoken>\n<t who=\"Name#N\" cue=\"the visible tell in the prose\">A first-person thought in their own voice.</t>\n</unspoken>\nOne or two sentences each{{if::{{var::persona_thoughts}}}}; include one for {{user}} — the one place you may voice {{user}}'s private thought, deciding nothing {{user}} does or says{{else}}{{if::{{getvar::alm_sealed}}}}; never {{user}}{{/if}}{{/if}}. The cue must be visible in the prose. Nothing in the register is known to anyone but its owner.\n{{/if}}",
       "id": "alm-marks",
       "name": "Marks & Artifacts",
       "variables": [
@@ -3254,6 +3254,166 @@
         "substitute_macros": "none",
         "disabled": false,
         "sort_order": 12,
+        "actions": [],
+        "metadata": {
+          "suite": "ALMANAC",
+          "schema": "lumiverse-regex-v1",
+          "layer": "response"
+        }
+      },
+      {
+        "script_id": "alm-spk-label-tq",
+        "name": "ALMANAC · Speaker labels → marks (tone, quoted)",
+        "folder": "ALMANAC",
+        "description": "Buffy#1|flat: \"Words.\" → [spk=Buffy#1|flat]\"Words.\"[/spk]. Narration between the label and the quote stays.",
+        "find_regex": "{{if::{{ne::{{getchatvar::alm_ui_color}}::0}}}}{{else}}(?!){{/if}}(^|\\n)([ \\t]*)(?:\\*\\*|__)?\\[?([A-ZÀ-ÖØ-Þ?][^\\n\\[\\]#|:*_\"“=<>]{0,59}?)[ \\t]*#(\\d{1,2})[ \\t]*\\|[ \\t]*([a-z]+)[ \\t]*\\]?(?:\\*\\*|__)?[ \\t]*:(?:\\*\\*|__)?[ \\t]*([^\"“\\n]*?)([\"“][^\"“”\\n]{1,1200}[\"”])",
+        "replace_string": "$1$2$6[spk=$3#$4|$5]$7[/spk]",
+        "flags": "g",
+        "placement": [
+          "ai_output"
+        ],
+        "scope": "global",
+        "scope_id": null,
+        "target": [
+          "response",
+          "display",
+          "prompt"
+        ],
+        "min_depth": null,
+        "max_depth": null,
+        "trim_strings": [],
+        "run_on_edit": true,
+        "substitute_macros": "find",
+        "disabled": false,
+        "sort_order": 18,
+        "actions": [],
+        "metadata": {
+          "suite": "ALMANAC",
+          "schema": "lumiverse-regex-v1",
+          "layer": "response"
+        }
+      },
+      {
+        "script_id": "alm-spk-label-q",
+        "name": "ALMANAC · Speaker labels → marks (quoted)",
+        "folder": "ALMANAC",
+        "description": "",
+        "find_regex": "{{if::{{ne::{{getchatvar::alm_ui_color}}::0}}}}{{else}}(?!){{/if}}(^|\\n)([ \\t]*)(?:\\*\\*|__)?\\[?([A-ZÀ-ÖØ-Þ?][^\\n\\[\\]#|:*_\"“=<>]{0,59}?)[ \\t]*#(\\d{1,2})[ \\t]*[ \\t]*\\]?(?:\\*\\*|__)?[ \\t]*:(?:\\*\\*|__)?[ \\t]*([^\"“\\n]*?)([\"“][^\"“”\\n]{1,1200}[\"”])",
+        "replace_string": "$1$2$5[spk=$3#$4]$6[/spk]",
+        "flags": "g",
+        "placement": [
+          "ai_output"
+        ],
+        "scope": "global",
+        "scope_id": null,
+        "target": [
+          "response",
+          "display",
+          "prompt"
+        ],
+        "min_depth": null,
+        "max_depth": null,
+        "trim_strings": [],
+        "run_on_edit": true,
+        "substitute_macros": "find",
+        "disabled": false,
+        "sort_order": 18,
+        "actions": [],
+        "metadata": {
+          "suite": "ALMANAC",
+          "schema": "lumiverse-regex-v1",
+          "layer": "response"
+        }
+      },
+      {
+        "script_id": "alm-spk-label-tu",
+        "name": "ALMANAC · Speaker labels → marks (tone, unquoted)",
+        "folder": "ALMANAC",
+        "description": "",
+        "find_regex": "{{if::{{ne::{{getchatvar::alm_ui_color}}::0}}}}{{else}}(?!){{/if}}(^|\\n)([ \\t]*)(?:\\*\\*|__)?\\[?([A-ZÀ-ÖØ-Þ?][^\\n\\[\\]#|:*_\"“=<>]{0,59}?)[ \\t]*#(\\d{1,2})[ \\t]*\\|[ \\t]*([a-z]+)[ \\t]*\\]?(?:\\*\\*|__)?[ \\t]*:(?:\\*\\*|__)?[ \\t]*(?![^\\n]*[\"“”])([^\\n]*\\S)",
+        "replace_string": "$1$2[spk=$3#$4|$5]\"$6\"[/spk]",
+        "flags": "g",
+        "placement": [
+          "ai_output"
+        ],
+        "scope": "global",
+        "scope_id": null,
+        "target": [
+          "response",
+          "display",
+          "prompt"
+        ],
+        "min_depth": null,
+        "max_depth": null,
+        "trim_strings": [],
+        "run_on_edit": true,
+        "substitute_macros": "find",
+        "disabled": false,
+        "sort_order": 19,
+        "actions": [],
+        "metadata": {
+          "suite": "ALMANAC",
+          "schema": "lumiverse-regex-v1",
+          "layer": "response"
+        }
+      },
+      {
+        "script_id": "alm-spk-label-u",
+        "name": "ALMANAC · Speaker labels → marks (unquoted)",
+        "folder": "ALMANAC",
+        "description": "",
+        "find_regex": "{{if::{{ne::{{getchatvar::alm_ui_color}}::0}}}}{{else}}(?!){{/if}}(^|\\n)([ \\t]*)(?:\\*\\*|__)?\\[?([A-ZÀ-ÖØ-Þ?][^\\n\\[\\]#|:*_\"“=<>]{0,59}?)[ \\t]*#(\\d{1,2})[ \\t]*[ \\t]*\\]?(?:\\*\\*|__)?[ \\t]*:(?:\\*\\*|__)?[ \\t]*(?![^\\n]*[\"“”])([^\\n]*\\S)",
+        "replace_string": "$1$2[spk=$3#$4]\"$5\"[/spk]",
+        "flags": "g",
+        "placement": [
+          "ai_output"
+        ],
+        "scope": "global",
+        "scope_id": null,
+        "target": [
+          "response",
+          "display",
+          "prompt"
+        ],
+        "min_depth": null,
+        "max_depth": null,
+        "trim_strings": [],
+        "run_on_edit": true,
+        "substitute_macros": "find",
+        "disabled": false,
+        "sort_order": 19,
+        "actions": [],
+        "metadata": {
+          "suite": "ALMANAC",
+          "schema": "lumiverse-regex-v1",
+          "layer": "response"
+        }
+      },
+      {
+        "script_id": "alm-spk-label-plain",
+        "name": "ALMANAC · Speaker labels → plain names (dialogue blocks off)",
+        "folder": "ALMANAC",
+        "description": "",
+        "find_regex": "{{if::{{eq::{{getchatvar::alm_ui_color}}::0}}}}{{else}}(?!){{/if}}(^|\\n)([ \\t]*)(?:\\*\\*|__)?\\[?([A-ZÀ-ÖØ-Þ?][^\\n\\[\\]#|:*_\"“=<>]{0,59}?)[ \\t]*#(\\d{1,2})[ \\t]*(?:\\|[ \\t]*[a-z]+)?[ \\t]*\\]?(?:\\*\\*|__)?[ \\t]*:(?:\\*\\*|__)?[ \\t]*",
+        "replace_string": "$1$2$3: ",
+        "flags": "g",
+        "placement": [
+          "ai_output"
+        ],
+        "scope": "global",
+        "scope_id": null,
+        "target": [
+          "response",
+          "display",
+          "prompt"
+        ],
+        "min_depth": null,
+        "max_depth": null,
+        "trim_strings": [],
+        "run_on_edit": true,
+        "substitute_macros": "find",
+        "disabled": false,
+        "sort_order": 18,
         "actions": [],
         "metadata": {
           "suite": "ALMANAC",
@@ -5047,7 +5207,7 @@
   },
   "metadata": {
     "almanac": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "companion": "almanac_ledger",
       "design": "design/02-preset-almanac.md"
     }

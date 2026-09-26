@@ -9,7 +9,7 @@ import { chekhovNudges } from "../core/pressures";
 import { recall, tierGuess } from "../core/recall";
 import { genreNudge } from "../core/telemetry";
 import { absMinutes, fmtSpan, plainProse } from "../core/util";
-import { extractLedgerBlock } from "../core/dsl";
+import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels } from "../core/dsl";
 import { debug, describe, has, host, warn, within } from "./host";
 import { ledgerFor, type ChatLedger } from "./ledger";
 import type { ChatMeta } from "./store";
@@ -33,6 +33,8 @@ export interface TurnPlan {
   injectedIds: string[];
   returning: boolean;
   formatExample?: string;
+  /** Set when the last reply labelled speech as `Name#N|tone:` instead of using [spk] marks. */
+  speechFix?: string;
 }
 
 const plans = new Map<string, TurnPlan>();
@@ -140,13 +142,21 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     const b = extractLedgerBlock(lastReplyMsg.content);
     if (b) formatExample = `Format reminder — last turn's ledger, as an example of the shape:\n<ledger>\n${b.body}\n</ledger>`;
   }
+  let speechFix: string | undefined;
+  if (lastReplyMsg && hasSpeakerLabels(lastReplyMsg.content)) {
+    SPEAKER_LABEL.lastIndex = 0;
+    const m = SPEAKER_LABEL.exec(lastReplyMsg.content);
+    SPEAKER_LABEL.lastIndex = 0;
+    const who = m ? `${m[3].trim()}#${m[4]}${m[5] ? `|${m[5]}` : ""}` : "Name#N|tone";
+    speechFix = `Speech format: your last reply put a label in front of speech (${who}: "…"). The page can't draw that. Write every spoken line as [spk=${who}]"Words."[/spk], with no label before it.`;
+  }
 
   const plan: TurnPlan = {
     chatId, genType, createdAt: Date.now(), enabled: true, note: noteRes.text, recallText, mirrorPicks,
     mirrorChronicle: new Set(Object.entries(meta.mirror.entries).filter(([id]) => id.startsWith("chron:")).map(([, v]) => v.entryId)),
     lorePicks, loreManagedBooks, divergence, tier,
     feed: { at: Date.now(), tier, items: rc.feed, tokens: rc.tokens + noteRes.tokens },
-    firedKeys: rc.firedKeys, injectedIds: rc.items.map((i) => i.record.id), returning: !!returning, formatExample,
+    firedKeys: rc.firedKeys, injectedIds: rc.items.map((i) => i.record.id), returning: !!returning, formatExample, speechFix,
   };
   if (!opts.dryRun) {
     // Feedback bookkeeping for the next turn.

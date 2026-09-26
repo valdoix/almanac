@@ -1199,7 +1199,29 @@ function parseVtks(text) {
     out.push({ kind: m[1].toLowerCase(), title: (m[2] ?? "").trim(), meta: (m[3] ?? "").trim(), body: m[4].trim() });
   return out;
 }
+var SPEAKER_LABEL = /(^|\n)([ \t]*)(?:\*\*|__)?\[?([A-Z\u00C0-\u00D6\u00D8-\u00DE?][^\n\[\]#|:*_"\u201C=<>]{0,59}?)[ \t]*#(\d{1,2})[ \t]*(?:\|[ \t]*([a-z]+)[ \t]*)?\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[ \t]*([^\n]*)/g;
+function fixSpeakerLabels(text) {
+  if (!/#\d/.test(text))
+    return text;
+  return text.replace(SPEAKER_LABEL, (all, lead, ws, name, slot, tone, rest) => {
+    const mark = `[spk=${name.trim()}#${slot}${tone ? `|${tone}` : ""}]`;
+    const q = /(["\u201C][^"\u201C\u201D\n]{1,1200}["\u201D])/.exec(rest);
+    if (q)
+      return `${lead}${ws}${rest.slice(0, q.index)}${mark}${q[1]}[/spk]${rest.slice(q.index + q[1].length)}`;
+    const words = rest.trim();
+    if (!words || /["\u201C\u201D]/.test(words))
+      return all;
+    return `${lead}${ws}${mark}"${words}"[/spk]`;
+  });
+}
+function hasSpeakerLabels(text) {
+  SPEAKER_LABEL.lastIndex = 0;
+  const hit = SPEAKER_LABEL.test(text);
+  SPEAKER_LABEL.lastIndex = 0;
+  return hit;
+}
 function parseSpeakers(text) {
+  text = fixSpeakerLabels(text);
   const seen = new Map;
   const re = /\[(?:spk|thk)=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|[^\]]*)?\]/g;
   let m;
@@ -1287,7 +1309,7 @@ function parseMessage(text) {
 }
 
 // src/core/version.ts
-var VERSION = "1.1.1";
+var VERSION = "1.1.2";
 
 // src/core/types.ts
 var BIPOLAR_AXES = ["trust", "affection", "respect", "comfort"];
@@ -4969,6 +4991,14 @@ ${recallItems.join(`
 ${b.body}
 </ledger>`;
   }
+  let speechFix;
+  if (lastReplyMsg && hasSpeakerLabels(lastReplyMsg.content)) {
+    SPEAKER_LABEL.lastIndex = 0;
+    const m = SPEAKER_LABEL.exec(lastReplyMsg.content);
+    SPEAKER_LABEL.lastIndex = 0;
+    const who = m ? `${m[3].trim()}#${m[4]}${m[5] ? `|${m[5]}` : ""}` : "Name#N|tone";
+    speechFix = `Speech format: your last reply put a label in front of speech (${who}: "\u2026"). The page can't draw that. Write every spoken line as [spk=${who}]"Words."[/spk], with no label before it.`;
+  }
   const plan = {
     chatId,
     genType,
@@ -4986,7 +5016,8 @@ ${b.body}
     firedKeys: rc.firedKeys,
     injectedIds: rc.items.map((i) => i.record.id),
     returning: !!returning,
-    formatExample
+    formatExample,
+    speechFix
   };
   if (!opts.dryRun) {
     for (const id of plan.injectedIds)
@@ -5356,6 +5387,14 @@ function registerPromptInterceptor() {
       }
       if (!isEnabled(meta, settings))
         return msgs;
+      for (let i = 0;i < msgs.length; i++) {
+        if (msgs[i].role !== "assistant")
+          continue;
+        const t = textOf(msgs[i]);
+        const f = fixSpeakerLabels(t);
+        if (f !== t)
+          msgs[i] = setText(msgs[i], f);
+      }
       if (genType === "impersonate")
         return msgs;
       let plan = lastPlan(chatId);
@@ -5399,8 +5438,8 @@ ${planText}
 </director-plan>
 Follow this plan. Do not repeat it; write the reply.` }, name: "ALMANAC \xB7 Director plan" });
       }
-      const noteText = plan.formatExample ? `${plan.note}
-${plan.formatExample}` : plan.note;
+      const noteText = [plan.note, plan.speechFix, plan.formatExample].filter(Boolean).join(`
+`);
       inserts.push({ at: lastUserIdx, msg: { role: "system", content: noteText }, name: "ALMANAC \xB7 Now" });
       inserts.sort((a, b) => a.at - b.at);
       const out = [];
@@ -5452,13 +5491,17 @@ function registerRenderProcessor() {
   host.registerMessageContentProcessor(async (ctx) => {
     if (ctx.origin !== "render" || ctx.isUser || !ctx.messageId)
       return;
-    if (!/<ledger\b|\uD83D\uDDD3/u.test(ctx.content))
+    const labelled = /#\d/.test(ctx.content);
+    if (!labelled && !/<ledger\b|\uD83D\uDDD3/u.test(ctx.content))
       return;
     try {
       const files = await loadChat(ctx.chatId, ctx.userId);
       const settings = await loadSettings(ctx.userId);
       if (!isEnabled(files.meta, settings))
         return;
+      const fixed = labelled ? fixSpeakerLabels(ctx.content) : ctx.content;
+      if (!/<ledger\b|\uD83D\uDDD3/u.test(fixed))
+        return fixed !== ctx.content ? { content: fixed } : undefined;
       const L = ledgerFor(ctx.chatId, ctx.userId);
       const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}`;
       const hit = renderCache.get(key);
@@ -5470,7 +5513,7 @@ function registerRenderProcessor() {
       if (!state)
         return;
       const al = L.almanac(files.meta, settings, state);
-      let content = ctx.content;
+      let content = fixed;
       if (al)
         content = content.replace(/^([ \t]*\uD83D\uDDD3[^\n]*?)(\s*\u27EA[^\u27EB]*\u27EB)?[ \t]*$/mu, (_m, line) => `${line}${plateSuffix(al)}`);
       const block = extractLedgerBlock(content);
