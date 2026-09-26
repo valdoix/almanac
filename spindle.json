@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "name": "ALMANAC Ledger",
+  "identifier": "almanac_ledger",
+  "author": "valdoix",
+  "github": "https://github.com/valdoix/almanac",
+  "homepage": "https://github.com/valdoix/almanac",
+  "description": "Story memory for the ALMANAC preset: branch-safe world state, chapters that replace old turns, a Codex, knowledge-aware recall, computed weather and sky, a lore bridge, and a lorebook creator.",
+  "permissions": [
+    "interceptor",
+    "context_handler",
+    "generation",
+    "chats",
+    "chat_mutation",
+    "world_books",
+    "characters",
+    "personas",
+    "tools",
+    "ui_panels"
+  ],
+  "entry_backend": "dist/backend.js",
+  "entry_frontend": "dist/frontend.js",
+  "interceptorTimeoutMs": 60000,
+  "minimum_lumiverse_version": "1.1.6"
+}

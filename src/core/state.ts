@@ -1,0 +1,843 @@
+// Event-sourced world state. `Folder` applies parsed ledger ops for one message
+// at a time, validating each against the state so far, and records every op as
+// an accepted / warned / rejected event. Branch correctness comes from the
+// caller: only messages on the active path (current swipes) are folded.
+
+import type {
+  BondAxis, BondState, CharacterState, EventSource, KnowRow, LedgerEvent, MessageDelta,
+  ParsedLedger, ParsedOp, WorldState,
+} from "./types";
+import { ALL_AXES, BIPOLAR_AXES } from "./types";
+import { absMinutes, addMinutes, clamp, fmtSpan, fromAbs, MIN_PER_DAY, slug, type StoryTime } from "./util";
+
+export interface FoldOptions {
+  userName: string;
+  userAliases?: string[];
+  strictness: "strict" | "lenient";
+  /** Sealed / Continuity persona modes: drop the player's inner-state ops. */
+  sealed: boolean;
+  personaThoughts?: boolean;
+  romance?: string; // off | slow | measured | fast | established
+  startTime?: StoryTime | null;
+}
+
+export const CONFIDENCE: Record<EventSource, number> = {
+  user: 1, model: 0.9, lore: 0.85, archivist: 0.8, repair: 0.75, engine: 0.95, sim: 0.7, extractor: 0.6,
+};
+
+const PIVOTAL = /betray|rescu|saved|save[sd]? (her|his|their|my) life|kill|murder|unforgiv|sacrific|confess|abandon|attack|lied about|revealed|died|death|oath|marri|propos/i;
+
+const MODE_INSTRUMENTS: Record<string, string> = {
+  clue: "mystery", ladder: "romance", deadline: "thriller", clockf: "intrigue", payoff: "comedy", plant: "comedy",
+};
+
+export function emptyState(): WorldState {
+  return {
+    time: null,
+    weather: null,
+    place: [],
+    mode: "social",
+    title: undefined,
+    sceneNo: 0,
+    sceneStartMsg: 0,
+    sceneStartAbs: null,
+    chars: {},
+    bonds: {},
+    ladders: {},
+    knowledge: [],
+    items: {},
+    threads: {},
+    cons: {},
+    factions: {},
+    rumors: [],
+    rep: {},
+    canon: [],
+    artifacts: {},
+    keys: {},
+    gauges: {},
+    clues: [],
+    plants: [],
+    deadlines: {},
+    milestones: [],
+    places: {},
+    voices: {},
+    nextSlot: 1,
+    lastDelta: null,
+    genreHits: {},
+    msgCount: 0,
+    ledgerCount: 0,
+    unverified: [],
+  };
+}
+
+export class Folder {
+  state: WorldState;
+  opts: FoldOptions;
+  private userKeys: Set<string>;
+
+  constructor(opts: FoldOptions, state?: WorldState) {
+    this.opts = opts;
+    this.state = state ?? emptyState();
+    this.userKeys = new Set(
+      [opts.userName, ...(opts.userAliases ?? []), "{{user}}", "user", "you", "player"]
+        .filter(Boolean)
+        .map((s) => s.toLowerCase().trim()),
+    );
+    if (!this.state.time && opts.startTime) this.state.time = { ...opts.startTime };
+  }
+
+  // -------------------------------------------------------------------------
+  // Identity
+  // -------------------------------------------------------------------------
+
+  isUser(name: string): boolean {
+    return this.userKeys.has(name.toLowerCase().trim());
+  }
+
+  /** Resolve a written name to a character id, creating the character on first sight. */
+  charId(name: string, msgIndex: number, create = true): string | null {
+    const n = name.replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").trim();
+    if (!n) return null;
+    if (this.isUser(n)) {
+      this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
+      return "user";
+    }
+    const low = n.toLowerCase();
+    for (const c of Object.values(this.state.chars)) {
+      if (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low)) return c.id;
+    }
+    // "Mara Voss" vs "Mara": match on first name when unambiguous
+    const first = low.split(/\s+/)[0];
+    const byFirst = Object.values(this.state.chars).filter((c) => c.name.toLowerCase().split(/\s+/)[0] === first);
+    if (byFirst.length === 1 && first.length > 2) {
+      const c = byFirst[0];
+      if (n.length > c.name.length) {
+        c.aliases.push(c.name);
+        c.name = n;
+      } else if (!c.aliases.includes(n)) c.aliases.push(n);
+      return c.id;
+    }
+    if (!create) return null;
+    let id = slug(n);
+    if (id === "user") id = "user_npc";
+    while (this.state.chars[id] && this.state.chars[id].name.toLowerCase() !== low) id += "_";
+    this.ensureChar(id, n, msgIndex, false);
+    return id;
+  }
+
+  private ensureChar(id: string, name: string, msgIndex: number, isUser: boolean): CharacterState {
+    let c = this.state.chars[id];
+    if (!c) {
+      c = {
+        id, name, aliases: [], slot: isUser ? 0 : this.assignSlot(id), isUser,
+        firstSeen: msgIndex, lastSeen: msgIndex, meters: {}, flags: [], injuries: [], journal: [],
+      };
+      this.state.chars[id] = c;
+      if (!isUser) this.milestone(msgIndex, "meet", `${name} enters the story`);
+    }
+    c.lastSeen = Math.max(c.lastSeen, msgIndex);
+    return c;
+  }
+
+  private assignSlot(id: string): number {
+    if (this.state.voices[id] != null) return this.state.voices[id];
+    const used = new Set(Object.values(this.state.voices));
+    let slot = this.state.nextSlot;
+    for (let i = 0; i < 12 && used.has(slot); i++) slot = (slot % 12) + 1;
+    this.state.voices[id] = slot;
+    this.state.nextSlot = (slot % 12) + 1;
+    return slot;
+  }
+
+  /** Adopt voice slots the model already used in [spk=Name#N] marks. */
+  adoptSpeakers(speakers: { name: string; slot?: number }[], msgIndex: number): void {
+    for (const s of speakers) {
+      if (this.isUser(s.name)) continue;
+      const existing = this.charId(s.name, msgIndex, false);
+      if (existing) continue;
+      const id = this.charId(s.name, msgIndex, true)!;
+      if (s.slot && s.slot >= 1 && s.slot <= 12) {
+        this.state.voices[id] = s.slot;
+        this.state.chars[id].slot = s.slot;
+      }
+    }
+  }
+
+  private milestone(msgIndex: number, kind: string, text: string) {
+    this.state.milestones.push({ at: this.state.time ? { ...this.state.time } : null, msgIndex, kind, text });
+    if (this.state.milestones.length > 400) this.state.milestones.splice(0, this.state.milestones.length - 400);
+  }
+
+  // -------------------------------------------------------------------------
+  // Message application
+  // -------------------------------------------------------------------------
+
+  applyMessage(
+    msgIndex: number,
+    msgId: string,
+    swipe: number,
+    parsed: ParsedLedger,
+    source: EventSource = "model",
+    extra: ParsedOp[] = [],
+    extraSource: EventSource = "user",
+  ): LedgerEvent[] {
+    const st = this.state;
+    st.msgCount = Math.max(st.msgCount, msgIndex + 1);
+    const startAbs = st.time ? absMinutes(st.time) : null;
+    const events: LedgerEvent[] = [];
+    const delta: MessageDelta = { msgIndex, msgId, count: 0, elapsed: 0, lines: [], rejected: [] };
+    const hadPlace = st.place.join(" › ");
+    const hadMode = st.mode;
+    const hadTitle = st.title;
+
+    if (parsed.speakers?.length) this.adoptSpeakers(parsed.speakers, msgIndex);
+
+    // Header is a fallback source of time/place/weather when the ledger omits them.
+    const ops = [...parsed.ops];
+    if (parsed.header) this.applyHeader(parsed, ops, msgIndex);
+    if (parsed.title) st.title = parsed.title;
+    if (parsed.ops.length) st.ledgerCount++;
+
+    const castOp = ops.some((o) => o.op === "cast");
+    let seq = 0;
+    const run = (op: ParsedOp, src: EventSource) => {
+      const ev: LedgerEvent = {
+        id: `${msgId}:${swipe}:${seq}`,
+        msgId, swipe, msgIndex, seq: seq++, source: src, op,
+        confidence: CONFIDENCE[src], verdict: "accepted",
+      };
+      try {
+        const res = this.applyOp(op, msgIndex, src, castOp);
+        if (res && res.verdict !== "accepted") {
+          ev.verdict = res.verdict;
+          ev.reason = res.reason;
+        }
+        if (res?.line && ev.verdict !== "rejected") delta.lines.push(res.line);
+      } catch (e) {
+        ev.verdict = "rejected";
+        ev.reason = `error: ${(e as Error).message}`;
+      }
+      if (ev.verdict === "rejected") delta.rejected.push({ raw: op.raw, reason: ev.reason ?? "rejected" });
+      else delta.count++;
+      ev.at = st.time ? { ...st.time } : null;
+      events.push(ev);
+    };
+    for (const op of ops) run(op, source);
+    for (const op of extra) run(op, extraSource);
+
+    // Thoughts and artifacts in the prose.
+    for (const t of parsed.thoughts ?? []) {
+      const id = this.charId(t.who, msgIndex);
+      if (id && id !== "user") this.state.chars[id].lastSeen = msgIndex;
+    }
+    for (const v of parsed.vtks ?? []) {
+      const aid = `doc:${slug(v.title || v.kind)}`;
+      const existing = st.artifacts[aid];
+      st.artifacts[aid] = {
+        id: aid, title: v.title || v.kind, kind: v.kind, text: v.body, meta: v.meta,
+        holder: existing?.holder, keys: existing?.keys ?? [], msgIndex,
+      };
+    }
+
+    const endAbs = st.time ? absMinutes(st.time) : null;
+    delta.elapsed = startAbs != null && endAbs != null ? endAbs - startAbs : 0;
+
+    // Scene boundary: place change, ≥60 min jump, new title, downtime.
+    const newPlace = st.place.join(" › ");
+    const boundary =
+      (hadPlace && newPlace && hadPlace !== newPlace) ||
+      delta.elapsed >= 60 ||
+      (parsed.title && parsed.title !== hadTitle && st.sceneStartMsg !== msgIndex) ||
+      (st.mode === "downtime" && hadMode !== "downtime");
+    if (boundary || st.sceneNo === 0) {
+      st.sceneNo++;
+      st.sceneStartMsg = msgIndex;
+      st.sceneStartAbs = endAbs;
+    }
+
+    if (source !== "model" && parsed.ops.length) st.unverified.push(msgIndex);
+    st.lastDelta = delta;
+    return events;
+  }
+
+  private applyHeader(parsed: ParsedLedger, ops: ParsedOp[], _msgIndex: number) {
+    const h = parsed.header!;
+    const has = (o: string) => ops.some((x) => x.op === o);
+    if (!has("clock") && h.time != null) {
+      ops.unshift({ op: "clock", args: { kind: "abs", day: h.day, minute: h.time, fromHeader: true }, raw: "(header) time" });
+    }
+    if (!has("wx") && h.condition) {
+      ops.push({ op: "wx", args: { condition: h.condition, intensity: h.intensity, tempC: h.tempC, wind: h.wind, glyph: h.glyph, fromHeader: true }, raw: "(header) weather" });
+    } else if (h.glyph) {
+      const wx = ops.find((x) => x.op === "wx");
+      if (wx) wx.args.glyph = h.glyph;
+    }
+    if (!has("at") && h.place?.length) {
+      ops.push({ op: "at", args: { path: h.place, fromHeader: true }, raw: "(header) place" });
+    }
+  }
+
+  private applyOp(
+    op: ParsedOp,
+    mi: number,
+    src: EventSource,
+    castOp: boolean,
+  ): { verdict: "accepted" | "rejected" | "warned"; reason?: string; line?: string } | void {
+    const st = this.state;
+    const strict = this.opts.strictness === "strict" && src !== "user";
+    const a = op.args;
+    const reject = (reason: string) => ({ verdict: "rejected" as const, reason });
+
+    // The player's inner state is theirs in Sealed / Continuity modes.
+    const innerOps = new Set(["mood", "journal", "status"]);
+    if (innerOps.has(op.op) && op.subject && this.isUser(op.subject) && this.opts.sealed && !this.opts.personaThoughts && src !== "user") {
+      return reject("the player's inner state belongs to the player (sealed persona)");
+    }
+
+    switch (op.op) {
+      case "clock": {
+        const cur = st.time;
+        if (a.kind === "rel") {
+          if (a.minutes < 0) return reject("time cannot run backwards");
+          if (!cur) {
+            st.time = { day: 1, minute: 8 * 60 };
+            return { verdict: "warned", reason: "no start time yet; assumed Day 1 08:00", line: `clock ${fmtSpan(a.minutes)}` };
+          }
+          const next = addMinutes(cur, a.minutes);
+          this.drift(absMinutes(cur), absMinutes(next));
+          st.time = next;
+          return { verdict: "accepted", line: `🕰 +${fmtSpan(a.minutes)}` };
+        }
+        // absolute
+        if (!cur) {
+          st.time = { day: a.day ?? 1, minute: a.minute };
+          return { verdict: "accepted", line: `🕰 Day ${st.time.day} ${fmtClock(a.minute)}` };
+        }
+        let day = a.day ?? cur.day;
+        if (a.day == null && a.minute < cur.minute) day = cur.day + 1; // passed midnight
+        const target = { day, minute: a.minute };
+        const diff = absMinutes(target) - absMinutes(cur);
+        if (diff < 0) {
+          if (a.fromHeader) return { verdict: "warned", reason: "header time is behind the verified clock; kept the clock" };
+          return reject(`time cannot run backwards (${fmtClock(a.minute)} Day ${day} is before the current clock)`);
+        }
+        if (diff > 0) this.drift(absMinutes(cur), absMinutes(target));
+        st.time = target;
+        return diff > 18 * 60 && a.day == null
+          ? { verdict: "warned", reason: "large implicit jump; assumed the next day", line: `🕰 → Day ${day} ${fmtClock(a.minute)}` }
+          : { verdict: "accepted", line: diff ? `🕰 +${fmtSpan(diff)}` : undefined };
+      }
+      case "wx": {
+        const prev = st.weather?.condition;
+        st.weather = {
+          condition: a.condition, intensity: a.intensity, tempC: a.tempC ?? st.weather?.tempC, wind: a.wind ?? st.weather?.wind,
+          glyph: a.glyph ?? st.weather?.glyph, setAt: st.time ? { ...st.time } : null, source: a.fromHeader ? "header" : "model",
+        };
+        if (prev === a.condition) return { verdict: "accepted" };
+        return { verdict: "accepted", line: `🌦 ${prev ? prev + " → " : ""}${a.condition}` };
+      }
+      case "at": {
+        const path: string[] = a.path;
+        const prev = st.place.join(" › ");
+        // Relative paths ("back room") extend the current place when the root is unknown.
+        let full = path;
+        if (path.length === 1 && st.place.length && !st.places[slug(path[0])]) {
+          const idx = st.place.findIndex((p) => p.toLowerCase() === path[0].toLowerCase());
+          full = idx >= 0 ? st.place.slice(0, idx + 1) : st.place.length > 1 ? [...st.place.slice(0, -1), path[0]] : path;
+        } else if (path.length < st.place.length && path.length > 1) {
+          const root = st.place.findIndex((p) => p.toLowerCase() === path[0].toLowerCase());
+          if (root > 0) full = [...st.place.slice(0, root), ...path];
+        }
+        st.place = full;
+        for (let i = 0; i < full.length; i++) {
+          const pid = `loc:${slug(full[i])}`;
+          const pl = st.places[pid] ?? { id: pid, name: full[i], path: full.slice(0, i + 1), visits: 0, lastMsg: mi };
+          if (i === full.length - 1 && prev !== full.join(" › ")) pl.visits++;
+          pl.lastMsg = mi;
+          st.places[pid] = pl;
+        }
+        const now = full.join(" › ");
+        if (prev === now) return { verdict: "accepted" };
+        // Moving without a cast update: whoever was present stays with the player.
+        if (prev && !castOp) {
+          for (const c of Object.values(st.chars)) if (c.tier === "spot" || c.tier === "peri") c.place = full[full.length - 1];
+        }
+        return { verdict: "accepted", line: `📍 ${now}` };
+      }
+      case "cast": {
+        const lines: string[] = [];
+        const listed = new Set<string>();
+        const here = st.place[st.place.length - 1];
+        for (const e of a.entries as { name: string; tier: string; activity?: string }[]) {
+          const id = this.charId(e.name, mi);
+          if (!id) continue;
+          listed.add(id);
+          const c = st.chars[id];
+          if (c.dead && e.tier !== "left" && e.tier !== "dead") {
+            if (strict) return reject(`${c.name} is dead and cannot appear`);
+          }
+          const before = c.tier;
+          if (e.tier === "left") {
+            c.tier = "off";
+            c.place = e.activity?.replace(/^→\s*/, "").trim() || undefined;
+            c.activity = undefined;
+            lines.push(`${c.name} leaves`);
+          } else if (e.tier === "dead") {
+            c.dead = true;
+            c.tier = "off";
+            this.milestone(mi, "death", `${c.name} dies`);
+            lines.push(`${c.name} dies`);
+          } else if (e.tier === "off") {
+            c.tier = "off";
+          } else {
+            c.tier = e.tier === "arrive" ? "peri" : (e.tier as "spot" | "peri");
+            c.place = here;
+            if (e.activity) c.activity = e.activity.replace(/^←\s*/, "");
+            if (before !== "spot" && before !== "peri") lines.push(`${c.name} ${e.tier === "arrive" ? "arrives" : "is here"}`);
+          }
+          c.lastSeen = mi;
+        }
+        return { verdict: "accepted", line: lines.length ? `👥 ${lines.join(" · ")}` : undefined };
+      }
+      case "mood": {
+        const id = this.charId(op.subject!, mi)!;
+        const c = st.chars[id];
+        if (c.dead) return reject(`${c.name} is dead`);
+        const prev = c.mood?.name;
+        c.mood = { name: a.name, v: a.v ?? c.mood?.v, a: a.a ?? c.mood?.a, d: a.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null };
+        return { verdict: "accepted", line: `🎭 ${c.name}: ${prev ? prev + " → " : ""}${a.name}` };
+      }
+      case "body": {
+        const id = this.charId(op.subject!, mi)!;
+        const c = st.chars[id];
+        const bits: string[] = [];
+        for (const [k, v] of Object.entries(a.meters as Record<string, { v: number; rel: boolean }>)) {
+          const before = c.meters[k] ?? 0;
+          c.meters[k] = clamp(v.rel ? before + v.v : v.v, 0, 5);
+          bits.push(`${k} ${c.meters[k]}`);
+        }
+        for (const f of a.flags as string[]) {
+          if (f === "dead") {
+            c.dead = true;
+            this.milestone(mi, "death", `${c.name} dies`);
+            bits.push("dead");
+            continue;
+          }
+          if (/^(asleep|sleeping)$/.test(f)) c.flags = c.flags.filter((x) => x !== "awake");
+          if (/^(awake|woke)$/.test(f)) c.flags = c.flags.filter((x) => !/asleep|sleeping/.test(x));
+          if (!c.flags.includes(f)) c.flags.push(f);
+          bits.push(f);
+        }
+        for (const f of a.unflags as string[]) c.flags = c.flags.filter((x) => x !== f && !x.startsWith(f));
+        for (const inj of a.injuries as any[]) {
+          const ex = c.injuries.find((i) => i.where.toLowerCase() === inj.where.toLowerCase());
+          if (ex) Object.assign(ex, inj, { since: ex.since });
+          else c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null });
+          bits.push(`injury: ${inj.where}`);
+          if (inj.severity >= 3) this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
+        }
+        for (const h of a.heals as string[]) c.injuries = c.injuries.filter((i) => !i.where.toLowerCase().includes(h.toLowerCase()));
+        if (c.flags.length > 12) c.flags = c.flags.slice(-12);
+        return { verdict: "accepted", line: bits.length ? `🩹 ${c.name}: ${bits.join(", ")}` : undefined };
+      }
+      case "look": {
+        const id = this.charId(op.subject!, mi)!;
+        st.chars[id].look = a.text;
+        return { verdict: "accepted", line: `👗 ${st.chars[id].name}: ${a.text}` };
+      }
+      case "status": {
+        const id = this.charId(op.subject!, mi)!;
+        st.chars[id].status = a.text;
+        return { verdict: "accepted" };
+      }
+      case "bond": {
+        const from = this.charId(op.subject!, mi)!;
+        const to = this.charId(op.object!, mi)!;
+        if (from === to) return reject("a bond needs two different people");
+        if (from === "user" && this.opts.sealed && src !== "user") return reject("the player's feelings belong to the player (sealed persona)");
+        if (st.chars[from]?.dead) return reject(`${st.chars[from].name} is dead`);
+        const key = `${from}>${to}`;
+        const b: BondState = st.bonds[key] ?? { from, to, axes: {}, tags: [], history: [] };
+        st.bonds[key] = b;
+        if (a.label) b.label = a.label;
+        if (a.tags) b.tags = [...new Set([...b.tags, ...a.tags])];
+        if (!a.changes?.length) return { verdict: "accepted", line: a.label ? `🕸 ${this.nm(from)} → ${this.nm(to)}: “${a.label}”` : undefined };
+        if (strict && !op.cause) return reject("bond change without a cause");
+        const lines: string[] = [];
+        let warned: string | undefined;
+        for (const ch of a.changes as { axis: BondAxis; delta: number }[]) {
+          let d = ch.delta;
+          if (Math.abs(d) >= 4 && !PIVOTAL.test(op.cause ?? "")) {
+            d = Math.sign(d) * 2;
+            warned = `a shift of ${ch.delta} needs a pivotal cause; clamped to ${d > 0 ? "+" : ""}${d}`;
+          }
+          const lo = BIPOLAR_AXES.includes(ch.axis) ? -5 : 0;
+          const before = b.axes[ch.axis] ?? 0;
+          const after = clamp(before + d, lo, 5);
+          b.axes[ch.axis] = after;
+          b.history.push({ axis: ch.axis, delta: after - before, from: before, to: after, cause: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
+          lines.push(`${ch.axis} ${d > 0 ? "+" : ""}${d}`);
+          if (Math.abs(d) >= 2) this.milestone(mi, "bond", `${this.nm(from)} → ${this.nm(to)}: ${ch.axis} ${d > 0 ? "+" : ""}${d}${op.cause ? ` (${op.cause})` : ""}`);
+        }
+        if (b.history.length > 60) b.history = b.history.slice(-60);
+        const line = `🕸 ${this.nm(from)} → ${this.nm(to)}: ${lines.join(", ")}`;
+        return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
+      }
+      case "ladder": {
+        const from = this.charId(op.subject!, mi)!;
+        const to = this.charId(op.object!, mi)!;
+        if (from === "user" && this.opts.sealed && src !== "user") return reject("the player's side of a ladder moves only by the player's words");
+        const key = `${from}>${to}`;
+        const cur = st.ladders[key]?.tier ?? (this.opts.romance === "established" ? 7 : 0);
+        let tier = clamp(a.rel ? cur + a.tier : a.tier, 0, 7);
+        if (this.opts.romance === "off" && tier > cur) return reject("romance pace is off");
+        const maxStep = this.opts.romance === "fast" ? 2 : 1;
+        let warned: string | undefined;
+        if (tier - cur > maxStep && src !== "user") {
+          warned = `skipped ${tier - cur} rungs at once; the pace allows ${maxStep}`;
+          tier = cur + maxStep;
+          if (strict && this.opts.romance !== "measured") warned += " (clamped)";
+        }
+        const l = st.ladders[key] ?? { from, to, tier: cur, at: null, msgIndex: mi, history: [] };
+        l.tier = tier;
+        l.evidence = op.cause;
+        l.at = st.time ? { ...st.time } : null;
+        l.msgIndex = mi;
+        l.history.push({ tier, evidence: op.cause, msgIndex: mi });
+        st.ladders[key] = l;
+        st.genreHits.romance = mi;
+        this.milestone(mi, "ladder", `${this.nm(from)} → ${this.nm(to)}: ${LADDER_NAMES[tier]}`);
+        const line = `♡ ${this.nm(from)} → ${this.nm(to)}: ${LADDER_NAMES[tier]}`;
+        return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
+      }
+      case "know": {
+        const holder = this.charId(op.subject!, mi)!;
+        const row: KnowRow = {
+          id: `k${mi}_${st.knowledge.length}`, holder, fact: a.fact, status: a.status, source: a.source, truth: a.truth,
+          at: st.time ? { ...st.time } : null, msgIndex: mi,
+        };
+        const norm = normFact(a.fact);
+        for (const old of st.knowledge) {
+          if (old.holder === holder && !old.supersededBy && (normFact(old.fact) === norm || overlap(normFact(old.fact), norm) > 0.7)) old.supersededBy = row.id;
+        }
+        st.knowledge.push(row);
+        const line = `🧠 ${this.nm(holder)} ${a.status}: ${a.fact}${a.truth === "false" ? " (false)" : ""}`;
+        if (strict && !a.source) return { verdict: "warned", reason: "knowledge without a source", line };
+        return { verdict: "accepted", line };
+      }
+      case "item": {
+        const iid = `item:${slug(op.subject!)}`;
+        const it = st.items[iid] ?? { id: iid, name: op.subject!, custody: [] };
+        st.items[iid] = it;
+        if (a.condition) {
+          it.condition = a.condition;
+          return { verdict: "accepted", line: `🎒 ${it.name}: ${a.condition}` };
+        }
+        const toRaw: string | undefined = a.to;
+        const fromId = a.from ? this.holderId(a.from, mi) : it.holder;
+        if (a.from && it.holder && fromId !== it.holder && !it.gone) {
+          if (strict) return reject(`${this.nm(fromId!)} does not hold ${it.name} (${this.nm(it.holder)} does)`);
+        }
+        if (fromId && fromId !== "user" && st.chars[fromId]?.dead && strict) return reject(`${this.nm(fromId)} is dead`);
+        if (strict && a.from && !op.cause) return reject("item transfer without a cause");
+        if (toRaw === "gone") {
+          it.gone = true;
+          it.custody.push({ from: it.holder, to: "gone", how: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
+          it.holder = "gone";
+          this.milestone(mi, "item", `${it.name} is gone${op.cause ? ` (${op.cause})` : ""}`);
+          return { verdict: "accepted", line: `🎒 ${it.name} → gone` };
+        }
+        const toId = toRaw ? this.holderId(toRaw, mi) : undefined;
+        it.custody.push({ from: it.holder, to: toId, how: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
+        if (it.custody.length > 20) it.custody = it.custody.slice(-20);
+        it.holder = toId;
+        it.gone = false;
+        if (a.quantity != null) it.quantity = a.quantity;
+        return { verdict: "accepted", line: `🎒 ${it.name}: ${a.from ? this.nm(fromId!) + " → " : ""}${this.nm(toId)}` };
+      }
+      case "thread": {
+        const tid = `thread:${slug(op.subject!)}`;
+        const t = st.threads[tid] ?? { id: tid, title: op.subject!, status: "open" as const, stalls: 0, history: [], lastMsg: mi };
+        const isNew = !st.threads[tid];
+        st.threads[tid] = t;
+        const tOp = a.op as ThreadOpName;
+        t.history.push({ op: tOp, detail: a.detail, at: st.time ? { ...st.time } : null, msgIndex: mi });
+        if (t.history.length > 12) t.history = t.history.slice(-12);
+        t.lastMsg = mi;
+        if (a.detail) t.latest = a.detail;
+        let warned: string | undefined;
+        if (tOp === "stall") {
+          if (!a.blocker && strict) warned = "a stalled thread must name its blocker";
+          t.status = "stalled";
+          t.blocker = a.blocker;
+          t.stalls++;
+        } else if (tOp === "resolve") {
+          t.status = "resolved";
+          this.milestone(mi, "thread", `Resolved: ${t.title}`);
+        } else {
+          t.status = "open";
+          t.stalls = 0;
+          t.blocker = undefined;
+          if (isNew || tOp === "new") this.milestone(mi, "thread", `New thread: ${t.title}`);
+        }
+        const line = `🧵 ${t.title}: ${tOp}${a.detail ? ` — ${a.detail}` : ""}`;
+        if (!warned && strict && !a.detail && tOp !== "new" && tOp !== "resolve") warned = "thread change without a detail";
+        return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
+      }
+      case "owe":
+      case "cons": {
+        const who = this.holderId(op.subject!, mi)!;
+        const whom = op.object ? this.holderId(op.object, mi) : undefined;
+        const cid = `cons:${slug(`${who}_${whom ?? ""}_${a.what}`)}`;
+        const existing = st.cons[cid] ?? Object.values(st.cons).find((c) => c.who === who && c.whom === whom && overlap(normFact(c.what), normFact(a.what)) > 0.6);
+        const c = existing ?? { id: cid, kind: a.kind, who, whom, what: a.what, status: "open" as const, since: st.time ? { ...st.time } : null, msgIndex: mi };
+        c.status = a.status;
+        if (a.due) c.due = parseDue(a.due, st.time);
+        st.cons[c.id] = c;
+        if (!existing) this.milestone(mi, "cons", `${this.nm(who)} ${a.kind === "owe" ? "owes" : "→"} ${whom ? this.nm(whom) + ": " : ""}${a.what}`);
+        return { verdict: "accepted", line: `⚖ ${this.nm(who)}${whom ? " → " + this.nm(whom) : ""}: ${a.what} (${c.status})` };
+      }
+      case "clockf": {
+        const fid = `fac:${slug(op.subject!)}`;
+        const f = st.factions[fid] ?? { id: fid, name: op.subject!, clocks: {} };
+        st.factions[fid] = f;
+        const pk = slug(a.project);
+        const clk = f.clocks[pk] ?? { name: a.project, cur: 0, max: a.max ?? 6, history: [] };
+        if (a.max) clk.max = a.max;
+        clk.cur = clamp(a.cur != null ? a.cur : clk.cur + (a.inc ?? 1), 0, clk.max);
+        clk.history.push(clk.cur);
+        f.clocks[pk] = clk;
+        st.genreHits.intrigue = mi;
+        st.genreHits.thriller = mi;
+        if (clk.cur >= clk.max) this.milestone(mi, "faction", `${f.name}: ${clk.name} complete`);
+        return { verdict: "accepted", line: `⏳ ${f.name}: ${clk.name} ${clk.cur}/${clk.max}` };
+      }
+      case "rumor": {
+        const text: string = a.text;
+        const ex = st.rumors.find((r) => overlap(normFact(r.text), normFact(text)) > 0.6);
+        if (ex) {
+          ex.hops++;
+          ex.to = a.to ?? ex.to;
+          ex.msgIndex = mi;
+        } else st.rumors.push({ id: `r${mi}_${st.rumors.length}`, text, from: a.from, to: a.to, truth: a.truth, hops: 1, msgIndex: mi });
+        if (st.rumors.length > 60) st.rumors.splice(0, st.rumors.length - 60);
+        return { verdict: "accepted", line: `🗣 ${text}` };
+      }
+      case "rep": {
+        const gid = slug(op.object!);
+        const r = st.rep[gid] ?? { group: op.object!, score: 0, tags: [], history: [] };
+        r.score = clamp(r.score + (a.delta ?? 0), -3, 3);
+        if (a.tag && !r.tags.includes(a.tag)) r.tags.push(a.tag);
+        r.history.push({ delta: a.delta ?? 0, deed: op.cause, msgIndex: mi });
+        st.rep[gid] = r;
+        return { verdict: "accepted", line: `🏷 ${r.group}: ${r.score > 0 ? "+" : ""}${r.score}` };
+      }
+      case "journal": {
+        const id = this.charId(op.subject!, mi)!;
+        const c = st.chars[id];
+        c.journal.push({ text: a.text, at: st.time ? { ...st.time } : null, msgIndex: mi });
+        if (c.journal.length > 30) c.journal = c.journal.slice(-30);
+        return { verdict: "accepted", line: `📓 ${c.name}: “${a.text}”` };
+      }
+      case "keys": {
+        const rid = this.recordIdFor(op.subject!, mi);
+        const cur = st.keys[rid] ?? [];
+        st.keys[rid] = [...new Set([...cur, ...(a.keys as string[])])].slice(-16);
+        return { verdict: "accepted" };
+      }
+      case "canon": {
+        if (st.canon.some((c) => normFact(c.text) === normFact(a.text))) return { verdict: "accepted" };
+        st.canon.push({ text: a.text, at: st.time ? { ...st.time } : null, msgIndex: mi });
+        return { verdict: "accepted", line: `📜 ${a.text}` };
+      }
+      case "artifact": {
+        const aid = `doc:${slug(op.subject!)}`;
+        const ex = st.artifacts[aid];
+        const holder = a.holder ? this.holderId(a.holder, mi) : ex?.holder;
+        st.artifacts[aid] = { id: aid, title: op.subject!, kind: a.kind ?? ex?.kind ?? "document", holder, text: ex?.text, meta: ex?.meta, keys: ex?.keys ?? [], msgIndex: ex?.msgIndex ?? mi };
+        this.milestone(mi, "artifact", `Filed: ${op.subject}`);
+        return { verdict: "accepted", line: `📄 filed: ${op.subject}` };
+      }
+      case "mode": {
+        st.mode = a.mode;
+        return { verdict: "accepted" };
+      }
+      case "gauge": {
+        const gid = slug(op.subject!);
+        const g = st.gauges[gid] ?? { name: op.subject!, cur: 0, max: a.max ?? 5, history: [] };
+        if (a.max) g.max = a.max;
+        g.cur = clamp(a.cur != null ? a.cur : g.cur + (a.inc ?? 0), 0, g.max);
+        g.cause = op.cause;
+        g.history.push({ v: g.cur, msgIndex: mi });
+        if (g.history.length > 30) g.history = g.history.slice(-30);
+        st.gauges[gid] = g;
+        const gn = g.name.toLowerCase();
+        if (/dread|fear|terror/.test(gn)) st.genreHits.horror = mi;
+        if (/corrupt/.test(gn)) st.genreHits.dark_fantasy = mi;
+        if (/pressure|flaw/.test(gn)) st.genreHits.tragedy = mi;
+        if (/supplies|water|food|warmth|needs/.test(gn)) st.genreHits.survival = mi;
+        if (/tension|heat|charge/.test(gn)) st.genreHits.romance = mi;
+        return { verdict: "accepted", line: `📊 ${g.name} ${g.cur}/${g.max}` };
+      }
+      case "clue": {
+        st.clues.push({ id: `clue${mi}_${st.clues.length}`, text: a.text, pointsTo: a.pointsTo, reliability: a.reliability, msgIndex: mi });
+        st.genreHits.mystery = mi;
+        return { verdict: "accepted", line: `🔎 ${a.text}${a.pointsTo ? ` → ${a.pointsTo}` : ""}` };
+      }
+      case "plant": {
+        st.plants.push({ id: `plant${mi}_${st.plants.length}`, text: a.text, payoff: a.payoff, plantedAt: mi, plantedScene: st.sceneNo });
+        st.genreHits.comedy = mi;
+        return { verdict: "accepted" };
+      }
+      case "payoff": {
+        const t = normFact(a.text);
+        const best = st.plants.filter((p) => p.paidAt == null).map((p) => ({ p, s: overlap(normFact(p.text), t) })).sort((x, y) => y.s - x.s)[0];
+        if (best && best.s > 0.25) best.p.paidAt = mi;
+        st.genreHits.comedy = mi;
+        return { verdict: "accepted", line: `🎯 payoff: ${a.text}` };
+      }
+      case "deadline": {
+        const did = `dl:${slug(op.subject!)}`;
+        if (a.done) {
+          if (st.deadlines[did]) st.deadlines[did].done = true;
+          return { verdict: "accepted" };
+        }
+        const base = st.time ?? { day: 1, minute: 480 };
+        const at = a.kind === "rel" ? addMinutes(base, a.minutes) : { day: a.day ?? (a.minute < base.minute ? base.day + 1 : base.day), minute: a.minute };
+        st.deadlines[did] = { id: did, title: op.subject!, at, msgIndex: mi };
+        st.genreHits.thriller = mi;
+        return { verdict: "accepted", line: `⏰ ${op.subject}: Day ${at.day} ${fmtClock(at.minute)}` };
+      }
+      case "title": {
+        st.title = a.text;
+        return { verdict: "accepted" };
+      }
+      case "pressure": {
+        const id = this.charId(op.subject!, mi, false);
+        if (id) st.chars[id].pressure = a.text;
+        return { verdict: "accepted" };
+      }
+      default:
+        return { verdict: "accepted" };
+    }
+  }
+
+  private nm(id: string | undefined): string {
+    if (!id) return "nobody";
+    if (id === "gone") return "gone";
+    if (id.startsWith("loc:")) return this.state.places[id]?.name ?? id.slice(4);
+    return this.state.chars[id]?.name ?? id;
+  }
+
+  /** Holders are characters, or places for items left somewhere. */
+  holderId(name: string, mi: number): string | undefined {
+    const n = name.trim();
+    if (!n) return undefined;
+    if (/^(the )?(floor|ground|table|room|here)$/i.test(n) || n.startsWith("loc:")) return `loc:${slug(this.state.place[this.state.place.length - 1] ?? n)}`;
+    const pid = `loc:${slug(n)}`;
+    if (this.state.places[pid]) return pid;
+    return this.charId(n, mi) ?? undefined;
+  }
+
+  /** `keys Name:` can target a character, item, thread, place, faction or document. */
+  recordIdFor(name: string, mi: number): string {
+    const s = slug(name);
+    const st = this.state;
+    if (this.isUser(name)) return "char:user";
+    const cid = this.charId(name, mi, false);
+    if (cid) return `char:${cid}`;
+    for (const prefix of ["item:", "thread:", "loc:", "fac:", "doc:"]) {
+      const id = prefix + s;
+      if ((st as any)[{ "item:": "items", "thread:": "threads", "loc:": "places", "fac:": "factions", "doc:": "artifacts" }[prefix]!][id]) return id;
+    }
+    return `custom:${s}`;
+  }
+
+  /** Clock-driven drift for meters that are being tracked (§6.3). */
+  private drift(fromAbs0: number, toAbs: number) {
+    const span = toAbs - fromAbs0;
+    if (span <= 0) return;
+    const sleeping = this.state.mode === "downtime" && span >= 360;
+    for (const c of Object.values(this.state.chars)) {
+      if (c.dead) continue;
+      const present = c.tier === "spot" || c.tier === "peri" || c.isUser;
+      if (!present) continue;
+      const m = c.meters;
+      const acc = ((c as any)._acc ??= { hunger: 0, thirst: 0, fatigue: 0, intox: 0 });
+      const bump = (k: "hunger" | "thirst" | "fatigue", rate: number) => {
+        if (m[k] == null) return;
+        acc[k] += span;
+        const n = Math.floor(acc[k] / rate);
+        if (n > 0) {
+          m[k] = clamp((m[k] ?? 0) + n, 0, 5);
+          acc[k] -= n * rate;
+        }
+      };
+      bump("hunger", 300);
+      bump("thirst", 180);
+      if (sleeping && m.fatigue != null) {
+        m.fatigue = clamp(m.fatigue - (span >= 420 ? 4 : 3), span < 240 ? 2 : 0, 5);
+        acc.fatigue = 0;
+      } else bump("fatigue", 240);
+      if (m.intox != null && m.intox > 0) {
+        acc.intox += span;
+        const n = Math.floor(acc.intox / 90);
+        if (n > 0) {
+          m.intox = clamp(m.intox - n, 0, 5);
+          acc.intox -= n * 90;
+        }
+      }
+      // Healing by elapsed time.
+      c.injuries = c.injuries.filter((inj) => {
+        if (!inj.since) return true;
+        const age = toAbs - absMinutes(inj.since);
+        const heal = [0, 2 * MIN_PER_DAY, 14 * MIN_PER_DAY, 42 * MIN_PER_DAY, Infinity][inj.severity];
+        if (age >= heal * (inj.treated ? 1 : 1.5)) {
+          if (inj.severity >= 3 && !c.flags.includes(`scar: ${inj.where}`)) c.flags.push(`scar: ${inj.where}`);
+          return false;
+        }
+        return true;
+      });
+    }
+  }
+}
+
+type ThreadOpName = "new" | "advance" | "complicate" | "bridge" | "resolve" | "stall";
+
+export const LADDER_NAMES = ["Strangers", "Aware", "Interested", "Charged", "Tested", "Spoken", "Together", "Established"];
+
+export function fmtClock(minute: number): string {
+  const m = ((minute % MIN_PER_DAY) + MIN_PER_DAY) % MIN_PER_DAY;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+export function normFact(s: string): string {
+  return s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
+}
+
+const STOP = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
+
+export function overlap(a: string, b: string): number {
+  const A = new Set(a.split(" ").filter((w) => w && !STOP.has(w)));
+  const B = new Set(b.split(" ").filter((w) => w && !STOP.has(w)));
+  if (!A.size || !B.size) return 0;
+  let n = 0;
+  for (const w of A) if (B.has(w)) n++;
+  return n / Math.min(A.size, B.size);
+}
+
+function parseDue(raw: string, now: StoryTime | null): { at?: StoryTime; trigger?: string; raw: string } {
+  const d = /day\s*(\d+)(?:\D+(\d{1,2})[:.](\d{2}))?/i.exec(raw);
+  if (d) return { at: { day: parseInt(d[1], 10), minute: d[2] ? parseInt(d[2], 10) * 60 + parseInt(d[3], 10) : 12 * 60 }, raw };
+  const rel = /\+?\s*(\d+)\s*(d|h|day|days|hours?)/i.exec(raw);
+  if (rel && now) {
+    const n = parseInt(rel[1], 10);
+    return { at: addMinutes(now, rel[2].startsWith("d") ? n * MIN_PER_DAY : n * 60), raw };
+  }
+  if (/tomorrow/i.test(raw) && now) return { at: { day: now.day + 1, minute: 9 * 60 }, raw };
+  if (/tonight/i.test(raw) && now) return { at: { day: now.day, minute: 21 * 60 }, raw };
+  return { trigger: raw, raw };
+}
+
+export { fromAbs };
+export const _test = { parseDue, ALL_AXES };

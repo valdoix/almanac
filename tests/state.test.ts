@@ -1,0 +1,118 @@
+import { describe, expect, test } from "bun:test";
+import { LedgerRuntime, toPath, type RawChatMessage } from "../src/core/branch";
+import type { FoldOptions } from "../src/core/state";
+
+const OPTS: FoldOptions = { userName: "Wren", strictness: "strict", sealed: true, romance: "slow" };
+
+function msg(i: number, content: string, isUser = false, swipes?: string[], swipe = 0): RawChatMessage {
+  return { id: `m${i}`, index_in_chat: i, is_user: isUser, content, swipes: swipes ?? [content], swipe_id: swipe };
+}
+
+const R1 = `🗓️ Day 1 · Monday 🕰️ 18:40 🌧️ rain, light · 11°C · wind NW
+📍 Lowmarket › The Rusty Flagon
+# The Wet Door
+Prose.
+<ledger>
+cast: Mara@spot(by the fire) · Kael@peri(at the bar)
+mood Mara: guarded | V-1 A2 D1
+body Mara: soaked; fatigue 2
+item Locket: +Wren
+mode: social
+</ledger>`;
+
+const R2 = `Prose.
+<ledger>
+clock: +12m
+wx: rain → heavy rain
+item Locket: Wren → Mara — returned it
+bond Mara>Wren: trust +1 — he gave the locket back
+know Kael: Wren stole the locket | overheard half · suspects · false
+thread Lost locket: new — Mara owes Wren a favour
+owe Mara → Wren: favour | open
+mode: social
+</ledger>`;
+
+describe("fold", () => {
+  test("builds state from header + ledgers", () => {
+    const rt = new LedgerRuntime();
+    const path = toPath([msg(0, R1), msg(1, "I hand her the locket.", true), msg(2, R2)]);
+    const { state } = rt.fold(path, OPTS);
+    expect(state.time).toEqual({ day: 1, minute: 18 * 60 + 52 });
+    expect(state.weather?.condition).toBe("heavy rain");
+    expect(state.place).toEqual(["Lowmarket", "The Rusty Flagon"]);
+    expect(state.chars.mara.tier).toBe("spot");
+    expect(state.chars.mara.mood?.name).toBe("guarded");
+    expect(state.items["item:locket"].holder).toBe("mara");
+    expect(state.bonds["mara>user"].axes.trust).toBe(1);
+    expect(state.knowledge[0]).toMatchObject({ holder: "kael", status: "suspects", truth: "false" });
+    expect(Object.values(state.cons)[0]).toMatchObject({ who: "mara", whom: "user", what: "favour" });
+    expect(state.title).toBe("The Wet Door");
+    expect(state.chars.mara.slot).toBe(1);
+    expect(state.chars.kael.slot).toBe(2);
+  });
+
+  test("swipes are branch-correct", () => {
+    const rt = new LedgerRuntime();
+    const alt = `Prose.\n<ledger>\nclock: +3h\nitem Locket: Wren → Kael — sold it\nmode: downtime\n</ledger>`;
+    const a = rt.fold(toPath([msg(0, R1), msg(1, "x", true), msg(2, R2, false, [R2, alt], 0)]), OPTS).state;
+    const b = rt.fold(toPath([msg(0, R1), msg(1, "x", true), msg(2, alt, false, [R2, alt], 1)]), OPTS).state;
+    expect(a.items["item:locket"].holder).toBe("mara");
+    expect(b.items["item:locket"].holder).toBe("kael");
+    expect(b.bonds["mara>user"]).toBeUndefined();
+    expect(b.time?.minute).toBe(18 * 60 + 40 + 180);
+  });
+
+  test("validation rejects rewinds, causeless bonds, bad custody, player's inner state", () => {
+    const rt = new LedgerRuntime();
+    const bad = `<ledger>
+clock: Day 1 07:00
+bond Kael>Mara: trust -1
+item Locket: Kael → Joss — stole it
+mood Wren: furious
+bond Mara>Kael: affection +5 — shared a drink
+</ledger>`;
+    const { events, state } = rt.fold(toPath([msg(0, R1), msg(1, bad)]), OPTS);
+    const reasons = events.filter((e) => e.verdict !== "accepted").map((e) => [e.op.op, e.verdict]);
+    expect(reasons).toContainEqual(["clock", "rejected"]);
+    expect(reasons).toContainEqual(["bond", "rejected"]);
+    expect(reasons).toContainEqual(["item", "rejected"]);
+    expect(reasons).toContainEqual(["mood", "rejected"]);
+    expect(reasons).toContainEqual(["bond", "warned"]);
+    expect(state.bonds["mara>kael"].axes.affection).toBe(2); // clamped
+    expect(state.items["item:locket"].holder).toBe("user");
+  });
+
+  test("time drift and sleep", () => {
+    const rt = new LedgerRuntime();
+    const r = `<ledger>\nbody Mara: hunger 1; fatigue 1\nclock: +10h\n</ledger>`;
+    const s = rt.fold(toPath([msg(0, R1), msg(1, r)]), OPTS).state;
+    expect(s.chars.mara.meters.hunger).toBe(3);
+    expect(s.chars.mara.meters.fatigue).toBe(3);
+    const sleep = `<ledger>\nmode: downtime\n</ledger>`;
+    const wake = `<ledger>\nclock: +8h\n</ledger>`;
+    const s2 = rt.fold(toPath([msg(0, R1), msg(1, r), msg(2, sleep), msg(3, wake)]), OPTS).state;
+    expect(s2.chars.mara.meters.fatigue).toBe(0);
+  });
+
+  test("snapshots give identical results", () => {
+    const msgs: RawChatMessage[] = [msg(0, R1)];
+    for (let i = 1; i < 60; i++) msgs.push(msg(i, i % 2 ? "go on" : `<ledger>\nclock: +5m\nbond Mara>Kael: trust +1 — talk ${i}\n</ledger>`, i % 2 === 1));
+    const rt = new LedgerRuntime();
+    const first = rt.fold(toPath(msgs), OPTS).state;
+    const second = rt.fold(toPath(msgs), OPTS).state;
+    expect(second.time).toEqual(first.time);
+    expect(second.bonds["mara>kael"].axes.trust).toBe(5);
+    const fresh = new LedgerRuntime().fold(toPath(msgs), OPTS).state;
+    expect(fresh.time).toEqual(first.time);
+    const asOf = rt.stateAt(toPath(msgs), "m10", OPTS)!;
+    expect(asOf.time!.minute).toBe(18 * 60 + 40 + 25);
+  });
+
+  test("side events repair a missing ledger", () => {
+    const rt = new LedgerRuntime();
+    const path = toPath([msg(0, R1), msg(1, "Prose without a ledger.")]);
+    const { state } = rt.fold(path, OPTS, { "m1:0": [{ source: "repair", replaces: true, ops: [{ op: "clock", args: { kind: "rel", minutes: 30 }, raw: "clock: +30m" }] }] });
+    expect(state.time!.minute).toBe(18 * 60 + 40 + 30);
+    expect(state.unverified).toContain(1);
+  });
+});
