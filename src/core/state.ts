@@ -39,6 +39,7 @@ export function emptyState(): WorldState {
     mode: "social",
     title: undefined,
     sceneNo: 0,
+    sceneLog: [],
     sceneStartMsg: 0,
     sceneStartAbs: null,
     chars: {},
@@ -253,7 +254,9 @@ export class Folder {
       st.sceneNo++;
       st.sceneStartMsg = msgIndex;
       st.sceneStartAbs = endAbs;
-    }
+      st.sceneLog.push({ no: st.sceneNo, startMsg: msgIndex, startAbs: endAbs, place: newPlace, title: parsed.title ?? undefined });
+      if (st.sceneLog.length > 2000) st.sceneLog.splice(0, st.sceneLog.length - 2000);
+    } else if (parsed.title && st.sceneLog.length) st.sceneLog[st.sceneLog.length - 1].title ??= parsed.title;
 
     if (source !== "model" && parsed.ops.length) st.unverified.push(msgIndex);
     st.lastDelta = delta;

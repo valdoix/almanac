@@ -299,6 +299,7 @@ export interface WorldState {
   mode: string;
   title?: string;
   sceneNo: number;
+  sceneLog: { no: number; startMsg: number; startAbs: number | null; place: string; title?: string }[];
   sceneStartMsg: number;
   sceneStartAbs: number | null;
   chars: Record<string, CharacterState>;
