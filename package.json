@@ -9,7 +9,9 @@
     "build:preset": "bun run preset/build.ts",
     "build": "bun run build:backend && bun run build:frontend && bun run build:preset",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "preset:harness": "bun run preset/harness.ts",
+    "golden": "bun run preset/golden.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

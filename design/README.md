@@ -1,6 +1,6 @@
 # ALMANAC — Preset + Extension Design Set for Lumiverse
 
-**Status:** design only. There is no implementation code here.
+**Status:** implemented. The preset is built from `preset/src/` into `preset/ALMANAC.json`; the extension lives in `src/` (bundled into `dist/`). See the [root README](../README.md) for install and development. These documents remain the design reference.
 
 The set has two parts that work together:
 
@@ -72,8 +72,8 @@ The set has two parts that work together:
 1. **The dialogue reference image wasn't attached.** Dialogue blocks are designed from the description ("blocks instead of just coloured dialogue"). The mockup shows the Blocks style next to Chips, Tint and Script. Share the image and 03 §3 can be matched to it exactly.
 2. **Name.** "ALMANAC" matches the repo, and an almanac is literally a book of days, weather and sky. Rename freely; identifiers are prefixed `alm` / `almanac_ledger`.
 3. **Platform behaviours to confirm at implementation time** (documented in Lumiverse `staging`, but worth a test):
-   - how an unknown macro renders when the extension is absent. The router checks `{{eq::{{almActive}}::yes}}`; `{{hasExtension::almanac_ledger}}` can back it up;
-   - the preset-linked "activate prompt blocks from matches" flow for the scene-mode router;
+   - how an unknown macro renders when the extension is absent. *Confirmed:* it stays literal and is falsy in conditions. The router checks `{{eq::{{almActive}}::yes}}`. `{{hasExtension}}` always returns false in current Lumiverse, so it is not used;
+   - the preset-linked "activate prompt blocks from matches" flow for the scene-mode router. *Implemented* with a radio category, so one mode replaces the last, and a `social` mapping that closes them all;
    - that the message content processor's `render` origin fires twice per message (needs a small cache);
    - `hidden` excludes messages from embeddings only, so the interceptor must drop covered turns itself;
    - the 10 s WI-interceptor budget (heavy retrieval runs earlier, in the context handler or as a prefetch).
