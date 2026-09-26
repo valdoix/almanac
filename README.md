@@ -24,6 +24,8 @@ In Lumiverse, open **Extensions → Install from GitHub** and paste this reposit
 | tools | Optional recall tools the model can call |
 | ui_panels | The floating "Now" widget |
 
+To update later, use **Update** on the extension in the Extensions panel. It pulls the latest commit of the branch you installed from, so if you installed from a different branch, switch to it there first. The version in the Extensions panel (from `spindle.json`) tells you which release you're running.
+
 ### The preset
 **Presets → Import** and choose `preset/ALMANAC.json`. It brings its own regex scripts (they are bound to the preset, so they switch on and off with it). Open the preset's **variables** panel to set persona mode, genres, intimacy, planning depth and the rest; each setting lives on the block that uses it.
 
