@@ -369,37 +369,170 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
   }
 }
 
-// src/frontend/app.ts
-var TABS = ["now", "cast", "bonds", "knowledge", "codex", "chronicle", "timeline", "world", "lore", "creator", "recall", "craft", "settings"];
-var TAB_LABEL = {
+// src/frontend/orrery.ts
+var GROUPS = [
+  { id: "people", label: "People", color: "#ff8fa3", icon: "cast", pages: ["cast", "bonds", "knowledge"] },
+  { id: "story", label: "Story", color: "#5fcfc0", icon: "chronicle", pages: ["chronicle", "timeline", "world"] },
+  { id: "library", label: "Library", color: "#a99bff", icon: "codex", pages: ["codex", "lore", "creator"] },
+  { id: "engine", label: "Engine", color: "#ffc46b", icon: "settings", pages: ["recall", "craft", "settings"] }
+];
+var PAGES = ["now", ...GROUPS.flatMap((g) => g.pages)];
+var LABEL = {
   now: "Now",
   cast: "Cast",
   bonds: "Bonds",
   knowledge: "Knowledge",
-  codex: "Codex",
   chronicle: "Chronicle",
   timeline: "Timeline",
   world: "World",
+  codex: "Codex",
   lore: "Lore",
   creator: "Creator",
   recall: "Recall",
   craft: "Craft",
   settings: "Settings"
 };
-var BAND_SKY = {
-  "deep night": "linear-gradient(#070a1c,#161c3e)",
-  "small hours": "linear-gradient(#0c1230,#252b58)",
-  "pre-dawn": "linear-gradient(#1d2352,#5a4a78)",
-  dawn: "linear-gradient(#3a3570,#e58b72)",
-  sunrise: "linear-gradient(#6f7fb8,#ffc48a)",
-  morning: "linear-gradient(#6fa6de,#cfe6f5)",
-  midday: "linear-gradient(#4d97e0,#a8d4f5)",
-  afternoon: "linear-gradient(#5e9bd6,#d9e4ee)",
-  "golden hour": "linear-gradient(#6d8fc2,#ffcf7a)",
-  sunset: "linear-gradient(#5b4b8a,#ff8a5c)",
-  dusk: "linear-gradient(#2e2d62,#a0588a)",
-  evening: "linear-gradient(#10163a,#3b3566)"
+var groupOf = (p) => GROUPS.find((g) => g.pages.includes(p));
+var IC = {
+  now: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
+  cast: '<circle cx="9" cy="8" r="3"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.3-.3 4.3 1 5 3.8"/>',
+  bonds: '<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 7h7M7.2 9.2l3.6 6.6M16.8 9.2l-3.6 6.6"/>',
+  knowledge: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+  chronicle: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5Z"/><path d="M12 6.5v13"/>',
+  timeline: '<path d="M7 3v18"/><circle cx="7" cy="7" r="2"/><circle cx="7" cy="16" r="2"/><path d="M11 7h9M11 16h6"/>',
+  world: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5Z"/>',
+  codex: '<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+  lore: '<path d="M7 4h11v13a3 3 0 0 1-3 3H6"/><path d="M7 4a2 2 0 0 0-2 2v2h2M6 20a2 2 0 0 0 2-2v-1h10"/><path d="M10 9h5M10 12.5h5"/>',
+  creator: '<path d="M20 4c-7 1-12 6-13.5 13.5L5 20"/><path d="M20 4c-.5 5-3.5 9.5-9 11"/><path d="m9 13.5 3 3"/>',
+  recall: '<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5.5 5.5"/><path d="M10.5 7.5v3l2 1.5"/>',
+  craft: '<path d="M4 20 15 9"/><path d="m14 5 1-2 1 2 2 1-2 1-1 2-1-2-2-1Z"/><path d="m19 12 .6 1.4L21 14l-1.4.6L19 16l-.6-1.4L17 14l1.4-.6Z"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'
 };
+var icon = (p) => `<svg class="almo-ic" viewBox="0 0 24 24" aria-hidden="true">${IC[p]}</svg>`;
+var BAND_SKY = {
+  "deep night": "linear-gradient(175deg,#070a1c,#161c3e)",
+  "small hours": "linear-gradient(175deg,#0c1230,#252b58)",
+  "pre-dawn": "linear-gradient(175deg,#1d2352,#5a4a78)",
+  dawn: "linear-gradient(175deg,#3a3570,#e58b72)",
+  sunrise: "linear-gradient(175deg,#6f7fb8,#ffc48a)",
+  morning: "linear-gradient(175deg,#4f86c4,#9fc9e8)",
+  midday: "linear-gradient(175deg,#3f86d0,#8cc3ea)",
+  afternoon: "linear-gradient(175deg,#4a86c4,#a9c4dc)",
+  "golden hour": "linear-gradient(175deg,#5b7cb4,#f0b865)",
+  sunset: "linear-gradient(175deg,#4b3f7c,#e87a52)",
+  dusk: "linear-gradient(175deg,#252459,#94507e)",
+  evening: "linear-gradient(175deg,#141a44,#3b3566)"
+};
+var n = (x, one, many = `${one}s`) => `${x} ${x === 1 ? one : many}`;
+function summary(p, v) {
+  const w = v.world ?? {};
+  const present = (v.cast ?? []).filter((c) => c.tier === "spot" || c.tier === "peri").length;
+  switch (p) {
+    case "now":
+      return v.now?.time ? `Day ${v.now.day ?? "?"} · ${v.now.time}` : "not started";
+    case "cast":
+      return `${n((v.cast ?? []).length, "person", "people")} · ${present} present`;
+    case "bonds":
+      return n((v.bonds ?? []).length, "bond");
+    case "knowledge":
+      return n((v.knowledge ?? []).length, "fact");
+    case "chronicle":
+      return `${n(v.counts?.chapters ?? 0, "chapter")} · ${v.chronicle?.coverage?.raw ?? 100}% raw`;
+    case "timeline":
+      return n((v.timeline ?? []).length, "milestone");
+    case "world": {
+      const due = dueCount(v);
+      return `${n((w.threads ?? []).length, "thread")}${due ? ` · ${due} due` : ""}`;
+    }
+    case "codex":
+      return n((v.codex ?? []).length, "record");
+    case "lore": {
+      const books = Object.keys(v.lore?.books ?? {}).length;
+      const review = v.lore?.review?.length ?? 0;
+      return `${n(books, "book")}${review ? ` · ${review} to review` : ""}`;
+    }
+    case "creator":
+      return "build a lorebook";
+    case "recall": {
+      const f = v.feed?.[0];
+      return f ? `${f.items.filter((i) => i.injected).length} of ${f.items.length} injected` : "after the next reply";
+    }
+    case "craft":
+      return v.telemetry?.technique ? `try: ${v.telemetry.technique}` : "after a few replies";
+    case "settings":
+      return v.enabled ? "Ledger on" : "Ledger off";
+  }
+}
+function dueCount(v) {
+  const w = v.world ?? {};
+  return (w.cons ?? []).filter((c) => c.status === "due").length + (w.deadlines ?? []).filter((d) => d.passed && !d.done).length;
+}
+function attention(g, v) {
+  if (!v)
+    return 0;
+  if (g === "story")
+    return dueCount(v);
+  if (g === "library")
+    return v.lore?.review?.length ?? 0;
+  if (g === "engine")
+    return (v.counts?.unverified ?? 0) + (v.rejected?.length ? 1 : 0);
+  return 0;
+}
+function moon(m) {
+  if (!m)
+    return "";
+  const lit = Math.max(0, Math.min(1, Number(m.illumination ?? 0.5)));
+  const dir = /wan/i.test(m.name ?? "") ? -1 : 1;
+  const shadow = Math.round((1 - lit) * 34) * dir;
+  return `<span class="almo-moon" style="--sh:${shadow}px" title="${escapeHtml(m.name ?? "")}" aria-label="${escapeHtml(m.name ?? "")}"></span>`;
+}
+function skyHeader(v, page) {
+  const now = v.now ?? {};
+  const sky = BAND_SKY[now.band] ?? BAND_SKY.evening;
+  const clock = String(now.clock ?? "");
+  const cut = clock.lastIndexOf(", ");
+  const date = now.time && cut > 0 ? clock.slice(0, cut) : now.time ? clock : "The clock starts with the first scene";
+  const [weekday, ...rest] = date.split(" ");
+  const place = now.place ?? [];
+  const g = groupOf(page);
+  const chips = [
+    now.weather ? `${escapeHtml(now.weather.glyph)} ${escapeHtml(now.weather.text ?? now.weather.condition)}` : "",
+    place.length ? `\uD83D\uDCCD ${escapeHtml(place.slice(-2).join(" › "))}` : "",
+    now.mode ? escapeHtml(now.mode) : ""
+  ].filter(Boolean);
+  const rain = /rain|storm|drizzle|shower|sleet/i.test(now.weather?.condition ?? "") ? " almo-rain" : /snow/i.test(now.weather?.condition ?? "") ? " almo-snow" : "";
+  const night = /night|hours|pre-dawn|evening|dusk/.test(now.band ?? "evening") ? " almo-night" : "";
+  return `<header class="almo-sky${rain}${night}" style="background:${sky}">
+  <div class="almo-sky__row"><div class="almo-clock">${escapeHtml(now.time ?? "--:--")}</div><div class="almo-date">${rest.length ? `${escapeHtml(weekday)}<br>${escapeHtml(rest.join(" "))}` : escapeHtml(date)}</div>${moon(now.moon)}</div>
+  ${page === "now" && now.title ? `<div class="almo-title">${escapeHtml(now.title)}</div>` : ""}
+  ${chips.length ? `<div class="almo-chips">${chips.map((c) => `<span>${c}</span>`).join("")}</div>` : ""}
+  ${g ? `<div class="almo-seg" role="tablist" aria-label="${escapeHtml(g.label)}" style="--pc:${g.color}">${g.pages.map((p) => `<button role="tab" data-page="${p}" aria-selected="${p === page}">${icon(p)}<span>${LABEL[p]}</span></button>`).join("")}</div>` : ""}
+</header>`;
+}
+function pageTitle(v, page) {
+  if (page === "now")
+    return "";
+  const g = groupOf(page);
+  return `<div class="almo-head"><span class="almo-eyebrow" style="color:${g?.color}">${escapeHtml(g?.label ?? "")}</span><h3>${LABEL[page]}</h3><small>${escapeHtml(summary(page, v))}</small></div>`;
+}
+function dock(v, page, orbit) {
+  const cur = groupOf(page);
+  const planet = (g) => {
+    const a = attention(g.id, v);
+    return `<button class="almo-pl${cur === g ? " on" : ""}${a ? " alert" : ""}" style="--pc:${g.color}" data-orbit="${g.id}" aria-expanded="${orbit === g.id}" aria-label="${escapeHtml(g.label)}${a ? ` (${a} need a look)` : ""}"><span class="almo-orb">${icon(g.icon)}${a ? `<b>${a > 9 ? "9+" : a}</b>` : ""}</span><span>${escapeHtml(g.label)}</span></button>`;
+  };
+  const og = GROUPS.find((g) => g.id === orbit);
+  const pos = [[0, 50], [96, 0], [192, 50]];
+  const ring = og ? `<div class="almo-orbit" style="--pc:${og.color}" role="menu" aria-label="${escapeHtml(og.label)}">${og.pages.map((p, i) => `<button class="almo-moonb" role="menuitem" style="left:${pos[i][0]}px;top:${pos[i][1]}px;animation-delay:${i * 40}ms" data-page="${p}"><span class="almo-m">${icon(p)}</span><b>${LABEL[p]}</b><small>${escapeHtml(v ? summary(p, v) : "")}</small></button>`).join("")}<div class="almo-orbit__t">${escapeHtml(og.label)}</div></div>` : "";
+  return `<div class="almo-dockwrap">${ring}<nav class="almo-dock" aria-label="Almanac pages">${planet(GROUPS[0])}${planet(GROUPS[1])}<button class="almo-sun${page === "now" ? " on" : ""}" data-page="now" aria-label="Now"><span>${icon("now")}<small>NOW</small></span></button>${planet(GROUPS[2])}${planet(GROUPS[3])}</nav></div>`;
+}
+function emptySky(status) {
+  const [title, text] = status === "nochat" ? ["No sky yet", "Open a chat to set the clock turning."] : status === "stalled" ? ["The Ledger hasn't answered", "Check that ALMANAC Ledger is enabled in Extensions and has its permissions, then retry."] : ["Reading this chat…", "Setting up the sky."];
+  return `<div class="almo-empty"><div class="almo-dial${status === "waiting" ? " spin" : ""}"></div><h4>${title}</h4><p>${text}</p>${status === "stalled" ? `<button class="btn primary" data-act="retryState">Retry</button>` : ""}</div>`;
+}
+
+// src/frontend/app.ts
+var TABS = PAGES;
 
 class AlmanacApp {
   ctx;
@@ -412,6 +545,7 @@ class AlmanacApp {
   codexFilter = "";
   codexKind = "";
   editing = null;
+  orbit = "";
   creator;
   status = "nochat";
   hudProblem = "";
@@ -427,6 +561,12 @@ class AlmanacApp {
     } catch {}
     this.root.addEventListener("click", (ev) => this.onClick(ev));
     this.root.addEventListener("change", (ev) => this.onChange(ev));
+    this.root.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && this.orbit) {
+        this.orbit = "";
+        this.render();
+      }
+    });
   }
   send(msg) {
     this.ctx.sendToBackend({ chatId: this.view?.chatId, ...msg });
@@ -444,34 +584,45 @@ class AlmanacApp {
   }
   render() {
     const v = this.view;
-    const tabs = `<div class="tabs" role="tablist">${TABS.map((t) => `<button role="tab" data-tab="${t}" aria-selected="${t === this.tab}">${TAB_LABEL[t]}</button>`).join("")}</div>`;
     if (!v) {
-      const msg = this.status === "nochat" ? `Open a chat to see its Almanac.` : this.status === "stalled" ? `The Ledger hasn't answered yet. Check that ALMANAC Ledger is enabled in Extensions and has its permissions, then retry.<div class="row" style="justify-content:center;margin-top:10px"><button class="btn primary" data-act="retryState">Retry</button></div>` : `Reading this chat…`;
-      this.root.innerHTML = `${tabs}<div class="empty">${msg}</div>`;
+      this.root.innerHTML = `<div class="almo">${emptySky(this.status)}</div>`;
       return;
     }
     let body = "";
     try {
       body = this[`tab_${this.tab}`]?.(v) ?? "";
     } catch (err) {
-      body = `<div class="empty">Could not draw this tab: ${escapeHtml(String(err))}</div>`;
+      body = `<div class="empty">Could not draw this page: ${escapeHtml(String(err))}</div>`;
     }
     const banner = !v.enabled ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block). You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button></div>` : "";
     const scroll = this.root.scrollTop;
-    this.root.innerHTML = tabs + banner + body;
+    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
     this.root.scrollTop = scroll;
   }
+  go(page) {
+    const changed = page !== this.tab;
+    this.tab = page;
+    this.orbit = "";
+    try {
+      localStorage.setItem("alm-tab", this.tab);
+    } catch {}
+    this.render();
+    if (changed)
+      this.root.scrollTop = 0;
+  }
   tab_now(v) {
-    const n = v.now;
-    const sky = BAND_SKY[n.band] ?? BAND_SKY.afternoon;
+    const n2 = v.now;
     const present = v.cast.filter((c) => c.tier === "spot" || c.tier === "peri");
-    const fc = (n.forecastHours ?? []).filter((_, i) => i % 2 === 0).slice(0, 6);
-    return `<div class="hero" style="background:${sky}">
-  <div class="row"><span class="gl">\uD83D\uDDD3 ${escapeHtml(n.clock)}</span>${n.weather ? `<span class="gl">${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.text)}</span>` : ""}${n.moon ? `<span class="gl">${escapeHtml(n.moon.glyph)} ${escapeHtml(n.moon.name)}</span>` : ""}</div>
-  <div class="t">${escapeHtml(n.title || (n.place.length ? n.place[n.place.length - 1] : "The story so far"))}</div>
-  <div class="row"><span class="gl">\uD83D\uDCCD ${escapeHtml(n.place.join(" › ") || "—")}</span>${n.sun ? `<span class="gl">☀ ${escapeHtml(n.sun.text)}</span>` : ""}<span class="gl">${escapeHtml(n.season || "")}</span><span class="gl">scene ${n.scene} · ${escapeHtml(n.mode)}</span></div>
-</div>
-${fc.length ? `<div class="card flat"><h4>Next hours</h4><div class="alm-fc" style="grid-template-columns:repeat(${fc.length},1fr)">${fc.map((h) => `<div><small>${escapeHtml(h.t)}</small><span>${escapeHtml(h.glyph)}</span><b>${h.temp}°</b></div>`).join("")}</div><div class="muted">${escapeHtml(n.forecast)}</div></div>` : ""}
+    const fc = (n2.forecastHours ?? []).filter((_, i) => i % 2 === 0).slice(0, 6);
+    const facts = [
+      n2.place.length ? `<b>Where</b><span>${escapeHtml(n2.place.join(" › "))}</span>` : "",
+      n2.sun ? `<b>Sun</b><span>${escapeHtml(n2.sun.text)}</span>` : "",
+      n2.moon ? `<b>Moon</b><span>${escapeHtml(n2.moon.glyph)} ${escapeHtml(n2.moon.name)}</span>` : "",
+      n2.season ? `<b>Season</b><span>${escapeHtml(n2.season)}</span>` : "",
+      `<b>Scene</b><span>${n2.scene} · ${escapeHtml(n2.mode)}</span>`
+    ].join("");
+    return `<div class="card flat almo-facts"><div class="kv">${facts}</div></div>
+${fc.length ? `<div class="card flat"><h4>Next hours</h4><div class="alm-fc" style="grid-template-columns:repeat(${fc.length},1fr)">${fc.map((h) => `<div><small>${escapeHtml(h.t)}</small><span>${escapeHtml(h.glyph)}</span><b>${h.temp}°</b></div>`).join("")}</div><div class="muted">${escapeHtml(n2.forecast)}</div></div>` : ""}
 <h4>Present</h4>
 ${present.length ? `<div class="alm-cast">${present.map((c) => this.castCard(c, true)).join("")}</div>` : `<div class="empty">No one else is here.</div>`}
 ${v.world.cons.filter((c) => c.status === "open" || c.status === "due").length ? `<h4>Owed and due</h4><div class="card flat"><ul class="alm-list">${v.world.cons.filter((c) => c.status === "open" || c.status === "due").slice(-8).map((c) => `<li>${escapeHtml(c.whoName)}${c.whomName ? ` → ${escapeHtml(c.whomName)}` : ""}: ${escapeHtml(c.what)}${c.dueText ? ` <small class="muted">due ${escapeHtml(c.dueText)}</small>` : ""}</li>`).join("")}</ul></div>` : ""}
@@ -567,7 +718,7 @@ ${r.kind === "place" ? `<label class="f">Hours (e.g. open 20:00 to 02:00)<input 
   }
   tab_world(v) {
     const w = v.world;
-    const ring = (n, of, c) => `<div class="alm-clock__face"><div class="alm-ring" style="--n:${n};--of:${Math.max(1, of)};--rc:${c}"></div><b>${n}/${of}</b></div>`;
+    const ring = (n2, of, c) => `<div class="alm-clock__face"><div class="alm-ring" style="--n:${n2};--of:${Math.max(1, of)};--rc:${c}"></div><b>${n2}/${of}</b></div>`;
     return `<div class="card flat"><div class="kv"><b>Calendar</b><span>${escapeHtml(w.calendar ? `${w.calendar.date} · ${w.calendar.season}` : "not started")}</span><b>Climate</b><span>${escapeHtml(w.climate)}</span></div>
 <details><summary class="muted">Schedule weather</summary><div class="row"><input type="number" id="almWxDay" placeholder="day" style="width:70px"><input type="number" id="almWxHour" placeholder="hour" style="width:70px"><input type="number" id="almWxLen" placeholder="hours" style="width:70px"><input type="text" id="almWxCond" placeholder="thunderstorm" class="grow"><button class="btn" data-act="scheduleWx">Schedule</button></div></details></div>
 ${w.factions.length ? `<h4>Factions</h4><div class="alm-clocks">${w.factions.flatMap((f) => f.clocks.map((c) => `<div class="alm-clock">${ring(c.cur, c.max, "var(--alm-danger)")}<div><strong>${escapeHtml(f.name)}: ${escapeHtml(c.name)}</strong></div></div>`)).join("")}</div>` : ""}
@@ -629,12 +780,20 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
   }
   onClick(ev) {
     const t = ev.target;
-    const tabBtn = t.closest("[data-tab]");
-    if (tabBtn) {
-      this.tab = tabBtn.dataset.tab;
-      try {
-        localStorage.setItem("alm-tab", this.tab);
-      } catch {}
+    const pageBtn = t.closest("[data-page]");
+    if (pageBtn) {
+      this.go(pageBtn.dataset.page);
+      return;
+    }
+    const planet = t.closest("[data-orbit]");
+    if (planet) {
+      this.orbit = this.orbit === planet.dataset.orbit ? "" : planet.dataset.orbit;
+      this.render();
+      this.root.querySelector(".almo-moonb")?.focus();
+      return;
+    }
+    if (this.orbit && !t.closest(".almo-orbit")) {
+      this.orbit = "";
       this.render();
       return;
     }
@@ -797,7 +956,7 @@ function toHex(c) {
 }
 
 // src/frontend/styles.ts
-var FONTS_IMPORT = `@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500;1,700&family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Fredoka:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=Oswald:wght@500;600&family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Space+Grotesk:wght@500;700&display=swap");`;
+var FONTS_IMPORT = `@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500;1,700&family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Fredoka:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=Oswald:wght@500;600&family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Space+Grotesk:wght@500;700&family=Syne:wght@700;800&display=swap");`;
 var TOKENS = `
 :root{
   --alm-ink:var(--lumiverse-text,#2a231d);
@@ -871,7 +1030,7 @@ var MESSAGE_CSS = `
 .alm-say__who{position:absolute!important;top:-12px!important;left:16px!important;display:inline-flex!important;align-items:center!important;gap:7px!important;padding:5px 11px!important;border-radius:999px!important;
   background:var(--c)!important;color:var(--alm-on-voice)!important;font:500 10.5px/1 var(--alm-font-mono)!important;letter-spacing:.16em!important;text-transform:uppercase!important;
   box-shadow:0 6px 12px -6px color-mix(in oklab,var(--c) 90%,#000)!important}
-.alm-say__tone{font:italic 500 12px/1 var(--alm-font-body)!important;letter-spacing:.02em!important;text-transform:none!important;padding-left:7px!important;border-left:1px solid color-mix(in oklab,var(--alm-on-voice) 45%,transparent)!important;opacity:1!important}
+.alm-say__tone{font-style:italic!important;font-weight:500!important;font-size:12px!important;line-height:1!important;font-family:var(--alm-font-body)!important;letter-spacing:.02em!important;text-transform:none!important;padding-left:7px!important;border-left:1px solid color-mix(in oklab,var(--alm-on-voice) 45%,transparent)!important;opacity:1!important}
 .alm-say__line{display:block!important;font-size:1.06em!important;line-height:1.5!important;color:var(--alm-ink)!important;font-style:normal}
 .alm-say__beat{display:block!important;margin-top:8px!important;padding-top:7px!important;border-top:1px dashed color-mix(in oklab,var(--c) 25%,var(--alm-line))!important;color:var(--alm-muted)!important;font-size:.9em!important;font-style:italic!important}
 .alm-say--user{grid-template-columns:minmax(0,1fr) 44px!important;margin-left:12%!important}
@@ -982,7 +1141,7 @@ details.alm-env>summary::-webkit-details-marker{display:none}
   background:radial-gradient(circle at 35% 30%,color-mix(in oklab,var(--c) 60%,#fff),var(--c) 60%,color-mix(in oklab,var(--c) 60%,#000))!important;
   color:var(--alm-on-voice)!important;font:700 15px/1 var(--alm-font-display)!important;box-shadow:0 3px 8px rgba(0,0,0,.3),inset 0 0 0 3px rgba(0,0,0,.12);transition:transform .4s,opacity .4s}
 .alm-env__cue{display:block!important;margin-top:12px;font:500 10.5px/1.45 var(--alm-font-mono)!important;letter-spacing:.06em;text-transform:uppercase;color:var(--alm-muted)!important}
-.alm-env__hint{display:block!important;margin-top:6px;font:italic 12px/1 var(--alm-font-body)!important;color:var(--c)!important}
+.alm-env__hint{display:block!important;margin-top:6px;font-style:italic!important;font-size:12px!important;line-height:1!important;font-family:var(--alm-font-body)!important;color:var(--c)!important}
 .alm-env__hint::after{content:"break the seal"}
 details.alm-env[open] .alm-env__hint::after{content:"reseal"}
 details.alm-env[open] .alm-env__flap{transform:rotateX(180deg)}
@@ -1021,7 +1180,7 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 .alm-cc .alm-cc__medal{position:absolute!important;left:12px;top:24px;margin:0!important;width:46px!important;height:46px!important}
 .alm-cc__bd{padding:28px 12px 12px}
 .alm-cc__nm{font:700 17px/1.1 var(--alm-font-display)}
-.alm-cc__em{margin-top:2px;font:italic 14px/1.3 var(--alm-font-body);color:var(--c)}
+.alm-cc__em{margin-top:2px;font-style:italic;font-size:14px;line-height:1.3;font-family:var(--alm-font-body);color:var(--c)}
 .alm-cc__em small{color:var(--alm-muted);font-style:normal}
 .alm-vad{display:grid;grid-template-columns:14px 1fr;gap:6px 8px;align-items:center;margin:12px 0 10px;font:500 10px/1 var(--alm-font-mono);color:var(--alm-muted)}
 .alm-slider{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,color-mix(in oklab,var(--c) 10%,var(--alm-panel-2)),color-mix(in oklab,var(--c) 45%,var(--alm-panel-2)))}
@@ -1138,16 +1297,13 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 }
 `;
 var PANEL_CSS = `
-.almp{--c:var(--alm-accent);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:14px;line-height:1.5;padding:10px 10px 40px}
+.almp{--c:var(--alm-accent);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:14px;line-height:1.5;padding:0}
 .almp *{box-sizing:border-box}
 .almp h3{margin:14px 0 8px;font:600 17px/1.2 var(--alm-font-display)}
 .almp h4{margin:12px 0 6px;font:500 10.5px/1 var(--alm-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--alm-muted)}
 .almp .muted{color:var(--alm-muted)}
 .almp .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .almp .grow{flex:1;min-width:0}
-.almp .tabs{position:sticky;top:0;z-index:5;display:flex;gap:2px;padding:4px;margin:0 0 12px;border-radius:12px;background:var(--alm-panel-2);overflow-x:auto;scrollbar-width:none}
-.almp .tabs button{all:unset;flex:none;cursor:pointer;font:500 11.5px/1 var(--alm-font-mono);padding:8px 10px;border-radius:9px;color:var(--alm-muted)}
-.almp .tabs button[aria-selected="true"]{color:var(--alm-ink);background:var(--alm-panel);box-shadow:0 1px 3px rgba(0,0,0,.15),0 0 0 1px var(--alm-line)}
 .almp .card{background:var(--alm-panel);border:1px solid var(--alm-line);border-radius:var(--alm-r-sm);padding:12px;margin:0 0 10px;box-shadow:var(--alm-lift)}
 .almp .card.flat{box-shadow:none}
 .almp .hero{position:relative;overflow:hidden;border-radius:var(--alm-radius);padding:16px;color:#fff;min-height:120px;background:linear-gradient(180deg,#27295a,#6d4a7d 50%,#e0866b);box-shadow:var(--alm-shadow)}
@@ -1197,6 +1353,74 @@ var PANEL_CSS = `
 .alm-sz{font-size:14px}
 .alm-sz .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
 @media (max-width:560px){.alm-sz .grid{grid-template-columns:1fr}}
+/* ── Orrery navigation ── */
+.almo{position:relative;display:flex;flex-direction:column;min-height:100%;background:color-mix(in oklab,var(--alm-panel-2) 55%,var(--alm-panel));--almo-font:"Syne",var(--alm-font-display)}
+.almo-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.almo button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
+.almo button:focus-visible{outline:2px solid var(--alm-accent);outline-offset:2px}
+.almo-sky{flex:none;position:relative;overflow:hidden;padding:14px 14px 12px;color:#fff;isolation:isolate}
+.almo-sky::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none}
+.almo-sky.almo-night::before{background:radial-gradient(1px 1px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 78% 30%,#fff,transparent),radial-gradient(1.5px 1.5px at 60% 12%,#fff,transparent),radial-gradient(1px 1px at 34% 44%,#fffc,transparent),radial-gradient(1px 1px at 90% 58%,#fffa,transparent)}
+.almo-sky.almo-rain::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:repeating-linear-gradient(105deg,transparent 0 11px,rgba(210,222,255,.2) 11px 12px,transparent 12px 26px)}
+.almo-sky.almo-snow::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(1.5px 1.5px at 20% 30%,#fff,transparent),radial-gradient(2px 2px at 70% 60%,#fff,transparent),radial-gradient(1.5px 1.5px at 45% 80%,#fff,transparent);background-size:60px 60px}
+.almo-sky__row{display:flex;align-items:flex-end;gap:12px}
+.almo-clock{font:800 38px/.9 var(--almo-font);letter-spacing:-.02em;font-variant-numeric:tabular-nums;text-shadow:0 2px 16px rgba(0,0,0,.35)}
+.almo-date{font:500 11px/1.35 var(--alm-font-mono);color:rgba(255,255,255,.82);min-width:0}
+.almo-moon{--sh:0px;margin-left:auto;flex:none;width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 60% 40%,#f7efd9 0 45%,#bdb4a2 75%);box-shadow:inset var(--sh) 0 0 0 rgba(12,16,44,.88),0 0 22px rgba(247,239,217,.3)}
+.almo-title{margin-top:8px;font:700 18px/1.15 var(--alm-font-display);text-shadow:0 2px 12px rgba(0,0,0,.4)}
+.almo-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.almo-chips span{padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);font-weight:500;font-size:11px;line-height:1.25;max-width:100%;overflow-wrap:anywhere}
+.almo-seg{display:flex;gap:4px;margin-top:12px;padding:4px;border-radius:14px;background:rgba(6,9,26,.42);border:1px solid rgba(255,255,255,.1);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.almo-seg button{flex:1;min-width:0;display:flex;justify-content:center;align-items:center;gap:6px;padding:8px 4px;border-radius:10px;font-weight:600;font-size:12px;line-height:1;color:rgba(255,255,255,.66)}
+.almo-seg button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.almo-seg .almo-ic{width:15px;height:15px}
+.almo-seg button:hover{color:#fff}
+.almo-seg button[aria-selected="true"]{background:rgba(255,255,255,.15);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),inset 0 -2px 0 var(--pc)}
+.almo-body{flex:1 0 auto;padding:6px 12px 12px;min-width:0}
+.almo-head{margin:8px 0 10px}
+.almo-head h3{margin:3px 0 1px!important;font:800 22px/1.1 var(--almo-font)!important;letter-spacing:-.01em}
+.almo-head small{color:var(--alm-muted);font-size:12px}
+.almo-eyebrow{font:700 10px/1 var(--alm-font-mono);letter-spacing:.2em;text-transform:uppercase}
+.almo-facts{margin-top:10px}
+.almo-facts .kv{grid-template-columns:70px 1fr}
+.almo-dockwrap{flex:none;position:sticky;bottom:10px;z-index:8;display:flex;justify-content:center;padding:14px 8px 0;pointer-events:none}
+.almo-dockwrap>*{pointer-events:auto}
+.almo-dock{display:flex;align-items:flex-end;gap:2px;padding:6px 8px;border-radius:26px;max-width:100%;
+  background:color-mix(in oklab,var(--alm-panel) 80%,transparent);border:1px solid var(--alm-line);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 18px 40px -14px rgba(0,0,0,.65)}
+.almo-pl{flex:1 1 60px;min-width:44px;max-width:64px;display:grid;justify-items:center;gap:4px;padding:6px 0 4px;border-radius:18px;color:var(--alm-muted);font-weight:600!important;font-size:10px!important;line-height:1.1!important;white-space:nowrap}
+.almo-pl>span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.almo-pl:hover,.almo-pl.on{color:var(--alm-ink)}
+.almo-orb{position:relative;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#10132e;
+  background:radial-gradient(circle at 35% 30%,color-mix(in oklab,var(--pc) 65%,#fff),var(--pc) 60%,color-mix(in oklab,var(--pc) 62%,#000));transition:box-shadow .2s,transform .2s}
+.almo-orb .almo-ic{width:16px;height:16px;stroke-width:1.9}
+.almo-pl:hover .almo-orb{transform:translateY(-2px)}
+.almo-pl.on .almo-orb{box-shadow:0 0 0 3px var(--alm-panel),0 0 0 5px var(--pc),0 0 16px var(--pc)}
+.almo-pl.alert .almo-orb{box-shadow:0 0 14px 1px var(--pc)}
+.almo-orb b{position:absolute;top:-5px;right:-7px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--alm-danger);color:#fff;font-weight:700;font-size:9.5px;line-height:16px;box-shadow:0 0 0 2px var(--alm-panel)}
+.almo-sun{flex:none;width:56px;height:56px;margin:0 4px 2px!important;border-radius:50%;display:grid;place-items:center;color:#3a1c00!important;transform:translateY(-12px);
+  background:radial-gradient(circle at 38% 32%,#fff3c4,#ffc46b 45%,#f08a3c)!important;box-shadow:0 0 0 4px var(--alm-panel),0 0 24px rgba(255,196,107,.55);transition:box-shadow .2s}
+.almo-sun span{display:grid;justify-items:center}
+.almo-sun small{font:800 8.5px/1 var(--almo-font);letter-spacing:.12em;margin-top:1px}
+.almo-sun.on{box-shadow:0 0 0 4px var(--alm-panel),0 0 0 6px #ffc46b,0 0 32px rgba(255,196,107,.85)}
+.almo.orbiting .almo-body,.almo.orbiting .almo-sky{filter:blur(2px) brightness(.55);transition:filter .2s}
+.almo-orbit{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);width:280px;height:132px}
+.almo-orbit::before{content:"";position:absolute;left:8px;right:8px;top:22px;height:240px;border-radius:50%;border:1px dashed color-mix(in oklab,var(--pc) 45%,transparent);pointer-events:none}
+.almo-orbit__t{position:absolute;left:0;right:0;bottom:4px;text-align:center;font:700 10px/1 var(--alm-font-mono);letter-spacing:.2em;text-transform:uppercase;color:var(--pc);pointer-events:none}
+.almo-moonb{position:absolute;width:88px;display:grid;justify-items:center;gap:4px;text-align:center;animation:almo-rise .22s ease-out both}
+.almo-m{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--alm-panel);border:1.5px solid var(--pc);color:var(--pc);box-shadow:0 0 18px -4px var(--pc);transition:background .15s,color .15s}
+.almo-moonb:hover .almo-m,.almo-moonb:focus-visible .almo-m{background:var(--pc);color:#10132e}
+.almo-moonb b{font-weight:700;font-size:12px;line-height:1.1;color:var(--alm-ink);text-shadow:0 1px 6px var(--alm-panel)}
+.almo-moonb small{font:500 9.5px/1.2 var(--alm-font-mono);color:var(--alm-muted)}
+@keyframes almo-rise{from{opacity:0;transform:translateY(14px) scale(.9)}}
+.almo-empty{flex:1 0 auto;display:grid;justify-items:center;align-content:center;text-align:center;gap:6px;padding:40px 24px}
+.almo-empty h4{margin:14px 0 0;font:800 19px/1.2 var(--almo-font);color:var(--alm-ink)}
+.almo-empty p{margin:0 0 8px;color:var(--alm-muted);max-width:30ch}
+.almo-dial{position:relative;width:110px;height:110px;border-radius:50%;border:1px dashed var(--alm-line);display:grid;place-items:center}
+.almo-dial::before{content:"";width:14px;height:14px;border-radius:50%;background:#ffc46b;box-shadow:0 0 22px #ffc46b}
+.almo-dial::after{content:"";position:absolute;top:-5px;left:50%;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:#5fcfc0;box-shadow:0 0 12px #5fcfc0;transform-origin:5px 60px}
+.almo-dial.spin::after{animation:almo-orbit 3s linear infinite}
+@keyframes almo-orbit{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.almo-moonb,.almo-dial.spin::after{animation:none}.almo.orbiting .almo-body,.almo.orbiting .almo-sky{transition:none}}
 `;
 
 // src/frontend/sessionzero.ts
@@ -1411,10 +1635,10 @@ function setup(ctx) {
       hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>\uD83D\uDD70 ALMANAC</span><span class="alm-hudw__dim">off in this chat</span></div>`;
       return;
     }
-    const n = v.now;
+    const n2 = v.now;
     const present = v.cast.filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).slice(0, 5);
     hud.setSize(300, 40);
-    hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>\uD83D\uDD70 ${escapeHtml(n.time ?? "—")}</span>${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.condition)}</span>` : ""}<span>\uD83D\uDCCD ${escapeHtml(n.place[n.place.length - 1] ?? "—")}</span>${present.map((c) => `<span class="alm-mini" style="--c:${escapeHtml(c.color)}" title="${escapeHtml(c.name)}${c.mood?.name ? ` · ${escapeHtml(c.mood.name)}` : ""}">${escapeHtml(initials(c.name))}</span>`).join("")}</div>`;
+    hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>\uD83D\uDD70 ${escapeHtml(n2.time ?? "—")}</span>${n2.weather ? `<span>${escapeHtml(n2.weather.glyph)} ${escapeHtml(n2.weather.condition)}</span>` : ""}<span>\uD83D\uDCCD ${escapeHtml(n2.place[n2.place.length - 1] ?? "—")}</span>${present.map((c) => `<span class="alm-mini" style="--c:${escapeHtml(c.color)}" title="${escapeHtml(c.name)}${c.mood?.name ? ` · ${escapeHtml(c.mood.name)}` : ""}">${escapeHtml(initials(c.name))}</span>`).join("")}</div>`;
   };
   const applyView = (v) => {
     gotStateFor = v ? v.chatId : null;

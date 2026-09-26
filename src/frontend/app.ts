@@ -1,24 +1,15 @@
-// The "Almanac" drawer tab: Now · Cast · Bonds · Knowledge · Codex · Chronicle ·
-// Timeline · World · Lore · Creator · Recall · Craft · Settings.
+// The "Almanac" drawer tab, with Orrery navigation (see orrery.ts): Now, and
+// People (Cast · Bonds · Knowledge), Story (Chronicle · Timeline · World),
+// Library (Codex · Lore · Creator) and Engine (Recall · Craft · Settings).
 
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { escapeHtml as e, initials } from "../core/util";
 import { renderGraph, type GEdge, type GNode } from "./graph";
 import { CreatorUI } from "./creator-ui";
+import { PAGES, dock, emptySky, pageTitle, skyHeader, type Page } from "./orrery";
 
-export const TABS = ["now", "cast", "bonds", "knowledge", "codex", "chronicle", "timeline", "world", "lore", "creator", "recall", "craft", "settings"] as const;
-type Tab = (typeof TABS)[number];
-const TAB_LABEL: Record<Tab, string> = {
-  now: "Now", cast: "Cast", bonds: "Bonds", knowledge: "Knowledge", codex: "Codex", chronicle: "Chronicle", timeline: "Timeline",
-  world: "World", lore: "Lore", creator: "Creator", recall: "Recall", craft: "Craft", settings: "Settings",
-};
-
-const BAND_SKY: Record<string, string> = {
-  "deep night": "linear-gradient(#070a1c,#161c3e)", "small hours": "linear-gradient(#0c1230,#252b58)", "pre-dawn": "linear-gradient(#1d2352,#5a4a78)",
-  dawn: "linear-gradient(#3a3570,#e58b72)", sunrise: "linear-gradient(#6f7fb8,#ffc48a)", morning: "linear-gradient(#6fa6de,#cfe6f5)",
-  midday: "linear-gradient(#4d97e0,#a8d4f5)", afternoon: "linear-gradient(#5e9bd6,#d9e4ee)", "golden hour": "linear-gradient(#6d8fc2,#ffcf7a)",
-  sunset: "linear-gradient(#5b4b8a,#ff8a5c)", dusk: "linear-gradient(#2e2d62,#a0588a)", evening: "linear-gradient(#10163a,#3b3566)",
-};
+type Tab = Page;
+const TABS = PAGES;
 
 export class AlmanacApp {
   ctx: SpindleFrontendContext;
@@ -31,6 +22,7 @@ export class AlmanacApp {
   codexFilter = "";
   codexKind = "";
   editing: string | null = null;
+  orbit = "";
   creator: CreatorUI;
   status: "nochat" | "waiting" | "stalled" | "ok" = "nochat";
   hudProblem = "";
@@ -48,6 +40,12 @@ export class AlmanacApp {
     }
     this.root.addEventListener("click", (ev) => this.onClick(ev));
     this.root.addEventListener("change", (ev) => this.onChange(ev));
+    this.root.addEventListener("keydown", (ev) => {
+      if ((ev as KeyboardEvent).key === "Escape" && this.orbit) {
+        this.orbit = "";
+        this.render();
+      }
+    });
   }
 
   send(msg: Record<string, unknown>) {
@@ -67,28 +65,35 @@ export class AlmanacApp {
 
   render() {
     const v = this.view;
-    const tabs = `<div class="tabs" role="tablist">${TABS.map((t) => `<button role="tab" data-tab="${t}" aria-selected="${t === this.tab}">${TAB_LABEL[t]}</button>`).join("")}</div>`;
     if (!v) {
-      const msg = this.status === "nochat"
-        ? `Open a chat to see its Almanac.`
-        : this.status === "stalled"
-          ? `The Ledger hasn't answered yet. Check that ALMANAC Ledger is enabled in Extensions and has its permissions, then retry.<div class="row" style="justify-content:center;margin-top:10px"><button class="btn primary" data-act="retryState">Retry</button></div>`
-          : `Reading this chat…`;
-      this.root.innerHTML = `${tabs}<div class="empty">${msg}</div>`;
+      this.root.innerHTML = `<div class="almo">${emptySky(this.status)}</div>`;
       return;
     }
     let body = "";
     try {
       body = (this as any)[`tab_${this.tab}`]?.(v) ?? "";
     } catch (err) {
-      body = `<div class="empty">Could not draw this tab: ${e(String(err))}</div>`;
+      body = `<div class="empty">Could not draw this page: ${e(String(err))}</div>`;
     }
     const banner = !v.enabled
       ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block). You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button></div>`
       : "";
     const scroll = this.root.scrollTop;
-    this.root.innerHTML = tabs + banner + body;
+    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
     this.root.scrollTop = scroll;
+  }
+
+  go(page: Tab) {
+    const changed = page !== this.tab;
+    this.tab = page;
+    this.orbit = "";
+    try {
+      localStorage.setItem("alm-tab", this.tab);
+    } catch {
+      /* ignore */
+    }
+    this.render();
+    if (changed) this.root.scrollTop = 0;
   }
 
   // -------------------------------------------------------------------------
@@ -97,14 +102,16 @@ export class AlmanacApp {
 
   tab_now(v: any): string {
     const n = v.now;
-    const sky = BAND_SKY[n.band] ?? BAND_SKY.afternoon;
     const present = v.cast.filter((c: any) => c.tier === "spot" || c.tier === "peri");
     const fc = (n.forecastHours ?? []).filter((_: any, i: number) => i % 2 === 0).slice(0, 6);
-    return `<div class="hero" style="background:${sky}">
-  <div class="row"><span class="gl">🗓 ${e(n.clock)}</span>${n.weather ? `<span class="gl">${e(n.weather.glyph)} ${e(n.weather.text)}</span>` : ""}${n.moon ? `<span class="gl">${e(n.moon.glyph)} ${e(n.moon.name)}</span>` : ""}</div>
-  <div class="t">${e(n.title || (n.place.length ? n.place[n.place.length - 1] : "The story so far"))}</div>
-  <div class="row"><span class="gl">📍 ${e(n.place.join(" › ") || "—")}</span>${n.sun ? `<span class="gl">☀ ${e(n.sun.text)}</span>` : ""}<span class="gl">${e(n.season || "")}</span><span class="gl">scene ${n.scene} · ${e(n.mode)}</span></div>
-</div>
+    const facts = [
+      n.place.length ? `<b>Where</b><span>${e(n.place.join(" › "))}</span>` : "",
+      n.sun ? `<b>Sun</b><span>${e(n.sun.text)}</span>` : "",
+      n.moon ? `<b>Moon</b><span>${e(n.moon.glyph)} ${e(n.moon.name)}</span>` : "",
+      n.season ? `<b>Season</b><span>${e(n.season)}</span>` : "",
+      `<b>Scene</b><span>${n.scene} · ${e(n.mode)}</span>`,
+    ].join("");
+    return `<div class="card flat almo-facts"><div class="kv">${facts}</div></div>
 ${fc.length ? `<div class="card flat"><h4>Next hours</h4><div class="alm-fc" style="grid-template-columns:repeat(${fc.length},1fr)">${fc.map((h: any) => `<div><small>${e(h.t)}</small><span>${e(h.glyph)}</span><b>${h.temp}°</b></div>`).join("")}</div><div class="muted">${e(n.forecast)}</div></div>` : ""}
 <h4>Present</h4>
 ${present.length ? `<div class="alm-cast">${present.map((c: any) => this.castCard(c, true)).join("")}</div>` : `<div class="empty">No one else is here.</div>`}
@@ -280,14 +287,20 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
 
   onClick(ev: Event) {
     const t = ev.target as HTMLElement;
-    const tabBtn = t.closest("[data-tab]") as HTMLElement | null;
-    if (tabBtn) {
-      this.tab = tabBtn.dataset.tab as Tab;
-      try {
-        localStorage.setItem("alm-tab", this.tab);
-      } catch {
-        /* ignore */
-      }
+    const pageBtn = t.closest("[data-page]") as HTMLElement | null;
+    if (pageBtn) {
+      this.go(pageBtn.dataset.page as Tab);
+      return;
+    }
+    const planet = t.closest("[data-orbit]") as HTMLElement | null;
+    if (planet) {
+      this.orbit = this.orbit === planet.dataset.orbit ? "" : planet.dataset.orbit!;
+      this.render();
+      (this.root.querySelector(".almo-moonb") as HTMLElement | null)?.focus();
+      return;
+    }
+    if (this.orbit && !t.closest(".almo-orbit")) {
+      this.orbit = "";
       this.render();
       return;
     }

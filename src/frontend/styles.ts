@@ -3,7 +3,7 @@
 // palettes for Solar / Nocturne / Botanical / Prism / Candy. Standalone "Lite"
 // inline styles from the preset regex are overridden here with !important.
 
-export const FONTS_IMPORT = `@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500;1,700&family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Fredoka:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=Oswald:wght@500;600&family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Space+Grotesk:wght@500;700&display=swap");`;
+export const FONTS_IMPORT = `@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500;1,700&family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Fredoka:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=Oswald:wght@500;600&family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Space+Grotesk:wght@500;700&family=Syne:wght@700;800&display=swap");`;
 
 export const TOKENS = `
 :root{
@@ -79,7 +79,7 @@ export const MESSAGE_CSS = `
 .alm-say__who{position:absolute!important;top:-12px!important;left:16px!important;display:inline-flex!important;align-items:center!important;gap:7px!important;padding:5px 11px!important;border-radius:999px!important;
   background:var(--c)!important;color:var(--alm-on-voice)!important;font:500 10.5px/1 var(--alm-font-mono)!important;letter-spacing:.16em!important;text-transform:uppercase!important;
   box-shadow:0 6px 12px -6px color-mix(in oklab,var(--c) 90%,#000)!important}
-.alm-say__tone{font:italic 500 12px/1 var(--alm-font-body)!important;letter-spacing:.02em!important;text-transform:none!important;padding-left:7px!important;border-left:1px solid color-mix(in oklab,var(--alm-on-voice) 45%,transparent)!important;opacity:1!important}
+.alm-say__tone{font-style:italic!important;font-weight:500!important;font-size:12px!important;line-height:1!important;font-family:var(--alm-font-body)!important;letter-spacing:.02em!important;text-transform:none!important;padding-left:7px!important;border-left:1px solid color-mix(in oklab,var(--alm-on-voice) 45%,transparent)!important;opacity:1!important}
 .alm-say__line{display:block!important;font-size:1.06em!important;line-height:1.5!important;color:var(--alm-ink)!important;font-style:normal}
 .alm-say__beat{display:block!important;margin-top:8px!important;padding-top:7px!important;border-top:1px dashed color-mix(in oklab,var(--c) 25%,var(--alm-line))!important;color:var(--alm-muted)!important;font-size:.9em!important;font-style:italic!important}
 .alm-say--user{grid-template-columns:minmax(0,1fr) 44px!important;margin-left:12%!important}
@@ -190,7 +190,7 @@ details.alm-env>summary::-webkit-details-marker{display:none}
   background:radial-gradient(circle at 35% 30%,color-mix(in oklab,var(--c) 60%,#fff),var(--c) 60%,color-mix(in oklab,var(--c) 60%,#000))!important;
   color:var(--alm-on-voice)!important;font:700 15px/1 var(--alm-font-display)!important;box-shadow:0 3px 8px rgba(0,0,0,.3),inset 0 0 0 3px rgba(0,0,0,.12);transition:transform .4s,opacity .4s}
 .alm-env__cue{display:block!important;margin-top:12px;font:500 10.5px/1.45 var(--alm-font-mono)!important;letter-spacing:.06em;text-transform:uppercase;color:var(--alm-muted)!important}
-.alm-env__hint{display:block!important;margin-top:6px;font:italic 12px/1 var(--alm-font-body)!important;color:var(--c)!important}
+.alm-env__hint{display:block!important;margin-top:6px;font-style:italic!important;font-size:12px!important;line-height:1!important;font-family:var(--alm-font-body)!important;color:var(--c)!important}
 .alm-env__hint::after{content:"break the seal"}
 details.alm-env[open] .alm-env__hint::after{content:"reseal"}
 details.alm-env[open] .alm-env__flap{transform:rotateX(180deg)}
@@ -229,7 +229,7 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 .alm-cc .alm-cc__medal{position:absolute!important;left:12px;top:24px;margin:0!important;width:46px!important;height:46px!important}
 .alm-cc__bd{padding:28px 12px 12px}
 .alm-cc__nm{font:700 17px/1.1 var(--alm-font-display)}
-.alm-cc__em{margin-top:2px;font:italic 14px/1.3 var(--alm-font-body);color:var(--c)}
+.alm-cc__em{margin-top:2px;font-style:italic;font-size:14px;line-height:1.3;font-family:var(--alm-font-body);color:var(--c)}
 .alm-cc__em small{color:var(--alm-muted);font-style:normal}
 .alm-vad{display:grid;grid-template-columns:14px 1fr;gap:6px 8px;align-items:center;margin:12px 0 10px;font:500 10px/1 var(--alm-font-mono);color:var(--alm-muted)}
 .alm-slider{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,color-mix(in oklab,var(--c) 10%,var(--alm-panel-2)),color-mix(in oklab,var(--c) 45%,var(--alm-panel-2)))}
@@ -347,16 +347,13 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 `;
 
 export const PANEL_CSS = `
-.almp{--c:var(--alm-accent);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:14px;line-height:1.5;padding:10px 10px 40px}
+.almp{--c:var(--alm-accent);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:14px;line-height:1.5;padding:0}
 .almp *{box-sizing:border-box}
 .almp h3{margin:14px 0 8px;font:600 17px/1.2 var(--alm-font-display)}
 .almp h4{margin:12px 0 6px;font:500 10.5px/1 var(--alm-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--alm-muted)}
 .almp .muted{color:var(--alm-muted)}
 .almp .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .almp .grow{flex:1;min-width:0}
-.almp .tabs{position:sticky;top:0;z-index:5;display:flex;gap:2px;padding:4px;margin:0 0 12px;border-radius:12px;background:var(--alm-panel-2);overflow-x:auto;scrollbar-width:none}
-.almp .tabs button{all:unset;flex:none;cursor:pointer;font:500 11.5px/1 var(--alm-font-mono);padding:8px 10px;border-radius:9px;color:var(--alm-muted)}
-.almp .tabs button[aria-selected="true"]{color:var(--alm-ink);background:var(--alm-panel);box-shadow:0 1px 3px rgba(0,0,0,.15),0 0 0 1px var(--alm-line)}
 .almp .card{background:var(--alm-panel);border:1px solid var(--alm-line);border-radius:var(--alm-r-sm);padding:12px;margin:0 0 10px;box-shadow:var(--alm-lift)}
 .almp .card.flat{box-shadow:none}
 .almp .hero{position:relative;overflow:hidden;border-radius:var(--alm-radius);padding:16px;color:#fff;min-height:120px;background:linear-gradient(180deg,#27295a,#6d4a7d 50%,#e0866b);box-shadow:var(--alm-shadow)}
@@ -406,4 +403,72 @@ export const PANEL_CSS = `
 .alm-sz{font-size:14px}
 .alm-sz .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
 @media (max-width:560px){.alm-sz .grid{grid-template-columns:1fr}}
+/* ── Orrery navigation ── */
+.almo{position:relative;display:flex;flex-direction:column;min-height:100%;background:color-mix(in oklab,var(--alm-panel-2) 55%,var(--alm-panel));--almo-font:"Syne",var(--alm-font-display)}
+.almo-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.almo button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
+.almo button:focus-visible{outline:2px solid var(--alm-accent);outline-offset:2px}
+.almo-sky{flex:none;position:relative;overflow:hidden;padding:14px 14px 12px;color:#fff;isolation:isolate}
+.almo-sky::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none}
+.almo-sky.almo-night::before{background:radial-gradient(1px 1px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 78% 30%,#fff,transparent),radial-gradient(1.5px 1.5px at 60% 12%,#fff,transparent),radial-gradient(1px 1px at 34% 44%,#fffc,transparent),radial-gradient(1px 1px at 90% 58%,#fffa,transparent)}
+.almo-sky.almo-rain::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:repeating-linear-gradient(105deg,transparent 0 11px,rgba(210,222,255,.2) 11px 12px,transparent 12px 26px)}
+.almo-sky.almo-snow::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(1.5px 1.5px at 20% 30%,#fff,transparent),radial-gradient(2px 2px at 70% 60%,#fff,transparent),radial-gradient(1.5px 1.5px at 45% 80%,#fff,transparent);background-size:60px 60px}
+.almo-sky__row{display:flex;align-items:flex-end;gap:12px}
+.almo-clock{font:800 38px/.9 var(--almo-font);letter-spacing:-.02em;font-variant-numeric:tabular-nums;text-shadow:0 2px 16px rgba(0,0,0,.35)}
+.almo-date{font:500 11px/1.35 var(--alm-font-mono);color:rgba(255,255,255,.82);min-width:0}
+.almo-moon{--sh:0px;margin-left:auto;flex:none;width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 60% 40%,#f7efd9 0 45%,#bdb4a2 75%);box-shadow:inset var(--sh) 0 0 0 rgba(12,16,44,.88),0 0 22px rgba(247,239,217,.3)}
+.almo-title{margin-top:8px;font:700 18px/1.15 var(--alm-font-display);text-shadow:0 2px 12px rgba(0,0,0,.4)}
+.almo-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.almo-chips span{padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);font-weight:500;font-size:11px;line-height:1.25;max-width:100%;overflow-wrap:anywhere}
+.almo-seg{display:flex;gap:4px;margin-top:12px;padding:4px;border-radius:14px;background:rgba(6,9,26,.42);border:1px solid rgba(255,255,255,.1);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.almo-seg button{flex:1;min-width:0;display:flex;justify-content:center;align-items:center;gap:6px;padding:8px 4px;border-radius:10px;font-weight:600;font-size:12px;line-height:1;color:rgba(255,255,255,.66)}
+.almo-seg button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.almo-seg .almo-ic{width:15px;height:15px}
+.almo-seg button:hover{color:#fff}
+.almo-seg button[aria-selected="true"]{background:rgba(255,255,255,.15);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),inset 0 -2px 0 var(--pc)}
+.almo-body{flex:1 0 auto;padding:6px 12px 12px;min-width:0}
+.almo-head{margin:8px 0 10px}
+.almo-head h3{margin:3px 0 1px!important;font:800 22px/1.1 var(--almo-font)!important;letter-spacing:-.01em}
+.almo-head small{color:var(--alm-muted);font-size:12px}
+.almo-eyebrow{font:700 10px/1 var(--alm-font-mono);letter-spacing:.2em;text-transform:uppercase}
+.almo-facts{margin-top:10px}
+.almo-facts .kv{grid-template-columns:70px 1fr}
+.almo-dockwrap{flex:none;position:sticky;bottom:10px;z-index:8;display:flex;justify-content:center;padding:14px 8px 0;pointer-events:none}
+.almo-dockwrap>*{pointer-events:auto}
+.almo-dock{display:flex;align-items:flex-end;gap:2px;padding:6px 8px;border-radius:26px;max-width:100%;
+  background:color-mix(in oklab,var(--alm-panel) 80%,transparent);border:1px solid var(--alm-line);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 18px 40px -14px rgba(0,0,0,.65)}
+.almo-pl{flex:1 1 60px;min-width:44px;max-width:64px;display:grid;justify-items:center;gap:4px;padding:6px 0 4px;border-radius:18px;color:var(--alm-muted);font-weight:600!important;font-size:10px!important;line-height:1.1!important;white-space:nowrap}
+.almo-pl>span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.almo-pl:hover,.almo-pl.on{color:var(--alm-ink)}
+.almo-orb{position:relative;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#10132e;
+  background:radial-gradient(circle at 35% 30%,color-mix(in oklab,var(--pc) 65%,#fff),var(--pc) 60%,color-mix(in oklab,var(--pc) 62%,#000));transition:box-shadow .2s,transform .2s}
+.almo-orb .almo-ic{width:16px;height:16px;stroke-width:1.9}
+.almo-pl:hover .almo-orb{transform:translateY(-2px)}
+.almo-pl.on .almo-orb{box-shadow:0 0 0 3px var(--alm-panel),0 0 0 5px var(--pc),0 0 16px var(--pc)}
+.almo-pl.alert .almo-orb{box-shadow:0 0 14px 1px var(--pc)}
+.almo-orb b{position:absolute;top:-5px;right:-7px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--alm-danger);color:#fff;font-weight:700;font-size:9.5px;line-height:16px;box-shadow:0 0 0 2px var(--alm-panel)}
+.almo-sun{flex:none;width:56px;height:56px;margin:0 4px 2px!important;border-radius:50%;display:grid;place-items:center;color:#3a1c00!important;transform:translateY(-12px);
+  background:radial-gradient(circle at 38% 32%,#fff3c4,#ffc46b 45%,#f08a3c)!important;box-shadow:0 0 0 4px var(--alm-panel),0 0 24px rgba(255,196,107,.55);transition:box-shadow .2s}
+.almo-sun span{display:grid;justify-items:center}
+.almo-sun small{font:800 8.5px/1 var(--almo-font);letter-spacing:.12em;margin-top:1px}
+.almo-sun.on{box-shadow:0 0 0 4px var(--alm-panel),0 0 0 6px #ffc46b,0 0 32px rgba(255,196,107,.85)}
+.almo.orbiting .almo-body,.almo.orbiting .almo-sky{filter:blur(2px) brightness(.55);transition:filter .2s}
+.almo-orbit{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);width:280px;height:132px}
+.almo-orbit::before{content:"";position:absolute;left:8px;right:8px;top:22px;height:240px;border-radius:50%;border:1px dashed color-mix(in oklab,var(--pc) 45%,transparent);pointer-events:none}
+.almo-orbit__t{position:absolute;left:0;right:0;bottom:4px;text-align:center;font:700 10px/1 var(--alm-font-mono);letter-spacing:.2em;text-transform:uppercase;color:var(--pc);pointer-events:none}
+.almo-moonb{position:absolute;width:88px;display:grid;justify-items:center;gap:4px;text-align:center;animation:almo-rise .22s ease-out both}
+.almo-m{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--alm-panel);border:1.5px solid var(--pc);color:var(--pc);box-shadow:0 0 18px -4px var(--pc);transition:background .15s,color .15s}
+.almo-moonb:hover .almo-m,.almo-moonb:focus-visible .almo-m{background:var(--pc);color:#10132e}
+.almo-moonb b{font-weight:700;font-size:12px;line-height:1.1;color:var(--alm-ink);text-shadow:0 1px 6px var(--alm-panel)}
+.almo-moonb small{font:500 9.5px/1.2 var(--alm-font-mono);color:var(--alm-muted)}
+@keyframes almo-rise{from{opacity:0;transform:translateY(14px) scale(.9)}}
+.almo-empty{flex:1 0 auto;display:grid;justify-items:center;align-content:center;text-align:center;gap:6px;padding:40px 24px}
+.almo-empty h4{margin:14px 0 0;font:800 19px/1.2 var(--almo-font);color:var(--alm-ink)}
+.almo-empty p{margin:0 0 8px;color:var(--alm-muted);max-width:30ch}
+.almo-dial{position:relative;width:110px;height:110px;border-radius:50%;border:1px dashed var(--alm-line);display:grid;place-items:center}
+.almo-dial::before{content:"";width:14px;height:14px;border-radius:50%;background:#ffc46b;box-shadow:0 0 22px #ffc46b}
+.almo-dial::after{content:"";position:absolute;top:-5px;left:50%;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:#5fcfc0;box-shadow:0 0 12px #5fcfc0;transform-origin:5px 60px}
+.almo-dial.spin::after{animation:almo-orbit 3s linear infinite}
+@keyframes almo-orbit{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.almo-moonb,.almo-dial.spin::after{animation:none}.almo.orbiting .almo-body,.almo.orbiting .almo-sky{transition:none}}
 `;
