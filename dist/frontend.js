@@ -8,6 +8,10 @@ function initials(name) {
     return "?";
   return (parts[0][0] ?? "?").toUpperCase();
 }
+function kpNote(note) {
+  const short = note.length > 70 ? `${note.slice(0, 67).trimEnd()}…` : note;
+  return `<small class="alm-kp__n" title="${escapeHtml(note)}">${escapeHtml(short)}</small>`;
+}
 
 // src/frontend/graph.ts
 var DOMINANT_COLORS = {
@@ -663,22 +667,24 @@ ${c.isUser ? "" : `<h4>Hidden pressure (narrator-only)</h4><div class="row"><spa
 <h4>All bonds</h4><div class="list">${v.bonds.map((b) => `<div class="rec"><div class="hd"><b>${escapeHtml(b.fromName)} → ${escapeHtml(b.toName)}</b>${b.label ? `<span class="pill">${escapeHtml(b.label)}</span>` : ""}${b.ladder ? `<span class="pill">♡ tier ${b.ladder.tier}</span>` : ""}</div><div class="muted">${Object.entries(b.axes).map(([k, x]) => `${k} ${x > 0 ? "+" : ""}${x}`).join(" · ")}</div>${b.history.slice(-2).map((h) => `<div class="muted"><small>${escapeHtml(h.axis)} ${h.delta > 0 ? "+" : ""}${h.delta}${h.cause ? ` — ${escapeHtml(h.cause)}` : ""}</small></div>`).join("")}</div>`).join("") || `<div class="empty">No bonds yet.</div>`}</div>`;
   }
   tab_knowledge(v) {
-    const people = v.cast.filter((c) => !c.dead).slice(0, 8);
     if (!v.knowledge.length)
       return `<div class="empty">No knowledge recorded yet. The model records it with <code>know</code> lines.</div>`;
-    const rows = v.knowledge.map((f) => {
-      const cells = people.map((p) => {
-        const h = f.holders.find((x) => x.id === p.id);
-        if (!h)
-          return `<td data-who="${escapeHtml(p.name)}"><span class="alm-kp un">—</span></td>`;
+    const people = v.cast.filter((c) => !c.dead);
+    const byId = new Map(people.map((c) => [c.id, c]));
+    const cards = [...v.knowledge].reverse().map((f) => {
+      const holders = f.holders.filter((h) => h.status !== "unaware");
+      const unaware = people.filter((c) => !holders.some((h) => h.id === c.id)).map((c) => c.isUser ? v.names?.user || c.name : c.name);
+      const chips = holders.map((h) => {
+        const c = byId.get(h.id);
         const wrong = h.status === "wrong" || h.status !== "knows" && f.truth === "false";
-        return `<td data-who="${escapeHtml(p.name)}"><span class="alm-kp ${wrong ? "wrong" : h.status === "knows" ? "knows" : "sus"}">${wrong ? "✗" : h.status === "knows" ? "✓" : "?"} ${escapeHtml(h.status)}</span></td>`;
+        const cls = wrong ? "wrong" : h.status === "knows" ? "knows" : "sus";
+        return `<div class="almk-h"><span class="alm-mini" style="--c:${escapeHtml(c?.color ?? "#888")}">${escapeHtml(initials(h.name))}</span><div class="almk-h__b"><b>${escapeHtml(h.name)}</b> <span class="alm-kp ${cls}">${wrong ? "✗ wrong" : h.status === "knows" ? "✓ knows" : `? ${escapeHtml(h.status)}`}</span>${h.source ? kpNote(h.source) : ""}</div></div>`;
       }).join("");
-      return `<tr><td>${escapeHtml(f.fact)}${f.truth !== "unknown" ? ` <small class="muted">(${escapeHtml(f.truth)})</small>` : ""}</td>${cells}</tr>`;
+      const truth = f.truth !== "unknown" ? `<span class="pill${f.truth === "false" ? " warn" : ""}">${escapeHtml(f.truth)}</span>` : "";
+      return `<div class="card flat almk"><div class="almk-q"><span class="grow">${escapeHtml(f.fact)}</span>${truth}</div>${chips || `<div class="muted">No one knows this yet.</div>`}${unaware.length ? `<div class="almk-un">unaware: ${escapeHtml(unaware.slice(0, 8).join(", "))}${unaware.length > 8 ? "…" : ""}</div>` : ""}</div>`;
     }).join("");
     const irony = v.knowledge.filter((f) => f.truth === "false" && f.holders.some((h) => h.status !== "unaware")).slice(0, 3);
-    return `<table class="alm-km"><tr><th>Fact</th>${people.map((p) => `<th><span class="alm-mini" style="--c:${escapeHtml(p.color)}">${escapeHtml(initials(p.name))}</span></th>`).join("")}</tr>${rows}</table>
-${irony.map((f) => `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${escapeHtml(f.holders.filter((h) => h.status !== "unaware").map((h) => h.name).join(", "))} ${f.holders.length > 1 ? "are" : "is"} certain of something false: “${escapeHtml(f.fact)}”.</span></div>`).join("")}`;
+    return `${irony.map((f) => `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${escapeHtml(f.holders.filter((h) => h.status !== "unaware").map((h) => h.name).join(", "))} ${f.holders.filter((h) => h.status !== "unaware").length > 1 ? "are" : "is"} certain that “${escapeHtml(f.fact)}”, which isn't true.</span></div>`).join("")}<div class="list">${cards}</div>`;
   }
   tab_codex(v) {
     const kinds = [...new Set(v.codex.map((r) => r.kind))];
@@ -1232,16 +1238,20 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 .alm-clock__face b{position:absolute;inset:0;display:grid;place-items:center;font:600 13px/1 var(--alm-font-display)}
 .alm-clock strong{display:block;font:700 14px/1.25 var(--alm-font-display)}
 .alm-clock span{font:500 10.5px/1.4 var(--alm-font-mono);color:var(--alm-muted)}
+.alm-km-wrap{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
 .alm-km{width:100%;border-collapse:separate;border-spacing:0 6px;font-size:13.5px}
 .alm-km th{font:500 10px/1.2 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--alm-muted);text-align:left;padding:0 6px}
 .alm-km td{padding:8px 6px;background:var(--alm-panel-2);vertical-align:middle}
-.alm-km td:first-child{border-radius:10px 0 0 10px;font-weight:600}
+.alm-km td:first-child{border-radius:10px 0 0 10px;font-weight:600;min-width:11em;width:42%;overflow-wrap:break-word}
+.alm-km th:first-child{min-width:11em}
+.alm-km td[data-who]{min-width:7.5em;vertical-align:top}
 .alm-km td:last-child{border-radius:0 10px 10px 0}
 .alm-kp{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;font:500 11px/1.2 var(--alm-font-mono);white-space:nowrap}
 .alm-kp.knows{color:var(--alm-good);background:color-mix(in oklab,var(--alm-good) 13%,var(--alm-panel))}
 .alm-kp.sus{color:var(--alm-warn);background:color-mix(in oklab,var(--alm-warn) 14%,var(--alm-panel))}
 .alm-kp.wrong{color:var(--alm-danger);background:color-mix(in oklab,var(--alm-danger) 13%,var(--alm-panel));box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-danger) 40%,transparent)}
 .alm-kp.un{color:var(--alm-muted);border:1px dashed var(--alm-line)}
+.alm-kp__n{display:block;margin-top:4px;font-size:11px;line-height:1.35;color:var(--alm-muted);white-space:normal;overflow-wrap:break-word;max-width:22em}
 .alm-irony{display:flex;gap:12px;align-items:center;margin-top:10px;padding:10px 14px;border-radius:var(--alm-r-sm);font-size:14px;
   background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,linear-gradient(120deg,#7b5bd6,var(--alm-danger),var(--alm-gold)) border-box;border:1.5px solid transparent}
 .alm-irony .i{font-size:22px}
@@ -1292,7 +1302,8 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
   .alm-km,.alm-km tbody,.alm-km tr,.alm-km td{display:block}
   .alm-km tr:first-child{display:none}
   .alm-km tr{margin:0 0 8px;padding:10px 12px;border-radius:12px;background:var(--alm-panel-2)}
-  .alm-km td{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 0;background:none;border-radius:0!important}
+  .alm-km td{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 10px;padding:3px 0;background:none;border-radius:0!important;min-width:0!important;width:auto!important}
+  .alm-km td .alm-kp__n{flex-basis:100%;max-width:none;margin-top:0}
   .alm-km td[data-who]::before{content:attr(data-who);font:500 10.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--alm-muted)}
 }
 `;
@@ -1348,11 +1359,54 @@ var PANEL_CSS = `
 .almp .timeline .ev{position:relative;margin:0 0 10px;font-size:13px}
 .almp .timeline .ev::before{content:"";position:absolute;left:-17px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--alm-accent);box-shadow:0 0 0 3px var(--alm-panel)}
 .almp .timeline .ev small{display:block;font:500 10.5px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
-.alm-hudw{width:100%;height:100%;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:linear-gradient(90deg,#1c2146,#3a3060 60%,#6a4a6a);color:#fff;font:500 11.5px/1 var(--alm-font-mono);box-shadow:0 10px 26px -12px rgba(0,0,0,.7);cursor:grab;overflow:hidden;white-space:nowrap}
-.alm-hudw__dim{opacity:.7;font-style:italic}
+.alm-hudw{box-sizing:border-box;width:max-content;max-width:440px;height:40px;display:flex;align-items:center;gap:9px;padding:0 12px 0 7px;border-radius:999px;background:linear-gradient(90deg,#1c2146,#3a3060 60%,#6a4a6a);color:#fff;font:500 12px/1 var(--alm-font-mono);box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,255,255,.12);cursor:pointer;white-space:nowrap;user-select:none;transition:transform .15s,box-shadow .15s}
+.alm-hudw:hover{transform:translateY(-1px);box-shadow:0 14px 30px -12px rgba(0,0,0,.8),inset 0 0 0 1px rgba(255,255,255,.22)}
+.alm-hudw:focus-visible{outline:2px solid #ffc46b;outline-offset:2px}
+.alm-hudw>*{flex:none}
+.alm-hudw b{font-weight:600;letter-spacing:.02em}
+.alm-hudw__orb{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),0 0 10px rgba(255,255,255,.15)}
+.alm-hudw__orb i{width:10px;height:10px;border-radius:50%}
+.alm-hudw__orb i.moon{background:#f7efd9;box-shadow:inset -3px 0 0 rgba(20,24,60,.75),0 0 7px rgba(247,239,217,.55)}
+.alm-hudw__orb i.sun{background:#ffd36b;box-shadow:0 0 8px #ffc46b}
+.alm-hudw__pl{display:inline-flex;align-items:center;gap:4px;flex:0 1 auto!important;min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.alm-hudw__pl svg{flex:none;opacity:.8}
+.alm-hudw .alm-stack{display:inline-flex;padding-left:5px}
+.alm-hudw .alm-mini{box-shadow:0 0 0 2px #3f3264!important}
+.alm-hudw__dim{opacity:.72;font-style:italic}
+.alm-hudc{box-sizing:border-box;width:300px;border-radius:18px;overflow:hidden;background:var(--alm-panel);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:13px;line-height:1.45;box-shadow:0 24px 50px -18px rgba(0,0,0,.75),0 0 0 1px var(--alm-line)}
+.alm-hudc button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
+.alm-hudc__sky{position:relative;padding:12px 12px 11px;color:#fff;cursor:grab}
+.alm-hudc__row{display:flex;align-items:flex-end;gap:10px}
+.alm-hudc__clock{font:800 30px/.9 "Syne",var(--alm-font-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.alm-hudc__date{font:500 10.5px/1.3 var(--alm-font-mono);opacity:.85;min-width:0}
+.alm-hudc__x{margin-left:auto!important;align-self:flex-start;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.14)!important;color:#fff!important;font-size:12px!important}
+.alm-hudc__x:hover{background:rgba(255,255,255,.26)!important}
+.alm-hudc__title{margin-top:7px;font-weight:700;font-size:15px;font-family:var(--alm-font-display)}
+.alm-hudc__chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.alm-hudc__chips span{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.16);font-size:11px}
+.alm-hudc__bd{padding:4px 12px 12px}
+.alm-hudc h5{margin:10px 0 6px;font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--alm-muted)}
+.alm-hudc ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.alm-hudc__who li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start}
+.alm-hudc__who b{font-weight:600}
+.alm-hudc__mood{color:var(--alm-muted);font-size:12px}
+.alm-hudc__who small{display:block;color:var(--alm-muted);font-size:11.5px;overflow-wrap:anywhere}
+.alm-hudc__owed li{padding-left:12px;position:relative;font-size:12.5px}
+.alm-hudc__owed li::before{content:"";position:absolute;left:0;top:.55em;width:6px;height:6px;border-radius:50%;background:var(--alm-accent)}
+.alm-hudc__owed li.due::before{background:var(--alm-warn)}
+.alm-hudc__owed small{color:var(--alm-muted)}
+.alm-hudc__muted{margin:0;color:var(--alm-muted);font-size:12px}
+.alm-hudc__go{display:block;width:100%;margin-top:12px!important;padding:9px 12px!important;border-radius:12px;text-align:center;background:var(--alm-accent)!important;color:var(--alm-on-voice)!important;font-weight:600!important;font-size:12.5px!important}
+.alm-hudc__go:hover{filter:brightness(1.08)}
 .alm-sz{font-size:14px}
 .alm-sz .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
 @media (max-width:560px){.alm-sz .grid{grid-template-columns:1fr}}
+.almk{display:grid;gap:8px}
+.almk-q{display:flex;gap:8px;align-items:flex-start;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.almk-h{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start}
+.almk-h__b{min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.almk-h__b .alm-kp__n{flex-basis:100%;margin-top:0;max-width:none}
+.almk-un{font-size:11.5px;color:var(--alm-muted)}
 /* ── Orrery navigation ── */
 .almo{position:relative;display:flex;flex-direction:column;min-height:100%;background:color-mix(in oklab,var(--alm-panel-2) 55%,var(--alm-panel));--almo-font:"Syne",var(--alm-font-display)}
 .almo-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
@@ -1538,6 +1592,61 @@ function openSessionZero(ctx, chatId, current) {
   });
 }
 
+// src/frontend/hud.ts
+var PIN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>`;
+var mini = (c) => `<span class="alm-mini" style="--c:${escapeHtml(c.color)}" title="${escapeHtml(c.name)}${c.mood?.name ? ` · ${escapeHtml(c.mood.name)}` : ""}">${escapeHtml(initials(c.name))}</span>`;
+var presentOf = (v) => (v.cast ?? []).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead);
+var skyOf = (v) => BAND_SKY[v?.now?.band] ?? BAND_SKY.evening;
+function hudPill(v, note) {
+  if (note || !v) {
+    return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" title="Open the Almanac"><span class="alm-hudw__orb" style="background:${BAND_SKY.evening}"></span><b>ALMANAC</b><span class="alm-hudw__dim">${escapeHtml(note ?? "connecting…")}</span></div>`;
+  }
+  const n2 = v.now ?? {};
+  const place = n2.place ?? [];
+  const present = presentOf(v).slice(0, 4);
+  return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" aria-expanded="false" title="Open the Now window">
+<span class="alm-hudw__orb" style="background:${skyOf(v)}"><i class="${/night|hours|pre-dawn|evening|dusk/.test(n2.band ?? "evening") ? "moon" : "sun"}"></i></span><b class="alm-hudw__t">${escapeHtml(n2.time ?? "--:--")}</b>${n2.weather ? `<span>${escapeHtml(n2.weather.glyph)} ${escapeHtml(n2.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${escapeHtml(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-stack">${present.map(mini).join("")}</span>` : ""}</div>`;
+}
+function hudCard(v) {
+  const n2 = v.now ?? {};
+  const place = n2.place ?? [];
+  const clock = String(n2.clock ?? "");
+  const cut = clock.lastIndexOf(", ");
+  const date = n2.time && cut > 0 ? clock.slice(0, cut) : "";
+  const present = presentOf(v).slice(0, 5);
+  const owed = (v.world?.cons ?? []).filter((c) => c.status === "due" || c.status === "open").slice(-2);
+  const who = present.map((c) => `<li>${mini(c)}<div><b>${escapeHtml(c.name)}</b>${c.mood?.name ? ` <span class="alm-hudc__mood">${escapeHtml(c.mood.name)}</span>` : ""}${c.activity ? `<small>${escapeHtml(c.activity)}</small>` : ""}</div></li>`).join("");
+  return `<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now">
+<div class="alm-hudc__sky" style="background:${skyOf(v)}">
+  <div class="alm-hudc__row"><b class="alm-hudc__clock">${escapeHtml(n2.time ?? "--:--")}</b><span class="alm-hudc__date">${escapeHtml(date)}</span><button class="alm-hudc__x" data-hud="toggle" aria-label="Close the Now window">✕</button></div>
+  ${n2.title ? `<div class="alm-hudc__title">${escapeHtml(n2.title)}</div>` : ""}
+  <div class="alm-hudc__chips">${n2.weather ? `<span>${escapeHtml(n2.weather.glyph)} ${escapeHtml(n2.weather.text ?? n2.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${escapeHtml(place.slice(-2).join(" › "))}</span>` : ""}${n2.mode ? `<span>${escapeHtml(n2.mode)}</span>` : ""}</div>
+</div>
+<div class="alm-hudc__bd">
+  <h5>Present</h5>
+  ${who ? `<ul class="alm-hudc__who">${who}</ul>` : `<p class="alm-hudc__muted">No one else is here.</p>`}
+  ${owed.length ? `<h5>Owed and due</h5><ul class="alm-hudc__owed">${owed.map((c) => `<li class="${c.status === "due" ? "due" : ""}">${escapeHtml(c.whoName)}${c.whomName ? ` → ${escapeHtml(c.whomName)}` : ""}: ${escapeHtml(c.what ?? "")}${c.dueText ? ` <small>due ${escapeHtml(c.dueText)}</small>` : ""}</li>`).join("")}</ul>` : ""}
+  ${n2.forecast ? `<h5>Ahead</h5><p class="alm-hudc__muted">${escapeHtml(n2.forecast)}</p>` : ""}
+  <button class="alm-hudc__go" data-hud="open">Open the Almanac →</button>
+</div></div>`;
+}
+function measure(html, width) {
+  try {
+    const probe = document.createElement("div");
+    probe.style.cssText = `position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none;${width ? `width:${width}px;` : "width:max-content;"}`;
+    probe.innerHTML = html;
+    document.body.appendChild(probe);
+    const el = probe.firstElementChild;
+    const r = el?.getBoundingClientRect();
+    probe.remove();
+    if (r && r.width > 0)
+      return { w: Math.ceil(r.width), h: Math.ceil(r.height) };
+  } catch {}
+  const text = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  const avatars = (html.match(/class="alm-mini"/g) ?? []).length;
+  return width ? { w: width, h: 380 } : { w: Math.ceil(text.length * 7.4 + 56 + avatars * 18), h: 40 };
+}
+
 // src/frontend.ts
 var ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><circle cx="12" cy="10" r="3.2"/><path d="M12 4.5v1.3M12 14.2v1.3M6.5 10h1.3M16.2 10h1.3"/></svg>`;
 var COMMANDS = [
@@ -1598,12 +1707,44 @@ function setup(ctx) {
   };
   let hud = null;
   let hudOn = true;
+  let hudOpen = false;
+  try {
+    hudOpen = localStorage.getItem("alm-hud-open") === "1";
+  } catch {}
+  const setHudOpen = (open) => {
+    hudOpen = open;
+    try {
+      localStorage.setItem("alm-hud-open", open ? "1" : "0");
+    } catch {}
+    renderHud(app.view);
+  };
+  const onHudAction = (target) => {
+    const el = target?.closest?.("[data-hud]");
+    if (!el)
+      return;
+    const v = app.view;
+    const live = v && v.chatId === ctx.getActiveChat().chatId && v.enabled;
+    if (el.dataset.hud === "open" || !live) {
+      tab.activate();
+      return;
+    }
+    setHudOpen(!hudOpen);
+  };
   const ensureHud = (on) => {
     hudOn = on;
     try {
       if (on && !hud) {
-        hud = ctx.ui.createFloatWidget({ width: 300, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, tooltip: "ALMANAC · Now", chromeless: true });
-        hud.root.addEventListener("click", () => tab.activate());
+        hud = ctx.ui.createFloatWidget({ width: 260, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, tooltip: "ALMANAC · Now", chromeless: true });
+        hud.root.addEventListener("click", (ev) => onHudAction(ev.target));
+        hud.root.addEventListener("keydown", (ev) => {
+          const k = ev.key;
+          if (k === "Escape" && hudOpen)
+            setHudOpen(false);
+          else if ((k === "Enter" || k === " ") && ev.target.matches?.('[role="button"]')) {
+            ev.preventDefault();
+            onHudAction(ev.target);
+          }
+        });
         app.hudProblem = "";
       } else if (!on && hud) {
         hud.destroy();
@@ -1616,6 +1757,7 @@ function setup(ctx) {
     }
     renderHud(app.view);
   };
+  let lastHud = "";
   const renderHud = (v) => {
     if (!hud)
       return;
@@ -1625,20 +1767,23 @@ function setup(ctx) {
       return;
     }
     hud.setVisible(true);
-    if (!v || v.chatId !== chatId) {
-      hud.setSize(210, 40);
-      hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>\uD83D\uDD70 ALMANAC</span><span class="alm-hudw__dim">${app.status === "stalled" ? "no answer yet" : "connecting…"}</span></div>`;
+    let html;
+    let width;
+    if (!v || v.chatId !== chatId)
+      html = hudPill(null, app.status === "stalled" ? "no answer yet" : "connecting…");
+    else if (!v.enabled)
+      html = hudPill(null, "off in this chat");
+    else if (hudOpen) {
+      html = hudCard(v);
+      width = 300;
+    } else
+      html = hudPill(v);
+    if (html === lastHud)
       return;
-    }
-    if (!v.enabled) {
-      hud.setSize(230, 40);
-      hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>\uD83D\uDD70 ALMANAC</span><span class="alm-hudw__dim">off in this chat</span></div>`;
-      return;
-    }
-    const n2 = v.now;
-    const present = v.cast.filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).slice(0, 5);
-    hud.setSize(300, 40);
-    hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>\uD83D\uDD70 ${escapeHtml(n2.time ?? "—")}</span>${n2.weather ? `<span>${escapeHtml(n2.weather.glyph)} ${escapeHtml(n2.weather.condition)}</span>` : ""}<span>\uD83D\uDCCD ${escapeHtml(n2.place[n2.place.length - 1] ?? "—")}</span>${present.map((c) => `<span class="alm-mini" style="--c:${escapeHtml(c.color)}" title="${escapeHtml(c.name)}${c.mood?.name ? ` · ${escapeHtml(c.mood.name)}` : ""}">${escapeHtml(initials(c.name))}</span>`).join("")}</div>`;
+    lastHud = html;
+    hud.root.innerHTML = html;
+    const size = measure(html, width);
+    hud.setSize(Math.min(width ?? 440, Math.max(120, size.w || 260)), Math.max(40, Math.min(560, size.h || 40)));
   };
   const applyView = (v) => {
     gotStateFor = v ? v.chatId : null;

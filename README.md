@@ -42,6 +42,7 @@ The two find each other on their own: with the extension installed, the preset s
 - Write as usual. The model ends each reply with a `<ledger>`; you see it as the tracker drawer under the reply.
 - Out of character: `((like this))`, `OOC: …` or `[OOC …]`.
 - Commands: `/skip 30m`, `/skip until morning`, `/recap`, `/report bonds`, `/report threads`, `/audit`, `/session0`. The **Director's Desk** keycaps in the latest drawer send them in one click.
+- The floating **Now** widget (extension) shows the time, weather, place and who is present. Click it to open a small Now window (scene, people and their moods, what is owed, the forecast), and use its button to open the full Almanac drawer. Drag it anywhere; right-click to hide or reset it.
 - Swipes get a different take, not a paraphrase: the model is shown how the rejected take opened.
 - The **Almanac** drawer tab (extension) opens under a live sky: clock, date, moon, weather and place. The dock at the bottom holds everything. The sun goes to **Now**, and each planet opens its pages on an orbit: **People** (Cast · Bonds with a relationship graph and time scrubber · Knowledge), **Story** (Chronicle · Timeline · World), **Library** (Codex · Lore · Creator) and **Engine** (Recall · Craft · Settings). Under the sky, a switcher moves between the current group's pages, and a planet glows with a count when something needs a look (debts due, lorebook entries to review, unverified turns).
 

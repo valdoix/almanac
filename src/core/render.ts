@@ -5,7 +5,7 @@
 
 import type { AlmanacReport } from "./engines/almanac";
 import type { CharacterState, MessageDelta, WorldState } from "./types";
-import { absMinutes, escapeHtml as e, fmtSpan, fmtTime, hhmm, initials } from "./util";
+import { absMinutes, escapeHtml as e, fmtSpan, fmtTime, hhmm, initials, kpNote } from "./util";
 import { LADDER_NAMES, normFact } from "./state";
 
 /** Voice-slot palette (slot 0 = the player). Tuned for contrast on both paper and night skins. */
@@ -99,17 +99,18 @@ function knowledgeTable(state: WorldState, colors: Record<string, string>, userN
       let pill = `<span class="alm-kp un">— unaware</span>`;
       if (r) {
         if (r.status === "wrong" || (r.status !== "knows" && r.truth === "false")) {
-          pill = `<span class="alm-kp wrong">✗ ${e(r.status)}</span>`;
+          pill = `<span class="alm-kp wrong">✗ ${e(r.status === "wrong" ? "wrong" : r.status)}</span>`;
           if (!irony) irony = `${e(c.name)} is certain of something false.`;
-        } else if (r.status === "knows") pill = `<span class="alm-kp knows">✓ ${e(r.source ?? "knows")}</span>`;
+        } else if (r.status === "knows") pill = `<span class="alm-kp knows">✓ knows</span>`;
         else if (r.status === "unaware") pill = `<span class="alm-kp un">— unaware</span>`;
         else pill = `<span class="alm-kp sus">? ${e(r.status)}</span>`;
+        if (r.source) pill += kpNote(r.source);
       }
       return `<td data-who="${e(c.name)}">${pill}</td>`;
     });
     return `<tr><td>${e(f.fact.replace(/\{\{user\}\}/g, userName))}</td>${cells.join("")}</tr>`;
   });
-  return `<table class="alm-km">${head}${body.join("")}</table>${irony ? `<div class="alm-irony"><span class="i">🎭</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
+  return `<div class="alm-km-wrap"><table class="alm-km">${head}${body.join("")}</table></div>${irony ? `<div class="alm-irony"><span class="i">🎭</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
 }
 
 function sub(icon: string, title: string, count: string, inner: string, open = false): string {

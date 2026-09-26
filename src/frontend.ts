@@ -6,7 +6,7 @@ import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { AlmanacApp } from "./frontend/app";
 import { FONTS_IMPORT, MESSAGE_CSS, PANEL_CSS, TOKENS } from "./frontend/styles";
 import { openSessionZero } from "./frontend/sessionzero";
-import { escapeHtml as e, initials } from "./core/util";
+import { hudCard, hudPill, measure } from "./frontend/hud";
 
 const ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><circle cx="12" cy="10" r="3.2"/><path d="M12 4.5v1.3M12 14.2v1.3M6.5 10h1.3M16.2 10h1.3"/></svg>`;
 
@@ -64,15 +64,50 @@ export function setup(ctx: SpindleFrontendContext) {
   };
 
   // Floating "Now" widget (ui_panels). Shown whenever a chat is open and the
-  // widget is switched on; it says so when the Ledger is off or still connecting.
+  // widget is switched on. The pill opens into a small Now window; the window's
+  // button opens the full drawer. It sizes itself to what it shows.
   let hud: ReturnType<SpindleFrontendContext["ui"]["createFloatWidget"]> | null = null;
   let hudOn = true;
+  let hudOpen = false;
+  try {
+    hudOpen = localStorage.getItem("alm-hud-open") === "1";
+  } catch {
+    /* private mode */
+  }
+  const setHudOpen = (open: boolean) => {
+    hudOpen = open;
+    try {
+      localStorage.setItem("alm-hud-open", open ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    renderHud(app.view);
+  };
+  const onHudAction = (target: EventTarget | null) => {
+    const el = (target as HTMLElement | null)?.closest?.("[data-hud]") as HTMLElement | null;
+    if (!el) return;
+    const v = app.view;
+    const live = v && v.chatId === ctx.getActiveChat().chatId && v.enabled;
+    if (el.dataset.hud === "open" || !live) {
+      tab.activate();
+      return;
+    }
+    setHudOpen(!hudOpen);
+  };
   const ensureHud = (on: boolean) => {
     hudOn = on;
     try {
       if (on && !hud) {
-        hud = ctx.ui.createFloatWidget({ width: 300, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, tooltip: "ALMANAC · Now", chromeless: true });
-        hud.root.addEventListener("click", () => tab.activate());
+        hud = ctx.ui.createFloatWidget({ width: 260, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, tooltip: "ALMANAC · Now", chromeless: true });
+        hud.root.addEventListener("click", (ev) => onHudAction(ev.target));
+        hud.root.addEventListener("keydown", (ev) => {
+          const k = (ev as KeyboardEvent).key;
+          if (k === "Escape" && hudOpen) setHudOpen(false);
+          else if ((k === "Enter" || k === " ") && (ev.target as HTMLElement).matches?.('[role="button"]')) {
+            ev.preventDefault();
+            onHudAction(ev.target);
+          }
+        });
         app.hudProblem = "";
       } else if (!on && hud) {
         hud.destroy();
@@ -86,6 +121,7 @@ export function setup(ctx: SpindleFrontendContext) {
     renderHud(app.view);
   };
 
+  let lastHud = "";
   const renderHud = (v: any) => {
     if (!hud) return;
     const chatId = ctx.getActiveChat().chatId;
@@ -94,20 +130,19 @@ export function setup(ctx: SpindleFrontendContext) {
       return;
     }
     hud.setVisible(true);
-    if (!v || v.chatId !== chatId) {
-      hud.setSize(210, 40);
-      hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>🕰 ALMANAC</span><span class="alm-hudw__dim">${app.status === "stalled" ? "no answer yet" : "connecting…"}</span></div>`;
-      return;
-    }
-    if (!v.enabled) {
-      hud.setSize(230, 40);
-      hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>🕰 ALMANAC</span><span class="alm-hudw__dim">off in this chat</span></div>`;
-      return;
-    }
-    const n = v.now;
-    const present = v.cast.filter((c: any) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).slice(0, 5);
-    hud.setSize(300, 40);
-    hud.root.innerHTML = `<div class="alm-hudw" title="Open the Almanac"><span>🕰 ${e(n.time ?? "—")}</span>${n.weather ? `<span>${e(n.weather.glyph)} ${e(n.weather.condition)}</span>` : ""}<span>📍 ${e(n.place[n.place.length - 1] ?? "—")}</span>${present.map((c: any) => `<span class="alm-mini" style="--c:${e(c.color)}" title="${e(c.name)}${c.mood?.name ? ` · ${e(c.mood.name)}` : ""}">${e(initials(c.name))}</span>`).join("")}</div>`;
+    let html: string;
+    let width: number | undefined;
+    if (!v || v.chatId !== chatId) html = hudPill(null, app.status === "stalled" ? "no answer yet" : "connecting…");
+    else if (!v.enabled) html = hudPill(null, "off in this chat");
+    else if (hudOpen) {
+      html = hudCard(v);
+      width = 300;
+    } else html = hudPill(v);
+    if (html === lastHud) return;
+    lastHud = html;
+    hud.root.innerHTML = html;
+    const size = measure(html, width);
+    hud.setSize(Math.min(width ?? 440, Math.max(120, size.w || 260)), Math.max(40, Math.min(560, size.h || 40)));
   };
 
   const applyView = (v: any) => {

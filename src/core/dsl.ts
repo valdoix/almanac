@@ -376,16 +376,25 @@ const PARSERS: Record<OpName, LineParser> = {
     p.subject = s;
     const [fact, meta = ""] = rest.split(/\s*\|\s*/);
     if (!fact) return null;
-    const bits = meta.split(/\s*[·,;]\s*/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const bits = meta.split(/\s*[·,;]\s*/).map((x) => x.trim()).filter(Boolean);
     let status = "knows";
     let truth = "unknown";
     let source: string | undefined;
-    for (const b of bits) {
-      if (/^(knows?|believes?|suspects?|wrong|unaware|doubts?|denies)$/.test(b)) {
-        status = b.replace(/s$/, "").replace(/^know$/, "knows").replace(/^believe$/, "believes").replace(/^suspect$/, "suspects").replace(/^doubt$/, "doubts").replace(/^denie$/, "doubts");
-        if (!["knows", "believes", "suspects", "wrong", "unaware", "doubts"].includes(status)) status = "believes";
-      } else if (/^(true|false|partial|unknown|half-true|mixed)$/.test(b)) truth = b === "half-true" || b === "mixed" ? "partial" : b;
-      else source = source ? `${source}, ${b}` : b;
+    const norm = (w: string) => {
+      const st = w.replace(/s$/, "").replace(/^know$/, "knows").replace(/^believe$/, "believes").replace(/^suspect$/, "suspects").replace(/^doubt$/, "doubts").replace(/^denie$/, "doubts");
+      return ["knows", "believes", "suspects", "wrong", "unaware", "doubts"].includes(st) ? st : "believes";
+    };
+    const note = (x: string) => (source = source ? `${source}, ${x}` : x);
+    for (const raw of bits) {
+      const b = raw.toLowerCase();
+      const lead = /^(knows?|believes?|suspects?|doubts?)\s+(?:that\s+)?(.+)$/i.exec(raw);
+      if (/^(knows?|believes?|suspects?|wrong|unaware|doubts?|denies)$/.test(b)) status = norm(b);
+      else if (/^(true|false|partial|unknown|half-true|mixed)$/.test(b)) truth = b === "half-true" || b === "mixed" ? "partial" : b;
+      else if (lead) {
+        // "suspects it was Kael" → status suspects, note "it was Kael"
+        status = norm(lead[1].toLowerCase());
+        note(lead[2]);
+      } else note(raw); // free text is a note (keeps its case)
     }
     if (status === "wrong" && truth === "unknown") truth = "false";
     p.args = { fact: fact.trim(), status, truth, source };

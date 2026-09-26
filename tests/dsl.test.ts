@@ -126,3 +126,32 @@ describe("ledger parser", () => {
     expect(v[0].body).toContain("cargo");
   });
 });
+
+describe("know lines with free-text notes", () => {
+  test("a long note stays a note (with its case) and doesn't become the status", () => {
+    const p = parseLine("know Bea: a stranger pulled her out of the river | does not know his name, that he is a slayer, or that 5 months passed")!;
+    expect(p.args.status).toBe("knows");
+    expect(p.args.source).toBe("does not know his name, that he is a slayer, or that 5 months passed");
+    expect(parseLine("know Kael: the ledger was burned | Overheard from Mara · suspects")!.args.source).toBe("Overheard from Mara");
+  });
+  test("a leading status word sets the status and keeps the rest as the note", () => {
+    const p = parseLine("know Joss: the cargo is gone | Suspects it was Kael")!;
+    expect(p.args.status).toBe("suspects");
+    expect(p.args.source).toBe("it was Kael");
+  });
+});
+
+describe("knowledge table in the tracker drawer", () => {
+  test("pills show the status; notes wrap under them; the table scrolls instead of crushing the fact column", async () => {
+    const { renderDrawer } = await import("../src/core/render");
+    const { LedgerRuntime, toPath } = await import("../src/core/branch");
+    const reply = `The river was cold.\n\n<ledger>\ncast: Bea@spot(on the bank) · Gale@peri(by the fire)\nknow Bea: a stranger pulled her out of the river | does not know his name, that he is a slayer, or that 5 months passed\nmode: social\n</ledger>`;
+    const raw = [{ id: "m0", index_in_chat: 0, is_user: false, content: reply, swipes: [reply], swipe_id: 0 }];
+    const { state } = new LedgerRuntime().fold(toPath(raw as any), { userName: "Wren", strictness: "lenient", sealed: true, romance: "slow" });
+    const html = renderDrawer({ state, colors: {}, userName: "Wren", view: "drawer", trackers: ["knowledge"], latest: false } as any);
+    expect(html).toContain('class="alm-km-wrap"');
+    expect(html).toContain("✓ knows</span>");
+    expect(html).toMatch(/<small class="alm-kp__n" title="does not know his name[^"]*">does not know his name/);
+    expect(html).not.toMatch(/alm-kp knows">✓ does not know/);
+  });
+});

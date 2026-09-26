@@ -3,7 +3,7 @@
 // Library (Codex · Lore · Creator) and Engine (Recall · Craft · Settings).
 
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
-import { escapeHtml as e, initials } from "../core/util";
+import { escapeHtml as e, initials, kpNote } from "../core/util";
 import { renderGraph, type GEdge, type GNode } from "./graph";
 import { CreatorUI } from "./creator-ui";
 import { PAGES, dock, emptySky, pageTitle, skyHeader, type Page } from "./orrery";
@@ -158,20 +158,23 @@ ${c.isUser ? "" : `<h4>Hidden pressure (narrator-only)</h4><div class="row"><spa
   }
 
   tab_knowledge(v: any): string {
-    const people = v.cast.filter((c: any) => !c.dead).slice(0, 8);
     if (!v.knowledge.length) return `<div class="empty">No knowledge recorded yet. The model records it with <code>know</code> lines.</div>`;
-    const rows = v.knowledge.map((f: any) => {
-      const cells = people.map((p: any) => {
-        const h = f.holders.find((x: any) => x.id === p.id);
-        if (!h) return `<td data-who="${e(p.name)}"><span class="alm-kp un">—</span></td>`;
+    const people = v.cast.filter((c: any) => !c.dead);
+    const byId = new Map(people.map((c: any) => [c.id, c]));
+    const cards = [...v.knowledge].reverse().map((f: any) => {
+      const holders = f.holders.filter((h: any) => h.status !== "unaware");
+      const unaware = people.filter((c: any) => !holders.some((h: any) => h.id === c.id)).map((c: any) => (c.isUser ? v.names?.user || c.name : c.name));
+      const chips = holders.map((h: any) => {
+        const c: any = byId.get(h.id);
         const wrong = h.status === "wrong" || (h.status !== "knows" && f.truth === "false");
-        return `<td data-who="${e(p.name)}"><span class="alm-kp ${wrong ? "wrong" : h.status === "knows" ? "knows" : "sus"}">${wrong ? "✗" : h.status === "knows" ? "✓" : "?"} ${e(h.status)}</span></td>`;
+        const cls = wrong ? "wrong" : h.status === "knows" ? "knows" : "sus";
+        return `<div class="almk-h"><span class="alm-mini" style="--c:${e(c?.color ?? "#888")}">${e(initials(h.name))}</span><div class="almk-h__b"><b>${e(h.name)}</b> <span class="alm-kp ${cls}">${wrong ? "✗ wrong" : h.status === "knows" ? "✓ knows" : `? ${e(h.status)}`}</span>${h.source ? kpNote(h.source) : ""}</div></div>`;
       }).join("");
-      return `<tr><td>${e(f.fact)}${f.truth !== "unknown" ? ` <small class="muted">(${e(f.truth)})</small>` : ""}</td>${cells}</tr>`;
+      const truth = f.truth !== "unknown" ? `<span class="pill${f.truth === "false" ? " warn" : ""}">${e(f.truth)}</span>` : "";
+      return `<div class="card flat almk"><div class="almk-q"><span class="grow">${e(f.fact)}</span>${truth}</div>${chips || `<div class="muted">No one knows this yet.</div>`}${unaware.length ? `<div class="almk-un">unaware: ${e(unaware.slice(0, 8).join(", "))}${unaware.length > 8 ? "…" : ""}</div>` : ""}</div>`;
     }).join("");
     const irony = v.knowledge.filter((f: any) => f.truth === "false" && f.holders.some((h: any) => h.status !== "unaware")).slice(0, 3);
-    return `<table class="alm-km"><tr><th>Fact</th>${people.map((p: any) => `<th><span class="alm-mini" style="--c:${e(p.color)}">${e(initials(p.name))}</span></th>`).join("")}</tr>${rows}</table>
-${irony.map((f: any) => `<div class="alm-irony"><span class="i">🎭</span><span><b>Dramatic irony:</b> ${e(f.holders.filter((h: any) => h.status !== "unaware").map((h: any) => h.name).join(", "))} ${f.holders.length > 1 ? "are" : "is"} certain of something false: “${e(f.fact)}”.</span></div>`).join("")}`;
+    return `${irony.map((f: any) => `<div class="alm-irony"><span class="i">🎭</span><span><b>Dramatic irony:</b> ${e(f.holders.filter((h: any) => h.status !== "unaware").map((h: any) => h.name).join(", "))} ${f.holders.filter((h: any) => h.status !== "unaware").length > 1 ? "are" : "is"} certain that “${e(f.fact)}”, which isn't true.</span></div>`).join("")}<div class="list">${cards}</div>`;
   }
 
   tab_codex(v: any): string {

@@ -157,3 +157,9 @@ export function plainProse(text: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/** A knowledge note (how a holder came to know it, or what they don't know yet): short, wrapping, full text on hover. */
+export function kpNote(note: string): string {
+  const short = note.length > 70 ? `${note.slice(0, 67).trimEnd()}…` : note;
+  return `<small class="alm-kp__n" title="${escapeHtml(note)}">${escapeHtml(short)}</small>`;
+}

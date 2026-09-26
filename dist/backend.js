@@ -194,6 +194,10 @@ function plainProse(text) {
 
 `).trim();
 }
+function kpNote(note) {
+  const short = note.length > 70 ? `${note.slice(0, 67).trimEnd()}\u2026` : note;
+  return `<small class="alm-kp__n" title="${escapeHtml(note)}">${escapeHtml(short)}</small>`;
+}
 
 // src/core/chronicle.ts
 function emptyChronicle() {
@@ -873,19 +877,27 @@ var PARSERS = {
     const [fact, meta = ""] = rest.split(/\s*\|\s*/);
     if (!fact)
       return null;
-    const bits = meta.split(/\s*[\u00B7,;]\s*/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const bits = meta.split(/\s*[\u00B7,;]\s*/).map((x) => x.trim()).filter(Boolean);
     let status = "knows";
     let truth = "unknown";
     let source;
-    for (const b of bits) {
-      if (/^(knows?|believes?|suspects?|wrong|unaware|doubts?|denies)$/.test(b)) {
-        status = b.replace(/s$/, "").replace(/^know$/, "knows").replace(/^believe$/, "believes").replace(/^suspect$/, "suspects").replace(/^doubt$/, "doubts").replace(/^denie$/, "doubts");
-        if (!["knows", "believes", "suspects", "wrong", "unaware", "doubts"].includes(status))
-          status = "believes";
-      } else if (/^(true|false|partial|unknown|half-true|mixed)$/.test(b))
+    const norm = (w) => {
+      const st = w.replace(/s$/, "").replace(/^know$/, "knows").replace(/^believe$/, "believes").replace(/^suspect$/, "suspects").replace(/^doubt$/, "doubts").replace(/^denie$/, "doubts");
+      return ["knows", "believes", "suspects", "wrong", "unaware", "doubts"].includes(st) ? st : "believes";
+    };
+    const note = (x) => source = source ? `${source}, ${x}` : x;
+    for (const raw of bits) {
+      const b = raw.toLowerCase();
+      const lead = /^(knows?|believes?|suspects?|doubts?)\s+(?:that\s+)?(.+)$/i.exec(raw);
+      if (/^(knows?|believes?|suspects?|wrong|unaware|doubts?|denies)$/.test(b))
+        status = norm(b);
+      else if (/^(true|false|partial|unknown|half-true|mixed)$/.test(b))
         truth = b === "half-true" || b === "mixed" ? "partial" : b;
-      else
-        source = source ? `${source}, ${b}` : b;
+      else if (lead) {
+        status = norm(lead[1].toLowerCase());
+        note(lead[2]);
+      } else
+        note(raw);
     }
     if (status === "wrong" && truth === "unknown")
       truth = "false";
@@ -2310,21 +2322,23 @@ function knowledgeTable(state, colors, userName) {
       let pill = `<span class="alm-kp un">\u2014 unaware</span>`;
       if (r) {
         if (r.status === "wrong" || r.status !== "knows" && r.truth === "false") {
-          pill = `<span class="alm-kp wrong">\u2717 ${escapeHtml(r.status)}</span>`;
+          pill = `<span class="alm-kp wrong">\u2717 ${escapeHtml(r.status === "wrong" ? "wrong" : r.status)}</span>`;
           if (!irony)
             irony = `${escapeHtml(c.name)} is certain of something false.`;
         } else if (r.status === "knows")
-          pill = `<span class="alm-kp knows">\u2713 ${escapeHtml(r.source ?? "knows")}</span>`;
+          pill = `<span class="alm-kp knows">\u2713 knows</span>`;
         else if (r.status === "unaware")
           pill = `<span class="alm-kp un">\u2014 unaware</span>`;
         else
           pill = `<span class="alm-kp sus">? ${escapeHtml(r.status)}</span>`;
+        if (r.source)
+          pill += kpNote(r.source);
       }
       return `<td data-who="${escapeHtml(c.name)}">${pill}</td>`;
     });
     return `<tr><td>${escapeHtml(f.fact.replace(/\{\{user\}\}/g, userName))}</td>${cells.join("")}</tr>`;
   });
-  return `<table class="alm-km">${head}${body.join("")}</table>${irony ? `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
+  return `<div class="alm-km-wrap"><table class="alm-km">${head}${body.join("")}</table></div>${irony ? `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
 }
 function sub(icon, title, count, inner, open = false) {
   if (!inner)

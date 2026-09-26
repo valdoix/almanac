@@ -6,8 +6,10 @@ import { expect, test } from "bun:test";
 class El {
   innerHTML = "";
   scrollTop = 0;
+  listeners: Record<string, ((ev: any) => void)[]> = {};
   classList = { add() {}, remove() {} };
-  addEventListener() {}
+  addEventListener(t: string, fn: (ev: any) => void) { (this.listeners[t] ??= []).push(fn); }
+  fire(t: string, target: any) { for (const fn of this.listeners[t] ?? []) fn({ target, key: "", preventDefault() {} }); }
   querySelector() { return null; }
   setAttribute() {}
   removeAttribute() {}
@@ -21,10 +23,11 @@ test("frontend keeps asking for state and shows the widget meanwhile", async () 
   const onBackend: ((m: unknown) => void)[] = [];
   const hud = { root: new El(), visible: false, size: [0, 0], setVisible(v: boolean) { this.visible = v; }, setSize(w: number, h: number) { this.size = [w, h]; }, destroy() {} };
   const tabRoot = new El();
+  let opened = 0;
   const ctx: any = {
     dom: { addStyle: () => () => {}, cleanup() {} },
     ui: {
-      registerDrawerTab: () => ({ root: tabRoot, activate() {}, setBadge() {}, onActivate() {}, destroy() {} }),
+      registerDrawerTab: () => ({ root: tabRoot, activate() { opened++; }, setBadge() {}, onActivate() {}, destroy() {} }),
       createFloatWidget: () => hud,
       registerInputBarAction: () => { throw new Error("n/a"); },
     },
@@ -37,7 +40,7 @@ test("frontend keeps asking for state and shows the widget meanwhile", async () 
     onBackendMessage: (h: any) => { onBackend.push(h); return () => {}; },
     permissions: { request: async () => [] },
   };
-  const VIEW = { chatId: "c1", enabled: false, settings: { hud: true, fonts: true }, counts: {}, now: {}, cast: [] };
+  let VIEW: any = { chatId: "c1", enabled: false, settings: { hud: true, fonts: true }, counts: {}, now: {}, cast: [] };
   const stop = setup(ctx);
   expect(hud.visible).toBe(true);
   expect(hud.root.innerHTML).toContain("connecting");
@@ -50,5 +53,23 @@ test("frontend keeps asking for state and shows the widget meanwhile", async () 
   const before = sent.length;
   await new Promise((r) => setTimeout(r, 2500));
   expect(sent.length).toBe(before); // stops asking once answered
+
+  // Clicking the "off" pill opens the drawer.
+  const hit = (sel: string) => ({ closest: (q: string) => (q === "[data-hud]" ? { dataset: { hud: sel } } : null) });
+  hud.root.fire("click", hit("toggle"));
+  expect(opened).toBe(1);
+
+  // Live: the pill opens the Now window, whose button opens the drawer.
+  VIEW = { ...VIEW, enabled: true, now: { time: "21:49", clock: "Tuesday 14 October, 21:49", weather: { glyph: "☁", condition: "overcast" }, place: ["Forest", "wooded section"], band: "evening" }, cast: [{ name: "Bea", tier: "spot", color: "#c33", mood: { name: "wary" } }], world: { cons: [] } };
+  onBackend.forEach((h) => h({ type: "state", view: VIEW }));
+  expect(hud.root.innerHTML).toContain("wooded section");
+  expect(hud.size[0]).toBeGreaterThan(200); // sized to its content, not a fixed 300 that clips
+  hud.root.fire("click", hit("toggle"));
+  expect(hud.root.innerHTML).toContain("alm-hudc");
+  expect(hud.root.innerHTML).toContain("Open the Almanac");
+  hud.root.fire("click", hit("open"));
+  expect(opened).toBe(2);
+  hud.root.fire("click", hit("toggle"));
+  expect(hud.root.innerHTML).toContain("alm-hudw");
   stop();
 }, 10000);
