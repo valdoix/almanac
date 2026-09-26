@@ -102,3 +102,16 @@ describe("almanac facade", () => {
     expect(routineAt(r, 12 * 60)?.place).toBe("harbour office");
   });
 });
+
+describe("calendar anchoring", () => {
+  test("a date read from a Day 3 header belongs to Day 3", () => {
+    const cal = buildCalendar({ headerDate: "Tuesday, 14 October 1923", anchorDay: 3 });
+    const d3 = dateFor(cal, 3);
+    expect([d3.weekday, d3.dayOfMonth, d3.month, d3.year]).toEqual(["Tuesday", 14, "October", 1923]);
+    expect(dateFor(cal, 1).dayOfMonth).toBe(12);
+  });
+  test("a start point's own date is not shifted", () => {
+    const cal = buildCalendar({ startPoint: "Day 1 · 14 October 1923 · 18:40", headerDate: "Thursday, 16 October 1923", anchorDay: 3 });
+    expect(dateFor(cal, 1).dayOfMonth).toBe(14);
+  });
+});

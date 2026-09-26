@@ -59,7 +59,7 @@ const SEASON_DOY: [RegExp, number][] = [
 ];
 
 /** Build a calendar from free text settings + start point + an optional first header date label. */
-export function buildCalendar(opts: { calendar?: string; startPoint?: string; climate?: string; headerDate?: string; latitude?: string }): CalendarConfig {
+export function buildCalendar(opts: { calendar?: string; startPoint?: string; climate?: string; headerDate?: string; latitude?: string; anchorDay?: number }): CalendarConfig {
   const cal = defaultCalendar();
   if (/\bsouth(ern)?\b|-\d/.test(opts.latitude ?? "")) cal.hemisphere = "south";
   const text = opts.calendar ?? "";
@@ -124,6 +124,18 @@ export function buildCalendar(opts: { calendar?: string; startPoint?: string; cl
   // Weekday name in the start point / header pins the weekday cycle.
   const wname = cal.weekdays.findIndex((w) => new RegExp(`\\b${w}\\b`, "i").test(sp));
   if (wname >= 0) cal.startWeekday = wname;
+  // A date read from a later header ("Day 3 · Tuesday, 14 October") belongs to that
+  // day, not to Day 1: walk the calendar back to Day 1. A start point's own date wins.
+  const fromHeader = !!opts.headerDate && !/(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?[A-Z][a-zA-Z]+|[A-Z][a-zA-Z]+\s+\d{1,2}\b|day\s*\d+/i.test(opts.startPoint ?? "");
+  const shift = fromHeader && opts.anchorDay && opts.anchorDay > 1 ? opts.anchorDay - 1 : 0;
+  if (shift) {
+    cal.startWeekday = (((cal.startWeekday - shift) % cal.weekdays.length) + cal.weekdays.length) % cal.weekdays.length;
+    cal.startDoy -= shift;
+    while (cal.startDoy < 0) {
+      if (cal.startYear != null) cal.startYear--;
+      cal.startDoy += !cal.custom && cal.startYear != null && isLeap(cal.startYear) ? 366 : yearLength(cal);
+    }
+  }
   const named = /holidays?\s*[:=]\s*([^;\n]+)/i.exec(text);
   if (named) {
     for (const h of named[1].split(/\s*,\s*/)) {

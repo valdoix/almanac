@@ -14,6 +14,8 @@ export interface AlmanacConfig {
   calendar?: string;
   startPoint?: string;
   headerDate?: string;
+  /** The day number printed in the header that carried headerDate. */
+  anchorDay?: number;
   scheduled?: Scheduled[];
   moonAnchor?: { day: number; phase: string };
 }
@@ -37,7 +39,7 @@ export interface AlmanacReport {
 const calCache = new Map<string, CalendarConfig>();
 
 export function calendarFor(cfg: AlmanacConfig): CalendarConfig {
-  const k = JSON.stringify([cfg.calendar, cfg.startPoint, cfg.climate, cfg.headerDate, cfg.latitude]);
+  const k = JSON.stringify([cfg.calendar, cfg.startPoint, cfg.climate, cfg.headerDate, cfg.anchorDay, cfg.latitude]);
   let c = calCache.get(k);
   if (!c) {
     c = buildCalendar(cfg);

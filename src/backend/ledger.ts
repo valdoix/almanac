@@ -130,7 +130,9 @@ export class ChatLedger {
 
   almanacConfig(meta: ChatMeta, settings: Settings): AlmanacConfig {
     const firstHeader = this.path.find((m) => !m.isUser && /🗓/u.test(m.content));
-    const headerDate = firstHeader ? parseMessage(firstHeader.content).header?.dateLabel : undefined;
+    const firstParsed = firstHeader ? parseMessage(firstHeader.content).header : undefined;
+    const headerDate = firstParsed?.dateLabel;
+    const anchorDay = firstParsed?.day;
     const scheduled = this.records
       .filter((r) => r.kind === "forecast" && r.body.weatherLevel != null && r.body.fromAbs != null)
       .map((r) => ({ fromAbs: r.body.fromAbs, toAbs: r.body.toAbs ?? r.body.fromAbs + 360, level: r.body.weatherLevel, label: r.name }));
@@ -141,6 +143,7 @@ export class ChatLedger {
       calendar: meta.config.calendar || settings.calendar || this.calendarFromLore(),
       startPoint: meta.config.startPoint,
       headerDate,
+      anchorDay,
       scheduled,
     };
   }
