@@ -1,5 +1,6 @@
 // The UI view model pushed to the frontend drawer tab and HUD.
 
+import { VERSION } from "../core/version";
 import { voiceColor, speakerCss } from "../core/render";
 import { absMinutes, fmtSpan, fmtTime, hhmm } from "../core/util";
 import { normFact } from "../core/state";
@@ -9,6 +10,7 @@ import { loadChat, loadSettings } from "./store";
 import { isEnabled, lastPlan } from "./turn";
 
 export interface UIView {
+  version: string;
   chatId: string;
   enabled: boolean;
   autoEnabled: boolean;
@@ -84,6 +86,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
   for (const k of Object.keys(coverage)) coverage[k] = Math.round((coverage[k] / total) * 100);
 
   return {
+    version: VERSION,
     chatId,
     enabled: isEnabled(meta, settings),
     autoEnabled: !!meta.enabled,

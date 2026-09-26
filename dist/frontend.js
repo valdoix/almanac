@@ -373,6 +373,9 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
   }
 }
 
+// src/core/version.ts
+var VERSION = "1.1.1";
+
 // src/frontend/orrery.ts
 var GROUPS = [
   { id: "people", label: "People", color: "#ff8fa3", icon: "cast", pages: ["cast", "bonds", "knowledge"] },
@@ -553,6 +556,7 @@ class AlmanacApp {
   creator;
   status = "nochat";
   hudProblem = "";
+  versionWarning = "";
   constructor(ctx, root) {
     this.ctx = ctx;
     this.root = root;
@@ -598,9 +602,10 @@ class AlmanacApp {
     } catch (err) {
       body = `<div class="empty">Could not draw this page: ${escapeHtml(String(err))}</div>`;
     }
+    const stale = this.versionWarning ? `<div class="card flat alm-warnbox"><b>The Ledger's background process is running ${escapeHtml(this.versionWarning)}, but this page loaded ${VERSION}.</b><p class="muted">In Extensions, turn ALMANAC Ledger off and on again (or press Update), then reload the page. If this stays, check Extensions for a second copy of ALMANAC Ledger and remove the older one.</p></div>` : "";
     const banner = !v.enabled ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block). You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button></div>` : "";
     const scroll = this.root.scrollTop;
-    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
+    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
     this.root.scrollTop = scroll;
   }
   go(page) {
@@ -782,7 +787,7 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
 <h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "weekdays: …; months: Name (30), …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 1e4)}</label><label class="f">Simulator connection id${txt("simConnection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
 <h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection id${txt("sidecarConnection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label></div>
-<h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]])}</label>${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${escapeHtml(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
+<p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${escapeHtml(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]])}</label>${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${escapeHtml(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
   }
   onClick(ev) {
     const t = ev.target;
@@ -1238,15 +1243,18 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 .alm-clock__face b{position:absolute;inset:0;display:grid;place-items:center;font:600 13px/1 var(--alm-font-display)}
 .alm-clock strong{display:block;font:700 14px/1.25 var(--alm-font-display)}
 .alm-clock span{font:500 10.5px/1.4 var(--alm-font-mono);color:var(--alm-muted)}
-.alm-km-wrap{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
-.alm-km{width:100%;border-collapse:separate;border-spacing:0 6px;font-size:13.5px}
-.alm-km th{font:500 10px/1.2 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--alm-muted);text-align:left;padding:0 6px}
-.alm-km td{padding:8px 6px;background:var(--alm-panel-2);vertical-align:middle}
-.alm-km td:first-child{border-radius:10px 0 0 10px;font-weight:600;min-width:11em;width:42%;overflow-wrap:break-word}
-.alm-km th:first-child{min-width:11em}
-.alm-km td[data-who]{min-width:7.5em;vertical-align:top}
-.alm-km td:last-child{border-radius:0 10px 10px 0}
-.alm-kp{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;font:500 11px/1.2 var(--alm-font-mono);white-space:nowrap}
+.alm-km-wrap{overflow-x:auto!important;max-width:100%!important;margin:0!important;-webkit-overflow-scrolling:touch}
+.alm-km{display:grid!important;gap:6px!important;width:100%;font-size:13.5px!important;text-align:left!important}
+.alm-km--1{--alm-km-cols:minmax(10em,1.6fr) minmax(8em,1fr);min-width:calc(10em + 1 * (7.5em + 10px) + 20px)}
+.alm-km--2{--alm-km-cols:minmax(10em,1.5fr) repeat(2,minmax(7.5em,1fr));min-width:calc(10em + 2 * (7.5em + 10px) + 20px)}
+.alm-km--3{--alm-km-cols:minmax(10em,1.4fr) repeat(3,minmax(7.5em,1fr));min-width:calc(10em + 3 * (7.5em + 10px) + 20px)}
+.alm-km--4{--alm-km-cols:minmax(10em,1.3fr) repeat(4,minmax(7.5em,1fr));min-width:calc(10em + 4 * (7.5em + 10px) + 20px)}
+.alm-km--5{--alm-km-cols:minmax(10em,1.2fr) repeat(5,minmax(7.5em,1fr));min-width:calc(10em + 5 * (7.5em + 10px) + 20px)}
+.alm-km__r{display:grid!important;grid-template-columns:var(--alm-km-cols);align-items:center;gap:0 10px;padding:8px 10px!important;border-radius:10px;background:var(--alm-panel-2)!important;border:0!important}
+.alm-km__h{background:none!important;padding:0 10px!important;font:500 10px/1.2 var(--alm-font-mono)!important;letter-spacing:.1em;text-transform:uppercase;color:var(--alm-muted)!important}
+.alm-km__f{font-weight:600;line-height:1.35;overflow-wrap:break-word;text-align:left!important;hyphens:auto;min-width:0}
+.alm-km__c{min-width:0;align-self:start;text-align:left!important}
+.alm-kp{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;font:500 11px/1.2 var(--alm-font-mono);white-space:nowrap;max-width:100%}
 .alm-kp.knows{color:var(--alm-good);background:color-mix(in oklab,var(--alm-good) 13%,var(--alm-panel))}
 .alm-kp.sus{color:var(--alm-warn);background:color-mix(in oklab,var(--alm-warn) 14%,var(--alm-panel))}
 .alm-kp.wrong{color:var(--alm-danger);background:color-mix(in oklab,var(--alm-danger) 13%,var(--alm-panel));box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-danger) 40%,transparent)}
@@ -1299,12 +1307,13 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
   .alm-cs{grid-template-columns:1fr!important;gap:3px!important}
   .alm-cs dt{justify-self:start}
   .alm-cs dd{margin-bottom:8px!important}
-  .alm-km,.alm-km tbody,.alm-km tr,.alm-km td{display:block}
-  .alm-km tr:first-child{display:none}
-  .alm-km tr{margin:0 0 8px;padding:10px 12px;border-radius:12px;background:var(--alm-panel-2)}
-  .alm-km td{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 10px;padding:3px 0;background:none;border-radius:0!important;min-width:0!important;width:auto!important}
-  .alm-km td .alm-kp__n{flex-basis:100%;max-width:none;margin-top:0}
-  .alm-km td[data-who]::before{content:attr(data-who);font:500 10.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--alm-muted)}
+  .alm-km{min-width:0;gap:8px!important}
+  .alm-km__h{display:none!important}
+  .alm-km__r{grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;border-radius:12px}
+  .alm-km__f{margin-bottom:2px}
+  .alm-km__c{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 10px}
+  .alm-km__c .alm-kp__n{flex-basis:100%;max-width:none;margin-top:0}
+  .alm-km__c[data-who]::before{content:attr(data-who);font:500 10.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--alm-muted)}
 }
 `;
 var PANEL_CSS = `
@@ -1407,6 +1416,7 @@ var PANEL_CSS = `
 .almk-h__b{min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
 .almk-h__b .alm-kp__n{flex-basis:100%;margin-top:0;max-width:none}
 .almk-un{font-size:11.5px;color:var(--alm-muted)}
+.almp .alm-warnbox{border-color:color-mix(in oklab,var(--alm-warn) 55%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 10%,var(--alm-panel))}
 /* ── Orrery navigation ── */
 .almo{position:relative;display:flex;flex-direction:column;min-height:100%;background:color-mix(in oklab,var(--alm-panel-2) 55%,var(--alm-panel));--almo-font:"Syne",var(--alm-font-display)}
 .almo-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
@@ -1687,6 +1697,13 @@ function setup(ctx) {
   });
   const app = new AlmanacApp(ctx, tab.root);
   app.render();
+  const refreshDisplay = () => {
+    try {
+      ctx.display?.invalidate(["*"]);
+    } catch {}
+  };
+  let displaySig;
+  setTimeout(refreshDisplay, 0);
   let gotStateFor;
   let retry = null;
   const requestState = (attempt = 0) => {
@@ -1792,8 +1809,15 @@ function setup(ctx) {
       retry = null;
     }
     app.setStatus(v ? "ok" : ctx.getActiveChat().chatId ? "waiting" : "nochat");
+    app.versionWarning = v && v.version !== VERSION ? String(v.version ?? "an older version") : "";
     app.setView(v);
     if (v) {
+      const sig = JSON.stringify([v.chatId, v.version, v.enabled, v.theme, v.config?.colors, v.detected?.trackerView, v.detected?.trackers, v.detected?.nsfw]);
+      if (sig !== displaySig) {
+        if (displaySig !== undefined || v.version !== VERSION)
+          refreshDisplay();
+        displaySig = sig;
+      }
       document.documentElement.setAttribute("data-alm-skin", v.theme || "almanac");
       if (v.speakerCss !== lastSpeakerCss) {
         speakerStyle?.();
@@ -1850,6 +1874,7 @@ function setup(ctx) {
     } catch {}
   }));
   removers.push(ctx.events.on("almanac:settings", (p) => {
+    setTimeout(refreshDisplay, 400);
     if (p && "hud" in p)
       ensureHud(!!p.hud);
     if (p && "fonts" in p)

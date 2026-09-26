@@ -7,6 +7,7 @@ import { AlmanacApp } from "./frontend/app";
 import { FONTS_IMPORT, MESSAGE_CSS, PANEL_CSS, TOKENS } from "./frontend/styles";
 import { openSessionZero } from "./frontend/sessionzero";
 import { hudCard, hudPill, measure } from "./frontend/hud";
+import { VERSION } from "./core/version";
 
 const ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><circle cx="12" cy="10" r="3.2"/><path d="M12 4.5v1.3M12 14.2v1.3M6.5 10h1.3M16.2 10h1.3"/></svg>`;
 
@@ -43,6 +44,20 @@ export function setup(ctx: SpindleFrontendContext) {
   });
   const app = new AlmanacApp(ctx, tab.root);
   app.render();
+
+  // Lumiverse caches each message's rendered display by its raw text, not by
+  // extension version or story state. Ask it to redraw after this extension
+  // (re)loads and whenever something that changes the trackers' look changes,
+  // so an update or a settings change shows without a page reload.
+  const refreshDisplay = () => {
+    try {
+      ctx.display?.invalidate(["*"]);
+    } catch {
+      /* older host */
+    }
+  };
+  let displaySig: string | undefined;
+  setTimeout(refreshDisplay, 0);
 
   // Asking for the chat's state. The first "hello" can be lost when the drawer
   // loads before the backend worker is up, so keep asking (with backoff) until a
@@ -152,8 +167,14 @@ export function setup(ctx: SpindleFrontendContext) {
       retry = null;
     }
     app.setStatus(v ? "ok" : ctx.getActiveChat().chatId ? "waiting" : "nochat");
+    app.versionWarning = v && v.version !== VERSION ? String(v.version ?? "an older version") : "";
     app.setView(v);
     if (v) {
+      const sig = JSON.stringify([v.chatId, v.version, v.enabled, v.theme, v.config?.colors, v.detected?.trackerView, v.detected?.trackers, v.detected?.nsfw]);
+      if (sig !== displaySig) {
+        if (displaySig !== undefined || v.version !== VERSION) refreshDisplay();
+        displaySig = sig;
+      }
       document.documentElement.setAttribute("data-alm-skin", v.theme || "almanac");
       if (v.speakerCss !== lastSpeakerCss) {
         speakerStyle?.();
@@ -209,6 +230,7 @@ export function setup(ctx: SpindleFrontendContext) {
     }
   }));
   removers.push(ctx.events.on("almanac:settings", (p: any) => {
+    setTimeout(refreshDisplay, 400);
     if (p && "hud" in p) ensureHud(!!p.hud);
     if (p && "fonts" in p) setFonts(!!p.fonts);
   }));

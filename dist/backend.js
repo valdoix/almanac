@@ -1286,6 +1286,9 @@ function parseMessage(text) {
   return result;
 }
 
+// src/core/version.ts
+var VERSION = "1.1.1";
+
 // src/core/types.ts
 var BIPOLAR_AXES = ["trust", "affection", "respect", "comfort"];
 var DEFAULT_SETTINGS = {
@@ -2315,7 +2318,7 @@ function knowledgeTable(state, colors, userName) {
   if (!facts.length)
     return "";
   let irony = "";
-  const head = `<tr><th>Fact</th>${present.map((c) => `<th>${mini(c, colors)}</th>`).join("")}</tr>`;
+  const head = `<div class="alm-km__r alm-km__h" role="row"><span role="columnheader">Fact</span>${present.map((c) => `<span role="columnheader">${mini(c, colors)}</span>`).join("")}</div>`;
   const body = facts.slice(-8).map((f) => {
     const cells = present.map((c) => {
       const r = f.rows.filter((x) => x.holder === c.id).pop();
@@ -2334,11 +2337,11 @@ function knowledgeTable(state, colors, userName) {
         if (r.source)
           pill += kpNote(r.source);
       }
-      return `<td data-who="${escapeHtml(c.name)}">${pill}</td>`;
+      return `<div class="alm-km__c" role="cell" data-who="${escapeHtml(c.name)}">${pill}</div>`;
     });
-    return `<tr><td>${escapeHtml(f.fact.replace(/\{\{user\}\}/g, userName))}</td>${cells.join("")}</tr>`;
+    return `<div class="alm-km__r" role="row"><div class="alm-km__f" role="rowheader">${escapeHtml(f.fact.replace(/\{\{user\}\}/g, userName))}</div>${cells.join("")}</div>`;
   });
-  return `<div class="alm-km-wrap"><table class="alm-km">${head}${body.join("")}</table></div>${irony ? `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
+  return `<div class="alm-km-wrap"><div class="alm-km alm-km--${present.length}" role="table" aria-label="Who knows what">${head}${body.join("")}</div></div>${irony ? `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
 }
 function sub(icon, title, count, inner, open = false) {
   if (!inner)
@@ -2456,7 +2459,7 @@ function renderDrawer(inp) {
     parts.push(sub("\uD83C\uDF26", "World", "forecast", `<div class="alm-fc">${hours.map((h) => `<div><small>${hhmm(h.abs % 1440)}</small><span>${h.glyph}</span><b>${Math.round(h.tempC)}\xB0</b></div>`).join("")}</div>${rumors.length ? `<ul class="alm-list">${rumors.map((r) => `<li>\uD83D\uDDE3 ${escapeHtml(r.text)}</li>`).join("")}</ul>` : ""}`));
   }
   const desk = inp.latest ? "[[alm-desk]]" : "";
-  return `<details class="alm-drawer alm-ledger"${inp.view === "inline" ? " open" : ""}>${summary}<div class="alm-drawer__body">${parts.join("")}${desk}</div></details>`;
+  return `<details data-alm-v="${VERSION}" class="alm-drawer alm-ledger"${inp.view === "inline" ? " open" : ""}>${summary}<div class="alm-drawer__body">${parts.join("")}${desk}</div></details>`;
 }
 function ring(n, of, color, title, subText) {
   return `<div class="alm-clock"><div class="alm-clock__face"><div class="alm-ring" style="--n:${n};--of:${Math.max(1, of)};--rc:${color}"></div><b>${n}/${of}</b></div><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subText)}</span></div></div>`;
@@ -5662,6 +5665,7 @@ async function buildView(chatId, userId) {
   for (const k of Object.keys(coverage))
     coverage[k] = Math.round(coverage[k] / total * 100);
   return {
+    version: VERSION,
     chatId,
     enabled: isEnabled(meta, settings),
     autoEnabled: !!meta.enabled,

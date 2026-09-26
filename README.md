@@ -71,3 +71,5 @@ bun test             # parser, state engine, engines, recall, chronicle, golden 
 - Lumiverse's `{{hasExtension}}` currently always returns `false`, so the preset detects the extension through its own `{{almActive}}` macro instead.
 - Bun 1.3 rewrites non-ASCII characters in `String.raw` templates as `\u` escapes; the preset sources use a small `R` tag that undoes this.
 - Display regex can't read preset variables, so the Boot block mirrors the display settings (dialogue style, tracker view, lead genre…) into chat variables that the display scripts read.
+- Lumiverse caches each message's rendered display by its text. The extension asks it to redraw when the extension loads and when a display setting changes, so an update shows without a page reload. The Settings page shows the running version, and warns if the page and the background process disagree.
+- The tracker's knowledge matrix is built from grid rows rather than a `<table>`, because Lumiverse's message styles restyle tables.

@@ -153,5 +153,14 @@ describe("knowledge table in the tracker drawer", () => {
     expect(html).toContain("✓ knows</span>");
     expect(html).toMatch(/<small class="alm-kp__n" title="does not know his name[^"]*">does not know his name/);
     expect(html).not.toMatch(/alm-kp knows">✓ does not know/);
+    // No <table>: the host's message styles restyle tables and win.
+    expect(html).not.toContain("<table");
+    expect(html).toContain('class="alm-km alm-km--2"');
+    expect(html).toMatch(/data-alm-v="\d+\.\d+\.\d+"/);
+  });
+  test("the shared version matches the manifest and package", async () => {
+    const { VERSION } = await import("../src/core/version");
+    expect(JSON.parse(await Bun.file("spindle.json").text()).version).toBe(VERSION);
+    expect(JSON.parse(await Bun.file("package.json").text()).version).toBe(VERSION);
   });
 });

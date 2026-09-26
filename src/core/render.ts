@@ -3,6 +3,7 @@
 // that message*. Class names only; the extension stylesheet paints them. No
 // <style> tags, so the markup stays in the light DOM where the stylesheet reaches.
 
+import { VERSION } from "./version";
 import type { AlmanacReport } from "./engines/almanac";
 import type { CharacterState, MessageDelta, WorldState } from "./types";
 import { absMinutes, escapeHtml as e, fmtSpan, fmtTime, hhmm, initials, kpNote } from "./util";
@@ -92,7 +93,9 @@ function knowledgeTable(state: WorldState, colors: Record<string, string>, userN
   }
   if (!facts.length) return "";
   let irony = "";
-  const head = `<tr><th>Fact</th>${present.map((c) => `<th>${mini(c, colors)}</th>`).join("")}</tr>`;
+  // Rows of divs on a shared grid rather than a <table>: the host's message
+  // styles restyle tables (collapsed borders, header tint, padding) and win.
+  const head = `<div class="alm-km__r alm-km__h" role="row"><span role="columnheader">Fact</span>${present.map((c) => `<span role="columnheader">${mini(c, colors)}</span>`).join("")}</div>`;
   const body = facts.slice(-8).map((f) => {
     const cells = present.map((c) => {
       const r = f.rows.filter((x) => x.holder === c.id).pop();
@@ -106,11 +109,11 @@ function knowledgeTable(state: WorldState, colors: Record<string, string>, userN
         else pill = `<span class="alm-kp sus">? ${e(r.status)}</span>`;
         if (r.source) pill += kpNote(r.source);
       }
-      return `<td data-who="${e(c.name)}">${pill}</td>`;
+      return `<div class="alm-km__c" role="cell" data-who="${e(c.name)}">${pill}</div>`;
     });
-    return `<tr><td>${e(f.fact.replace(/\{\{user\}\}/g, userName))}</td>${cells.join("")}</tr>`;
+    return `<div class="alm-km__r" role="row"><div class="alm-km__f" role="rowheader">${e(f.fact.replace(/\{\{user\}\}/g, userName))}</div>${cells.join("")}</div>`;
   });
-  return `<div class="alm-km-wrap"><table class="alm-km">${head}${body.join("")}</table></div>${irony ? `<div class="alm-irony"><span class="i">🎭</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
+  return `<div class="alm-km-wrap"><div class="alm-km alm-km--${present.length}" role="table" aria-label="Who knows what">${head}${body.join("")}</div></div>${irony ? `<div class="alm-irony"><span class="i">🎭</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
 }
 
 function sub(icon: string, title: string, count: string, inner: string, open = false): string {
@@ -225,7 +228,7 @@ export function renderDrawer(inp: DrawerInput): string {
     parts.push(sub("🌦", "World", "forecast", `<div class="alm-fc">${hours.map((h) => `<div><small>${hhmm(h.abs % 1440)}</small><span>${h.glyph}</span><b>${Math.round(h.tempC)}°</b></div>`).join("")}</div>${rumors.length ? `<ul class="alm-list">${rumors.map((r) => `<li>🗣 ${e(r.text)}</li>`).join("")}</ul>` : ""}`));
   }
   const desk = inp.latest ? "[[alm-desk]]" : "";
-  return `<details class="alm-drawer alm-ledger"${inp.view === "inline" ? " open" : ""}>${summary}<div class="alm-drawer__body">${parts.join("")}${desk}</div></details>`;
+  return `<details data-alm-v="${VERSION}" class="alm-drawer alm-ledger"${inp.view === "inline" ? " open" : ""}>${summary}<div class="alm-drawer__body">${parts.join("")}${desk}</div></details>`;
 }
 
 function ring(n: number, of: number, color: string, title: string, subText: string): string {
