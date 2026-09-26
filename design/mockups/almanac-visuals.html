@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALMANAC Visual Language</title>
+<style>
+/* ───────────── Tokens (Almanac theme) ───────────── */
+:root{
+  --bg:#f3ede1; --panel:#fffaf1; --panel-2:#f7f0e2; --ink:#2b2621; --muted:#6e655a; --line:#dccfb8;
+  --accent:#9a5b2e; --accent-2:#3f5a7a; --good:#3d7a4f; --danger:#a8423a;
+  --font-display:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --font-body:"Charter","Bitstream Charter","Sitka Text",Cambria,Georgia,serif;
+  --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --radius:14px; --shadow:0 10px 30px -18px rgba(40,25,10,.45);
+  /* speaker voices (contrast-clamped for light) */
+  --v-mara:#b23a4e; --v-kael:#6b4bb0; --v-joss:#0f7468; --v-user:#8a6a2f;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12141a; --panel:#1b1e26; --panel-2:#20242e; --ink:#ebe5da; --muted:#9d968b; --line:#2f3441;
+    --accent:#d9a75c; --accent-2:#8fb2d8; --good:#7cc493; --danger:#e07d72;
+    --shadow:0 12px 34px -18px rgba(0,0,0,.8);
+    --v-mara:#f08a9b; --v-kael:#b59cf2; --v-joss:#5fd0bf; --v-user:#e2c07e;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12141a; --panel:#1b1e26; --panel-2:#20242e; --ink:#ebe5da; --muted:#9d968b; --line:#2f3441;
+  --accent:#d9a75c; --accent-2:#8fb2d8; --good:#7cc493; --danger:#e07d72;
+  --shadow:0 12px 34px -18px rgba(0,0,0,.8);
+  --v-mara:#f08a9b; --v-kael:#b59cf2; --v-joss:#5fd0bf; --v-user:#e2c07e;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font:17px/1.62 var(--font-body);padding:28px 16px 80px}
+.page{max-width:780px;margin:0 auto}
+h1.doc{font:600 30px/1.15 var(--font-display);letter-spacing:.01em;margin:0 0 4px}
+p.lede{color:var(--muted);margin:0 0 26px;font-size:15px}
+h2.sec{font:600 13px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);
+  margin:44px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+.note{font:13px/1.5 var(--font-mono);color:var(--muted);margin:8px 0 0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* ───────────── Scene plate ───────────── */
+.plate{position:relative;isolation:isolate;overflow:hidden;border-radius:18px;min-height:176px;color:#fff;
+  box-shadow:var(--shadow),inset 0 0 0 1px rgba(255,255,255,.08);margin:0 0 18px}
+.plate .sky,.plate .fx,.plate .fx2,.plate .sil,.plate .glow{position:absolute;inset:0;pointer-events:none}
+.plate .sky{z-index:-3}
+.plate .orb{position:absolute;border-radius:50%;z-index:-2}
+.plate .sil{z-index:-1}
+.plate .info{position:relative;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;padding:14px 16px 0;
+  font:600 12px/1 var(--font-mono);letter-spacing:.04em}
+.chip{background:rgba(10,14,24,.38);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:6px 10px;white-space:nowrap}
+.plate .place{position:relative;padding:8px 18px 0;font:500 13px/1.3 var(--font-mono);opacity:.92;text-shadow:0 1px 6px rgba(0,0,0,.5)}
+.plate .place b{font-weight:700}
+.plate .ttl{position:relative;padding:10px 18px 18px;font:600 30px/1.08 var(--font-display);letter-spacing:.01em;
+  text-shadow:0 2px 18px rgba(0,0,0,.55)}
+.plate .ttl small{display:block;font:italic 400 13px/1.4 var(--font-body);opacity:.85;margin-top:4px;letter-spacing:0}
+
+/* night + heavy rain + city */
+.p-night .sky{background:linear-gradient(180deg,#05081a 0%,#0e1636 55%,#26234a 100%)}
+.p-night .sky::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(40,46,62,.78),rgba(22,26,38,.5))}
+.p-night .orb{width:30px;height:30px;top:20%;left:80%;background:radial-gradient(circle at 36% 36%,#fbfcff 0 44%,#d7defa 72%,#aeb8e6 100%);
+  box-shadow:0 0 24px 6px rgba(200,210,255,.18),inset -8px -3px 0 rgba(90,100,150,.55);opacity:.35;filter:blur(1.5px)}
+.p-night .fx{background:repeating-linear-gradient(104deg,rgba(200,215,255,.42) 0 1px,transparent 1px 9px);background-size:180px 180px;opacity:.85}
+.p-night .fx2{background:radial-gradient(120% 60% at 50% 110%,rgba(255,196,120,.28),transparent 60%)}
+.p-night .sil{background:#0a0d18;clip-path:polygon(0 100%,0 74%,6% 74%,6% 62%,11% 62%,11% 70%,16% 70%,16% 52%,19% 52%,19% 48%,22% 48%,22% 66%,28% 66%,28% 58%,34% 58%,34% 72%,40% 72%,40% 55%,44% 55%,44% 45%,47% 45%,47% 63%,53% 63%,53% 70%,59% 70%,59% 57%,64% 57%,64% 67%,70% 67%,70% 50%,74% 50%,74% 60%,80% 60%,80% 73%,86% 73%,86% 61%,92% 61%,92% 69%,100% 69%,100% 100%)}
+.p-night .sil::after{content:"";position:absolute;inset:0;background:
+  radial-gradient(2px 3px at 18% 60%,#ffd27a 60%,transparent),radial-gradient(2px 3px at 30% 68%,#ffd27a 60%,transparent),
+  radial-gradient(2px 3px at 45% 55%,#ffe2a8 60%,transparent),radial-gradient(2px 3px at 62% 64%,#ffd27a 60%,transparent),
+  radial-gradient(2px 3px at 72% 56%,#ffe2a8 60%,transparent),radial-gradient(2px 3px at 88% 70%,#ffd27a 60%,transparent)}
+
+/* interior: afternoon storm seen through a window */
+.p-interior{background:linear-gradient(180deg,#3b2a20,#2a1d16)}
+.p-interior .sky{background:
+  radial-gradient(60% 90% at 16% 40%,rgba(255,176,92,.35),transparent 70%),
+  repeating-linear-gradient(90deg,rgba(0,0,0,.14) 0 2px,transparent 2px 46px),
+  linear-gradient(180deg,#4a3326,#2c1e17)}
+.p-interior .win{position:absolute;right:26px;top:16px;width:150px;height:118px;border-radius:70px 70px 6px 6px;overflow:hidden;z-index:-2;
+  border:6px solid #1c130e;box-shadow:inset 0 0 0 2px #5a3f2c,0 6px 18px rgba(0,0,0,.45);
+  background:linear-gradient(180deg,#2b3242 0%,#48526a 60%,#67718a 100%)}
+.p-interior .win::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(100deg,rgba(210,225,255,.45) 0 1px,transparent 1px 8px);background-size:120px 120px}
+.p-interior .win::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent calc(50% - 2px),#1c130e calc(50% - 2px) calc(50% + 2px),transparent calc(50% + 2px)),
+  linear-gradient(180deg,transparent calc(46% - 2px),#1c130e calc(46% - 2px) calc(46% + 2px),transparent calc(46% + 2px))}
+.p-interior .win .flash{position:absolute;inset:0;background:#e9f0ff;opacity:0}
+.p-interior .glow{background:radial-gradient(40% 70% at 12% 100%,rgba(255,170,80,.45),transparent 70%);z-index:-1}
+
+/* dawn · clear · autumn forest */
+.p-dawn .sky{background:linear-gradient(180deg,#2a2c5c 0%,#6d4a7d 38%,#e0866b 72%,#f7c67c 100%)}
+.p-dawn .sky::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(214,120,40,.22),transparent 60%)}
+.p-dawn .orb{width:54px;height:54px;top:74%;left:22%;background:radial-gradient(circle,#fff4d2 0 40%,#ffc97a 70%,rgba(255,170,90,0) 100%);box-shadow:0 0 70px 30px rgba(255,170,100,.4)}
+.p-dawn .sil{background:#2a1a1e;clip-path:polygon(0 100%,0 78%,4% 64%,8% 78%,12% 58%,17% 78%,21% 66%,25% 78%,30% 55%,35% 78%,39% 68%,43% 78%,48% 60%,53% 78%,57% 70%,61% 78%,66% 57%,71% 78%,75% 66%,79% 78%,84% 61%,89% 78%,93% 69%,97% 78%,100% 70%,100% 100%)}
+
+/* winter · snow · midday · mountains */
+.p-snow .sky{background:linear-gradient(180deg,#8ea4bf 0%,#b9c8d8 55%,#e4ebf2 100%)}
+.p-snow .orb{width:46px;height:46px;top:16%;left:52%;background:radial-gradient(circle,#fff 0 45%,#f4f7ff 72%,rgba(255,255,255,0) 100%);opacity:.35;filter:blur(3px)}
+.p-snow .fx{background-image:radial-gradient(2px 2px at 10% 20%,#fff 60%,transparent),radial-gradient(3px 3px at 30% 60%,#fff 60%,transparent),radial-gradient(2px 2px at 50% 30%,#fff 60%,transparent),radial-gradient(3px 3px at 70% 70%,#fff 60%,transparent),radial-gradient(2px 2px at 85% 25%,#fff 60%,transparent),radial-gradient(2.5px 2.5px at 20% 85%,#fff 60%,transparent),radial-gradient(2px 2px at 60% 90%,#fff 60%,transparent);background-size:150px 110px}
+.p-snow .sil{background:linear-gradient(180deg,#f3f6fa,#c9d4e1);clip-path:polygon(0 100%,0 70%,12% 48%,20% 60%,33% 34%,44% 58%,52% 46%,63% 66%,76% 38%,88% 62%,100% 50%,100% 100%)}
+.p-snow{color:#10233a}
+.p-snow .chip{background:rgba(255,255,255,.55);border-color:rgba(20,40,70,.18);color:#10233a}
+.p-snow .ttl,.p-snow .place{text-shadow:0 1px 8px rgba(255,255,255,.7)}
+
+.variants{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.variants .plate{min-height:132px;margin:0}
+.variants .plate .ttl{font-size:21px;padding-bottom:14px}
+.variants .plate .place{font-size:11.5px}
+.variants .plate .info{font-size:10.5px}
+.variants .p-interior .win{width:96px;height:80px;right:14px;top:12px}
+
+@media (prefers-reduced-motion: no-preference){
+  .p-night .fx,.p-interior .win::before{animation:rain .6s linear infinite}
+  .p-snow .fx{animation:snow 9s linear infinite}
+  .p-interior .win .flash{animation:flash 7s ease-out infinite}
+  .p-night .orb{animation:none}
+}
+@keyframes rain{to{background-position:-60px 180px}}
+@keyframes snow{to{background-position:40px 220px,-30px 220px,20px 220px,-40px 220px,30px 220px,-20px 220px,10px 220px}}
+@keyframes flash{0%,86%,92%,100%{opacity:0}87%{opacity:.85}89%{opacity:.1}90%{opacity:.6}}
+
+/* chapter card */
+.chapter{display:flex;align-items:center;gap:14px;margin:6px 0 18px;color:var(--muted);font:500 12px/1 var(--font-mono);letter-spacing:.16em;text-transform:uppercase}
+.chapter::before,.chapter::after{content:"";flex:1;height:0;border-top:3px double var(--line)}
+.chapter span{color:var(--ink);font:600 20px/1.1 var(--font-display);letter-spacing:.02em;text-transform:none}
+
+/* ───────────── Prose & dialogue blocks ───────────── */
+.msg{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 22px 18px;box-shadow:var(--shadow)}
+.msg p{margin:0 0 14px}
+.say{--c:var(--muted);position:relative;display:grid;grid-template-columns:34px 1fr;gap:2px 12px;margin:10px 0 14px;padding:10px 14px 11px 12px;
+  background:color-mix(in oklab,var(--c) 7%,var(--panel));border:1px solid color-mix(in oklab,var(--c) 22%,var(--line));
+  border-left:4px solid var(--c);border-radius:4px 12px 12px 4px}
+.say .sig{grid-row:1 / span 3;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+  background:var(--c);color:var(--panel);font:700 15px/1 var(--font-display);box-shadow:0 0 0 3px color-mix(in oklab,var(--c) 18%,transparent)}
+.say .who{font:700 11.5px/1.4 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--c);display:flex;gap:8px;align-items:center}
+.say .tone{font:italic 500 11px/1 var(--font-body);letter-spacing:.02em;text-transform:none;color:var(--muted);
+  border:1px solid var(--line);border-radius:999px;padding:3px 7px}
+.say q{quotes:"\201C" "\201D";color:var(--ink);font-size:1.02em}
+.say .beat{color:var(--muted);font-size:.93em;font-style:italic}
+.say.whisper q{font-style:italic;opacity:.86}
+.say.shout q{font-weight:650;letter-spacing:.01em}
+.say.follow{margin-top:-8px;border-top-left-radius:0}
+.say.follow .sig{visibility:hidden}
+.say.follow .who{display:none}
+.say.user{grid-template-columns:1fr 34px;text-align:right;border-left:1px solid color-mix(in oklab,var(--c) 22%,var(--line));border-right:4px solid var(--c);border-radius:12px 4px 4px 12px;margin-left:12%}
+.say.user .sig{grid-column:2;grid-row:1 / span 3}
+.say.user .who{justify-content:flex-end}
+.v-mara{--c:var(--v-mara)} .v-kael{--c:var(--v-kael)} .v-joss{--c:var(--v-joss)} .v-user{--c:var(--v-user)}
+.chipq{--c:var(--muted);display:inline;padding:1px 6px 2px;border-radius:7px;background:color-mix(in oklab,var(--c) 12%,transparent);
+  box-shadow:inset 0 -2px 0 color-mix(in oklab,var(--c) 45%,transparent);color:var(--ink)}
+.chipq b{font:700 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--c);margin-right:5px;vertical-align:2px}
+.thk{--c:var(--muted);display:block;margin:10px 0 14px 46px;padding:8px 12px;border:1px dashed color-mix(in oklab,var(--c) 55%,var(--line));
+  border-radius:10px;font-style:italic;color:color-mix(in oklab,var(--c) 70%,var(--ink))}
+.thk::before{content:"✦ " attr(data-who) " thinks";display:block;font:700 10px/1.4 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;font-style:normal;color:var(--c);margin-bottom:2px}
+.txt{font:600 .86em/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;padding:2px 7px;border:1px solid var(--line);border-radius:4px;background:var(--panel-2)}
+
+/* style comparison */
+.styles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.styles .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:14.5px}
+.styles h4{margin:0 0 8px;font:700 11px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.styles .say{grid-template-columns:24px 1fr;padding:8px 10px;margin:0}
+.styles .say .sig{width:24px;height:24px;font-size:11px}
+.tint{color:var(--v-mara)}
+.script{display:grid;grid-template-columns:62px 1fr;gap:4px 10px;font-size:14px}
+.script .n{font:700 11px/1.6 var(--font-mono);letter-spacing:.08em;color:var(--v-mara);text-align:right}
+.script .par{color:var(--muted);font-style:italic}
+
+/* ───────────── VTK ───────────── */
+.vtks{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.letter{position:relative;background:linear-gradient(180deg,#fbf3df,#f1e3c2);color:#3a2c1c;border-radius:4px;padding:22px 22px 26px;
+  box-shadow:0 14px 26px -16px rgba(60,35,10,.6),inset 0 0 40px rgba(150,110,50,.18);font:16px/1.55 "Snell Roundhand","Segoe Script","Brush Script MT",var(--font-body);transform:rotate(-.6deg)}
+.letter h5{margin:0 0 10px;font:600 11px/1 var(--font-mono);letter-spacing:.16em;text-transform:uppercase;color:#8a6a3a}
+.letter .seal{position:absolute;right:18px;bottom:-14px;width:46px;height:46px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#d9585f,#8e1d27 70%);
+  box-shadow:0 4px 10px rgba(0,0,0,.35),inset 0 0 0 4px rgba(0,0,0,.12);display:grid;place-items:center;color:#f6d4c8;font:700 16px/1 var(--font-display)}
+.letter .sig{display:block;text-align:right;margin-top:10px}
+.phone{background:#0e1117;color:#e8ecf3;border-radius:26px;padding:12px 12px 16px;box-shadow:0 18px 34px -18px rgba(0,0,0,.8),inset 0 0 0 2px #2a2f3a;font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+.phone .bar{display:flex;justify-content:space-between;font:600 11px/1 var(--font-mono);opacity:.7;padding:4px 10px 10px}
+.phone .hd{text-align:center;font-weight:700;padding-bottom:8px;border-bottom:1px solid #232835;margin-bottom:10px}
+.bub{max-width:78%;padding:8px 12px;border-radius:16px;margin:6px 0;width:fit-content}
+.bub.in{background:#252b38;border-bottom-left-radius:5px}
+.bub.out{background:#2f6fed;margin-left:auto;border-bottom-right-radius:5px}
+.bub small{display:block;opacity:.6;font-size:10.5px;margin-top:2px}
+
+/* ───────────── Drawers ───────────── */
+details.drawer{margin:14px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+details.drawer>summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:11px 14px;
+  font:600 12.5px/1.2 var(--font-mono);color:var(--muted);background:var(--panel-2)}
+details.drawer>summary::-webkit-details-marker{display:none}
+details.drawer>summary .k{color:var(--ink)}
+details.drawer>summary .delta{margin-left:auto;color:var(--accent)}
+details.drawer[open]>summary{border-bottom:1px solid var(--line)}
+.drawer .body{padding:14px}
+details.sub{border:1px solid var(--line);border-radius:10px;margin:0 0 10px;background:var(--panel)}
+details.sub>summary{cursor:pointer;padding:9px 12px;font:700 11px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+details.sub .in{padding:4px 12px 12px}
+
+/* unspoken */
+.unspoken summary{color:var(--ink)!important}
+.sealed{display:grid;gap:10px}
+.sealed .t{--c:var(--muted);position:relative;padding:10px 12px 10px 52px;border-radius:10px;background:
+  linear-gradient(135deg,color-mix(in oklab,var(--c) 10%,var(--panel)),var(--panel));border:1px solid color-mix(in oklab,var(--c) 25%,var(--line))}
+.sealed .t .sig{position:absolute;left:12px;top:12px;width:28px;height:28px;border-radius:50%;background:var(--c);color:var(--panel);display:grid;place-items:center;font:700 12px/1 var(--font-display)}
+.sealed .cue{font:600 10.5px/1.4 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sealed .interior{font-style:italic;color:var(--ink)}
+.lockcap{font:11px/1.4 var(--font-mono);color:var(--muted);margin-top:8px}
+
+/* cast cards */
+.cast{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.cc{--c:var(--muted);border:1px solid var(--line);border-top:3px solid var(--c);border-radius:10px;padding:10px 12px;background:var(--panel)}
+.cc .hd{display:flex;gap:10px;align-items:center;margin-bottom:6px}
+.cc .sig{width:30px;height:30px;border-radius:50%;background:var(--c);color:var(--panel);display:grid;place-items:center;font:700 13px/1 var(--font-display)}
+.cc .nm{font:700 14px/1.2 var(--font-display)}
+.cc .em{font:italic 13px/1.3 var(--font-body);color:var(--c)}
+.cc .tier{margin-left:auto;font:600 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 6px}
+.vad{display:grid;grid-template-columns:18px 1fr;gap:3px 8px;align-items:center;font:600 10px/1 var(--font-mono);color:var(--muted);margin:6px 0}
+.bip{position:relative;height:6px;border-radius:3px;background:var(--panel-2);border:1px solid var(--line)}
+.bip::before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line)}
+.bip i{position:absolute;top:0;bottom:0;border-radius:3px;background:var(--c)}
+.pips{display:grid;grid-template-columns:62px 1fr;gap:3px 8px;font:600 10.5px/1.5 var(--font-mono);color:var(--muted)}
+.pips span:nth-child(even){letter-spacing:.12em;color:var(--ink)}
+.tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.tag{font:600 10px/1 var(--font-mono);padding:4px 6px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted)}
+.tag.warn{color:var(--danger);border-color:color-mix(in oklab,var(--danger) 35%,var(--line))}
+.cc .row{font-size:12.5px;line-height:1.45;margin-top:6px}
+.cc .row b{font:700 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-right:6px}
+
+/* bonds */
+.bond{display:grid;grid-template-columns:minmax(120px,1.2fr) 1fr;gap:4px 12px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.bond:last-child{border-bottom:0}
+.bond .pair{font:700 12.5px/1.3 var(--font-display)}
+.bond .pair .a{color:var(--ca)} .bond .pair .b{color:var(--cb)}
+.bond .d{font:700 11px/1 var(--font-mono)}
+.bond .up{color:var(--good)} .bond .dn{color:var(--danger)}
+.bond .why{grid-column:1 / -1;color:var(--muted);font-style:italic;font-size:12.5px}
+.axis{display:grid;grid-template-columns:60px 1fr 64px;gap:6px;align-items:center;font:600 10px/1 var(--font-mono);color:var(--muted)}
+.axis .bip i{background:var(--ca)}
+
+/* inventory / threads / knowledge */
+.inv{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.it{border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px;background:var(--panel)}
+.it b{display:block;font:700 13px/1.3 var(--font-display)}
+.it .h{font:600 10px/1.6 var(--font-mono);color:var(--muted)}
+.clocks{display:flex;flex-wrap:wrap;gap:16px}
+.clock{display:flex;gap:10px;align-items:center;font-size:12.5px}
+.ring{--n:3;--of:6;width:44px;height:44px;border-radius:50%;
+  background:conic-gradient(var(--accent) calc(var(--n)/var(--of)*360deg),var(--panel-2) 0);
+  -webkit-mask:radial-gradient(circle,transparent 52%,#000 53%);mask:radial-gradient(circle,transparent 52%,#000 53%);position:relative}
+.clock b{display:block;font:700 12.5px/1.2 var(--font-display)}
+.clock span{font:600 10px/1.4 var(--font-mono);color:var(--muted)}
+table.km{width:100%;border-collapse:collapse;font-size:12.5px}
+table.km th,table.km td{border-bottom:1px solid var(--line);padding:6px 6px;text-align:left;vertical-align:top}
+table.km th{font:700 10px/1.2 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.k-knows{color:var(--good);font-weight:700} .k-wrong{color:var(--danger);font-weight:700} .k-sus{color:var(--accent);font-weight:700} .k-un{color:var(--muted)}
+
+/* desk buttons */
+.desk{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.btn{font:600 12px/1 var(--font-mono);padding:8px 11px;border-radius:9px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink)}
+.btn.primary{border-color:color-mix(in oklab,var(--accent) 45%,var(--line));color:var(--accent)}
+
+/* plan drawer */
+.plan pre{margin:0;font:12px/1.55 var(--font-mono);color:var(--muted);white-space:pre-wrap}
+
+/* graph panel */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+.panel .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.panel .tabs span{font:600 11px/1 var(--font-mono);padding:7px 9px;border-radius:8px;border:1px solid var(--line);color:var(--muted)}
+.panel .tabs span.on{color:var(--accent);border-color:color-mix(in oklab,var(--accent) 40%,var(--line));background:var(--panel-2)}
+svg.graph{width:100%;height:auto;display:block}
+svg.graph text{font:600 12px var(--font-display);fill:var(--ink)}
+svg.graph .lbl{font:600 9.5px var(--font-mono);fill:var(--muted)}
+
+/* speaker voices last, so they win over component defaults */
+.v-mara.v-mara{--c:var(--v-mara)} .v-kael.v-kael{--c:var(--v-kael)} .v-joss.v-joss{--c:var(--v-joss)} .v-user.v-user{--c:var(--v-user)}
+
+@media (max-width:560px){
+  body{font-size:16px}
+  .plate{min-height:140px}
+  .plate .ttl{font-size:24px}
+  .say{grid-template-columns:26px 1fr}
+  .say .sig{width:26px;height:26px;font-size:12px}
+  .say.user{margin-left:0;grid-template-columns:1fr 26px}
+  .thk{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1 class="doc">ALMANAC — visual language</h1>
+  <p class="lede">A static mockup of the preset's renderers and the Ledger's drawer. The model only writes short marks (headers, <code>[spk]</code>, <code>[vtk]</code>, <code>&lt;ledger&gt;</code>); everything below is drawn by regex or by the extension's stylesheet. It follows your light/dark setting.</p>
+
+  <!-- ═════════ 1. Scene plate ═════════ -->
+  <h2 class="sec">1 · Scene plate — reacts to hour, weather, season, place</h2>
+  <div class="plate p-night" role="img" aria-label="Night, heavy rain over Lowmarket">
+    <div class="sky"></div><div class="orb"></div><div class="fx"></div><div class="fx2"></div><div class="sil"></div>
+    <div class="info"><span class="chip">🗓 Day 3 · Thu 14 Frostmoon</span><span class="chip">🕰 23:40</span><span class="chip">🌧 heavy rain · 9°C · wind NW</span><span class="chip">🌔 waning gibbous</span></div>
+    <div class="place">📍 Lowmarket › <b>Dockside Stair</b></div>
+    <div class="ttl">Salt in the Wound<small>the river is rising; the lamps are not</small></div>
+  </div>
+  <div class="variants">
+    <div class="plate p-interior" role="img" aria-label="Interior, storm visible through the window">
+      <div class="sky"></div><div class="glow"></div><div class="win"><div class="flash"></div></div>
+      <div class="info"><span class="chip">Day 3 · 16:05</span><span class="chip">⛈ storm</span></div>
+      <div class="place">📍 The Rusty Flagon › <b>back room</b></div>
+      <div class="ttl">A Favour Owed</div>
+    </div>
+    <div class="plate p-dawn" role="img" aria-label="Dawn, clear, autumn forest">
+      <div class="sky"></div><div class="orb"></div><div class="sil"></div>
+      <div class="info"><span class="chip">Day 4 · 06:12</span><span class="chip">☀ clear · autumn</span></div>
+      <div class="place">📍 Harrow Wood › <b>the old road</b></div>
+      <div class="ttl">First Light, Wrong Road</div>
+    </div>
+    <div class="plate p-snow" role="img" aria-label="Midday snow in the mountains">
+      <div class="sky"></div><div class="orb"></div><div class="fx"></div><div class="sil"></div>
+      <div class="info"><span class="chip">Day 19 · 12:30</span><span class="chip">🌨 snow, moderate · −4°C</span></div>
+      <div class="place">📍 Greyspine Pass › <b>switchbacks</b></div>
+      <div class="ttl">What the Snow Keeps</div>
+    </div>
+  </div>
+  <p class="note">Model input: <code>🗓️ Day 3 · Thursday, 14 Frostmoon 🕰️ 23:40 🌧️ rain, heavy · 9°C · wind NW</code> / <code>📍 Lowmarket › Dockside Stair</code> / <code># Salt in the Wound</code>. Interior places swap the composition for a room with a window; the weather plays through the glass.</p>
+
+  <div class="chapter"><span>A Favour Owed</span></div>
+
+  <!-- ═════════ 2. Prose + dialogue blocks ═════════ -->
+  <h2 class="sec">2 · Dialogue blocks — one colour, sigil and nameplate per speaker</h2>
+  <div class="msg">
+    <p>Rain drums the back room's single window hard enough to rattle the latch. Mara has her coat off and her boots to the fire, and the locket lies open on the table between them like a card neither of them wants to play.</p>
+
+    <div class="say v-mara whisper">
+      <span class="sig" aria-hidden="true">M</span>
+      <span class="who">Mara <span class="tone">whisper</span></span>
+      <span class="sr">Mara says:</span>
+      <q>You gave it back.</q>
+      <span class="beat">She doesn't look up from the clasp.</span>
+    </div>
+    <div class="say v-mara follow">
+      <span class="sig" aria-hidden="true">M</span><span class="who">Mara</span>
+      <span class="sr">Mara continues:</span>
+      <q>Thieves don't give things back. So what are you?</q>
+    </div>
+
+    <p>At the bar, Kael has been polishing the same glass since they came in. When Mara laughs — short, surprised, at nothing you meant to be funny — the cloth stops. <span class="chipq v-kael"><b>Kael</b>“Bar's closing early,”</span> he says, to no one, and doesn't close anything.</p>
+
+    <span class="thk v-kael" data-who="Kael">She laughed. She never laughs for me.</span>
+
+    <div class="say v-user user">
+      <span class="sig" aria-hidden="true">Y</span>
+      <span class="who">You</span>
+      <span class="sr">You say:</span>
+      <q>Someone who needed a favour more than a locket.</q>
+    </div>
+
+    <div class="say v-joss shout">
+      <span class="sig" aria-hidden="true">J</span>
+      <span class="who">Joss <span class="tone">shout</span></span>
+      <span class="sr">Joss shouts:</span>
+      <q>River's over the second step — everybody up!</q>
+      <span class="beat">The door bangs open on wet dark and the smell of the tide.</span>
+    </div>
+
+    <p>Above the stair a painted sign swings in the wind: <span class="txt">The Rusty Flagon · Est. 1041</span>.</p>
+
+    <!-- Unspoken register -->
+    <details class="drawer unspoken">
+      <summary><span class="k">✉ 2 unspoken thoughts</span><span>narrator-only</span></summary>
+      <div class="body">
+        <div class="sealed">
+          <div class="t v-mara"><span class="sig">M</span><div class="cue">her thumb keeps finding the locket's clasp</div><div class="interior">He gave it back. If he's not a thief, he's something worse — someone with a reason.</div></div>
+          <div class="t v-kael"><span class="sig">K</span><div class="cue">he is wiping a glass that is already dry</div><div class="interior">I know that locket. I know exactly whose it was.</div></div>
+        </div>
+        <div class="lockcap">🔒 No one else in the story knows these. They never return to the model's context.</div>
+      </div>
+    </details>
+
+    <!-- Director's notes (visible CoT channel) -->
+    <details class="drawer plan">
+      <summary><span class="k">✦ Director's notes</span><span>charged · 168 words</span></summary>
+      <div class="body"><pre>ROUTE scene · charged (lie in play, 3 present)
+ANCHOR Day 3 16:05 → 16:17 · storm · back room · Mara spot, Kael peri, Joss arrives
+SEAL said: "someone who needed a favour" · did: sat · stop before your answer to Joss
+GNOSIS Kael knows locket's owner (himself); Mara does NOT → leak risk: Kael names it
+MINDS Mara want=truth fear=being played tactic=needle · Kael want=Mara's attention mask=boredom
+WEB Kael>Mara resent+1 (the laugh)
+WORLD river rising (due) → Joss arrival via stair
+MOVE a) Mara presses b) Kael interrupts c) flood forces move → c, genre: mystery clue = Kael's tell
+PREMORTEM last=B · risk: Kael blurts truth → keep it to a tell
+VOICE past · 3rd ltd · 2 speakers + 1 interrupt · open on sound
+LEDGER clock+12m wx storm at … bond×2 know×1 mode:crisis</pre></div>
+    </details>
+
+    <!-- Ledger drawer -->
+    <details class="drawer" open>
+      <summary><span class="k">🕰 16:17</span><span class="k">⛈ storm</span><span class="k">📍 back room</span><span class="k">👥 3 present</span><span class="delta">Δ 9 changes ▾</span></summary>
+      <div class="body">
+
+        <details class="sub" open><summary>Cast</summary><div class="in">
+          <div class="cast">
+            <div class="cc v-mara">
+              <div class="hd"><span class="sig">M</span><div><div class="nm">Mara</div><div class="em">wary-curious</div></div><span class="tier">spotlight</span></div>
+              <div class="vad"><span>V</span><div class="bip"><i style="left:36%;right:50%"></i></div><span>A</span><div class="bip"><i style="left:50%;right:26%"></i></div><span>D</span><div class="bip"><i style="left:50%;right:48%"></i></div></div>
+              <div class="pips"><span>health</span><span>●●●●●</span><span>fatigue</span><span>●●●○○</span><span>hunger</span><span>●●○○○</span><span>cold</span><span>●●○○○</span></div>
+              <div class="tags"><span class="tag">soaked</span><span class="tag">coat off</span><span class="tag">holds: locket</span></div>
+              <div class="row"><b>wants</b>the truth about the locket</div>
+              <div class="row"><b>mask</b>shows amused · feels cornered</div>
+            </div>
+            <div class="cc v-kael">
+              <div class="hd"><span class="sig">K</span><div><div class="nm">Kael</div><div class="em">jealous, hiding it</div></div><span class="tier">periphery</span></div>
+              <div class="vad"><span>V</span><div class="bip"><i style="left:30%;right:50%"></i></div><span>A</span><div class="bip"><i style="left:50%;right:36%"></i></div><span>D</span><div class="bip"><i style="left:50%;right:34%"></i></div></div>
+              <div class="pips"><span>health</span><span>●●●●●</span><span>fatigue</span><span>●●○○○</span><span>drink</span><span>●●○○○</span><span>composure</span><span>●●○○○</span></div>
+              <div class="tags"><span class="tag warn">suspects you (false)</span><span class="tag">at the bar</span></div>
+              <div class="row"><b>wants</b>Mara's attention back</div>
+            </div>
+            <div class="cc v-joss">
+              <div class="hd"><span class="sig">J</span><div><div class="nm">Joss</div><div class="em">alarmed</div></div><span class="tier">arrived</span></div>
+              <div class="pips"><span>health</span><span>●●●●○</span><span>fatigue</span><span>●●●●○</span></div>
+              <div class="tags"><span class="tag warn">injury: gashed palm (untreated)</span><span class="tag">drenched</span></div>
+            </div>
+          </div>
+        </div></details>
+
+        <details class="sub" open><summary>Bonds · changed this turn</summary><div class="in">
+          <div class="bond" style="--ca:var(--v-mara);--cb:var(--v-user)">
+            <div class="pair"><span class="a">Mara</span> → <span class="b">You</span></div>
+            <div class="axis"><span>trust</span><div class="bip"><i style="left:50%;right:30%"></i></div><span class="d up">▲1 · +2</span></div>
+            <div class="why">“he gave the locket back”</div>
+          </div>
+          <div class="bond" style="--ca:var(--v-kael);--cb:var(--v-mara)">
+            <div class="pair"><span class="a">Kael</span> → <span class="b">Mara</span></div>
+            <div class="axis"><span>resent</span><div class="bip"><i style="left:50%;right:30%"></i></div><span class="d dn">▲1 · 2</span></div>
+            <div class="why">saw her laugh with you · NPC↔NPC edge</div>
+          </div>
+          <div class="bond" style="--ca:var(--v-kael);--cb:var(--v-user)">
+            <div class="pair"><span class="a">Kael</span> → <span class="b">You</span></div>
+            <div class="axis"><span>trust</span><div class="bip"><i style="left:34%;right:50%"></i></div><span class="d dn">▼1 · −2</span></div>
+            <div class="why">overheard half a sentence about the locket</div>
+          </div>
+        </div></details>
+
+        <details class="sub"><summary>Inventory</summary><div class="in">
+          <div class="inv">
+            <div class="it"><b>Silver locket</b><span class="h">holder: Mara · since Day 3 16:08</span>engraved “E.” · returned by you</div>
+            <div class="it"><b>Harbour pass</b><span class="h">holder: you · condition: damp</span>valid until Day 5</div>
+            <div class="it"><b>Kael's ledger</b><span class="h">holder: Kael · under the bar</span>last seen Day 2</div>
+          </div>
+        </div></details>
+
+        <details class="sub"><summary>Threads & clocks</summary><div class="in">
+          <div class="clocks">
+            <div class="clock"><div class="ring" style="--n:3;--of:6"></div><div><b>The Syndicate: seize the docks</b><span>3 / 6 · next tick on flood</span></div></div>
+            <div class="clock"><div class="ring" style="--n:1;--of:4"></div><div><b>Lost locket</b><span>advancing · Mara owes you a favour</span></div></div>
+            <div class="clock"><div class="ring" style="--n:5;--of:8"></div><div><b>River flood</b><span>due ~20:00 · back room floods</span></div></div>
+          </div>
+        </div></details>
+
+        <details class="sub"><summary>Knowledge · topics in play</summary><div class="in">
+          <table class="km">
+            <tr><th>Fact</th><th>Mara</th><th>Kael</th><th>Joss</th></tr>
+            <tr><td>You returned the locket</td><td class="k-knows">knows · saw</td><td class="k-sus">suspects theft</td><td class="k-un">unaware</td></tr>
+            <tr><td>The locket was Kael's</td><td class="k-un">does not know</td><td class="k-knows">knows · lived</td><td class="k-un">unaware</td></tr>
+            <tr><td>Bandits took the cargo</td><td class="k-un">—</td><td class="k-wrong">believes · false</td><td class="k-un">—</td></tr>
+          </table>
+          <p class="note">⚠ Dramatic irony: Kael is certain of something false.</p>
+        </div></details>
+
+        <div class="desk" aria-label="Director's Desk">
+          <span class="btn primary">⏩ Skip…</span><span class="btn">📜 Recap</span><span class="btn">🕸 Bonds</span><span class="btn">🔎 Audit</span><span class="btn">🌦 Forecast</span>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <!-- ═════════ 3. Style comparison ═════════ -->
+  <h2 class="sec">3 · The four dialogue styles</h2>
+  <div class="styles">
+    <div class="card"><h4>Blocks</h4>
+      <div class="say v-mara"><span class="sig">M</span><span class="who">Mara</span><q>So what are you?</q></div></div>
+    <div class="card"><h4>Chips</h4>
+      She leans in. <span class="chipq v-mara"><b>Mara</b>“So what are you?”</span> The fire pops.</div>
+    <div class="card"><h4>Tint</h4>
+      She leans in. <span class="tint">“So what are you?”</span> The fire pops.</div>
+    <div class="card"><h4>Script</h4>
+      <div class="script"><span class="n">MARA</span><span><span class="par">(not looking up)</span><br>So what are you?</span></div></div>
+  </div>
+
+  <!-- ═════════ 4. VTKs ═════════ -->
+  <h2 class="sec">4 · Visual Toolkit — in-world artifacts</h2>
+  <div class="vtks">
+    <div class="letter">
+      <h5>Letter · To the Harbourmaster · Day 2</h5>
+      Sir —<br>The cargo was never ours to sell. If the manifest says otherwise, the manifest lies.
+      <span class="sig">— E. Vance</span>
+      <span class="seal">V</span>
+    </div>
+    <div class="phone">
+      <div class="bar"><span>23:41</span><span>▂▄▆ 41%</span></div>
+      <div class="hd">Joss</div>
+      <div class="bub in">water's at the second step<small>23:38</small></div>
+      <div class="bub in">where are u<small>23:39</small></div>
+      <div class="bub out">on my way. get Mara out<small>23:41 · read</small></div>
+    </div>
+  </div>
+  <p class="note">Model input: <code>[vtk=letter|To the Harbourmaster|sealed · red wax · Day 2]</code> … <code>[sig=E. Vance]</code> <code>[/vtk]</code>. The <code>artifact</code> ledger op files the full text in the Codex, so it can be quoted exactly later.</p>
+
+  <!-- ═════════ 5. Extension panel ═════════ -->
+  <h2 class="sec">5 · Ledger drawer tab (extension) — the relationship graph</h2>
+  <div class="panel">
+    <div class="tabs"><span>Now</span><span>Cast</span><span class="on">Bonds</span><span>Knowledge</span><span>Codex</span><span>Chronicle</span><span>World</span><span>Lore</span><span>Creator</span><span>Recall feed</span></div>
+    <svg class="graph" viewBox="0 0 640 310" role="img" aria-label="Directed relationship graph">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <g fill="none" stroke-width="2.4" stroke-linecap="round">
+        <path d="M156,160 C260,128 380,128 474,160" stroke="var(--v-mara)" marker-end="url(#ar)"/>
+        <path d="M474,184 C380,214 260,214 156,184" stroke="var(--v-user)" marker-end="url(#ar)"/>
+        <path d="M296,70 C236,94 186,122 150,150" stroke="var(--v-kael)" marker-end="url(#ar)" stroke-width="3.4"/>
+        <path d="M334,70 C394,94 444,122 480,150" stroke="var(--v-kael)" marker-end="url(#ar)" stroke-dasharray="6 5"/>
+        <path d="M298,268 C236,252 184,222 150,194" stroke="var(--v-joss)" marker-end="url(#ar)" stroke-width="1.6"/>
+      </g>
+      <g>
+        <text class="lbl" x="320" y="124" text-anchor="middle">trust +2 · attraction 1</text>
+        <text class="lbl" x="320" y="232" text-anchor="middle">player-authored only</text>
+        <text class="lbl" x="150" y="98">resent 2 · affection +3</text>
+        <text class="lbl" x="420" y="98">trust −2</text>
+        <text class="lbl" x="150" y="262">kin · protective</text>
+      </g>
+      <g>
+        <circle cx="130" cy="172" r="24" fill="var(--v-mara)"/><text x="130" y="177" text-anchor="middle" style="fill:var(--panel)">M</text><text x="130" y="214" text-anchor="middle">Mara</text>
+        <circle cx="500" cy="172" r="24" fill="var(--v-user)"/><text x="500" y="177" text-anchor="middle" style="fill:var(--panel)">Y</text><text x="500" y="214" text-anchor="middle">You</text>
+        <circle cx="315" cy="52" r="22" fill="var(--v-kael)"/><text x="315" y="57" text-anchor="middle" style="fill:var(--panel)">K</text><text x="350" y="30">Kael</text>
+        <circle cx="315" cy="278" r="20" fill="var(--v-joss)"/><text x="315" y="283" text-anchor="middle" style="fill:var(--panel)">J</text><text x="345" y="283">Joss</text>
+      </g>
+    </svg>
+    <p class="note">Nodes use each character's voice colour; edges are directed and coloured by the source; width is magnitude; dashed means the bond has shifted since Day 2. The timeline scrubber (not shown) replays the graph over story time.</p>
+  </div>
+</div>
+</body>
+</html>
