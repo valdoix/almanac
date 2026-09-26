@@ -523,7 +523,7 @@ These let tool-capable models retrieve on demand (the TunnelVision idea) without
 | **Telemetry** | Craft metrics and trends |
 | **Settings** | §18 |
 
-- **Floating "Now" HUD** (`ui_panels`): time, weather, place, present sigils with mood dots.
+- **Floating "Now" HUD** (`ui_panels`): time, weather, place, present medallions with mood dots.
 - **Session Zero modal** on first run (04 §10).
 - **Input-bar action** "Almanac command" (skip, recap, report, audit).
 

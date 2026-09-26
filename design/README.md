@@ -29,7 +29,7 @@ The set has two parts that work together:
 | 04 | [Recommendations](04-recommendations.md) | Additions beyond the brief, ranked, plus what *not* to do |
 | 05 | [ALMANAC Ledger extension](05-extension-ledger.md) | Architecture, branch-correct event model, chronicle, Codex, retrieval keys, Recall, Lore Bridge, Lorebook Creator, engines, telemetry, UI, performance, roadmap |
 | 06 | [Storage decision](06-storage-decision.md) | Lorebooks vs extension storage, scored against recall accuracy and continuity, with the recommended hybrid |
-| — | [Visual mockup](mockups/almanac-visuals.html) | Static HTML: scene plates, dialogue blocks, unspoken drawer, Director's notes, tracker drawer, VTKs, relationship graph. Open it in a browser |
+| — | [Visual mockup](mockups/almanac-visuals.html) | Static HTML with a skin switcher (6 themes) and light/dark toggle: animated scene plates for five genres, voice cards and ten tones, sealed-envelope thoughts, call-sheet Director's notes, trading-card trackers, HUD strip, VTKs, relationship graph. Open it in a browser |
 
 ---
 
