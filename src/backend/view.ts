@@ -38,7 +38,7 @@ export interface UIView {
 const AUTO_THEME: Record<string, string> = {
   horror: "nocturne", "dark fantasy": "nocturne", dark_fantasy: "nocturne", tragedy: "nocturne",
   "science fiction": "prism", sci_fi: "prism", scifi: "prism", thriller: "prism", action: "prism",
-  fantasy: "botanical", adventure: "botanical", cozy: "candy", comedy: "candy", "slice of life": "candy",
+  fantasy: "botanical", adventure: "botanical", cozy: "candy", comedy: "candy", "slice of life": "candy", slice_of_life: "candy", survival: "prism", erotic: "almanac",
   romance: "almanac", "erotic romance": "almanac", mystery: "solar", noir: "solar", drama: "solar", "political intrigue": "solar", intrigue: "solar",
 };
 
