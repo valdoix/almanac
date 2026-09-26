@@ -515,8 +515,10 @@ const PARSERS: Record<OpName, LineParser> = {
     const frac = /(\d+)\s*\/\s*(\d+)/.exec(main);
     const rel = /^([+-]\d+)/.exec(main.trim());
     const abs = /^(\d+)/.exec(main.trim());
-    p.args = frac ? { cur: parseInt(frac[1], 10), max: parseInt(frac[2], 10) } : rel ? { inc: parseInt(rel[1], 10) } : abs ? { cur: parseInt(abs[1], 10) } : null;
-    return p.args ? p : null;
+    const args = frac ? { cur: parseInt(frac[1], 10), max: parseInt(frac[2], 10) } : rel ? { inc: parseInt(rel[1], 10) } : abs ? { cur: parseInt(abs[1], 10) } : null;
+    if (!args) return null;
+    p.args = args;
+    return p;
   },
   clue(p, _s, rest) {
     const [text, points, rel] = rest.split(/\s*\|\s*/);

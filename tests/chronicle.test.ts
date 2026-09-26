@@ -144,7 +144,7 @@ describe("extractor and json", () => {
     expect(ops[2].args).toMatchObject({ from: "Mara", to: "Wren" });
   });
   test("json extraction", () => {
-    expect(extractJson('Sure!\n```json\n{"a":1}\n```')).toEqual({ a: 1 });
-    expect(extractJson('noise [1,2] noise')).toEqual([1, 2]);
+    expect(extractJson<any>('Sure!\n```json\n{"a":1}\n```')).toEqual({ a: 1 });
+    expect(extractJson<any>('noise [1,2] noise')).toEqual([1, 2]);
   });
 });

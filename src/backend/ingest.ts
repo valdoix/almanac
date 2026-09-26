@@ -1,0 +1,364 @@
+// After each reply (and on swipe/edit/delete/fork): refold, repair a missing
+// ledger, draw hidden pressures, measure craft, run the chronicle and the
+// off-screen simulator in the background, then refresh mirror, macros, chat
+// variables and the UI.
+
+import { sideKey, toPath } from "../core/branch";
+import { coverageGaps, makeUnit, planChronicle, spanSignature, transcriptFor, validateUnits } from "../core/chronicle";
+import { extractLedgerBlock, parseLine } from "../core/dsl";
+import { extractOps } from "../core/extractor";
+import { drawPressures } from "../core/pressures";
+import { archivistPrompt, extractJson, repairPrompt, rollupPrompt, simulatorPrompt, summaryPrompt } from "../core/prompts";
+import { craftReport } from "../core/telemetry";
+import { absMinutes, fmtTime, fromAbs, hash, plainProse, uid } from "../core/util";
+import { levelOf, seedFor } from "../core/engines/weather";
+import type { ParsedOp } from "../core/types";
+import { debounce, debug, describe, has, host, serial, warn } from "./host";
+import { ledgerFor } from "./ledger";
+import { quiet, sys, usr } from "./llm";
+import { mirrorChatVars, pushMacros } from "./macros";
+import { syncMirror } from "./mirror";
+import { appendEvents, copyChat, loadChat, loadSettings, save } from "./store";
+import { isEnabled } from "./turn";
+import { pushState } from "./view";
+import { clearRenderCache } from "./hooks";
+
+const busy = new Set<string>();
+
+/** Called when a generation ends. */
+export async function onReply(chatId: string, messageId: string | undefined, content: string, genType: string, userId?: string) {
+  const files = await loadChat(chatId, userId);
+  const settings = await loadSettings(userId);
+  const meta = files.meta;
+  if (settings.enabled === "auto" && !meta.enabled && meta.config.enabledOverride !== false && /<ledger\b/i.test(content)) {
+    meta.enabled = true;
+    save(chatId, "meta", userId);
+  }
+  if (!isEnabled(meta, settings) || genType === "impersonate") return;
+  await serial(`chat:${chatId}`, async () => {
+    const L = ledgerFor(chatId, userId);
+    await L.refresh({ reloadNames: !L.names.char });
+    const msg = messageId ? L.path.find((m) => m.id === messageId) : L.lastAssistant();
+    if (msg && !msg.isUser && !extractLedgerBlock(msg.content) && settings.autoRepair && meta.detected.ledger !== "off") {
+      await repair(chatId, msg.id, msg.swipe, msg.content, userId).catch((err) => warn(`repair: ${describe(err)}`));
+      await L.refresh();
+    }
+    // Audit log (the chat itself remains the source of truth).
+    const last = L.state.lastDelta;
+    if (last) appendEvents(chatId, [{ t: Date.now(), msgId: last.msgId, idx: last.msgIndex, n: last.count, rejected: last.rejected, lines: last.lines }], userId);
+    // Hidden pressures (seeded; narrator-only)
+    if (settings.pressures) {
+      const add = drawPressures(L.state, seedFor(chatId), meta.detected.genres ?? meta.config.genres ?? [], meta.pressures);
+      if (Object.keys(add).length) Object.assign(meta.pressures, add);
+    }
+    if (settings.telemetry) meta.telemetry = craftReport(L.recentAssistant(6), { userName: L.names.user, sealed: L.foldOptions(meta, settings).sealed, dialogue: meta.detected.dialogue });
+    save(chatId, "meta", userId);
+  });
+  afterChange(chatId, userId, { background: true });
+}
+
+/** Swipe navigation, edits, deletes: refold and refresh everything that projects state. */
+export function onMutation(chatId: string, userId?: string) {
+  debounce(`mut:${chatId}`, 350, async () => {
+    const files = await loadChat(chatId, userId);
+    const settings = await loadSettings(userId);
+    if (!isEnabled(files.meta, settings)) return;
+    const L = ledgerFor(chatId, userId);
+    await serial(`chat:${chatId}`, () => L.refresh());
+    // Chronicle units whose turns changed: unhide and drop (they will be re-summarised).
+    const stale = validateUnits(files.chronicle, toPath(L.raw));
+    if (stale.length) {
+      const ids = stale.filter((u) => !u.locked).flatMap((u) => u.msgIds).filter((id) => L.raw.some((m) => m.id === id));
+      files.chronicle.units = files.chronicle.units.filter((u) => !u.stale || u.locked);
+      files.chronicle.hidden = files.chronicle.hidden.filter((id) => !ids.includes(id));
+      if (ids.length && has("chat_mutation")) await host.chat.setMessagesHidden(chatId, ids.slice(0, 500), false).catch(() => undefined);
+      save(chatId, "chronicle", userId);
+    }
+    afterChange(chatId, userId, { background: false });
+  });
+}
+
+function afterChange(chatId: string, userId: string | undefined, opts: { background: boolean }) {
+  clearRenderCache();
+  pushMacros(chatId, userId);
+  mirrorChatVars(chatId, userId);
+  pushState(chatId, userId);
+  debounce(`mirror:${chatId}`, 2000, () => syncMirror(chatId, userId));
+  if (opts.background) {
+    debounce(`bg:${chatId}`, 800, async () => {
+      await runChronicle(chatId, userId).catch((err) => warn(`chronicle: ${describe(err)}`));
+      await runSimulator(chatId, userId).catch((err) => warn(`simulator: ${describe(err)}`));
+      pushState(chatId, userId);
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Repair: missing or broken ledger → quiet call → extractor fallback
+// ---------------------------------------------------------------------------
+
+export async function repair(chatId: string, msgId: string, swipe: number, content: string, userId?: string) {
+  const files = await loadChat(chatId, userId);
+  const settings = await loadSettings(userId);
+  const key = sideKey(msgId, swipe);
+  if (files.meta.repaired[key]) return;
+  const L = ledgerFor(chatId, userId);
+  const before = L.path.filter((m) => m.index < (L.path.find((x) => x.id === msgId)?.index ?? Infinity));
+  const prevState = L.runtime.fold(before, L.foldOptions(files.meta, settings), files.side).state;
+  const verified = `${fmtTime(prevState.time)} · ${prevState.place.join(" › ")} · present: ${Object.values(prevState.chars).filter((c) => c.tier === "spot" || c.tier === "peri").map((c) => c.name).join(", ")}`;
+  let ops: ParsedOp[] = [];
+  let source: "repair" | "extractor" = "repair";
+  try {
+    const p = repairPrompt({ prose: plainProse(content), verified, userName: L.names.user, sealed: L.foldOptions(files.meta, settings).sealed });
+    let text = await quiet([sys(p.system), usr(p.user)], { userId, reasoningOff: true, timeoutMs: 60_000, connectionId: settings.summarizerConnection || undefined, label: "ledger repair" });
+    if (!/<ledger/i.test(text)) text = await quiet([sys(p.system), usr(p.user)], { userId, timeoutMs: 90_000, connectionId: settings.summarizerConnection || undefined, label: "ledger repair (thinking)" });
+    const block = extractLedgerBlock(text);
+    ops = (block?.body ?? "").split("\n").map((l) => parseLine(l)).filter(Boolean) as ParsedOp[];
+  } catch {
+    /* fall through to the extractor */
+  }
+  if (!ops.length) {
+    source = "extractor";
+    ops = extractOps(content, Object.values(prevState.chars).map((c) => c.name), L.names.user);
+  }
+  files.side[key] = [...(files.side[key] ?? []).filter((s) => !s.replaces), { source, ops, replaces: true }];
+  files.meta.repaired[key] = ops.length ? source : "failed";
+  save(chatId, "side", userId);
+  save(chatId, "meta", userId);
+  debug(`repair ${key}: ${source}, ${ops.length} ops`);
+}
+
+// ---------------------------------------------------------------------------
+// Chronicle: summarise → coverage check → hide → archivist
+// ---------------------------------------------------------------------------
+
+export async function runChronicle(chatId: string, userId?: string, force = false): Promise<number> {
+  if (busy.has(`chron:${chatId}`)) return 0;
+  busy.add(`chron:${chatId}`);
+  let made = 0;
+  try {
+    const settings = await loadSettings(userId);
+    if (!settings.chronicle && !force) return 0;
+    const files = await loadChat(chatId, userId);
+    const L = ledgerFor(chatId, userId);
+    for (let round = 0; round < 3; round++) {
+      await L.refresh();
+      const path = toPath(L.raw);
+      const job = planChronicle(path, L.state, files.chronicle, { rawTail: settings.rawTail, rawTailTokens: settings.rawTailTokens, chapterThresholdTokens: settings.chapterThresholdTokens, fanIn: settings.fanIn });
+      if (!job) break;
+      let text: string;
+      if (job.level === "chapter") {
+        const transcript = transcriptFor(path, job, L.names.user, L.names.char);
+        const prev = files.chronicle.units.filter((u) => u.level === "chapter" && !u.stale).sort((a, b) => b.endIdx - a.endIdx)[0];
+        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, words: [150, 350], prior: prev ? `${prev.title}: ${prev.text.slice(0, 600)}` : undefined });
+        text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary" });
+        const gaps = coverageGaps(text, L.events, L.state, job.startIdx, job.endIdx);
+        if (gaps.length) {
+          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, words: [150, 380], mustInclude: gaps });
+          text = await quiet([sys(p2.system), usr(p2.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary (coverage)" }).catch(() => text);
+        }
+      } else {
+        const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}\n${c.text}`), L.names.user);
+        text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: `${job.level} summary` });
+      }
+      if (!text || text.length < 40) break;
+      const unit = makeUnit(job, text, path, L.state, files.chronicle);
+      files.chronicle.units.push(unit);
+      made++;
+      if (job.level === "chapter" && settings.hideCovered && has("chat_mutation")) {
+        const ids = job.msgIds.filter((id) => !files.chronicle.hidden.includes(id));
+        for (let i = 0; i < ids.length; i += 500) await host.chat.setMessagesHidden(chatId, ids.slice(i, i + 500), true).catch(() => undefined);
+        files.chronicle.hidden.push(...ids);
+      }
+      save(chatId, "chronicle", userId);
+      if (job.level === "chapter") await runArchivist(chatId, unit.text, job.startIdx, job.endIdx, userId).catch((err) => warn(`archivist: ${describe(err)}`));
+      host.rpcPool?.sync?.("chapter_created", { chatId, level: unit.level, title: unit.title, text: unit.text, startIdx: unit.startIdx, endIdx: unit.endIdx });
+    }
+  } finally {
+    busy.delete(`chron:${chatId}`);
+  }
+  if (made) {
+    debounce(`mirror:${chatId}`, 500, () => syncMirror(chatId, userId));
+    pushState(chatId, userId);
+  }
+  return made;
+}
+
+async function runArchivist(chatId: string, chapterText: string, startIdx: number, endIdx: number, userId?: string) {
+  const files = await loadChat(chatId, userId);
+  const settings = await loadSettings(userId);
+  const L = ledgerFor(chatId, userId);
+  const touched = L.records.filter((r) => (r.provenance.msgIndex ?? []).some((i) => i >= startIdx && i <= endIdx) && ["person", "place", "object", "group", "thread"].includes(r.kind)).slice(0, 24);
+  if (!touched.length) return;
+  const locked = touched.filter((r) => r.locked).map((r) => r.id);
+  const p = archivistPrompt({ chapter: chapterText, records: touched.map((r) => `${r.id} | ${r.kind} | ${r.name} | ${r.summary} | keys: ${r.keys.join(", ")}${r.body.archivist ? ` | notes: ${r.body.archivist}` : ""}`).join("\n"), locked });
+  const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, reasoningOff: true, timeoutMs: 120_000, label: "archivist" });
+  const res = extractJson<{ set?: { id: string; summary?: string; keys?: string[]; body?: Record<string, unknown> }[]; drop?: string[] }>(text);
+  if (!res) return;
+  for (const s of res.set ?? []) {
+    if (!s?.id || locked.includes(s.id) || !touched.some((r) => r.id === s.id)) continue;
+    const ov = (files.codex.overlays[s.id] ??= { id: s.id });
+    if (ov.locked) continue;
+    if (s.summary) ov.summary = s.summary;
+    if (Array.isArray(s.keys)) ov.keys = s.keys.map(String);
+    if (s.body && typeof s.body === "object") ov.body = { ...(ov.body ?? {}), ...s.body };
+    ov.provenance = { ...(ov.provenance ?? { source: "archivist" }), source: ov.provenance?.source === "lore" ? "lore" : "archivist" };
+  }
+  for (const id of res.drop ?? []) {
+    const ov = files.codex.overlays[id];
+    if (ov && !ov.locked && ov.provenance?.source === "archivist") delete files.codex.overlays[id];
+  }
+  save(chatId, "codex", userId);
+  host.rpcPool?.sync?.("codex_updated", { chatId, count: (res.set ?? []).length });
+}
+
+// ---------------------------------------------------------------------------
+// Off-screen simulator
+// ---------------------------------------------------------------------------
+
+export async function runSimulator(chatId: string, userId?: string, force = false) {
+  const settings = await loadSettings(userId);
+  if (!settings.simulator && !force) return;
+  if (busy.has(`sim:${chatId}`)) return;
+  const files = await loadChat(chatId, userId);
+  const L = ledgerFor(chatId, userId);
+  const st = L.state;
+  if (!st?.time) return;
+  const now = absMinutes(st.time);
+  const last = files.meta.lastSimAbs ?? now;
+  if (files.meta.lastSimAbs == null) {
+    files.meta.lastSimAbs = now;
+    save(chatId, "meta", userId);
+    if (!force) return;
+  }
+  if (!force && now - last < settings.simStep) return;
+  busy.add(`sim:${chatId}`);
+  try {
+    const actors = Object.values(st.chars).filter((c) => !c.isUser && !c.dead && c.tier !== "spot" && c.tier !== "peri").slice(0, 10);
+    const threads = Object.values(st.threads).filter((t) => t.status !== "resolved").slice(-8);
+    const factions = Object.values(st.factions);
+    if (!actors.length && !threads.length && !factions.length) return;
+    const slice = [
+      ...actors.map((c) => `PERSON ${c.name}: at ${c.place ?? "unknown"}; mood ${c.mood?.name ?? "?"}${c.pressure ? `; hidden pressure: ${c.pressure}` : ""}; knows: ${st.knowledge.filter((k) => k.holder === c.id && !k.supersededBy).slice(-4).map((k) => k.fact).join(" / ") || "—"}`),
+      ...threads.map((t) => `THREAD ${t.title}: ${t.status}${t.blocker ? ` (blocked by ${t.blocker})` : ""}; latest: ${t.latest ?? "—"}; stalls: ${t.stalls}`),
+      ...factions.map((f) => `FACTION ${f.name}: ${Object.values(f.clocks).map((c) => `${c.name} ${c.cur}/${c.max}`).join("; ")}`),
+      `PLAYER is at ${st.place.join(" › ")}.`,
+    ].join("\n");
+    const p = simulatorPrompt({ slice, from: fmtTime(fromAbs(last)), to: fmtTime(st.time), userName: L.names.user });
+    const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 120_000, label: "simulator" });
+    const res = extractJson<{ ops?: string[]; arrivals?: { text: string; route?: string; at?: string; place?: string }[] }>(text);
+    const target = L.lastAssistant();
+    if (res && target) {
+      const ops = (res.ops ?? []).map((l) => parseLine(String(l))).filter((o): o is ParsedOp => !!o && ["bond", "know", "item", "thread", "clockf", "rumor", "owe", "cons", "journal"].includes(o.op));
+      if (ops.length) {
+        const key = sideKey(target.id, target.swipe);
+        files.side[key] = [...(files.side[key] ?? []).filter((s) => s.source !== "sim"), { source: "sim", ops }];
+        save(chatId, "side", userId);
+      }
+      for (const a of res.arrivals ?? []) {
+        const d = a.at ? /day\s*(\d+)\D+(\d{1,2})[:.](\d{2})/i.exec(a.at) : null;
+        files.meta.arrivals.push({ id: uid("arr"), msgId: target.id, swipe: target.swipe, text: String(a.text).slice(0, 240), route: a.route, place: a.place, atAbs: d ? (parseInt(d[1], 10) - 1) * 1440 + parseInt(d[2], 10) * 60 + parseInt(d[3], 10) : undefined });
+      }
+      files.meta.arrivals = files.meta.arrivals.slice(-30);
+    }
+    files.meta.lastSimAbs = now;
+    save(chatId, "meta", userId);
+  } finally {
+    busy.delete(`sim:${chatId}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Forks and rebuilds
+// ---------------------------------------------------------------------------
+
+export async function onFork(sourceChatId: string, forkedChatId: string, userId?: string) {
+  try {
+    await copyChat(sourceChatId, forkedChatId, userId);
+    const [src, dst] = await Promise.all([host.chat.getMessages(sourceChatId), host.chat.getMessages(forkedChatId)]);
+    // Map source message ids → forked ids by index + content signature (like LumiBooks' fork.ts).
+    const sig = (m: any) => `${m.index_in_chat}:${hash(String(m.content ?? ""))}`;
+    const dstBySig = new Map(dst.map((m: any) => [sig(m), m.id]));
+    const map = new Map<string, string>();
+    for (const m of src as any[]) {
+      const d = dstBySig.get(sig(m));
+      if (d) map.set(m.id, d);
+    }
+    const files = await loadChat(forkedChatId, userId);
+    const side: typeof files.side = {};
+    for (const [k, v] of Object.entries(files.side)) {
+      const [mid, sw] = k.split(":");
+      const nid = map.get(mid);
+      if (nid) side[`${nid}:${sw}`] = v;
+    }
+    files.side = side;
+    for (const u of files.chronicle.units) u.msgIds = u.msgIds.map((id) => map.get(id)).filter(Boolean) as string[];
+    files.chronicle.hidden = files.chronicle.hidden.map((id) => map.get(id)).filter(Boolean) as string[];
+    files.meta.arrivals = files.meta.arrivals.filter((a) => map.has(a.msgId)).map((a) => ({ ...a, msgId: map.get(a.msgId)! }));
+    const L = ledgerFor(forkedChatId, userId);
+    await L.refresh();
+    validateUnits(files.chronicle, toPath(L.raw));
+    // Re-sign units that still match their (remapped) span.
+    const fpath = toPath(L.raw);
+    for (const u of files.chronicle.units) {
+      const ids = new Set(u.msgIds);
+      const span = fpath.filter((m) => ids.has(m.id));
+      if (span.length && span.length === u.msgIds.length) {
+        u.signature = spanSignature(fpath, u.startIdx, u.endIdx);
+        u.stale = false;
+      }
+    }
+    for (const k of ["side", "chronicle", "meta"] as const) save(forkedChatId, k, userId);
+  } catch (err) {
+    warn(`fork: ${describe(err)}`);
+  }
+}
+
+/** Rebuild from transcript: every stored reply still carries its ledger. */
+export async function rebuild(chatId: string, userId?: string) {
+  const files = await loadChat(chatId, userId);
+  // Keep user/archivist overlays and chronicle; drop repair/extractor/sim side events so they rerun.
+  const side: typeof files.side = {};
+  for (const [k, v] of Object.entries(files.side)) {
+    const keep = v.filter((s) => s.source === "user");
+    if (keep.length) side[k] = keep;
+  }
+  files.side = side;
+  files.meta.repaired = {};
+  save(chatId, "side", userId);
+  save(chatId, "meta", userId);
+  const L = ledgerFor(chatId, userId);
+  L.runtime.invalidate();
+  await L.refresh({ reloadNames: true });
+  afterChange(chatId, userId, { background: false });
+}
+
+/** A user-authored correction (from the drawer/Codex UI) as a locked event. */
+export async function addUserOps(chatId: string, lines: string[], userId?: string) {
+  const L = ledgerFor(chatId, userId);
+  await L.refresh();
+  const target = L.lastAssistant();
+  if (!target) return 0;
+  const ops = lines.map((l) => parseLine(l)).filter(Boolean) as ParsedOp[];
+  if (!ops.length) return 0;
+  const files = await loadChat(chatId, userId);
+  const key = sideKey(target.id, target.swipe);
+  files.side[key] = [...(files.side[key] ?? []), { source: "user", ops }];
+  save(chatId, "side", userId);
+  onMutation(chatId, userId);
+  return ops.length;
+}
+
+/** Schedule weather ("a storm on Day 5 evening") as a forecast record the engine honours. */
+export async function scheduleWeather(chatId: string, spec: { day: number; hour: number; hours: number; condition: string }, userId?: string) {
+  const files = await loadChat(chatId, userId);
+  const id = `forecast:wx_${spec.day}_${spec.hour}`;
+  const fromAbs = (spec.day - 1) * 1440 + spec.hour * 60;
+  files.codex.overlays[id] = {
+    id, standalone: true, kind: "forecast", tense: "future", name: `${spec.condition} on Day ${spec.day} ${String(spec.hour).padStart(2, "0")}:00`,
+    summary: `Upcoming weather: ${spec.condition} from Day ${spec.day} ${String(spec.hour).padStart(2, "0")}:00 for about ${spec.hours} h.`,
+    body: { weatherLevel: levelOf(spec.condition).level, fromAbs, toAbs: fromAbs + spec.hours * 60 }, provenance: { source: "user" },
+  };
+  save(chatId, "codex", userId);
+  onMutation(chatId, userId);
+}
