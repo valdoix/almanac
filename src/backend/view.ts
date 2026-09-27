@@ -4,7 +4,7 @@ import { VERSION } from "../core/version";
 import { voiceColor, speakerCss } from "../core/render";
 import { absMinutes, estTokens, fmtSpan, fmtTime, hhmm } from "../core/util";
 import { coverageMap } from "../core/chronicle";
-import { normFact } from "../core/state";
+import { howVerb, storyStamp, unawareOf } from "../core/facts";
 import { debounce, describe, host, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings } from "./store";
@@ -26,6 +26,7 @@ export interface UIView {
   cast: any[];
   bonds: any[];
   knowledge: any[];
+  hiddenFacts: { key: string; statement: string }[];
   codex: any[];
   chronicle: { units: any[]; coverage: Record<string, number>; tokens: Record<string, number>; counts: Record<string, number> };
   timeline: any[];
@@ -67,15 +68,17 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
   const nm = (id: string) => (id === "user" ? L.names.user : st.chars[id]?.name ?? id);
   const now = st.time ? absMinutes(st.time) : null;
 
-  const facts: { fact: string; truth: string; holders: { id: string; name: string; status: string; source?: string }[] }[] = [];
-  for (const k of st.knowledge.filter((x) => !x.supersededBy)) {
-    const n = normFact(k.fact);
-    let f = facts.find((x) => normFact(x.fact) === n);
-    if (!f) facts.push((f = { fact: k.fact, truth: k.truth, holders: [] }));
-    if (k.truth !== "unknown") f.truth = k.truth;
-    f.holders = f.holders.filter((h) => h.id !== k.holder);
-    f.holders.push({ id: k.holder, name: nm(k.holder), status: k.status, source: k.source });
-  }
+  // Facts, newest first: statement, where each person stands, and how it came out.
+  const allFacts = Object.values(st.facts ?? {});
+  const facts = allFacts.filter((f) => !f.hidden).sort((a, b) => b.lastMsg - a.lastMsg).map((f) => ({
+    key: f.key, statement: f.statement, truth: f.truth, locked: !!f.locked, lastMsg: f.lastMsg,
+    stances: Object.values(f.stances).sort((a, b) => a.msgIndex - b.msgIndex).map((s) => ({
+      id: s.holder, name: nm(s.holder), status: s.status, how: s.how, verb: howVerb(s.status, s.how), version: s.version, derived: !!s.derived, when: storyStamp(s.at),
+    })),
+    unaware: unawareOf(st, f).map((id) => ({ id, name: nm(id) })),
+    history: f.history.map((h) => ({ id: h.holder, name: nm(h.holder), verb: howVerb(h.status, h.how), how: h.how, version: h.version, note: h.note, derived: !!h.derived, when: storyStamp(h.at) || `message ${h.msgIndex + 1}` })),
+  }));
+  const hiddenFacts = allFacts.filter((f) => f.hidden).map((f) => ({ key: f.key, statement: f.statement }));
   // Which unit stands in for each message in the prompt; a unit none of them uses has been folded into a coarser one.
   const cover = coverageMap(files.chronicle);
   const inPrompt = new Set([...cover.values()].map((u) => u.id));
@@ -131,6 +134,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     })),
     bonds: Object.values(st.bonds).map((b) => ({ from: b.from, to: b.to, fromName: nm(b.from), toName: nm(b.to), axes: b.axes, label: b.label, tags: b.tags, history: b.history.slice(-6), ladder: st.ladders[`${b.from}>${b.to}`] ?? null, lastMsg: b.history.at(-1)?.msgIndex ?? 0 })),
     knowledge: facts,
+    hiddenFacts,
     codex: L.records.map((r) => ({ id: r.id, kind: r.kind, name: r.name, summary: r.summary, keys: r.keys, locked: !!r.locked, status: r.status, source: r.provenance.source, narratorOnly: !!r.scope.narratorOnly, salience: Math.round(r.salience * 100) / 100, body: pickBody(r.body), aliases: r.aliases })),
     chronicle: { units, coverage, tokens, counts: levelCounts },
     timeline: st.milestones.slice(-120).map((m) => ({ at: m.at ? fmtTime(m.at) : "", day: m.at?.day ?? null, kind: m.kind, text: m.text, msgIndex: m.msgIndex })),

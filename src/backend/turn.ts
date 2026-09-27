@@ -9,6 +9,7 @@ import { chekhovNudges } from "../core/pressures";
 import { recall, tierGuess } from "../core/recall";
 import { genreNudge } from "../core/telemetry";
 import { absMinutes, fmtSpan, plainProse } from "../core/util";
+import { NOT_A_PERSON } from "../core/state";
 import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels } from "../core/dsl";
 import { debug, describe, has, host, warn, within } from "./host";
 import { ledgerFor, type ChatLedger } from "./ledger";
@@ -50,6 +51,11 @@ export function isEnabled(meta: ChatMeta, settings: Settings): boolean {
   if (meta.config.enabledOverride === false) return false;
   if (settings.enabled === "on" || meta.config.enabledOverride === true) return true;
   return meta.enabled === true;
+}
+
+/** Names removed from the cast, as first written (one per group of spellings). */
+function notPeople(meta: ChatMeta): string[] {
+  return Object.entries(meta.config.merges ?? {}).filter(([, to]) => to === NOT_A_PERSON).map(([n]) => n).slice(0, 8);
 }
 
 function leadGenre(meta: ChatMeta): string | undefined {
@@ -136,6 +142,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     plants: settings.chekhov ? chekhovNudges(st, genres) : [], arrivals: arrivals.map((a) => `${a.text}${a.route ? ` (via ${a.route})` : ""}`),
     returning, lastDelta, pressures: settings.pressures ? meta.pressures : {}, nsfw: !!meta.detected.nsfw && meta.detected.nsfw !== "off",
     budgets: scaleBudgets(settings.recallBudget, tier),
+    notPeople: notPeople(meta),
   });
   let formatExample: string | undefined;
   if (settings.formatAid && lastReplyMsg) {

@@ -88,7 +88,8 @@ export interface ChronicleJob {
 /** Decide the next summarisation job, if any. */
 export function planChronicle(path: PathMessage[], state: WorldState, store: ChronicleStore, s: ChronicleSettings): ChronicleJob | null {
   if (path.length < s.rawTail + 4) return null;
-  // Raw tail: never summarised (count and token cap, whichever keeps more raw text)
+  // Raw tail: never summarised. The last rawTail messages, cut short by the token cap
+  // when they are long (whichever keeps less), but never fewer than 6.
   let tailStart = path.length - s.rawTail;
   let tok = 0;
   for (let i = path.length - 1; i >= 0; i--) {

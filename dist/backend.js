@@ -379,6 +379,1315 @@ function zoomCandidates(store, query, limit = 2) {
   }).filter((x) => x.score >= 0.34).sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
+// src/core/types.ts
+var BIPOLAR_AXES = ["trust", "affection", "respect", "comfort"];
+var DEFAULT_SETTINGS = {
+  enabled: "auto",
+  strictness: "strict",
+  autoRepair: true,
+  formatAid: false,
+  rawTail: 20,
+  rawTailTokens: 12000,
+  chapterThresholdTokens: 6000,
+  fanIn: 4,
+  hideCovered: true,
+  chronicle: true,
+  summarizerConnection: "",
+  summaryDetail: "detailed",
+  summaryFocus: "",
+  recallBudget: 2400,
+  recallPlacement: "before_history",
+  controller: "off",
+  controllerConnection: "",
+  semanticSource: "mirror",
+  keyHeat: true,
+  maxKeys: 12,
+  stopList: [],
+  loreDefaultMode: "assisted",
+  lorePermission: "read",
+  climate: "",
+  latitude: "temperate",
+  calendar: "",
+  simStep: 120,
+  simulator: false,
+  simConnection: "",
+  socialTicks: true,
+  rumors: true,
+  sidecar: false,
+  sidecarConnection: "",
+  sidecarTimeout: 20,
+  mirror: "summaries",
+  mirrorVectorize: false,
+  hud: true,
+  theme: "preset",
+  skinMode: "auto",
+  fonts: true,
+  narratorOnlyToTools: false,
+  telemetry: true,
+  pressures: true,
+  chekhov: true,
+  debug: false
+};
+var DEFAULT_CHAT_CONFIG = {
+  sessionZeroDone: false,
+  genres: [],
+  colors: {}
+};
+
+// src/core/state.ts
+function bareName(name) {
+  return name.replace(/\|[^|]*$/, "").replace(/#\d+\s*$/, "").replace(/^["\u201C'\u2018]|["\u201D'\u2019]$/g, "").replace(/['\u2019]s$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function editDistance(a, b, max) {
+  if (Math.abs(a.length - b.length) > max)
+    return max + 1;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1;j <= b.length; j++)
+    d[0][j] = j;
+  for (let i = 1;i <= a.length; i++) {
+    let rowMin = Infinity;
+    for (let j = 1;j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      rowMin = Math.min(rowMin, d[i][j]);
+    }
+    if (rowMin > max)
+      return max + 1;
+  }
+  return d[a.length][b.length];
+}
+function isTypoOf(n, known) {
+  if (!n || !known || n === known || n.includes(" ") || known.includes(" "))
+    return false;
+  if (n[0] !== known[0] || Math.abs(n.length - known.length) > 1)
+    return false;
+  const long = Math.max(n.length, known.length);
+  if (Math.min(n.length, known.length) < 5 || long < 6)
+    return false;
+  if (n.startsWith(known) || known.startsWith(n))
+    return false;
+  const max = long >= 7 ? 2 : 1;
+  return editDistance(n, known, max) <= max;
+}
+var CONFIDENCE = {
+  user: 1,
+  model: 0.9,
+  lore: 0.85,
+  archivist: 0.8,
+  repair: 0.75,
+  engine: 0.95,
+  sim: 0.7,
+  extractor: 0.6
+};
+var PIVOTAL = /betray|rescu|saved|save[sd]? (her|his|their|my) life|kill|murder|unforgiv|sacrific|confess|abandon|attack|lied about|revealed|died|death|oath|marri|propos/i;
+function emptyState() {
+  return {
+    time: null,
+    weather: null,
+    season: null,
+    place: [],
+    mode: "social",
+    title: undefined,
+    sceneNo: 0,
+    sceneLog: [],
+    sceneStartMsg: 0,
+    sceneStartAbs: null,
+    chars: {},
+    bonds: {},
+    ladders: {},
+    knowledge: [],
+    facts: {},
+    items: {},
+    threads: {},
+    cons: {},
+    factions: {},
+    rumors: [],
+    rep: {},
+    canon: [],
+    artifacts: {},
+    keys: {},
+    gauges: {},
+    clues: [],
+    plants: [],
+    deadlines: {},
+    milestones: [],
+    places: {},
+    voices: {},
+    nextSlot: 1,
+    lastDelta: null,
+    genreHits: {},
+    msgCount: 0,
+    ledgerCount: 0,
+    unverified: []
+  };
+}
+
+class Folder {
+  state;
+  opts;
+  userKeys;
+  userFirst;
+  constructor(opts, state) {
+    this.opts = opts;
+    this.state = state ?? emptyState();
+    const merged = Object.entries(opts.merges ?? {}).filter(([, to]) => to === "user").map(([from]) => from);
+    this.userKeys = new Set([opts.userName, ...opts.userAliases ?? [], ...merged, "{{user}}", "user", "you", "player"].filter(Boolean).map((s) => s.toLowerCase().trim()));
+    this.userFirst = [opts.userName, ...opts.userAliases ?? []].map((s) => (s ?? "").toLowerCase().trim().split(/\s+/)[0]).filter((f) => f && f.length >= 3 && !["the", "mr", "mrs", "ms", "dr", "sir", "lady", "lord"].includes(f.replace(/\.$/, "")));
+    if (!this.state.time && opts.startTime)
+      this.state.time = { ...opts.startTime };
+  }
+  isUser(name) {
+    if (/#0\s*(?:\|[^|]*)?$/.test(name.trim()))
+      return true;
+    const n = bareName(name);
+    if (!n)
+      return false;
+    if (this.userKeys.has(n) || this.userKeys.has(name.toLowerCase().trim()))
+      return true;
+    if (this.state.chars.user?.aliases.some((a) => a.toLowerCase() === n))
+      return true;
+    if (n.includes(" "))
+      return false;
+    if (this.npcNamed(n))
+      return false;
+    const full = (this.opts.userName ?? "").toLowerCase().trim();
+    if (this.userFirst.includes(n))
+      return true;
+    return [...this.userFirst, full].some((k) => isTypoOf(n, k));
+  }
+  npcNamed(low) {
+    return Object.values(this.state.chars).some((c) => !c.isUser && (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low)));
+  }
+  charId(name, msgIndex, create = true) {
+    let n = name.replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").trim();
+    if (!n)
+      return null;
+    const mergedTo = this.opts.merges?.[n.toLowerCase()];
+    if (mergedTo === NOT_A_PERSON)
+      return null;
+    if (mergedTo && mergedTo !== "user")
+      n = mergedTo;
+    if (this.isUser(name) || this.isUser(n)) {
+      this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
+      return "user";
+    }
+    const low = n.toLowerCase();
+    for (const c of Object.values(this.state.chars)) {
+      if (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low))
+        return c.id;
+    }
+    const first = low.split(/\s+/)[0];
+    const byFirst = Object.values(this.state.chars).filter((c) => c.name.toLowerCase().split(/\s+/)[0] === first);
+    if (byFirst.length === 1 && first.length > 2) {
+      const c = byFirst[0];
+      if (n.length > c.name.length) {
+        c.aliases.push(c.name);
+        c.name = n;
+      } else if (!c.aliases.includes(n))
+        c.aliases.push(n);
+      return c.id;
+    }
+    const typo = Object.values(this.state.chars).filter((c) => !c.isUser && [c.name, ...c.aliases].some((a) => isTypoOf(low, a.toLowerCase())));
+    if (typo.length === 1) {
+      if (!typo[0].aliases.includes(n))
+        typo[0].aliases.push(n);
+      return typo[0].id;
+    }
+    if (!create)
+      return null;
+    let id = slug(n);
+    if (id === "user")
+      id = "user_npc";
+    while (this.state.chars[id] && this.state.chars[id].name.toLowerCase() !== low)
+      id += "_";
+    this.ensureChar(id, n, msgIndex, false);
+    return id;
+  }
+  ensureChar(id, name, msgIndex, isUser) {
+    let c = this.state.chars[id];
+    if (!c) {
+      c = {
+        id,
+        name,
+        aliases: [],
+        slot: isUser ? 0 : this.assignSlot(id),
+        isUser,
+        firstSeen: msgIndex,
+        lastSeen: msgIndex,
+        meters: {},
+        flags: [],
+        injuries: [],
+        journal: []
+      };
+      this.state.chars[id] = c;
+      if (!isUser)
+        this.milestone(msgIndex, "meet", `${name} enters the story`);
+    }
+    c.lastSeen = Math.max(c.lastSeen, msgIndex);
+    return c;
+  }
+  assignSlot(id) {
+    if (this.state.voices[id] != null)
+      return this.state.voices[id];
+    const used = new Set(Object.values(this.state.voices));
+    let slot = this.state.nextSlot;
+    for (let i = 0;i < 12 && used.has(slot); i++)
+      slot = slot % 12 + 1;
+    this.state.voices[id] = slot;
+    this.state.nextSlot = slot % 12 + 1;
+    return slot;
+  }
+  adoptSpeakers(speakers, msgIndex) {
+    for (const s of speakers) {
+      if (s.slot === 0) {
+        const nm = s.name.replace(/#\d+$/, "").trim();
+        const low = bareName(nm);
+        if (low && !this.npcNamed(low) && !this.isUser(nm)) {
+          const u = this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
+          if (!u.aliases.some((a) => a.toLowerCase() === low))
+            u.aliases.push(nm);
+        }
+        continue;
+      }
+      if (this.isUser(s.name) || this.notAPerson(s.name))
+        continue;
+      const existing = this.charId(s.name, msgIndex, false);
+      if (existing)
+        continue;
+      const id = this.charId(s.name, msgIndex, true);
+      if (s.slot && s.slot >= 1 && s.slot <= 12) {
+        this.state.voices[id] = s.slot;
+        this.state.chars[id].slot = s.slot;
+      }
+    }
+  }
+  milestone(msgIndex, kind, text) {
+    this.state.milestones.push({ at: this.state.time ? { ...this.state.time } : null, msgIndex, kind, text });
+    if (this.state.milestones.length > 400)
+      this.state.milestones.splice(0, this.state.milestones.length - 400);
+  }
+  applyMessage(msgIndex, msgId, swipe, parsed, source = "model", extra = [], extraSource = "user") {
+    const st = this.state;
+    st.msgCount = Math.max(st.msgCount, msgIndex + 1);
+    const startAbs = st.time ? absMinutes(st.time) : null;
+    const events = [];
+    const delta = { msgIndex, msgId, count: 0, elapsed: 0, lines: [], rejected: [] };
+    const hadPlace = st.place.join(" \u203A ");
+    const hadMode = st.mode;
+    const hadTitle = st.title;
+    if (parsed.speakers?.length)
+      this.adoptSpeakers(parsed.speakers, msgIndex);
+    const ops = [...parsed.ops];
+    if (parsed.header)
+      this.applyHeader(parsed, ops, msgIndex);
+    if (parsed.title)
+      st.title = parsed.title;
+    if (parsed.ops.length)
+      st.ledgerCount++;
+    const castOp = ops.some((o) => o.op === "cast");
+    let seq = 0;
+    const run = (op, src) => {
+      const ev = {
+        id: `${msgId}:${swipe}:${seq}`,
+        msgId,
+        swipe,
+        msgIndex,
+        seq: seq++,
+        source: src,
+        op,
+        confidence: CONFIDENCE[src],
+        verdict: "accepted"
+      };
+      try {
+        const res = this.applyOp(op, msgIndex, src, castOp);
+        if (res && res.verdict !== "accepted") {
+          ev.verdict = res.verdict;
+          ev.reason = res.reason;
+        }
+        if (res?.line && ev.verdict !== "rejected")
+          delta.lines.push(res.line);
+      } catch (e) {
+        ev.verdict = "rejected";
+        ev.reason = `error: ${e.message}`;
+      }
+      if (ev.verdict === "rejected")
+        delta.rejected.push({ raw: op.raw, reason: ev.reason ?? "rejected" });
+      else
+        delta.count++;
+      ev.at = st.time ? { ...st.time } : null;
+      events.push(ev);
+    };
+    for (const op of ops)
+      run(op, source);
+    for (const op of extra)
+      run(op, extraSource);
+    for (const t of parsed.thoughts ?? []) {
+      const id = this.charId(t.who, msgIndex);
+      if (id && id !== "user")
+        this.state.chars[id].lastSeen = msgIndex;
+    }
+    for (const v of parsed.vtks ?? []) {
+      const aid = `doc:${slug(v.title || v.kind)}`;
+      const existing = st.artifacts[aid];
+      st.artifacts[aid] = {
+        id: aid,
+        title: v.title || v.kind,
+        kind: v.kind,
+        text: v.body,
+        meta: v.meta,
+        holder: existing?.holder,
+        keys: existing?.keys ?? [],
+        msgIndex
+      };
+    }
+    const endAbs = st.time ? absMinutes(st.time) : null;
+    delta.elapsed = startAbs != null && endAbs != null ? endAbs - startAbs : 0;
+    const newPlace = st.place.join(" \u203A ");
+    const boundary = hadPlace && newPlace && hadPlace !== newPlace || delta.elapsed >= 60 || parsed.title && parsed.title !== hadTitle && st.sceneStartMsg !== msgIndex || st.mode === "downtime" && hadMode !== "downtime";
+    if (boundary || st.sceneNo === 0) {
+      st.sceneNo++;
+      st.sceneStartMsg = msgIndex;
+      st.sceneStartAbs = endAbs;
+      st.sceneLog.push({ no: st.sceneNo, startMsg: msgIndex, startAbs: endAbs, place: newPlace, title: parsed.title ?? undefined });
+      if (st.sceneLog.length > 2000)
+        st.sceneLog.splice(0, st.sceneLog.length - 2000);
+    } else if (parsed.title && st.sceneLog.length)
+      st.sceneLog[st.sceneLog.length - 1].title ??= parsed.title;
+    if (source !== "model" && parsed.ops.length)
+      st.unverified.push(msgIndex);
+    st.lastDelta = delta;
+    return events;
+  }
+  applyHeader(parsed, ops, _msgIndex) {
+    const h = parsed.header;
+    const has = (o) => ops.some((x) => x.op === o);
+    if (!has("clock") && h.time != null) {
+      ops.unshift({ op: "clock", args: { kind: "abs", day: h.day, minute: h.time, fromHeader: true }, raw: "(header) time" });
+    }
+    if (!has("wx") && h.condition) {
+      ops.push({ op: "wx", args: { condition: h.condition, intensity: h.intensity, tempC: h.tempC, wind: h.wind, glyph: h.glyph, fromHeader: true }, raw: "(header) weather" });
+    } else if (h.glyph) {
+      const wx = ops.find((x) => x.op === "wx");
+      if (wx)
+        wx.args.glyph = h.glyph;
+    }
+    if (!has("at") && h.place?.length) {
+      ops.push({ op: "at", args: { path: h.place, fromHeader: true }, raw: "(header) place" });
+    }
+  }
+  applyOp(op, mi, src, castOp) {
+    const st = this.state;
+    const strict = this.opts.strictness === "strict" && src !== "user";
+    const a = op.args;
+    const reject = (reason) => ({ verdict: "rejected", reason });
+    const innerOps = new Set(["mood", "journal", "status"]);
+    if (innerOps.has(op.op) && op.subject && this.isUser(op.subject) && this.opts.sealed && !this.opts.personaThoughts && src !== "user") {
+      return reject("the player's inner state belongs to the player (sealed persona)");
+    }
+    if (CHAR_OPS.has(op.op) && (this.notAPerson(op.subject) || this.notAPerson(op.object))) {
+      return reject(`${this.notAPerson(op.subject) ? op.subject : op.object} is not a person (removed from the cast)`);
+    }
+    switch (op.op) {
+      case "clock": {
+        const cur = st.time;
+        if (a.kind === "rel") {
+          if (a.minutes < 0)
+            return reject("time cannot run backwards");
+          if (!cur) {
+            st.time = { day: 1, minute: 8 * 60 };
+            return { verdict: "warned", reason: "no start time yet; assumed Day 1 08:00", line: `clock ${fmtSpan(a.minutes)}` };
+          }
+          const next = addMinutes(cur, a.minutes);
+          this.drift(absMinutes(cur), absMinutes(next));
+          st.time = next;
+          return { verdict: "accepted", line: `\uD83D\uDD70 +${fmtSpan(a.minutes)}` };
+        }
+        if (!cur) {
+          st.time = { day: a.day ?? 1, minute: a.minute };
+          return { verdict: "accepted", line: `\uD83D\uDD70 Day ${st.time.day} ${fmtClock(a.minute)}` };
+        }
+        let day = a.day ?? cur.day;
+        if (a.day == null && a.minute < cur.minute)
+          day = cur.day + 1;
+        const target = { day, minute: a.minute };
+        const diff = absMinutes(target) - absMinutes(cur);
+        if (diff < 0) {
+          if (a.fromHeader)
+            return { verdict: "warned", reason: "header time is behind the verified clock; kept the clock" };
+          return reject(`time cannot run backwards (${fmtClock(a.minute)} Day ${day} is before the current clock)`);
+        }
+        if (diff > 0)
+          this.drift(absMinutes(cur), absMinutes(target));
+        st.time = target;
+        return diff > 18 * 60 && a.day == null ? { verdict: "warned", reason: "large implicit jump; assumed the next day", line: `\uD83D\uDD70 \u2192 Day ${day} ${fmtClock(a.minute)}` } : { verdict: "accepted", line: diff ? `\uD83D\uDD70 +${fmtSpan(diff)}` : undefined };
+      }
+      case "wx": {
+        const prev = st.weather?.condition;
+        st.weather = {
+          condition: a.condition,
+          intensity: a.intensity,
+          tempC: a.tempC ?? st.weather?.tempC,
+          wind: a.wind ?? st.weather?.wind,
+          glyph: a.glyph ?? st.weather?.glyph,
+          setAt: st.time ? { ...st.time } : null,
+          source: a.fromHeader ? "header" : "model"
+        };
+        if (prev === a.condition)
+          return { verdict: "accepted" };
+        return { verdict: "accepted", line: `\uD83C\uDF26 ${prev ? prev + " \u2192 " : ""}${a.condition}` };
+      }
+      case "at": {
+        const path = a.path;
+        const prev = st.place.join(" \u203A ");
+        let full = path;
+        if (path.length === 1 && st.place.length && !st.places[slug(path[0])]) {
+          const idx = st.place.findIndex((p) => p.toLowerCase() === path[0].toLowerCase());
+          full = idx >= 0 ? st.place.slice(0, idx + 1) : st.place.length > 1 ? [...st.place.slice(0, -1), path[0]] : path;
+        } else if (path.length < st.place.length && path.length > 1) {
+          const root = st.place.findIndex((p) => p.toLowerCase() === path[0].toLowerCase());
+          if (root > 0)
+            full = [...st.place.slice(0, root), ...path];
+        }
+        st.place = full;
+        for (let i = 0;i < full.length; i++) {
+          const pid = `loc:${slug(full[i])}`;
+          const pl = st.places[pid] ?? { id: pid, name: full[i], path: full.slice(0, i + 1), visits: 0, lastMsg: mi };
+          if (i === full.length - 1 && prev !== full.join(" \u203A "))
+            pl.visits++;
+          pl.lastMsg = mi;
+          st.places[pid] = pl;
+        }
+        const now = full.join(" \u203A ");
+        if (prev === now)
+          return { verdict: "accepted" };
+        if (prev && !castOp) {
+          for (const c of Object.values(st.chars))
+            if (c.tier === "spot" || c.tier === "peri")
+              c.place = full[full.length - 1];
+        }
+        return { verdict: "accepted", line: `\uD83D\uDCCD ${now}` };
+      }
+      case "cast": {
+        const lines = [];
+        const listed = new Set;
+        const here = st.place[st.place.length - 1];
+        for (const e of a.entries) {
+          const id = this.charId(e.name, mi);
+          if (!id)
+            continue;
+          listed.add(id);
+          const c = st.chars[id];
+          if (c.dead && e.tier !== "left" && e.tier !== "dead") {
+            if (strict)
+              return reject(`${c.name} is dead and cannot appear`);
+          }
+          const before = c.tier;
+          if (e.tier === "left") {
+            c.tier = "off";
+            c.place = e.activity?.replace(/^\u2192\s*/, "").trim() || undefined;
+            c.activity = undefined;
+            lines.push(`${c.name} leaves`);
+          } else if (e.tier === "dead") {
+            c.dead = true;
+            c.tier = "off";
+            this.milestone(mi, "death", `${c.name} dies`);
+            lines.push(`${c.name} dies`);
+          } else if (e.tier === "off") {
+            c.tier = "off";
+          } else {
+            c.tier = e.tier === "arrive" ? "peri" : e.tier;
+            c.place = here;
+            if (e.activity)
+              c.activity = e.activity.replace(/^\u2190\s*/, "");
+            if (before !== "spot" && before !== "peri")
+              lines.push(`${c.name} ${e.tier === "arrive" ? "arrives" : "is here"}`);
+          }
+          c.lastSeen = mi;
+        }
+        return { verdict: "accepted", line: lines.length ? `\uD83D\uDC65 ${lines.join(" \xB7 ")}` : undefined };
+      }
+      case "mood": {
+        const id = this.charId(op.subject, mi);
+        const c = st.chars[id];
+        if (c.dead)
+          return reject(`${c.name} is dead`);
+        const prev = c.mood?.name;
+        c.mood = { name: a.name, v: a.v ?? c.mood?.v, a: a.a ?? c.mood?.a, d: a.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null };
+        return { verdict: "accepted", line: `\uD83C\uDFAD ${c.name}: ${prev ? prev + " \u2192 " : ""}${a.name}` };
+      }
+      case "body": {
+        const id = this.charId(op.subject, mi);
+        const c = st.chars[id];
+        const bits = [];
+        for (const [k, v] of Object.entries(a.meters)) {
+          const before = c.meters[k] ?? 0;
+          c.meters[k] = clamp(v.rel ? before + v.v : v.v, 0, 5);
+          bits.push(`${k} ${c.meters[k]}`);
+        }
+        for (const f of a.flags) {
+          if (f === "dead") {
+            c.dead = true;
+            this.milestone(mi, "death", `${c.name} dies`);
+            bits.push("dead");
+            continue;
+          }
+          if (/^(asleep|sleeping)$/.test(f))
+            c.flags = c.flags.filter((x) => x !== "awake");
+          if (/^(awake|woke)$/.test(f))
+            c.flags = c.flags.filter((x) => !/asleep|sleeping/.test(x));
+          if (!c.flags.includes(f))
+            c.flags.push(f);
+          bits.push(f);
+        }
+        for (const f of a.unflags)
+          c.flags = c.flags.filter((x) => x !== f && !x.startsWith(f));
+        for (const inj of a.injuries) {
+          const ex = c.injuries.find((i) => i.where.toLowerCase() === inj.where.toLowerCase());
+          if (ex)
+            Object.assign(ex, inj, { since: ex.since });
+          else
+            c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null });
+          bits.push(`injury: ${inj.where}`);
+          if (inj.severity >= 3)
+            this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
+        }
+        for (const h of a.heals)
+          c.injuries = c.injuries.filter((i) => !i.where.toLowerCase().includes(h.toLowerCase()));
+        if (c.flags.length > 12)
+          c.flags = c.flags.slice(-12);
+        return { verdict: "accepted", line: bits.length ? `\uD83E\uDE79 ${c.name}: ${bits.join(", ")}` : undefined };
+      }
+      case "look": {
+        const id = this.charId(op.subject, mi);
+        st.chars[id].look = a.text;
+        return { verdict: "accepted", line: `\uD83D\uDC57 ${st.chars[id].name}: ${a.text}` };
+      }
+      case "status": {
+        const id = this.charId(op.subject, mi);
+        st.chars[id].status = a.text;
+        return { verdict: "accepted" };
+      }
+      case "bond": {
+        const from = this.charId(op.subject, mi);
+        const to = this.charId(op.object, mi);
+        if (from === to)
+          return reject("a bond needs two different people");
+        if (from === "user" && this.opts.sealed && src !== "user")
+          return reject("the player's feelings belong to the player (sealed persona)");
+        if (st.chars[from]?.dead)
+          return reject(`${st.chars[from].name} is dead`);
+        const key = `${from}>${to}`;
+        const b = st.bonds[key] ?? { from, to, axes: {}, tags: [], history: [] };
+        st.bonds[key] = b;
+        if (a.label)
+          b.label = a.label;
+        if (a.tags)
+          b.tags = [...new Set([...b.tags, ...a.tags])];
+        if (!a.changes?.length)
+          return { verdict: "accepted", line: a.label ? `\uD83D\uDD78 ${this.nm(from)} \u2192 ${this.nm(to)}: \u201C${a.label}\u201D` : undefined };
+        if (strict && !op.cause)
+          return reject("bond change without a cause");
+        const lines = [];
+        let warned;
+        for (const ch of a.changes) {
+          let d = ch.delta;
+          if (Math.abs(d) >= 4 && !PIVOTAL.test(op.cause ?? "")) {
+            d = Math.sign(d) * 2;
+            warned = `a shift of ${ch.delta} needs a pivotal cause; clamped to ${d > 0 ? "+" : ""}${d}`;
+          }
+          const lo = BIPOLAR_AXES.includes(ch.axis) ? -5 : 0;
+          const before = b.axes[ch.axis] ?? 0;
+          const after = clamp(before + d, lo, 5);
+          b.axes[ch.axis] = after;
+          b.history.push({ axis: ch.axis, delta: after - before, from: before, to: after, cause: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
+          lines.push(`${ch.axis} ${d > 0 ? "+" : ""}${d}`);
+          if (Math.abs(d) >= 2)
+            this.milestone(mi, "bond", `${this.nm(from)} \u2192 ${this.nm(to)}: ${ch.axis} ${d > 0 ? "+" : ""}${d}${op.cause ? ` (${op.cause})` : ""}`);
+        }
+        if (b.history.length > 60)
+          b.history = b.history.slice(-60);
+        const line = `\uD83D\uDD78 ${this.nm(from)} \u2192 ${this.nm(to)}: ${lines.join(", ")}`;
+        return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
+      }
+      case "ladder": {
+        const from = this.charId(op.subject, mi);
+        const to = this.charId(op.object, mi);
+        if (from === "user" && this.opts.sealed && src !== "user")
+          return reject("the player's side of a ladder moves only by the player's words");
+        const key = `${from}>${to}`;
+        const cur = st.ladders[key]?.tier ?? (this.opts.romance === "established" ? 7 : 0);
+        let tier = clamp(a.rel ? cur + a.tier : a.tier, 0, 7);
+        const maxStep = this.opts.romance === "fast" ? 2 : 1;
+        let warned;
+        if (tier < cur && src !== "user") {
+          const why = op.cause ?? "";
+          if (!LADDER_FALL.test(why)) {
+            if (!a.rel && a.tier > 0 && LADDER_WARM.test(why)) {
+              warned = `"tier ${a.tier}" after a warm beat read as a step up (+${a.tier}), not a fall from ${LADDER_NAMES[cur]}`;
+              tier = clamp(cur + a.tier, 0, 7);
+            } else {
+              return reject(`a fall from ${LADDER_NAMES[cur]} to ${LADDER_NAMES[tier]} needs a cause (betrayal, a lie, neglect, cruelty); write the rung it reaches, or +1`);
+            }
+          } else if (cur - tier > 1 && !LADDER_FALL_HARD.test(why)) {
+            warned = `fell ${cur - tier} rungs at once; only betrayal or the unforgivable drops more than one`;
+            tier = cur - 1;
+          }
+        }
+        if (this.opts.romance === "off" && tier > cur)
+          return reject("romance pace is off");
+        if (tier - cur > maxStep && src !== "user") {
+          const skipped = tier - cur;
+          warned = `${warned ? `${warned}; ` : ""}skipped ${skipped} rungs at once; the pace allows ${maxStep}`;
+          tier = cur + maxStep;
+          if (strict && this.opts.romance !== "measured")
+            warned += " (clamped)";
+        }
+        const changed = !st.ladders[key] || st.ladders[key].tier !== tier;
+        const l = st.ladders[key] ?? { from, to, tier: cur, at: null, msgIndex: mi, history: [] };
+        l.tier = tier;
+        l.evidence = op.cause;
+        l.at = st.time ? { ...st.time } : null;
+        l.msgIndex = mi;
+        l.history.push({ tier, evidence: op.cause, msgIndex: mi });
+        st.ladders[key] = l;
+        st.genreHits.romance = mi;
+        if (changed)
+          this.milestone(mi, "ladder", `${this.nm(from)} \u2192 ${this.nm(to)}: ${LADDER_NAMES[tier]}`);
+        const line = changed ? `\u2661 ${this.nm(from)} \u2192 ${this.nm(to)}: ${LADDER_NAMES[tier]}` : undefined;
+        return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
+      }
+      case "know": {
+        const holder = this.charId(op.subject, mi);
+        const row = {
+          id: `k${mi}_${st.knowledge.length}`,
+          holder,
+          fact: a.fact ?? "",
+          status: a.status,
+          source: a.source,
+          truth: a.truth,
+          at: st.time ? { ...st.time } : null,
+          msgIndex: mi
+        };
+        const key = fileKnow(st, row, a, this.opts.factEdits);
+        row.factKey = key;
+        const fact = st.facts[key];
+        if (!row.fact)
+          row.fact = fact.statement;
+        for (const old of st.knowledge) {
+          if (old.holder === holder && !old.supersededBy && old.factKey === key)
+            old.supersededBy = row.id;
+        }
+        st.knowledge.push(row);
+        const line = `\uD83E\uDDE0 ${this.nm(holder)} ${a.status}: ${fact.statement}${a.truth === "false" ? " (false)" : ""}`;
+        if (strict && !a.source)
+          return { verdict: "warned", reason: "knowledge without a source", line };
+        return { verdict: "accepted", line };
+      }
+      case "item": {
+        const iid = `item:${slug(op.subject)}`;
+        const it = st.items[iid] ?? { id: iid, name: op.subject, custody: [] };
+        st.items[iid] = it;
+        if (a.condition) {
+          it.condition = a.condition;
+          return { verdict: "accepted", line: `\uD83C\uDF92 ${it.name}: ${a.condition}` };
+        }
+        const toRaw = a.to;
+        const fromId = a.from ? this.holderId(a.from, mi) : it.holder;
+        if (a.from && it.holder && fromId !== it.holder && !it.gone) {
+          if (strict)
+            return reject(`${this.nm(fromId)} does not hold ${it.name} (${this.nm(it.holder)} does)`);
+        }
+        if (fromId && fromId !== "user" && st.chars[fromId]?.dead && strict)
+          return reject(`${this.nm(fromId)} is dead`);
+        if (strict && a.from && !op.cause)
+          return reject("item transfer without a cause");
+        if (toRaw === "gone") {
+          it.gone = true;
+          it.custody.push({ from: it.holder, to: "gone", how: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
+          it.holder = "gone";
+          this.milestone(mi, "item", `${it.name} is gone${op.cause ? ` (${op.cause})` : ""}`);
+          return { verdict: "accepted", line: `\uD83C\uDF92 ${it.name} \u2192 gone` };
+        }
+        const to = toRaw ? this.parseHolder(toRaw, mi) : {};
+        if (to.same) {
+          if (to.where)
+            it.where = to.where;
+          if (a.quantity != null)
+            it.quantity = a.quantity;
+          return { verdict: "accepted", line: `\uD83C\uDF92 ${it.name}: ${this.nm(it.holder)}${it.where ? ` (${it.where})` : ""}` };
+        }
+        const toId = to.id;
+        if (toId !== it.holder || to.where !== it.where) {
+          it.custody.push({ from: it.holder, to: toId, how: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
+          if (it.custody.length > 20)
+            it.custody = it.custody.slice(-20);
+        }
+        it.holder = toId;
+        it.where = to.where;
+        it.gone = false;
+        if (a.quantity != null)
+          it.quantity = a.quantity;
+        return { verdict: "accepted", line: `\uD83C\uDF92 ${it.name}: ${a.from ? this.nm(fromId) + " \u2192 " : ""}${this.nm(toId)}${to.where ? ` (${to.where})` : ""}` };
+      }
+      case "thread": {
+        const tid = `thread:${slug(op.subject)}`;
+        const t = st.threads[tid] ?? { id: tid, title: op.subject, status: "open", stalls: 0, history: [], lastMsg: mi };
+        const isNew = !st.threads[tid];
+        st.threads[tid] = t;
+        const tOp = a.op;
+        t.history.push({ op: tOp, detail: a.detail, at: st.time ? { ...st.time } : null, msgIndex: mi });
+        if (t.history.length > 12)
+          t.history = t.history.slice(-12);
+        t.lastMsg = mi;
+        if (a.detail)
+          t.latest = a.detail;
+        let warned;
+        if (tOp === "stall") {
+          if (!a.blocker && strict)
+            warned = "a stalled thread must name its blocker";
+          t.status = "stalled";
+          t.blocker = a.blocker;
+          t.stalls++;
+        } else if (tOp === "resolve") {
+          t.status = "resolved";
+          this.milestone(mi, "thread", `Resolved: ${t.title}`);
+        } else {
+          t.status = "open";
+          t.stalls = 0;
+          t.blocker = undefined;
+          if (isNew || tOp === "new")
+            this.milestone(mi, "thread", `New thread: ${t.title}`);
+        }
+        const line = `\uD83E\uDDF5 ${t.title}: ${tOp}${a.detail ? ` \u2014 ${a.detail}` : ""}`;
+        if (!warned && strict && !a.detail && tOp !== "new" && tOp !== "resolve")
+          warned = "thread change without a detail";
+        return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
+      }
+      case "owe":
+      case "cons": {
+        const who = this.partyId(op.subject, mi);
+        const whom = op.object ? this.partyId(op.object, mi) : undefined;
+        const cid = `cons:${slug(`${who}_${whom ?? ""}_${a.what}`)}`;
+        const existing = st.cons[cid] ?? Object.values(st.cons).find((c) => c.who === who && c.whom === whom && overlap(normFact(c.what), normFact(a.what)) > 0.6);
+        const c = existing ?? { id: cid, kind: a.kind, who, whom, what: a.what, status: "open", since: st.time ? { ...st.time } : null, msgIndex: mi };
+        c.status = a.status;
+        if (a.due)
+          c.due = parseDue(a.due, st.time);
+        st.cons[c.id] = c;
+        if (!existing)
+          this.milestone(mi, "cons", `${this.nm(who)} ${a.kind === "owe" ? "owes" : "\u2192"} ${whom ? this.nm(whom) + ": " : ""}${a.what}`);
+        return { verdict: "accepted", line: `\u2696 ${this.nm(who)}${whom ? " \u2192 " + this.nm(whom) : ""}: ${a.what} (${c.status})` };
+      }
+      case "clockf": {
+        const fid = `fac:${slug(op.subject)}`;
+        const f = st.factions[fid] ?? { id: fid, name: op.subject, clocks: {} };
+        st.factions[fid] = f;
+        const pk = slug(a.project);
+        const clk = f.clocks[pk] ?? { name: a.project, cur: 0, max: a.max ?? 6, history: [] };
+        if (a.max)
+          clk.max = a.max;
+        clk.cur = clamp(a.cur != null ? a.cur : clk.cur + (a.inc ?? 1), 0, clk.max);
+        clk.history.push(clk.cur);
+        f.clocks[pk] = clk;
+        st.genreHits.intrigue = mi;
+        st.genreHits.thriller = mi;
+        if (clk.cur >= clk.max)
+          this.milestone(mi, "faction", `${f.name}: ${clk.name} complete`);
+        return { verdict: "accepted", line: `\u23F3 ${f.name}: ${clk.name} ${clk.cur}/${clk.max}` };
+      }
+      case "rumor": {
+        const text = a.text;
+        const ex = st.rumors.find((r) => overlap(normFact(r.text), normFact(text)) > 0.6);
+        if (ex) {
+          ex.hops++;
+          ex.to = a.to ?? ex.to;
+          ex.msgIndex = mi;
+        } else
+          st.rumors.push({ id: `r${mi}_${st.rumors.length}`, text, from: a.from, to: a.to, truth: a.truth, hops: 1, msgIndex: mi });
+        if (st.rumors.length > 60)
+          st.rumors.splice(0, st.rumors.length - 60);
+        return { verdict: "accepted", line: `\uD83D\uDDE3 ${text}` };
+      }
+      case "rep": {
+        const gid = slug(op.object);
+        const r = st.rep[gid] ?? { group: op.object, score: 0, tags: [], history: [] };
+        r.score = clamp(r.score + (a.delta ?? 0), -3, 3);
+        if (a.tag && !r.tags.includes(a.tag))
+          r.tags.push(a.tag);
+        r.history.push({ delta: a.delta ?? 0, deed: op.cause, msgIndex: mi });
+        st.rep[gid] = r;
+        return { verdict: "accepted", line: `\uD83C\uDFF7 ${r.group}: ${r.score > 0 ? "+" : ""}${r.score}` };
+      }
+      case "journal": {
+        const id = this.charId(op.subject, mi);
+        const c = st.chars[id];
+        c.journal.push({ text: a.text, at: st.time ? { ...st.time } : null, msgIndex: mi });
+        if (c.journal.length > 30)
+          c.journal = c.journal.slice(-30);
+        return { verdict: "accepted", line: `\uD83D\uDCD3 ${c.name}: \u201C${a.text}\u201D` };
+      }
+      case "keys": {
+        const rid = this.recordIdFor(op.subject, mi);
+        const cur = st.keys[rid] ?? [];
+        st.keys[rid] = [...new Set([...cur, ...a.keys])].slice(-16);
+        return { verdict: "accepted" };
+      }
+      case "canon": {
+        if (st.canon.some((c) => normFact(c.text) === normFact(a.text)))
+          return { verdict: "accepted" };
+        st.canon.push({ text: a.text, at: st.time ? { ...st.time } : null, msgIndex: mi });
+        return { verdict: "accepted", line: `\uD83D\uDCDC ${a.text}` };
+      }
+      case "artifact": {
+        const aid = `doc:${slug(op.subject)}`;
+        const ex = st.artifacts[aid];
+        const holder = a.holder ? this.holderId(a.holder, mi) : ex?.holder;
+        st.artifacts[aid] = { id: aid, title: op.subject, kind: a.kind ?? ex?.kind ?? "document", holder, text: ex?.text, meta: ex?.meta, keys: ex?.keys ?? [], msgIndex: ex?.msgIndex ?? mi };
+        this.milestone(mi, "artifact", `Filed: ${op.subject}`);
+        return { verdict: "accepted", line: `\uD83D\uDCC4 filed: ${op.subject}` };
+      }
+      case "mode": {
+        st.mode = a.mode;
+        return { verdict: "accepted" };
+      }
+      case "gauge": {
+        const gid = slug(op.subject);
+        const g = st.gauges[gid] ?? { name: op.subject, cur: 0, max: a.max ?? 5, history: [] };
+        if (a.max)
+          g.max = a.max;
+        g.cur = clamp(a.cur != null ? a.cur : g.cur + (a.inc ?? 0), 0, g.max);
+        g.cause = op.cause;
+        g.history.push({ v: g.cur, msgIndex: mi });
+        if (g.history.length > 30)
+          g.history = g.history.slice(-30);
+        st.gauges[gid] = g;
+        const gn = g.name.toLowerCase();
+        if (/dread|fear|terror/.test(gn))
+          st.genreHits.horror = mi;
+        if (/corrupt/.test(gn))
+          st.genreHits.dark_fantasy = mi;
+        if (/pressure|flaw/.test(gn))
+          st.genreHits.tragedy = mi;
+        if (/supplies|water|food|warmth|needs/.test(gn))
+          st.genreHits.survival = mi;
+        if (/tension|heat|charge/.test(gn))
+          st.genreHits.romance = mi;
+        return { verdict: "accepted", line: `\uD83D\uDCCA ${g.name} ${g.cur}/${g.max}` };
+      }
+      case "clue": {
+        st.clues.push({ id: `clue${mi}_${st.clues.length}`, text: a.text, pointsTo: a.pointsTo, reliability: a.reliability, msgIndex: mi });
+        st.genreHits.mystery = mi;
+        return { verdict: "accepted", line: `\uD83D\uDD0E ${a.text}${a.pointsTo ? ` \u2192 ${a.pointsTo}` : ""}` };
+      }
+      case "plant": {
+        st.plants.push({ id: `plant${mi}_${st.plants.length}`, text: a.text, payoff: a.payoff, plantedAt: mi, plantedScene: st.sceneNo });
+        st.genreHits.comedy = mi;
+        return { verdict: "accepted" };
+      }
+      case "payoff": {
+        const t = normFact(a.text);
+        const best = st.plants.filter((p) => p.paidAt == null).map((p) => ({ p, s: overlap(normFact(p.text), t) })).sort((x, y) => y.s - x.s)[0];
+        if (best && best.s > 0.25)
+          best.p.paidAt = mi;
+        st.genreHits.comedy = mi;
+        return { verdict: "accepted", line: `\uD83C\uDFAF payoff: ${a.text}` };
+      }
+      case "deadline": {
+        const did = `dl:${slug(op.subject)}`;
+        if (a.done) {
+          if (st.deadlines[did])
+            st.deadlines[did].done = true;
+          return { verdict: "accepted" };
+        }
+        const base = st.time ?? { day: 1, minute: 480 };
+        const at = a.kind === "rel" ? addMinutes(base, a.minutes) : { day: a.day ?? (a.minute < base.minute ? base.day + 1 : base.day), minute: a.minute };
+        st.deadlines[did] = { id: did, title: op.subject, at, msgIndex: mi };
+        st.genreHits.thriller = mi;
+        return { verdict: "accepted", line: `\u23F0 ${op.subject}: Day ${at.day} ${fmtClock(at.minute)}` };
+      }
+      case "title": {
+        st.title = a.text;
+        return { verdict: "accepted" };
+      }
+      case "season": {
+        const prev = st.season?.name;
+        st.season = { name: a.name, setAt: st.time ? { ...st.time } : null };
+        return prev === a.name ? { verdict: "accepted" } : { verdict: "accepted", line: `\uD83C\uDF42 ${prev ? prev + " \u2192 " : ""}${a.name}` };
+      }
+      case "pressure": {
+        const id = this.charId(op.subject, mi, false);
+        if (id)
+          st.chars[id].pressure = a.text;
+        return { verdict: "accepted" };
+      }
+      default:
+        return { verdict: "accepted" };
+    }
+  }
+  nm(id) {
+    if (!id)
+      return "nobody";
+    if (id === "gone")
+      return "gone";
+    if (id.startsWith("loc:"))
+      return this.state.places[id]?.name ?? id.slice(4);
+    return this.state.chars[id]?.name ?? id;
+  }
+  partyId(name, mi) {
+    const pid = `loc:${slug(name.trim())}`;
+    if (this.state.places[pid])
+      return pid;
+    return this.charId(name, mi) ?? (this.notAPerson(name) ? name.trim() : undefined);
+  }
+  notAPerson(name) {
+    if (!name)
+      return false;
+    return this.opts.merges?.[name.replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").trim().toLowerCase()] === NOT_A_PERSON;
+  }
+  holderId(name, mi) {
+    const n = name.trim();
+    if (!n)
+      return;
+    if (/^(the )?(floor|ground|table|room|here)$/i.test(n) || n.startsWith("loc:"))
+      return `loc:${slug(this.state.place[this.state.place.length - 1] ?? n)}`;
+    return this.parseHolder(n, mi).id;
+  }
+  parseHolder(raw, mi) {
+    let s = raw;
+    for (let i = 0;i < 4 && /\([^()]*\)/.test(s); i++)
+      s = s.replace(/\s*\([^()]*\)/g, "");
+    s = s.replace(/\s+/g, " ").replace(/[.;,]+$/, "").trim();
+    if (!s || /^(no change|unchanged|same|still|as before)$/i.test(s))
+      return { same: true };
+    const known = (n) => this.charId(n.replace(/^(the|a)\s+/i, ""), mi, false) ?? undefined;
+    const spot = (w) => w?.replace(/^(?:in|on|at|inside|under|in the|on the)\s+/i, "").trim() || undefined;
+    const tail = (w) => spot(w?.replace(/^(?:in|on|at|inside|under|within|tucked in|hidden in)\s+/i, ""));
+    const by = /^(?:held|carried|kept|worn|owned|taken|pocketed|hidden|stashed)?\s*(?:by|with|to)\s+(.+?)(?:\s+(?:in|on|at|inside|under|around|behind)\s+(.+))?$/i.exec(s);
+    if (by) {
+      const id = known(by[1]) ?? (this.looksLikeName(by[1]) ? this.charId(by[1], mi) ?? undefined : undefined);
+      if (id)
+        return { id, where: tail(by[2]) };
+    }
+    const pos = /^(?:(?:in|on|at|inside|under|around|behind|tucked in|hidden in)\s+)?(?:the\s+)?([A-Z\u00C0-\u00DE][\w\u00C0-\u024F'\u2019-]*(?:\s+[A-Z\u00C0-\u00DE][\w\u00C0-\u024F'\u2019-]*){0,3})['\u2019]s?\s+(.+)$/.exec(s);
+    if (pos) {
+      const id = known(pos[1]) ?? (this.looksLikeName(pos[1]) ? this.charId(pos[1], mi) ?? undefined : undefined);
+      if (id)
+        return { id, where: pos[2].trim() };
+    }
+    const mine = /^(?:(?:in|on|at|inside|under)\s+)?(?:your|my)\s+(.+)$/i.exec(s);
+    if (mine)
+      return { id: this.charId("user", mi) ?? undefined, where: mine[1].trim() };
+    const exact = known(s);
+    if (exact)
+      return { id: exact };
+    const pid = `loc:${slug(s)}`;
+    if (this.state.places[pid])
+      return { id: pid };
+    if (this.looksLikeName(s))
+      return { id: this.charId(s, mi) ?? undefined };
+    const here = this.state.place[this.state.place.length - 1];
+    return { id: here ? `loc:${slug(here)}` : undefined, where: s };
+  }
+  looksLikeName(s) {
+    const t = s.trim();
+    if (!t || t.length > 40 || /[()\d:]/.test(t) || !/^[A-Z\u00C0-\u00DE]/.test(t))
+      return false;
+    const words = t.split(/\s+/);
+    if (words.length > 4)
+      return false;
+    const filler = /^(in|on|at|by|the|a|an|from|with|under|inside|near|behind|held|carried|no|change|pocket|bag|hand|table|floor)$/i;
+    return !words.some((w, i) => filler.test(w) && !(i > 0 && /^(of|the)$/i.test(w) && /^[A-Z]/.test(words[i + 1] ?? "")));
+  }
+  recordIdFor(name, mi) {
+    const s = slug(name);
+    const st = this.state;
+    if (this.isUser(name))
+      return "char:user";
+    const cid = this.charId(name, mi, false);
+    if (cid)
+      return `char:${cid}`;
+    for (const prefix of ["item:", "thread:", "loc:", "fac:", "doc:"]) {
+      const id = prefix + s;
+      if (st[{ "item:": "items", "thread:": "threads", "loc:": "places", "fac:": "factions", "doc:": "artifacts" }[prefix]][id])
+        return id;
+    }
+    return `custom:${s}`;
+  }
+  drift(fromAbs0, toAbs) {
+    const span = toAbs - fromAbs0;
+    if (span <= 0)
+      return;
+    const sleeping = this.state.mode === "downtime" && span >= 360;
+    for (const c of Object.values(this.state.chars)) {
+      if (c.dead)
+        continue;
+      const present = c.tier === "spot" || c.tier === "peri" || c.isUser;
+      if (!present)
+        continue;
+      const m = c.meters;
+      const acc = c._acc ??= { hunger: 0, thirst: 0, fatigue: 0, intox: 0 };
+      const bump = (k, rate) => {
+        if (m[k] == null)
+          return;
+        acc[k] += span;
+        const n = Math.floor(acc[k] / rate);
+        if (n > 0) {
+          m[k] = clamp((m[k] ?? 0) + n, 0, 5);
+          acc[k] -= n * rate;
+        }
+      };
+      bump("hunger", 300);
+      bump("thirst", 180);
+      if (sleeping && m.fatigue != null) {
+        m.fatigue = clamp(m.fatigue - (span >= 420 ? 4 : 3), span < 240 ? 2 : 0, 5);
+        acc.fatigue = 0;
+      } else
+        bump("fatigue", 240);
+      if (m.intox != null && m.intox > 0) {
+        acc.intox += span;
+        const n = Math.floor(acc.intox / 90);
+        if (n > 0) {
+          m.intox = clamp(m.intox - n, 0, 5);
+          acc.intox -= n * 90;
+        }
+      }
+      c.injuries = c.injuries.filter((inj) => {
+        if (!inj.since)
+          return true;
+        const age = toAbs - absMinutes(inj.since);
+        const heal = [0, 2 * MIN_PER_DAY, 14 * MIN_PER_DAY, 42 * MIN_PER_DAY, Infinity][inj.severity];
+        if (age >= heal * (inj.treated ? 1 : 1.5)) {
+          if (inj.severity >= 3 && !c.flags.includes(`scar: ${inj.where}`))
+            c.flags.push(`scar: ${inj.where}`);
+          return false;
+        }
+        return true;
+      });
+    }
+  }
+}
+var LADDER_FALL = /betray|\blie[sd]?\b|\blying\b|decei|neglect|abandon|cruel|cheat|reject|humiliat|contempt|disgust|resent|jealous|furious|\bangry\b|\banger\b|\bfight\b|argument|insult|threat|hurt (him|her|them)|\bhit\b|struck|walked (away|out)|left (him|her|them)|\bbroke\b|lost (her |his |their )?trust|distrust|suspicio|went cold|pulled away|shut (him|her|them) out|\bgrudge\b|regress|drops? a rung/i;
+var LADDER_FALL_HARD = /betray|cheat|abandon|\bhit\b|struck|violen|unforgivable|\bmurder|\bkill/i;
+var LADDER_WARM = /\bheld\b|\bhold|hug|embrac|kiss|smil|laugh|comfort|warm|tender|gentle|\bsafe\b|protect|saved|rescued|confess|\bstayed\b|didn't (pull|let) (away|go)|leaned|touch|\bhand\b|close|trust|open(ed)? up|let (him|her|them) (in|hold)|blush|flirt|charm|spark|linger/i;
+var LADDER_NAMES = ["Strangers", "Aware", "Interested", "Charged", "Tested", "Spoken", "Together", "Established"];
+function fmtClock(minute) {
+  const m = (minute % MIN_PER_DAY + MIN_PER_DAY) % MIN_PER_DAY;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+var NOT_A_PERSON = "-";
+var CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "status", "journal"]);
+function normFact(s) {
+  return s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
+}
+var STOP = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
+function overlap(a, b) {
+  const A = new Set(a.split(" ").filter((w) => w && !STOP.has(w)));
+  const B = new Set(b.split(" ").filter((w) => w && !STOP.has(w)));
+  if (!A.size || !B.size)
+    return 0;
+  let n = 0;
+  for (const w of A)
+    if (B.has(w))
+      n++;
+  return n / Math.min(A.size, B.size);
+}
+function parseDue(raw, now) {
+  const d = /day\s*(\d+)(?:\D+(\d{1,2})[:.](\d{2}))?/i.exec(raw);
+  if (d)
+    return { at: { day: parseInt(d[1], 10), minute: d[2] ? parseInt(d[2], 10) * 60 + parseInt(d[3], 10) : 12 * 60 }, raw };
+  const rel = /\+?\s*(\d+)\s*(d|h|day|days|hours?)/i.exec(raw);
+  if (rel && now) {
+    const n = parseInt(rel[1], 10);
+    return { at: addMinutes(now, rel[2].startsWith("d") ? n * MIN_PER_DAY : n * 60), raw };
+  }
+  if (/tomorrow/i.test(raw) && now)
+    return { at: { day: now.day + 1, minute: 9 * 60 }, raw };
+  if (/tonight/i.test(raw) && now)
+    return { at: { day: now.day, minute: 21 * 60 }, raw };
+  return { trigger: raw, raw };
+}
+
+// src/core/facts.ts
+var STOP2 = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
+function splitFact(raw) {
+  let text = raw;
+  let key;
+  const km = /(?:^|\s)#([\p{L}\p{N}_-]{2,40})/u.exec(text);
+  if (km) {
+    key = km[1].toLowerCase();
+    text = text.replace(km[0], " ");
+  }
+  const notes = [];
+  let unawareOf;
+  const dnk = /\b(?:DOES NOT KNOW|DOESN'?T KNOW|doesn't know yet|not yet known)\b\s*:?\s*/i.exec(text);
+  if (dnk) {
+    unawareOf = text.slice(dnk.index + dnk[0].length).split(/\s*[,;]\s*/).map((s) => s.replace(/[.\s]+$/, "").trim()).filter(Boolean);
+    text = text.slice(0, dnk.index);
+  }
+  text = text.replace(/\(([^()]*)\)/g, (_, x) => {
+    if (x.trim())
+      notes.push(x.trim());
+    return " ";
+  });
+  const dash = /\s[\u2014\u2013]\s|\s--\s/.exec(text);
+  if (dash) {
+    const tail = text.slice(dash.index + dash[0].length).trim();
+    if (tail)
+      notes.unshift(tail);
+    text = text.slice(0, dash.index);
+  }
+  const statement = text.replace(/\s+/g, " ").replace(/^[\s.;:,]+|[\s.;:,]+$/g, "").trim();
+  const note = notes.map((n) => n.replace(/\s+/g, " ").replace(/^[\s.;:,]+|[\s.;:,]+$/g, "")).filter(Boolean).join("; ") || undefined;
+  return { statement, key, note, unawareOf };
+}
+var slugKey = (s) => s.toLowerCase().replace(/^#/, "").replace(/[^\p{L}\p{N}_-]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+function contentWords(s) {
+  return normFact(s).split(" ").filter((w) => w && !STOP2.has(w));
+}
+function newKey(facts, statement) {
+  const base = slugKey(contentWords(statement).slice(0, 3).join("-")) || "fact";
+  let k = base;
+  for (let i = 2;facts[k]; i++)
+    k = `${base}-${i}`;
+  return k;
+}
+function findFact(facts, statement) {
+  const n = normFact(statement);
+  if (contentWords(n).length < 2)
+    return;
+  let best;
+  for (const f of Object.values(facts)) {
+    const s = Math.max(overlap(n, normFact(f.statement)), ...f.aliases.map((a) => overlap(n, a)));
+    if (s >= 0.6 && (!best || s > best.s))
+      best = { key: f.key, s };
+  }
+  return best?.key;
+}
+var EVIDENCE = /\b(confirm|because|silence|observ|deduc|guess|noticed|said it|told (him|her|them)|didn't correct|from her|from his|from their|this beat)/i;
+function cleaner(a, b) {
+  const wa = contentWords(a).length;
+  const wb = contentWords(b).length;
+  if (wa < 2)
+    return false;
+  const ea = EVIDENCE.test(a);
+  const eb = EVIDENCE.test(b);
+  if (ea !== eb)
+    return !ea;
+  return wa < wb;
+}
+var HOW = [
+  [/deduc|infer|worked (it )?out|figured|pieced|reason|put (it )?together/i, "deduced it"],
+  [/overheard|eavesdrop/i, "overheard it"],
+  [/was there when it was said/i, "was there when it was said"],
+  [/\bread\b|letter|\bnote\b|diary|journal|document/i, "read it"],
+  [/confirm/i, "confirmed it"],
+  [/\btold\b|\bsaid\b|confess|admit|reveal|explain|announc/i, "was told"],
+  [/\bsaw\b|watch|witness|observ|noticed|direct observation|seen/i, "saw it"],
+  [/guess|hunch|intuit|sens|felt|instinct/i, "sensed it"],
+  [/lived|experienc|remember|always knew|own secret|was there/i, "lived it"]
+];
+function howVerb(status, how) {
+  if (status === "wrong")
+    return "believes otherwise";
+  if (status === "unaware")
+    return "doesn't know";
+  if (status === "doubts")
+    return "doubts it";
+  if (status === "suspects")
+    return "suspects it";
+  for (const [re, v] of HOW)
+    if (how && re.test(how))
+      return status === "believes" ? `believes it (${v.replace(/ it$/, "")})` : v;
+  return status === "believes" ? "believes it" : "learned it";
+}
+var SPOKEN = /\bsaid\b|\bsays\b|\btold\b|\btells\b|announc|reveal|confess|admit|declar|shout|explain|stated|mention|\basked\b|aloud|out loud|in front of|to everyone|to the room|\bheard\b|\bspoke\b/i;
+var PRIVATE = /whisper|private|in secret|secretly|\balone\b|aside|letter|\bnote\b|message|text(ed)?\b|thought|dream|vision|\bread\b|overheard|eavesdrop|spied|diary|journal|confided|under (her|his|their) breath/i;
+var present = (c) => (c.tier === "spot" || c.tier === "peri" || c.isUser && c.tier !== "off") && !c.dead;
+function fileKnow(st, row, args, edits = {}) {
+  const facts = st.facts ??= {};
+  const stmt = row.fact.trim();
+  let key;
+  if (args.key) {
+    const k = slugKey(args.key);
+    key = facts[k] ? k : Object.values(facts).find((f) => f.altKeys?.includes(k))?.key;
+    if (!key) {
+      const same = stmt ? findFact(facts, stmt) : undefined;
+      if (same && facts[same].autoKey && !edits[same]) {
+        const f = facts[same];
+        delete facts[same];
+        facts[k] = { ...f, key: k, autoKey: false, altKeys: [...f.altKeys ?? [], same] };
+        for (const r of st.knowledge)
+          if (r.factKey === same)
+            r.factKey = k;
+      }
+      key = k;
+    }
+  } else
+    key = stmt ? findFact(facts, stmt) : undefined;
+  let auto = false;
+  if (!key) {
+    key = newKey(facts, stmt || "fact");
+    auto = true;
+  }
+  for (let i = 0;i < 6 && edits[key]?.into; i++)
+    key = slugKey(edits[key].into);
+  let f = facts[key];
+  if (!f) {
+    f = facts[key] = { key, statement: stmt || key.replace(/-/g, " "), truth: "unknown", aliases: [], stances: {}, history: [], firstMsg: row.msgIndex, lastMsg: row.msgIndex, ...auto ? { autoKey: true } : {} };
+  }
+  const differs = !!stmt && overlap(normFact(stmt), normFact(f.statement)) < 0.6 && !f.aliases.includes(normFact(stmt));
+  const falseVersion = differs && (row.status === "wrong" || row.truth === "false");
+  if (stmt && !falseVersion) {
+    const n = normFact(stmt);
+    if (!f.aliases.includes(n))
+      f.aliases = [...f.aliases, n].slice(-12);
+    if (!f.locked && cleaner(stmt, f.statement))
+      f.statement = stmt;
+  }
+  if (row.truth !== "unknown" && !falseVersion)
+    f.truth = row.truth;
+  const version = falseVersion ? stmt : undefined;
+  const status = falseVersion && row.status !== "unaware" ? "wrong" : row.status;
+  f.stances[row.holder] = { holder: row.holder, status, how: row.source, version, msgIndex: row.msgIndex, at: row.at };
+  const note = [args.note, args.unawareOf?.length ? `still doesn't know: ${args.unawareOf.join(", ")}` : ""].filter(Boolean).join("; ") || undefined;
+  f.history.push({ holder: row.holder, status, how: row.source, version, note, msgIndex: row.msgIndex, at: row.at });
+  f.lastMsg = Math.max(f.lastMsg, row.msgIndex);
+  if (status === "knows" && row.source && SPOKEN.test(row.source) && !PRIVATE.test(row.source)) {
+    for (const c of Object.values(st.chars)) {
+      if (c.id === row.holder || !present(c) || f.stances[c.id])
+        continue;
+      f.stances[c.id] = { holder: c.id, status: "knows", how: "was there when it was said", derived: true, msgIndex: row.msgIndex, at: row.at };
+      f.history.push({ holder: c.id, status: "knows", how: "was there when it was said", derived: true, msgIndex: row.msgIndex, at: row.at });
+    }
+  }
+  const e = edits[key];
+  if (e?.statement) {
+    f.statement = e.statement;
+    f.locked = true;
+  }
+  if (e?.truth)
+    f.truth = e.truth;
+  if (e?.hidden)
+    f.hidden = true;
+  return key;
+}
+function factsInPlay(st, query, limit = 4) {
+  const q = normFact(query);
+  const here = new Set(Object.values(st.chars).filter(present).map((c) => c.id));
+  here.add("user");
+  return Object.values(st.facts ?? {}).filter((f) => !f.hidden).map((f) => {
+    const talk = Math.max(overlap(q, normFact(f.statement)), ...f.aliases.map((a) => overlap(q, a)));
+    const recent = st.msgCount - f.lastMsg <= 8 && Object.keys(f.stances).some((h) => here.has(h));
+    return { f, score: (talk >= 0.34 ? 2 + talk : 0) + (recent ? 1 + f.lastMsg / Math.max(1, st.msgCount) : 0) };
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.f);
+}
+function unawareOf(st, f, window = 20) {
+  return Object.values(st.chars).filter((c) => !c.dead && !f.stances[c.id] && (present(c) || c.isUser || st.msgCount - c.lastSeen <= window)).map((c) => c.id);
+}
+var storyStamp = (at) => at ? `Day ${at.day} ${String(Math.floor(at.minute / 60)).padStart(2, "0")}:${String(at.minute % 60).padStart(2, "0")}` : "";
+
 // src/core/dsl.ts
 var OP_ALIASES = {
   clock: "clock",
@@ -902,7 +2211,10 @@ var PARSERS = {
     }
     if (status === "wrong" && truth === "unknown")
       truth = "false";
-    p.args = { fact: fact.trim(), status, truth, source };
+    const f = splitFact(fact);
+    if (!f.statement && !f.key)
+      return null;
+    p.args = { fact: f.statement, key: f.key, note: f.note, unawareOf: f.unawareOf, status, truth, source };
     p.cause = source;
     return p;
   },
@@ -1318,1118 +2630,7 @@ function parseMessage(text) {
 }
 
 // src/core/version.ts
-var VERSION = "1.4.2";
-
-// src/core/types.ts
-var BIPOLAR_AXES = ["trust", "affection", "respect", "comfort"];
-var DEFAULT_SETTINGS = {
-  enabled: "auto",
-  strictness: "strict",
-  autoRepair: true,
-  formatAid: false,
-  rawTail: 20,
-  rawTailTokens: 12000,
-  chapterThresholdTokens: 6000,
-  fanIn: 4,
-  hideCovered: true,
-  chronicle: true,
-  summarizerConnection: "",
-  summaryDetail: "detailed",
-  summaryFocus: "",
-  recallBudget: 2400,
-  recallPlacement: "before_history",
-  controller: "off",
-  controllerConnection: "",
-  semanticSource: "mirror",
-  keyHeat: true,
-  maxKeys: 12,
-  stopList: [],
-  loreDefaultMode: "assisted",
-  lorePermission: "read",
-  climate: "",
-  latitude: "temperate",
-  calendar: "",
-  simStep: 120,
-  simulator: false,
-  simConnection: "",
-  socialTicks: true,
-  rumors: true,
-  sidecar: false,
-  sidecarConnection: "",
-  sidecarTimeout: 20,
-  mirror: "summaries",
-  mirrorVectorize: false,
-  hud: true,
-  theme: "preset",
-  skinMode: "auto",
-  fonts: true,
-  narratorOnlyToTools: false,
-  telemetry: true,
-  pressures: true,
-  chekhov: true,
-  debug: false
-};
-var DEFAULT_CHAT_CONFIG = {
-  sessionZeroDone: false,
-  genres: [],
-  colors: {}
-};
-
-// src/core/state.ts
-function bareName(name) {
-  return name.replace(/\|[^|]*$/, "").replace(/#\d+\s*$/, "").replace(/^["\u201C'\u2018]|["\u201D'\u2019]$/g, "").replace(/['\u2019]s$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
-}
-function editDistance(a, b, max) {
-  if (Math.abs(a.length - b.length) > max)
-    return max + 1;
-  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-  for (let j = 1;j <= b.length; j++)
-    d[0][j] = j;
-  for (let i = 1;i <= a.length; i++) {
-    let rowMin = Infinity;
-    for (let j = 1;j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
-        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-      rowMin = Math.min(rowMin, d[i][j]);
-    }
-    if (rowMin > max)
-      return max + 1;
-  }
-  return d[a.length][b.length];
-}
-function isTypoOf(n, known) {
-  if (!n || !known || n === known || n.includes(" ") || known.includes(" "))
-    return false;
-  if (n[0] !== known[0] || Math.abs(n.length - known.length) > 1)
-    return false;
-  const long = Math.max(n.length, known.length);
-  if (Math.min(n.length, known.length) < 5 || long < 6)
-    return false;
-  if (n.startsWith(known) || known.startsWith(n))
-    return false;
-  const max = long >= 7 ? 2 : 1;
-  return editDistance(n, known, max) <= max;
-}
-var CONFIDENCE = {
-  user: 1,
-  model: 0.9,
-  lore: 0.85,
-  archivist: 0.8,
-  repair: 0.75,
-  engine: 0.95,
-  sim: 0.7,
-  extractor: 0.6
-};
-var PIVOTAL = /betray|rescu|saved|save[sd]? (her|his|their|my) life|kill|murder|unforgiv|sacrific|confess|abandon|attack|lied about|revealed|died|death|oath|marri|propos/i;
-function emptyState() {
-  return {
-    time: null,
-    weather: null,
-    season: null,
-    place: [],
-    mode: "social",
-    title: undefined,
-    sceneNo: 0,
-    sceneLog: [],
-    sceneStartMsg: 0,
-    sceneStartAbs: null,
-    chars: {},
-    bonds: {},
-    ladders: {},
-    knowledge: [],
-    items: {},
-    threads: {},
-    cons: {},
-    factions: {},
-    rumors: [],
-    rep: {},
-    canon: [],
-    artifacts: {},
-    keys: {},
-    gauges: {},
-    clues: [],
-    plants: [],
-    deadlines: {},
-    milestones: [],
-    places: {},
-    voices: {},
-    nextSlot: 1,
-    lastDelta: null,
-    genreHits: {},
-    msgCount: 0,
-    ledgerCount: 0,
-    unverified: []
-  };
-}
-
-class Folder {
-  state;
-  opts;
-  userKeys;
-  userFirst;
-  constructor(opts, state) {
-    this.opts = opts;
-    this.state = state ?? emptyState();
-    const merged = Object.entries(opts.merges ?? {}).filter(([, to]) => to === "user").map(([from]) => from);
-    this.userKeys = new Set([opts.userName, ...opts.userAliases ?? [], ...merged, "{{user}}", "user", "you", "player"].filter(Boolean).map((s) => s.toLowerCase().trim()));
-    this.userFirst = [opts.userName, ...opts.userAliases ?? []].map((s) => (s ?? "").toLowerCase().trim().split(/\s+/)[0]).filter((f) => f && f.length >= 3 && !["the", "mr", "mrs", "ms", "dr", "sir", "lady", "lord"].includes(f.replace(/\.$/, "")));
-    if (!this.state.time && opts.startTime)
-      this.state.time = { ...opts.startTime };
-  }
-  isUser(name) {
-    if (/#0\s*(?:\|[^|]*)?$/.test(name.trim()))
-      return true;
-    const n = bareName(name);
-    if (!n)
-      return false;
-    if (this.userKeys.has(n) || this.userKeys.has(name.toLowerCase().trim()))
-      return true;
-    if (this.state.chars.user?.aliases.some((a) => a.toLowerCase() === n))
-      return true;
-    if (n.includes(" "))
-      return false;
-    if (this.npcNamed(n))
-      return false;
-    const full = (this.opts.userName ?? "").toLowerCase().trim();
-    if (this.userFirst.includes(n))
-      return true;
-    return [...this.userFirst, full].some((k) => isTypoOf(n, k));
-  }
-  npcNamed(low) {
-    return Object.values(this.state.chars).some((c) => !c.isUser && (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low)));
-  }
-  charId(name, msgIndex, create = true) {
-    let n = name.replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").trim();
-    if (!n)
-      return null;
-    const mergedTo = this.opts.merges?.[n.toLowerCase()];
-    if (mergedTo && mergedTo !== "user")
-      n = mergedTo;
-    if (this.isUser(name) || this.isUser(n)) {
-      this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
-      return "user";
-    }
-    const low = n.toLowerCase();
-    for (const c of Object.values(this.state.chars)) {
-      if (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low))
-        return c.id;
-    }
-    const first = low.split(/\s+/)[0];
-    const byFirst = Object.values(this.state.chars).filter((c) => c.name.toLowerCase().split(/\s+/)[0] === first);
-    if (byFirst.length === 1 && first.length > 2) {
-      const c = byFirst[0];
-      if (n.length > c.name.length) {
-        c.aliases.push(c.name);
-        c.name = n;
-      } else if (!c.aliases.includes(n))
-        c.aliases.push(n);
-      return c.id;
-    }
-    const typo = Object.values(this.state.chars).filter((c) => !c.isUser && [c.name, ...c.aliases].some((a) => isTypoOf(low, a.toLowerCase())));
-    if (typo.length === 1) {
-      if (!typo[0].aliases.includes(n))
-        typo[0].aliases.push(n);
-      return typo[0].id;
-    }
-    if (!create)
-      return null;
-    let id = slug(n);
-    if (id === "user")
-      id = "user_npc";
-    while (this.state.chars[id] && this.state.chars[id].name.toLowerCase() !== low)
-      id += "_";
-    this.ensureChar(id, n, msgIndex, false);
-    return id;
-  }
-  ensureChar(id, name, msgIndex, isUser) {
-    let c = this.state.chars[id];
-    if (!c) {
-      c = {
-        id,
-        name,
-        aliases: [],
-        slot: isUser ? 0 : this.assignSlot(id),
-        isUser,
-        firstSeen: msgIndex,
-        lastSeen: msgIndex,
-        meters: {},
-        flags: [],
-        injuries: [],
-        journal: []
-      };
-      this.state.chars[id] = c;
-      if (!isUser)
-        this.milestone(msgIndex, "meet", `${name} enters the story`);
-    }
-    c.lastSeen = Math.max(c.lastSeen, msgIndex);
-    return c;
-  }
-  assignSlot(id) {
-    if (this.state.voices[id] != null)
-      return this.state.voices[id];
-    const used = new Set(Object.values(this.state.voices));
-    let slot = this.state.nextSlot;
-    for (let i = 0;i < 12 && used.has(slot); i++)
-      slot = slot % 12 + 1;
-    this.state.voices[id] = slot;
-    this.state.nextSlot = slot % 12 + 1;
-    return slot;
-  }
-  adoptSpeakers(speakers, msgIndex) {
-    for (const s of speakers) {
-      if (s.slot === 0) {
-        const nm = s.name.replace(/#\d+$/, "").trim();
-        const low = bareName(nm);
-        if (low && !this.npcNamed(low) && !this.isUser(nm)) {
-          const u = this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
-          if (!u.aliases.some((a) => a.toLowerCase() === low))
-            u.aliases.push(nm);
-        }
-        continue;
-      }
-      if (this.isUser(s.name))
-        continue;
-      const existing = this.charId(s.name, msgIndex, false);
-      if (existing)
-        continue;
-      const id = this.charId(s.name, msgIndex, true);
-      if (s.slot && s.slot >= 1 && s.slot <= 12) {
-        this.state.voices[id] = s.slot;
-        this.state.chars[id].slot = s.slot;
-      }
-    }
-  }
-  milestone(msgIndex, kind, text) {
-    this.state.milestones.push({ at: this.state.time ? { ...this.state.time } : null, msgIndex, kind, text });
-    if (this.state.milestones.length > 400)
-      this.state.milestones.splice(0, this.state.milestones.length - 400);
-  }
-  applyMessage(msgIndex, msgId, swipe, parsed, source = "model", extra = [], extraSource = "user") {
-    const st = this.state;
-    st.msgCount = Math.max(st.msgCount, msgIndex + 1);
-    const startAbs = st.time ? absMinutes(st.time) : null;
-    const events = [];
-    const delta = { msgIndex, msgId, count: 0, elapsed: 0, lines: [], rejected: [] };
-    const hadPlace = st.place.join(" \u203A ");
-    const hadMode = st.mode;
-    const hadTitle = st.title;
-    if (parsed.speakers?.length)
-      this.adoptSpeakers(parsed.speakers, msgIndex);
-    const ops = [...parsed.ops];
-    if (parsed.header)
-      this.applyHeader(parsed, ops, msgIndex);
-    if (parsed.title)
-      st.title = parsed.title;
-    if (parsed.ops.length)
-      st.ledgerCount++;
-    const castOp = ops.some((o) => o.op === "cast");
-    let seq = 0;
-    const run = (op, src) => {
-      const ev = {
-        id: `${msgId}:${swipe}:${seq}`,
-        msgId,
-        swipe,
-        msgIndex,
-        seq: seq++,
-        source: src,
-        op,
-        confidence: CONFIDENCE[src],
-        verdict: "accepted"
-      };
-      try {
-        const res = this.applyOp(op, msgIndex, src, castOp);
-        if (res && res.verdict !== "accepted") {
-          ev.verdict = res.verdict;
-          ev.reason = res.reason;
-        }
-        if (res?.line && ev.verdict !== "rejected")
-          delta.lines.push(res.line);
-      } catch (e) {
-        ev.verdict = "rejected";
-        ev.reason = `error: ${e.message}`;
-      }
-      if (ev.verdict === "rejected")
-        delta.rejected.push({ raw: op.raw, reason: ev.reason ?? "rejected" });
-      else
-        delta.count++;
-      ev.at = st.time ? { ...st.time } : null;
-      events.push(ev);
-    };
-    for (const op of ops)
-      run(op, source);
-    for (const op of extra)
-      run(op, extraSource);
-    for (const t of parsed.thoughts ?? []) {
-      const id = this.charId(t.who, msgIndex);
-      if (id && id !== "user")
-        this.state.chars[id].lastSeen = msgIndex;
-    }
-    for (const v of parsed.vtks ?? []) {
-      const aid = `doc:${slug(v.title || v.kind)}`;
-      const existing = st.artifacts[aid];
-      st.artifacts[aid] = {
-        id: aid,
-        title: v.title || v.kind,
-        kind: v.kind,
-        text: v.body,
-        meta: v.meta,
-        holder: existing?.holder,
-        keys: existing?.keys ?? [],
-        msgIndex
-      };
-    }
-    const endAbs = st.time ? absMinutes(st.time) : null;
-    delta.elapsed = startAbs != null && endAbs != null ? endAbs - startAbs : 0;
-    const newPlace = st.place.join(" \u203A ");
-    const boundary = hadPlace && newPlace && hadPlace !== newPlace || delta.elapsed >= 60 || parsed.title && parsed.title !== hadTitle && st.sceneStartMsg !== msgIndex || st.mode === "downtime" && hadMode !== "downtime";
-    if (boundary || st.sceneNo === 0) {
-      st.sceneNo++;
-      st.sceneStartMsg = msgIndex;
-      st.sceneStartAbs = endAbs;
-      st.sceneLog.push({ no: st.sceneNo, startMsg: msgIndex, startAbs: endAbs, place: newPlace, title: parsed.title ?? undefined });
-      if (st.sceneLog.length > 2000)
-        st.sceneLog.splice(0, st.sceneLog.length - 2000);
-    } else if (parsed.title && st.sceneLog.length)
-      st.sceneLog[st.sceneLog.length - 1].title ??= parsed.title;
-    if (source !== "model" && parsed.ops.length)
-      st.unverified.push(msgIndex);
-    st.lastDelta = delta;
-    return events;
-  }
-  applyHeader(parsed, ops, _msgIndex) {
-    const h = parsed.header;
-    const has = (o) => ops.some((x) => x.op === o);
-    if (!has("clock") && h.time != null) {
-      ops.unshift({ op: "clock", args: { kind: "abs", day: h.day, minute: h.time, fromHeader: true }, raw: "(header) time" });
-    }
-    if (!has("wx") && h.condition) {
-      ops.push({ op: "wx", args: { condition: h.condition, intensity: h.intensity, tempC: h.tempC, wind: h.wind, glyph: h.glyph, fromHeader: true }, raw: "(header) weather" });
-    } else if (h.glyph) {
-      const wx = ops.find((x) => x.op === "wx");
-      if (wx)
-        wx.args.glyph = h.glyph;
-    }
-    if (!has("at") && h.place?.length) {
-      ops.push({ op: "at", args: { path: h.place, fromHeader: true }, raw: "(header) place" });
-    }
-  }
-  applyOp(op, mi, src, castOp) {
-    const st = this.state;
-    const strict = this.opts.strictness === "strict" && src !== "user";
-    const a = op.args;
-    const reject = (reason) => ({ verdict: "rejected", reason });
-    const innerOps = new Set(["mood", "journal", "status"]);
-    if (innerOps.has(op.op) && op.subject && this.isUser(op.subject) && this.opts.sealed && !this.opts.personaThoughts && src !== "user") {
-      return reject("the player's inner state belongs to the player (sealed persona)");
-    }
-    switch (op.op) {
-      case "clock": {
-        const cur = st.time;
-        if (a.kind === "rel") {
-          if (a.minutes < 0)
-            return reject("time cannot run backwards");
-          if (!cur) {
-            st.time = { day: 1, minute: 8 * 60 };
-            return { verdict: "warned", reason: "no start time yet; assumed Day 1 08:00", line: `clock ${fmtSpan(a.minutes)}` };
-          }
-          const next = addMinutes(cur, a.minutes);
-          this.drift(absMinutes(cur), absMinutes(next));
-          st.time = next;
-          return { verdict: "accepted", line: `\uD83D\uDD70 +${fmtSpan(a.minutes)}` };
-        }
-        if (!cur) {
-          st.time = { day: a.day ?? 1, minute: a.minute };
-          return { verdict: "accepted", line: `\uD83D\uDD70 Day ${st.time.day} ${fmtClock(a.minute)}` };
-        }
-        let day = a.day ?? cur.day;
-        if (a.day == null && a.minute < cur.minute)
-          day = cur.day + 1;
-        const target = { day, minute: a.minute };
-        const diff = absMinutes(target) - absMinutes(cur);
-        if (diff < 0) {
-          if (a.fromHeader)
-            return { verdict: "warned", reason: "header time is behind the verified clock; kept the clock" };
-          return reject(`time cannot run backwards (${fmtClock(a.minute)} Day ${day} is before the current clock)`);
-        }
-        if (diff > 0)
-          this.drift(absMinutes(cur), absMinutes(target));
-        st.time = target;
-        return diff > 18 * 60 && a.day == null ? { verdict: "warned", reason: "large implicit jump; assumed the next day", line: `\uD83D\uDD70 \u2192 Day ${day} ${fmtClock(a.minute)}` } : { verdict: "accepted", line: diff ? `\uD83D\uDD70 +${fmtSpan(diff)}` : undefined };
-      }
-      case "wx": {
-        const prev = st.weather?.condition;
-        st.weather = {
-          condition: a.condition,
-          intensity: a.intensity,
-          tempC: a.tempC ?? st.weather?.tempC,
-          wind: a.wind ?? st.weather?.wind,
-          glyph: a.glyph ?? st.weather?.glyph,
-          setAt: st.time ? { ...st.time } : null,
-          source: a.fromHeader ? "header" : "model"
-        };
-        if (prev === a.condition)
-          return { verdict: "accepted" };
-        return { verdict: "accepted", line: `\uD83C\uDF26 ${prev ? prev + " \u2192 " : ""}${a.condition}` };
-      }
-      case "at": {
-        const path = a.path;
-        const prev = st.place.join(" \u203A ");
-        let full = path;
-        if (path.length === 1 && st.place.length && !st.places[slug(path[0])]) {
-          const idx = st.place.findIndex((p) => p.toLowerCase() === path[0].toLowerCase());
-          full = idx >= 0 ? st.place.slice(0, idx + 1) : st.place.length > 1 ? [...st.place.slice(0, -1), path[0]] : path;
-        } else if (path.length < st.place.length && path.length > 1) {
-          const root = st.place.findIndex((p) => p.toLowerCase() === path[0].toLowerCase());
-          if (root > 0)
-            full = [...st.place.slice(0, root), ...path];
-        }
-        st.place = full;
-        for (let i = 0;i < full.length; i++) {
-          const pid = `loc:${slug(full[i])}`;
-          const pl = st.places[pid] ?? { id: pid, name: full[i], path: full.slice(0, i + 1), visits: 0, lastMsg: mi };
-          if (i === full.length - 1 && prev !== full.join(" \u203A "))
-            pl.visits++;
-          pl.lastMsg = mi;
-          st.places[pid] = pl;
-        }
-        const now = full.join(" \u203A ");
-        if (prev === now)
-          return { verdict: "accepted" };
-        if (prev && !castOp) {
-          for (const c of Object.values(st.chars))
-            if (c.tier === "spot" || c.tier === "peri")
-              c.place = full[full.length - 1];
-        }
-        return { verdict: "accepted", line: `\uD83D\uDCCD ${now}` };
-      }
-      case "cast": {
-        const lines = [];
-        const listed = new Set;
-        const here = st.place[st.place.length - 1];
-        for (const e of a.entries) {
-          const id = this.charId(e.name, mi);
-          if (!id)
-            continue;
-          listed.add(id);
-          const c = st.chars[id];
-          if (c.dead && e.tier !== "left" && e.tier !== "dead") {
-            if (strict)
-              return reject(`${c.name} is dead and cannot appear`);
-          }
-          const before = c.tier;
-          if (e.tier === "left") {
-            c.tier = "off";
-            c.place = e.activity?.replace(/^\u2192\s*/, "").trim() || undefined;
-            c.activity = undefined;
-            lines.push(`${c.name} leaves`);
-          } else if (e.tier === "dead") {
-            c.dead = true;
-            c.tier = "off";
-            this.milestone(mi, "death", `${c.name} dies`);
-            lines.push(`${c.name} dies`);
-          } else if (e.tier === "off") {
-            c.tier = "off";
-          } else {
-            c.tier = e.tier === "arrive" ? "peri" : e.tier;
-            c.place = here;
-            if (e.activity)
-              c.activity = e.activity.replace(/^\u2190\s*/, "");
-            if (before !== "spot" && before !== "peri")
-              lines.push(`${c.name} ${e.tier === "arrive" ? "arrives" : "is here"}`);
-          }
-          c.lastSeen = mi;
-        }
-        return { verdict: "accepted", line: lines.length ? `\uD83D\uDC65 ${lines.join(" \xB7 ")}` : undefined };
-      }
-      case "mood": {
-        const id = this.charId(op.subject, mi);
-        const c = st.chars[id];
-        if (c.dead)
-          return reject(`${c.name} is dead`);
-        const prev = c.mood?.name;
-        c.mood = { name: a.name, v: a.v ?? c.mood?.v, a: a.a ?? c.mood?.a, d: a.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null };
-        return { verdict: "accepted", line: `\uD83C\uDFAD ${c.name}: ${prev ? prev + " \u2192 " : ""}${a.name}` };
-      }
-      case "body": {
-        const id = this.charId(op.subject, mi);
-        const c = st.chars[id];
-        const bits = [];
-        for (const [k, v] of Object.entries(a.meters)) {
-          const before = c.meters[k] ?? 0;
-          c.meters[k] = clamp(v.rel ? before + v.v : v.v, 0, 5);
-          bits.push(`${k} ${c.meters[k]}`);
-        }
-        for (const f of a.flags) {
-          if (f === "dead") {
-            c.dead = true;
-            this.milestone(mi, "death", `${c.name} dies`);
-            bits.push("dead");
-            continue;
-          }
-          if (/^(asleep|sleeping)$/.test(f))
-            c.flags = c.flags.filter((x) => x !== "awake");
-          if (/^(awake|woke)$/.test(f))
-            c.flags = c.flags.filter((x) => !/asleep|sleeping/.test(x));
-          if (!c.flags.includes(f))
-            c.flags.push(f);
-          bits.push(f);
-        }
-        for (const f of a.unflags)
-          c.flags = c.flags.filter((x) => x !== f && !x.startsWith(f));
-        for (const inj of a.injuries) {
-          const ex = c.injuries.find((i) => i.where.toLowerCase() === inj.where.toLowerCase());
-          if (ex)
-            Object.assign(ex, inj, { since: ex.since });
-          else
-            c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null });
-          bits.push(`injury: ${inj.where}`);
-          if (inj.severity >= 3)
-            this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
-        }
-        for (const h of a.heals)
-          c.injuries = c.injuries.filter((i) => !i.where.toLowerCase().includes(h.toLowerCase()));
-        if (c.flags.length > 12)
-          c.flags = c.flags.slice(-12);
-        return { verdict: "accepted", line: bits.length ? `\uD83E\uDE79 ${c.name}: ${bits.join(", ")}` : undefined };
-      }
-      case "look": {
-        const id = this.charId(op.subject, mi);
-        st.chars[id].look = a.text;
-        return { verdict: "accepted", line: `\uD83D\uDC57 ${st.chars[id].name}: ${a.text}` };
-      }
-      case "status": {
-        const id = this.charId(op.subject, mi);
-        st.chars[id].status = a.text;
-        return { verdict: "accepted" };
-      }
-      case "bond": {
-        const from = this.charId(op.subject, mi);
-        const to = this.charId(op.object, mi);
-        if (from === to)
-          return reject("a bond needs two different people");
-        if (from === "user" && this.opts.sealed && src !== "user")
-          return reject("the player's feelings belong to the player (sealed persona)");
-        if (st.chars[from]?.dead)
-          return reject(`${st.chars[from].name} is dead`);
-        const key = `${from}>${to}`;
-        const b = st.bonds[key] ?? { from, to, axes: {}, tags: [], history: [] };
-        st.bonds[key] = b;
-        if (a.label)
-          b.label = a.label;
-        if (a.tags)
-          b.tags = [...new Set([...b.tags, ...a.tags])];
-        if (!a.changes?.length)
-          return { verdict: "accepted", line: a.label ? `\uD83D\uDD78 ${this.nm(from)} \u2192 ${this.nm(to)}: \u201C${a.label}\u201D` : undefined };
-        if (strict && !op.cause)
-          return reject("bond change without a cause");
-        const lines = [];
-        let warned;
-        for (const ch of a.changes) {
-          let d = ch.delta;
-          if (Math.abs(d) >= 4 && !PIVOTAL.test(op.cause ?? "")) {
-            d = Math.sign(d) * 2;
-            warned = `a shift of ${ch.delta} needs a pivotal cause; clamped to ${d > 0 ? "+" : ""}${d}`;
-          }
-          const lo = BIPOLAR_AXES.includes(ch.axis) ? -5 : 0;
-          const before = b.axes[ch.axis] ?? 0;
-          const after = clamp(before + d, lo, 5);
-          b.axes[ch.axis] = after;
-          b.history.push({ axis: ch.axis, delta: after - before, from: before, to: after, cause: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
-          lines.push(`${ch.axis} ${d > 0 ? "+" : ""}${d}`);
-          if (Math.abs(d) >= 2)
-            this.milestone(mi, "bond", `${this.nm(from)} \u2192 ${this.nm(to)}: ${ch.axis} ${d > 0 ? "+" : ""}${d}${op.cause ? ` (${op.cause})` : ""}`);
-        }
-        if (b.history.length > 60)
-          b.history = b.history.slice(-60);
-        const line = `\uD83D\uDD78 ${this.nm(from)} \u2192 ${this.nm(to)}: ${lines.join(", ")}`;
-        return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
-      }
-      case "ladder": {
-        const from = this.charId(op.subject, mi);
-        const to = this.charId(op.object, mi);
-        if (from === "user" && this.opts.sealed && src !== "user")
-          return reject("the player's side of a ladder moves only by the player's words");
-        const key = `${from}>${to}`;
-        const cur = st.ladders[key]?.tier ?? (this.opts.romance === "established" ? 7 : 0);
-        let tier = clamp(a.rel ? cur + a.tier : a.tier, 0, 7);
-        const maxStep = this.opts.romance === "fast" ? 2 : 1;
-        let warned;
-        if (tier < cur && src !== "user") {
-          const why = op.cause ?? "";
-          if (!LADDER_FALL.test(why)) {
-            if (!a.rel && a.tier > 0 && LADDER_WARM.test(why)) {
-              warned = `"tier ${a.tier}" after a warm beat read as a step up (+${a.tier}), not a fall from ${LADDER_NAMES[cur]}`;
-              tier = clamp(cur + a.tier, 0, 7);
-            } else {
-              return reject(`a fall from ${LADDER_NAMES[cur]} to ${LADDER_NAMES[tier]} needs a cause (betrayal, a lie, neglect, cruelty); write the rung it reaches, or +1`);
-            }
-          } else if (cur - tier > 1 && !LADDER_FALL_HARD.test(why)) {
-            warned = `fell ${cur - tier} rungs at once; only betrayal or the unforgivable drops more than one`;
-            tier = cur - 1;
-          }
-        }
-        if (this.opts.romance === "off" && tier > cur)
-          return reject("romance pace is off");
-        if (tier - cur > maxStep && src !== "user") {
-          const skipped = tier - cur;
-          warned = `${warned ? `${warned}; ` : ""}skipped ${skipped} rungs at once; the pace allows ${maxStep}`;
-          tier = cur + maxStep;
-          if (strict && this.opts.romance !== "measured")
-            warned += " (clamped)";
-        }
-        const changed = !st.ladders[key] || st.ladders[key].tier !== tier;
-        const l = st.ladders[key] ?? { from, to, tier: cur, at: null, msgIndex: mi, history: [] };
-        l.tier = tier;
-        l.evidence = op.cause;
-        l.at = st.time ? { ...st.time } : null;
-        l.msgIndex = mi;
-        l.history.push({ tier, evidence: op.cause, msgIndex: mi });
-        st.ladders[key] = l;
-        st.genreHits.romance = mi;
-        if (changed)
-          this.milestone(mi, "ladder", `${this.nm(from)} \u2192 ${this.nm(to)}: ${LADDER_NAMES[tier]}`);
-        const line = changed ? `\u2661 ${this.nm(from)} \u2192 ${this.nm(to)}: ${LADDER_NAMES[tier]}` : undefined;
-        return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
-      }
-      case "know": {
-        const holder = this.charId(op.subject, mi);
-        const row = {
-          id: `k${mi}_${st.knowledge.length}`,
-          holder,
-          fact: a.fact,
-          status: a.status,
-          source: a.source,
-          truth: a.truth,
-          at: st.time ? { ...st.time } : null,
-          msgIndex: mi
-        };
-        const norm = normFact(a.fact);
-        for (const old of st.knowledge) {
-          if (old.holder === holder && !old.supersededBy && (normFact(old.fact) === norm || overlap(normFact(old.fact), norm) > 0.7))
-            old.supersededBy = row.id;
-        }
-        st.knowledge.push(row);
-        const line = `\uD83E\uDDE0 ${this.nm(holder)} ${a.status}: ${a.fact}${a.truth === "false" ? " (false)" : ""}`;
-        if (strict && !a.source)
-          return { verdict: "warned", reason: "knowledge without a source", line };
-        return { verdict: "accepted", line };
-      }
-      case "item": {
-        const iid = `item:${slug(op.subject)}`;
-        const it = st.items[iid] ?? { id: iid, name: op.subject, custody: [] };
-        st.items[iid] = it;
-        if (a.condition) {
-          it.condition = a.condition;
-          return { verdict: "accepted", line: `\uD83C\uDF92 ${it.name}: ${a.condition}` };
-        }
-        const toRaw = a.to;
-        const fromId = a.from ? this.holderId(a.from, mi) : it.holder;
-        if (a.from && it.holder && fromId !== it.holder && !it.gone) {
-          if (strict)
-            return reject(`${this.nm(fromId)} does not hold ${it.name} (${this.nm(it.holder)} does)`);
-        }
-        if (fromId && fromId !== "user" && st.chars[fromId]?.dead && strict)
-          return reject(`${this.nm(fromId)} is dead`);
-        if (strict && a.from && !op.cause)
-          return reject("item transfer without a cause");
-        if (toRaw === "gone") {
-          it.gone = true;
-          it.custody.push({ from: it.holder, to: "gone", how: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
-          it.holder = "gone";
-          this.milestone(mi, "item", `${it.name} is gone${op.cause ? ` (${op.cause})` : ""}`);
-          return { verdict: "accepted", line: `\uD83C\uDF92 ${it.name} \u2192 gone` };
-        }
-        const to = toRaw ? this.parseHolder(toRaw, mi) : {};
-        if (to.same) {
-          if (to.where)
-            it.where = to.where;
-          if (a.quantity != null)
-            it.quantity = a.quantity;
-          return { verdict: "accepted", line: `\uD83C\uDF92 ${it.name}: ${this.nm(it.holder)}${it.where ? ` (${it.where})` : ""}` };
-        }
-        const toId = to.id;
-        if (toId !== it.holder || to.where !== it.where) {
-          it.custody.push({ from: it.holder, to: toId, how: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
-          if (it.custody.length > 20)
-            it.custody = it.custody.slice(-20);
-        }
-        it.holder = toId;
-        it.where = to.where;
-        it.gone = false;
-        if (a.quantity != null)
-          it.quantity = a.quantity;
-        return { verdict: "accepted", line: `\uD83C\uDF92 ${it.name}: ${a.from ? this.nm(fromId) + " \u2192 " : ""}${this.nm(toId)}${to.where ? ` (${to.where})` : ""}` };
-      }
-      case "thread": {
-        const tid = `thread:${slug(op.subject)}`;
-        const t = st.threads[tid] ?? { id: tid, title: op.subject, status: "open", stalls: 0, history: [], lastMsg: mi };
-        const isNew = !st.threads[tid];
-        st.threads[tid] = t;
-        const tOp = a.op;
-        t.history.push({ op: tOp, detail: a.detail, at: st.time ? { ...st.time } : null, msgIndex: mi });
-        if (t.history.length > 12)
-          t.history = t.history.slice(-12);
-        t.lastMsg = mi;
-        if (a.detail)
-          t.latest = a.detail;
-        let warned;
-        if (tOp === "stall") {
-          if (!a.blocker && strict)
-            warned = "a stalled thread must name its blocker";
-          t.status = "stalled";
-          t.blocker = a.blocker;
-          t.stalls++;
-        } else if (tOp === "resolve") {
-          t.status = "resolved";
-          this.milestone(mi, "thread", `Resolved: ${t.title}`);
-        } else {
-          t.status = "open";
-          t.stalls = 0;
-          t.blocker = undefined;
-          if (isNew || tOp === "new")
-            this.milestone(mi, "thread", `New thread: ${t.title}`);
-        }
-        const line = `\uD83E\uDDF5 ${t.title}: ${tOp}${a.detail ? ` \u2014 ${a.detail}` : ""}`;
-        if (!warned && strict && !a.detail && tOp !== "new" && tOp !== "resolve")
-          warned = "thread change without a detail";
-        return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
-      }
-      case "owe":
-      case "cons": {
-        const who = this.partyId(op.subject, mi);
-        const whom = op.object ? this.partyId(op.object, mi) : undefined;
-        const cid = `cons:${slug(`${who}_${whom ?? ""}_${a.what}`)}`;
-        const existing = st.cons[cid] ?? Object.values(st.cons).find((c) => c.who === who && c.whom === whom && overlap(normFact(c.what), normFact(a.what)) > 0.6);
-        const c = existing ?? { id: cid, kind: a.kind, who, whom, what: a.what, status: "open", since: st.time ? { ...st.time } : null, msgIndex: mi };
-        c.status = a.status;
-        if (a.due)
-          c.due = parseDue(a.due, st.time);
-        st.cons[c.id] = c;
-        if (!existing)
-          this.milestone(mi, "cons", `${this.nm(who)} ${a.kind === "owe" ? "owes" : "\u2192"} ${whom ? this.nm(whom) + ": " : ""}${a.what}`);
-        return { verdict: "accepted", line: `\u2696 ${this.nm(who)}${whom ? " \u2192 " + this.nm(whom) : ""}: ${a.what} (${c.status})` };
-      }
-      case "clockf": {
-        const fid = `fac:${slug(op.subject)}`;
-        const f = st.factions[fid] ?? { id: fid, name: op.subject, clocks: {} };
-        st.factions[fid] = f;
-        const pk = slug(a.project);
-        const clk = f.clocks[pk] ?? { name: a.project, cur: 0, max: a.max ?? 6, history: [] };
-        if (a.max)
-          clk.max = a.max;
-        clk.cur = clamp(a.cur != null ? a.cur : clk.cur + (a.inc ?? 1), 0, clk.max);
-        clk.history.push(clk.cur);
-        f.clocks[pk] = clk;
-        st.genreHits.intrigue = mi;
-        st.genreHits.thriller = mi;
-        if (clk.cur >= clk.max)
-          this.milestone(mi, "faction", `${f.name}: ${clk.name} complete`);
-        return { verdict: "accepted", line: `\u23F3 ${f.name}: ${clk.name} ${clk.cur}/${clk.max}` };
-      }
-      case "rumor": {
-        const text = a.text;
-        const ex = st.rumors.find((r) => overlap(normFact(r.text), normFact(text)) > 0.6);
-        if (ex) {
-          ex.hops++;
-          ex.to = a.to ?? ex.to;
-          ex.msgIndex = mi;
-        } else
-          st.rumors.push({ id: `r${mi}_${st.rumors.length}`, text, from: a.from, to: a.to, truth: a.truth, hops: 1, msgIndex: mi });
-        if (st.rumors.length > 60)
-          st.rumors.splice(0, st.rumors.length - 60);
-        return { verdict: "accepted", line: `\uD83D\uDDE3 ${text}` };
-      }
-      case "rep": {
-        const gid = slug(op.object);
-        const r = st.rep[gid] ?? { group: op.object, score: 0, tags: [], history: [] };
-        r.score = clamp(r.score + (a.delta ?? 0), -3, 3);
-        if (a.tag && !r.tags.includes(a.tag))
-          r.tags.push(a.tag);
-        r.history.push({ delta: a.delta ?? 0, deed: op.cause, msgIndex: mi });
-        st.rep[gid] = r;
-        return { verdict: "accepted", line: `\uD83C\uDFF7 ${r.group}: ${r.score > 0 ? "+" : ""}${r.score}` };
-      }
-      case "journal": {
-        const id = this.charId(op.subject, mi);
-        const c = st.chars[id];
-        c.journal.push({ text: a.text, at: st.time ? { ...st.time } : null, msgIndex: mi });
-        if (c.journal.length > 30)
-          c.journal = c.journal.slice(-30);
-        return { verdict: "accepted", line: `\uD83D\uDCD3 ${c.name}: \u201C${a.text}\u201D` };
-      }
-      case "keys": {
-        const rid = this.recordIdFor(op.subject, mi);
-        const cur = st.keys[rid] ?? [];
-        st.keys[rid] = [...new Set([...cur, ...a.keys])].slice(-16);
-        return { verdict: "accepted" };
-      }
-      case "canon": {
-        if (st.canon.some((c) => normFact(c.text) === normFact(a.text)))
-          return { verdict: "accepted" };
-        st.canon.push({ text: a.text, at: st.time ? { ...st.time } : null, msgIndex: mi });
-        return { verdict: "accepted", line: `\uD83D\uDCDC ${a.text}` };
-      }
-      case "artifact": {
-        const aid = `doc:${slug(op.subject)}`;
-        const ex = st.artifacts[aid];
-        const holder = a.holder ? this.holderId(a.holder, mi) : ex?.holder;
-        st.artifacts[aid] = { id: aid, title: op.subject, kind: a.kind ?? ex?.kind ?? "document", holder, text: ex?.text, meta: ex?.meta, keys: ex?.keys ?? [], msgIndex: ex?.msgIndex ?? mi };
-        this.milestone(mi, "artifact", `Filed: ${op.subject}`);
-        return { verdict: "accepted", line: `\uD83D\uDCC4 filed: ${op.subject}` };
-      }
-      case "mode": {
-        st.mode = a.mode;
-        return { verdict: "accepted" };
-      }
-      case "gauge": {
-        const gid = slug(op.subject);
-        const g = st.gauges[gid] ?? { name: op.subject, cur: 0, max: a.max ?? 5, history: [] };
-        if (a.max)
-          g.max = a.max;
-        g.cur = clamp(a.cur != null ? a.cur : g.cur + (a.inc ?? 0), 0, g.max);
-        g.cause = op.cause;
-        g.history.push({ v: g.cur, msgIndex: mi });
-        if (g.history.length > 30)
-          g.history = g.history.slice(-30);
-        st.gauges[gid] = g;
-        const gn = g.name.toLowerCase();
-        if (/dread|fear|terror/.test(gn))
-          st.genreHits.horror = mi;
-        if (/corrupt/.test(gn))
-          st.genreHits.dark_fantasy = mi;
-        if (/pressure|flaw/.test(gn))
-          st.genreHits.tragedy = mi;
-        if (/supplies|water|food|warmth|needs/.test(gn))
-          st.genreHits.survival = mi;
-        if (/tension|heat|charge/.test(gn))
-          st.genreHits.romance = mi;
-        return { verdict: "accepted", line: `\uD83D\uDCCA ${g.name} ${g.cur}/${g.max}` };
-      }
-      case "clue": {
-        st.clues.push({ id: `clue${mi}_${st.clues.length}`, text: a.text, pointsTo: a.pointsTo, reliability: a.reliability, msgIndex: mi });
-        st.genreHits.mystery = mi;
-        return { verdict: "accepted", line: `\uD83D\uDD0E ${a.text}${a.pointsTo ? ` \u2192 ${a.pointsTo}` : ""}` };
-      }
-      case "plant": {
-        st.plants.push({ id: `plant${mi}_${st.plants.length}`, text: a.text, payoff: a.payoff, plantedAt: mi, plantedScene: st.sceneNo });
-        st.genreHits.comedy = mi;
-        return { verdict: "accepted" };
-      }
-      case "payoff": {
-        const t = normFact(a.text);
-        const best = st.plants.filter((p) => p.paidAt == null).map((p) => ({ p, s: overlap(normFact(p.text), t) })).sort((x, y) => y.s - x.s)[0];
-        if (best && best.s > 0.25)
-          best.p.paidAt = mi;
-        st.genreHits.comedy = mi;
-        return { verdict: "accepted", line: `\uD83C\uDFAF payoff: ${a.text}` };
-      }
-      case "deadline": {
-        const did = `dl:${slug(op.subject)}`;
-        if (a.done) {
-          if (st.deadlines[did])
-            st.deadlines[did].done = true;
-          return { verdict: "accepted" };
-        }
-        const base = st.time ?? { day: 1, minute: 480 };
-        const at = a.kind === "rel" ? addMinutes(base, a.minutes) : { day: a.day ?? (a.minute < base.minute ? base.day + 1 : base.day), minute: a.minute };
-        st.deadlines[did] = { id: did, title: op.subject, at, msgIndex: mi };
-        st.genreHits.thriller = mi;
-        return { verdict: "accepted", line: `\u23F0 ${op.subject}: Day ${at.day} ${fmtClock(at.minute)}` };
-      }
-      case "title": {
-        st.title = a.text;
-        return { verdict: "accepted" };
-      }
-      case "season": {
-        const prev = st.season?.name;
-        st.season = { name: a.name, setAt: st.time ? { ...st.time } : null };
-        return prev === a.name ? { verdict: "accepted" } : { verdict: "accepted", line: `\uD83C\uDF42 ${prev ? prev + " \u2192 " : ""}${a.name}` };
-      }
-      case "pressure": {
-        const id = this.charId(op.subject, mi, false);
-        if (id)
-          st.chars[id].pressure = a.text;
-        return { verdict: "accepted" };
-      }
-      default:
-        return { verdict: "accepted" };
-    }
-  }
-  nm(id) {
-    if (!id)
-      return "nobody";
-    if (id === "gone")
-      return "gone";
-    if (id.startsWith("loc:"))
-      return this.state.places[id]?.name ?? id.slice(4);
-    return this.state.chars[id]?.name ?? id;
-  }
-  partyId(name, mi) {
-    const pid = `loc:${slug(name.trim())}`;
-    return this.state.places[pid] ? pid : this.charId(name, mi) ?? undefined;
-  }
-  holderId(name, mi) {
-    const n = name.trim();
-    if (!n)
-      return;
-    if (/^(the )?(floor|ground|table|room|here)$/i.test(n) || n.startsWith("loc:"))
-      return `loc:${slug(this.state.place[this.state.place.length - 1] ?? n)}`;
-    return this.parseHolder(n, mi).id;
-  }
-  parseHolder(raw, mi) {
-    let s = raw;
-    for (let i = 0;i < 4 && /\([^()]*\)/.test(s); i++)
-      s = s.replace(/\s*\([^()]*\)/g, "");
-    s = s.replace(/\s+/g, " ").replace(/[.;,]+$/, "").trim();
-    if (!s || /^(no change|unchanged|same|still|as before)$/i.test(s))
-      return { same: true };
-    const known = (n) => this.charId(n.replace(/^(the|a)\s+/i, ""), mi, false) ?? undefined;
-    const spot = (w) => w?.replace(/^(?:in|on|at|inside|under|in the|on the)\s+/i, "").trim() || undefined;
-    const tail = (w) => spot(w?.replace(/^(?:in|on|at|inside|under|within|tucked in|hidden in)\s+/i, ""));
-    const by = /^(?:held|carried|kept|worn|owned|taken|pocketed|hidden|stashed)?\s*(?:by|with|to)\s+(.+?)(?:\s+(?:in|on|at|inside|under|around|behind)\s+(.+))?$/i.exec(s);
-    if (by) {
-      const id = known(by[1]) ?? (this.looksLikeName(by[1]) ? this.charId(by[1], mi) ?? undefined : undefined);
-      if (id)
-        return { id, where: tail(by[2]) };
-    }
-    const pos = /^(?:(?:in|on|at|inside|under|around|behind|tucked in|hidden in)\s+)?(?:the\s+)?([A-Z\u00C0-\u00DE][\w\u00C0-\u024F'\u2019-]*(?:\s+[A-Z\u00C0-\u00DE][\w\u00C0-\u024F'\u2019-]*){0,3})['\u2019]s?\s+(.+)$/.exec(s);
-    if (pos) {
-      const id = known(pos[1]) ?? (this.looksLikeName(pos[1]) ? this.charId(pos[1], mi) ?? undefined : undefined);
-      if (id)
-        return { id, where: pos[2].trim() };
-    }
-    const mine = /^(?:(?:in|on|at|inside|under)\s+)?(?:your|my)\s+(.+)$/i.exec(s);
-    if (mine)
-      return { id: this.charId("user", mi) ?? undefined, where: mine[1].trim() };
-    const exact = known(s);
-    if (exact)
-      return { id: exact };
-    const pid = `loc:${slug(s)}`;
-    if (this.state.places[pid])
-      return { id: pid };
-    if (this.looksLikeName(s))
-      return { id: this.charId(s, mi) ?? undefined };
-    const here = this.state.place[this.state.place.length - 1];
-    return { id: here ? `loc:${slug(here)}` : undefined, where: s };
-  }
-  looksLikeName(s) {
-    const t = s.trim();
-    if (!t || t.length > 40 || /[()\d:]/.test(t) || !/^[A-Z\u00C0-\u00DE]/.test(t))
-      return false;
-    const words = t.split(/\s+/);
-    if (words.length > 4)
-      return false;
-    const filler = /^(in|on|at|by|the|a|an|from|with|under|inside|near|behind|held|carried|no|change|pocket|bag|hand|table|floor)$/i;
-    return !words.some((w, i) => filler.test(w) && !(i > 0 && /^(of|the)$/i.test(w) && /^[A-Z]/.test(words[i + 1] ?? "")));
-  }
-  recordIdFor(name, mi) {
-    const s = slug(name);
-    const st = this.state;
-    if (this.isUser(name))
-      return "char:user";
-    const cid = this.charId(name, mi, false);
-    if (cid)
-      return `char:${cid}`;
-    for (const prefix of ["item:", "thread:", "loc:", "fac:", "doc:"]) {
-      const id = prefix + s;
-      if (st[{ "item:": "items", "thread:": "threads", "loc:": "places", "fac:": "factions", "doc:": "artifacts" }[prefix]][id])
-        return id;
-    }
-    return `custom:${s}`;
-  }
-  drift(fromAbs0, toAbs) {
-    const span = toAbs - fromAbs0;
-    if (span <= 0)
-      return;
-    const sleeping = this.state.mode === "downtime" && span >= 360;
-    for (const c of Object.values(this.state.chars)) {
-      if (c.dead)
-        continue;
-      const present = c.tier === "spot" || c.tier === "peri" || c.isUser;
-      if (!present)
-        continue;
-      const m = c.meters;
-      const acc = c._acc ??= { hunger: 0, thirst: 0, fatigue: 0, intox: 0 };
-      const bump = (k, rate) => {
-        if (m[k] == null)
-          return;
-        acc[k] += span;
-        const n = Math.floor(acc[k] / rate);
-        if (n > 0) {
-          m[k] = clamp((m[k] ?? 0) + n, 0, 5);
-          acc[k] -= n * rate;
-        }
-      };
-      bump("hunger", 300);
-      bump("thirst", 180);
-      if (sleeping && m.fatigue != null) {
-        m.fatigue = clamp(m.fatigue - (span >= 420 ? 4 : 3), span < 240 ? 2 : 0, 5);
-        acc.fatigue = 0;
-      } else
-        bump("fatigue", 240);
-      if (m.intox != null && m.intox > 0) {
-        acc.intox += span;
-        const n = Math.floor(acc.intox / 90);
-        if (n > 0) {
-          m.intox = clamp(m.intox - n, 0, 5);
-          acc.intox -= n * 90;
-        }
-      }
-      c.injuries = c.injuries.filter((inj) => {
-        if (!inj.since)
-          return true;
-        const age = toAbs - absMinutes(inj.since);
-        const heal = [0, 2 * MIN_PER_DAY, 14 * MIN_PER_DAY, 42 * MIN_PER_DAY, Infinity][inj.severity];
-        if (age >= heal * (inj.treated ? 1 : 1.5)) {
-          if (inj.severity >= 3 && !c.flags.includes(`scar: ${inj.where}`))
-            c.flags.push(`scar: ${inj.where}`);
-          return false;
-        }
-        return true;
-      });
-    }
-  }
-}
-var LADDER_FALL = /betray|\blie[sd]?\b|\blying\b|decei|neglect|abandon|cruel|cheat|reject|humiliat|contempt|disgust|resent|jealous|furious|\bangry\b|\banger\b|\bfight\b|argument|insult|threat|hurt (him|her|them)|\bhit\b|struck|walked (away|out)|left (him|her|them)|\bbroke\b|lost (her |his |their )?trust|distrust|suspicio|went cold|pulled away|shut (him|her|them) out|\bgrudge\b|regress|drops? a rung/i;
-var LADDER_FALL_HARD = /betray|cheat|abandon|\bhit\b|struck|violen|unforgivable|\bmurder|\bkill/i;
-var LADDER_WARM = /\bheld\b|\bhold|hug|embrac|kiss|smil|laugh|comfort|warm|tender|gentle|\bsafe\b|protect|saved|rescued|confess|\bstayed\b|didn't (pull|let) (away|go)|leaned|touch|\bhand\b|close|trust|open(ed)? up|let (him|her|them) (in|hold)|blush|flirt|charm|spark|linger/i;
-var LADDER_NAMES = ["Strangers", "Aware", "Interested", "Charged", "Tested", "Spoken", "Together", "Established"];
-function fmtClock(minute) {
-  const m = (minute % MIN_PER_DAY + MIN_PER_DAY) % MIN_PER_DAY;
-  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-}
-function normFact(s) {
-  return s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
-}
-var STOP = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
-function overlap(a, b) {
-  const A = new Set(a.split(" ").filter((w) => w && !STOP.has(w)));
-  const B = new Set(b.split(" ").filter((w) => w && !STOP.has(w)));
-  if (!A.size || !B.size)
-    return 0;
-  let n = 0;
-  for (const w of A)
-    if (B.has(w))
-      n++;
-  return n / Math.min(A.size, B.size);
-}
-function parseDue(raw, now) {
-  const d = /day\s*(\d+)(?:\D+(\d{1,2})[:.](\d{2}))?/i.exec(raw);
-  if (d)
-    return { at: { day: parseInt(d[1], 10), minute: d[2] ? parseInt(d[2], 10) * 60 + parseInt(d[3], 10) : 12 * 60 }, raw };
-  const rel = /\+?\s*(\d+)\s*(d|h|day|days|hours?)/i.exec(raw);
-  if (rel && now) {
-    const n = parseInt(rel[1], 10);
-    return { at: addMinutes(now, rel[2].startsWith("d") ? n * MIN_PER_DAY : n * 60), raw };
-  }
-  if (/tomorrow/i.test(raw) && now)
-    return { at: { day: now.day + 1, minute: 9 * 60 }, raw };
-  if (/tonight/i.test(raw) && now)
-    return { at: { day: now.day, minute: 21 * 60 }, raw };
-  return { trigger: raw, raw };
-}
+var VERSION = "1.5.0";
 
 // src/core/render.ts
 var SLOT_COLORS = ["#9b6a0e", "#c02f52", "#6b45c6", "#0a7d6d", "#1f6fb2", "#b0521c", "#8a3f9e", "#2f7d4f", "#b3871a", "#4f5fbf", "#a8406f", "#51741a", "#1b7e93"];
@@ -2500,41 +2701,34 @@ function knowledgeTable(state, colors, userName) {
   const present = Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead).slice(0, 5);
   if (!present.length)
     return "";
-  const rows = state.knowledge.filter((k) => !k.supersededBy && state.msgCount - k.msgIndex <= 30);
-  const facts = [];
-  for (const r of rows) {
-    const n = normFact(r.fact);
-    const f = facts.find((x) => normFact(x.fact) === n);
-    if (f)
-      f.rows.push(r);
-    else
-      facts.push({ fact: r.fact, rows: [r] });
-  }
+  const facts = Object.values(state.facts ?? {}).filter((f) => !f.hidden && state.msgCount - f.lastMsg <= 30).sort((a, b) => a.lastMsg - b.lastMsg);
   if (!facts.length)
     return "";
   let irony = "";
   const head = `<div class="alm-km__r alm-km__h" role="row"><span role="columnheader">Fact</span>${present.map((c) => `<span role="columnheader">${mini(c, colors)}</span>`).join("")}</div>`;
   const body = facts.slice(-8).map((f) => {
     const cells = present.map((c) => {
-      const r = f.rows.filter((x) => x.holder === c.id).pop();
+      const s = f.stances[c.id];
       let pill = `<span class="alm-kp un">\u2014 unaware</span>`;
-      if (r) {
-        if (r.status === "wrong" || r.status !== "knows" && r.truth === "false") {
-          pill = `<span class="alm-kp wrong">\u2717 ${escapeHtml(r.status === "wrong" ? "wrong" : r.status)}</span>`;
+      if (s) {
+        if (s.status === "wrong" || s.status !== "knows" && s.status !== "unaware" && f.truth === "false") {
+          pill = `<span class="alm-kp wrong">\u2717 ${escapeHtml(s.status === "wrong" ? "wrong" : s.status)}</span>`;
+          if (s.version)
+            pill += kpNote(`thinks \u201C${s.version}\u201D`);
           if (!irony)
             irony = `${escapeHtml(c.name)} is certain of something false.`;
-        } else if (r.status === "knows")
-          pill = `<span class="alm-kp knows">\u2713 knows</span>`;
-        else if (r.status === "unaware")
+        } else if (s.status === "knows")
+          pill = `<span class="alm-kp knows">\u2713 ${s.derived ? "heard it" : "knows"}</span>`;
+        else if (s.status === "unaware")
           pill = `<span class="alm-kp un">\u2014 unaware</span>`;
         else
-          pill = `<span class="alm-kp sus">? ${escapeHtml(r.status)}</span>`;
-        if (r.source)
-          pill += kpNote(r.source);
+          pill = `<span class="alm-kp sus">? ${escapeHtml(s.status)}</span>`;
+        if (s.how && !s.derived && s.status !== "wrong")
+          pill += kpNote(s.how);
       }
       return `<div class="alm-km__c" role="cell" data-who="${escapeHtml(c.name)}">${pill}</div>`;
     });
-    return `<div class="alm-km__r" role="row"><div class="alm-km__f" role="rowheader">${escapeHtml(f.fact.replace(/\{\{user\}\}/g, userName))}</div>${cells.join("")}</div>`;
+    return `<div class="alm-km__r" role="row"><div class="alm-km__f" role="rowheader">${escapeHtml(f.statement.replace(/\{\{user\}\}/g, userName))}</div>${cells.join("")}</div>`;
   });
   return `<div class="alm-km-wrap"><div class="alm-km alm-km--${present.length}" role="table" aria-label="Who knows what">${head}${body.join("")}</div></div>${irony ? `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
 }
@@ -2764,7 +2958,7 @@ cast: Mara@spot(by the fire) \xB7 Kael@peri(at the bar) \xB7 Joss@left(\u2192 st
 mood Name: old \u2192 new | V-1 A2 D0 body Name: soaked; fatigue 3; injury: arm, wound, bandaged
 look Name: \u2026                     bond A>B: trust +1 \u2014 cause      ladder A>B: tier 3 \u2014 evidence
 (ladder: the rung reached, or +1; a lower rung only for betrayal, neglect, a lie or cruelty, named in the cause)
-know Holder: fact | source \xB7 knows/believes/suspects/wrong \xB7 true/false
+know Holder: #key the fact in a few words | how they came to it \xB7 knows/believes/suspects/wrong \xB7 true/false
 item Name: A \u2192 B \u2014 how           thread Title: new/advance/complicate/stall(blocker)/resolve \u2014 detail
 owe A \u2192 B: what | open [due Day 5 18:00]     clockf Faction: project +1 (3/6)
 rumor text | from \u2192 to | truth   rep Name @ Group: \xB11 \u2014 deed     journal Name: "their own words"
@@ -3129,36 +3323,24 @@ function buildCodex(state, store) {
       status: "active"
     });
   }
-  const groups = [];
-  for (const k of state.knowledge) {
-    if (k.supersededBy)
+  for (const f of Object.values(state.facts ?? {})) {
+    if (f.hidden)
       continue;
-    const n = normFact(k.fact);
-    const g = groups.find((x) => x.norm === n || overlap(x.norm, n) > 0.75);
-    if (g)
-      g.rows.push(k);
-    else
-      groups.push({ norm: n, rows: [k] });
-  }
-  for (const g of groups) {
-    const fact = g.rows[g.rows.length - 1].fact;
-    const truth = g.rows.find((r) => r.truth !== "unknown")?.truth ?? "unknown";
-    const id = `fact:${slug(fact).slice(0, 48)}`;
-    const last = Math.max(...g.rows.map((r) => r.msgIndex));
+    const stances = Object.values(f.stances);
     put({
-      id,
+      id: `fact:${f.key}`,
       kind: "fact",
       tense: "now",
-      name: fact,
+      name: f.statement,
       aliases: [],
       keys: [],
-      summary: `Fact${truth !== "unknown" ? ` (${truth})` : ""}: ${fact}.`,
-      body: { truth, holders: g.rows.map((r) => ({ id: r.holder, status: r.status, source: r.source, truth: r.truth, at: r.at })) },
-      links: g.rows.map((r) => ({ rel: r.status, to: `char:${r.holder}` })),
-      scope: { knownBy: g.rows.filter((r) => r.status === "knows").map((r) => r.holder) },
-      provenance: { msgIndex: g.rows.map((r) => r.msgIndex), source: "story" },
-      salience: 0.55 * recency(last),
-      lastSeen: last,
+      summary: `Fact${f.truth !== "unknown" ? ` (${f.truth})` : ""}: ${f.statement}.`,
+      body: { key: f.key, truth: f.truth, holders: stances.map((s) => ({ id: s.holder, status: s.status, source: s.how, version: s.version, at: s.at })) },
+      links: stances.map((s) => ({ rel: s.status, to: `char:${s.holder}` })),
+      scope: { knownBy: stances.filter((s) => s.status === "knows").map((s) => s.holder) },
+      provenance: { msgIndex: f.history.map((h) => h.msgIndex), source: "story" },
+      salience: 0.55 * recency(f.lastMsg),
+      lastSeen: f.lastMsg,
       status: "active"
     });
   }
@@ -4699,61 +4881,28 @@ function capsule(c, state, opts) {
     s += ` [narrator-only pressure: ${opts.pressure}]`;
   return s;
 }
-function knowledgeBrief(state, query, userName, maxNpc = 4) {
-  const presentNpc = Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead);
-  if (!presentNpc.length)
-    return [];
-  const rows = state.knowledge.filter((k) => !k.supersededBy);
-  const q = normFact(query);
-  const presentIds = new Set(presentNpc.map((c) => c.id));
-  const facts = new Map;
-  for (const r of rows) {
-    const n = normFact(r.fact);
-    const inPlay = overlap(n, q) >= 0.34 || state.msgCount - r.msgIndex <= 8 && (presentIds.has(r.holder) || r.holder === "user");
-    if (!inPlay)
-      continue;
-    const key = [...facts.keys()].find((k) => k === n || overlap(k, n) > 0.75) ?? n;
-    const g = facts.get(key) ?? { fact: r.fact, rows: [] };
-    g.rows.push(r);
-    facts.set(key, g);
-  }
-  if (!facts.size)
+function knowledgeBrief(state, query, userName, maxFacts = 4) {
+  const nm = (id) => id === "user" ? userName : state.chars[id]?.name ?? id;
+  const here = new Set(Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.dead).map((c) => c.id));
+  if (![...here].some((id) => id !== "user"))
     return [];
   const lines = [];
-  const nm = (id) => id === "user" ? userName : state.chars[id]?.name ?? id;
-  for (const c of presentNpc.slice(0, maxNpc)) {
-    const knows = [];
-    const believes = [];
-    const wrong = [];
-    const unaware = [];
-    for (const { fact, rows: fr } of facts.values()) {
-      const mine = fr.filter((r) => r.holder === c.id).pop();
-      if (mine) {
-        const src = mine.source ? ` (${mine.source})` : "";
-        if (mine.status === "wrong" || mine.status !== "knows" && mine.truth === "false")
-          wrong.push(`${fact}${src}`);
-        else if (mine.status === "knows")
-          knows.push(`${fact}${src}`);
-        else if (mine.status === "unaware")
-          unaware.push(fact);
-        else
-          believes.push(`${fact} (${mine.status}${mine.truth !== "unknown" ? "; " + mine.truth : ""})`);
-      } else if (fr.some((r) => r.status === "knows" && (presentIds.has(r.holder) || r.holder === "user"))) {
-        unaware.push(fact);
-      }
-    }
-    const parts = [];
-    if (knows.length)
-      parts.push(`KNOWS: ${knows.slice(0, 3).join("; ")}`);
-    if (believes.length)
-      parts.push(`BELIEVES: ${believes.slice(0, 2).join("; ")}`);
-    if (wrong.length)
-      parts.push(`WRONG: ${wrong.slice(0, 2).join("; ")}`);
-    if (unaware.length)
-      parts.push(`DOES NOT KNOW: ${unaware.slice(0, 3).join("; ")}`);
-    if (parts.length)
-      lines.push(`${c.name} \u2014 ${parts.join(". ")}.`);
+  for (const f of factsInPlay(state, query, maxFacts)) {
+    const truth = f.truth !== "unknown" ? ` (${f.truth})` : "";
+    const stances = Object.values(f.stances).filter((s) => here.has(s.holder) || s.holder === "user").sort((a, b) => b.msgIndex - a.msgIndex).slice(0, 5).map((s) => {
+      if (s.status === "wrong")
+        return `${nm(s.holder)} wrongly believes ${s.version ? `"${s.version}"` : "otherwise"}`;
+      if (s.status === "unaware")
+        return `${nm(s.holder)} doesn't know`;
+      const how = s.derived ? "heard it said" : s.how ? howVerb(s.status, s.how).replace(/^(was |believes it \()/, "").replace(/\)$/, "") : "";
+      return `${nm(s.holder)} ${s.status === "knows" ? "knows" : s.status}${how ? ` (${how})` : ""}`;
+    });
+    const unaware = unawareOf(state, f).filter((id) => here.has(id)).map(nm);
+    const parts = [...stances, ...unaware.length ? [`news to ${unaware.slice(0, 4).join(", ")}`] : []];
+    lines.push(`#${f.key} "${f.statement}"${truth} \u2014 ${parts.join("; ") || "no one here knows it"}.`);
   }
+  if (lines.length)
+    lines.push(`(Reuse a fact's #key in know lines about it; write the fact itself, not how it came out.)`);
   return lines;
 }
 function constraints(state, records, userName) {
@@ -4890,7 +5039,9 @@ function buildLedgerNote(input) {
     lanes.plants = `[PLANTS] ${input.plants.join(" \xB7 ")}`;
   if (input.returning)
     lanes.returning = `[RETURNING] ${input.returning}`;
-  const order = ["now", "present", "constraints", "knowledge", "romance", "arrived", "craft", "genre", "plants", "returning"];
+  if (input.notPeople?.length)
+    lanes.notPeople = `[NOT PEOPLE] ${input.notPeople.join(", ")}: not characters (a force, power or thing). Keep them out of cast, mood, bond, ladder and know lines.`;
+  const order = ["now", "present", "constraints", "knowledge", "romance", "arrived", "craft", "genre", "plants", "returning", "notPeople"];
   const text = `<ledger-note>
 ${order.filter((k) => lanes[k]).map((k) => lanes[k]).join(`
 `)}
@@ -5139,7 +5290,7 @@ function renderRecord(r, state, present, full, userName) {
       const unaware = presentNpc.filter((p) => !holders.some((h) => h.id === p));
       if (unaware.length)
         lines.push(`  Unaware: ${unaware.map((p) => nameOf(state, p, userName)).join(", ")}.`);
-      const wrong = pres.filter((h) => h.status === "wrong" || h.status !== "knows" && h.truth === "false");
+      const wrong = pres.filter((h) => h.status === "wrong" || h.version || h.status !== "knows" && (h.truth ?? r.body.truth) === "false");
       const knowers = pres.filter((h) => h.status === "knows");
       if (wrong.length)
         lines.push(`  \u2192 Do not let ${wrong.map((h) => nameOf(state, h.id, userName)).join(" or ")} act on the truth.`);
@@ -5413,6 +5564,9 @@ function isEnabled(meta, settings) {
     return true;
   return meta.enabled === true;
 }
+function notPeople(meta) {
+  return Object.entries(meta.config.merges ?? {}).filter(([, to]) => to === NOT_A_PERSON).map(([n]) => n).slice(0, 8);
+}
 function leadGenre(meta) {
   return meta.detected.lead || meta.detected.genres?.[0] || meta.config.genres?.[0];
 }
@@ -5517,7 +5671,8 @@ ${recallItems.join(`
     lastDelta,
     pressures: settings.pressures ? meta.pressures : {},
     nsfw: !!meta.detected.nsfw && meta.detected.nsfw !== "off",
-    budgets: scaleBudgets(settings.recallBudget, tier)
+    budgets: scaleBudgets(settings.recallBudget, tier),
+    notPeople: notPeople(meta)
   });
   let formatExample;
   if (settings.formatAid && lastReplyMsg) {
@@ -6222,17 +6377,27 @@ async function buildView(chatId, userId) {
   const lead = meta.detected.lead || meta.detected.genres?.[0] || meta.config.genres?.[0];
   const nm = (id) => id === "user" ? L.names.user : st.chars[id]?.name ?? id;
   const now = st.time ? absMinutes(st.time) : null;
-  const facts = [];
-  for (const k of st.knowledge.filter((x) => !x.supersededBy)) {
-    const n = normFact(k.fact);
-    let f = facts.find((x) => normFact(x.fact) === n);
-    if (!f)
-      facts.push(f = { fact: k.fact, truth: k.truth, holders: [] });
-    if (k.truth !== "unknown")
-      f.truth = k.truth;
-    f.holders = f.holders.filter((h) => h.id !== k.holder);
-    f.holders.push({ id: k.holder, name: nm(k.holder), status: k.status, source: k.source });
-  }
+  const allFacts = Object.values(st.facts ?? {});
+  const facts = allFacts.filter((f) => !f.hidden).sort((a, b) => b.lastMsg - a.lastMsg).map((f) => ({
+    key: f.key,
+    statement: f.statement,
+    truth: f.truth,
+    locked: !!f.locked,
+    lastMsg: f.lastMsg,
+    stances: Object.values(f.stances).sort((a, b) => a.msgIndex - b.msgIndex).map((s) => ({
+      id: s.holder,
+      name: nm(s.holder),
+      status: s.status,
+      how: s.how,
+      verb: howVerb(s.status, s.how),
+      version: s.version,
+      derived: !!s.derived,
+      when: storyStamp(s.at)
+    })),
+    unaware: unawareOf(st, f).map((id) => ({ id, name: nm(id) })),
+    history: f.history.map((h) => ({ id: h.holder, name: nm(h.holder), verb: howVerb(h.status, h.how), how: h.how, version: h.version, note: h.note, derived: !!h.derived, when: storyStamp(h.at) || `message ${h.msgIndex + 1}` }))
+  }));
+  const hiddenFacts = allFacts.filter((f) => f.hidden).map((f) => ({ key: f.key, statement: f.statement }));
   const cover = coverageMap(files.chronicle);
   const inPrompt = new Set([...cover.values()].map((u) => u.id));
   const live = files.chronicle.units.filter((u) => !u.stale && !u.ghost);
@@ -6332,6 +6497,7 @@ async function buildView(chatId, userId) {
     })),
     bonds: Object.values(st.bonds).map((b) => ({ from: b.from, to: b.to, fromName: nm(b.from), toName: nm(b.to), axes: b.axes, label: b.label, tags: b.tags, history: b.history.slice(-6), ladder: st.ladders[`${b.from}>${b.to}`] ?? null, lastMsg: b.history.at(-1)?.msgIndex ?? 0 })),
     knowledge: facts,
+    hiddenFacts,
     codex: L.records.map((r) => ({ id: r.id, kind: r.kind, name: r.name, summary: r.summary, keys: r.keys, locked: !!r.locked, status: r.status, source: r.provenance.source, narratorOnly: !!r.scope.narratorOnly, salience: Math.round(r.salience * 100) / 100, body: pickBody(r.body), aliases: r.aliases })),
     chronicle: { units, coverage, tokens, counts: levelCounts },
     timeline: st.milestones.slice(-120).map((m) => ({ at: m.at ? fmtTime(m.at) : "", day: m.at?.day ?? null, kind: m.kind, text: m.text, msgIndex: m.msgIndex })),

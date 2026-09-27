@@ -153,8 +153,9 @@ details.alm-env>summary::-webkit-details-marker{display:none}
   background:radial-gradient(circle at 35% 30%,color-mix(in oklab,var(--c) 60%,#fff),var(--c) 60%,color-mix(in oklab,var(--c) 60%,#000))!important;
   color:var(--alm-on-voice)!important;font:700 15px/1 var(--alm-font-display)!important;box-shadow:0 3px 8px rgba(0,0,0,.3),inset 0 0 0 3px rgba(0,0,0,.12);transition:transform .4s,opacity .4s}
 .alm-env__cue{display:block!important;margin-top:12px;font:500 10.5px/1.45 var(--alm-font-mono)!important;letter-spacing:.06em;text-transform:uppercase;color:var(--alm-muted)!important}
-.alm-env__hint{display:block!important;margin-top:6px;font-style:italic!important;font-size:12px!important;line-height:1!important;font-family:var(--alm-font-body)!important;color:var(--c)!important}
-.alm-env__hint::after{content:"break the seal"}
+/* The preset writes "break the seal" into the hint for standalone mode; here the text comes from ::after (so it can say "reseal"). */
+.alm-env__hint{display:block!important;margin-top:6px;font-style:italic!important;font-size:0!important;line-height:1!important;font-family:var(--alm-font-body)!important;color:var(--c)!important}
+.alm-env__hint::after{content:"break the seal";font-size:12px}
 details.alm-env[open] .alm-env__hint::after{content:"reseal"}
 details.alm-env[open] .alm-env__flap{transform:rotateX(180deg)}
 details.alm-env[open] .alm-env__wax{transform:translateY(-44px) scale(.7);opacity:0}
@@ -441,6 +442,18 @@ export const PANEL_CSS = `
 .almk-h__b{min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
 .almk-h__b .alm-kp__n{flex-basis:100%;margin-top:0;max-width:none}
 .almk-un{font-size:11.5px;color:var(--alm-muted)}
+.almk-key{flex:none;font:500 10.5px/1.6 var(--alm-font-mono);padding:1px 7px;border-radius:6px;background:color-mix(in oklab,var(--alm-accent) 12%,var(--alm-panel));color:var(--alm-accent)}
+.almk-q b{font-weight:650;font-size:15px;line-height:1.3;min-width:0}
+.almk-q .btn{flex:none;padding:4px 9px}
+.almk-st{display:grid;gap:6px}
+.almk-ver{font-style:italic;color:var(--alm-danger)}
+.almk-hist>summary{cursor:pointer;font:500 11px/1.4 var(--alm-font-mono);color:var(--alm-muted);letter-spacing:.04em}
+.almk-hist ol{margin:8px 0 0;padding:0 0 0 14px;border-left:2px solid var(--alm-line);list-style:none;display:grid;gap:7px}
+.almk-hist li{position:relative;font-size:13px;line-height:1.4}
+.almk-hist li::before{content:"";position:absolute;left:-19px;top:6px;width:8px;height:8px;border-radius:50%;background:var(--alm-accent);box-shadow:0 0 0 2px var(--alm-panel)}
+.almk-hist time{display:block;font:500 10.5px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
+.almk-note{display:block;color:var(--alm-muted);font-size:11.5px;margin-top:2px}
+.almk--edit{border-color:var(--alm-accent)}
 .almp .alm-warnbox{border-color:color-mix(in oklab,var(--alm-warn) 55%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 10%,var(--alm-panel))}
 /* ── Orrery navigation ── */
 .almo{position:relative;display:flex;flex-direction:column;min-height:100%;background:color-mix(in oklab,var(--alm-panel-2) 55%,var(--alm-panel));background-image:var(--alm-texture);--almo-font:"Syne",var(--alm-font-display)}

@@ -8,6 +8,7 @@ import type { CraftReport } from "./telemetry";
 import type { CharacterState, MessageDelta, WorldState } from "./types";
 import { absMinutes, estTokens, fmtSpan, fmtTime, truncateTokens } from "./util";
 import { LADDER_NAMES, normFact, overlap } from "./state";
+import { factsInPlay, howVerb, unawareOf } from "./facts";
 import { isOpen, parseHours } from "./engines/almanac";
 
 export interface NoteInput {
@@ -26,6 +27,8 @@ export interface NoteInput {
   pressures?: Record<string, string>;
   budgets?: Partial<Record<"now" | "present" | "constraints" | "knowledge" | "craft", number>>;
   nsfw?: boolean;
+  /** Names the player removed from the cast: forces, spells, things. */
+  notPeople?: string[];
 }
 
 const DEFAULT_BUDGETS = { now: 120, present: 330, constraints: 150, knowledge: 250, craft: 110 };
@@ -78,52 +81,32 @@ export function capsule(c: CharacterState, state: WorldState, opts: { sealed: bo
   return s;
 }
 
-/** KNOWS / BELIEVES / WRONG / DOES NOT KNOW, per present NPC, for topics in play only. */
-export function knowledgeBrief(state: WorldState, query: string, userName: string, maxNpc = 4): string[] {
-  const presentNpc = Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead);
-  if (!presentNpc.length) return [];
-  const rows = state.knowledge.filter((k) => !k.supersededBy);
-  const q = normFact(query);
-  const presentIds = new Set(presentNpc.map((c) => c.id));
-  // Topics in play: overlap with the query, or touched in the last 8 messages by someone present.
-  const facts = new Map<string, { fact: string; rows: typeof rows }>();
-  for (const r of rows) {
-    const n = normFact(r.fact);
-    const inPlay = overlap(n, q) >= 0.34 || (state.msgCount - r.msgIndex <= 8 && (presentIds.has(r.holder) || r.holder === "user"));
-    if (!inPlay) continue;
-    const key = [...facts.keys()].find((k) => k === n || overlap(k, n) > 0.75) ?? n;
-    const g = facts.get(key) ?? { fact: r.fact, rows: [] };
-    g.rows.push(r);
-    facts.set(key, g);
-  }
-  if (!facts.size) return [];
-  const lines: string[] = [];
+/**
+ * One line per fact in play: its #key and statement, where the people here stand
+ * on it (and how they came to it), and who here doesn't know it yet.
+ */
+export function knowledgeBrief(state: WorldState, query: string, userName: string, maxFacts = 4): string[] {
   const nm = (id: string) => (id === "user" ? userName : state.chars[id]?.name ?? id);
-  for (const c of presentNpc.slice(0, maxNpc)) {
-    const knows: string[] = [];
-    const believes: string[] = [];
-    const wrong: string[] = [];
-    const unaware: string[] = [];
-    for (const { fact, rows: fr } of facts.values()) {
-      const mine = fr.filter((r) => r.holder === c.id).pop();
-      if (mine) {
-        const src = mine.source ? ` (${mine.source})` : "";
-        if (mine.status === "wrong" || (mine.status !== "knows" && mine.truth === "false")) wrong.push(`${fact}${src}`);
-        else if (mine.status === "knows") knows.push(`${fact}${src}`);
-        else if (mine.status === "unaware") unaware.push(fact);
-        else believes.push(`${fact} (${mine.status}${mine.truth !== "unknown" ? "; " + mine.truth : ""})`);
-      } else if (fr.some((r) => r.status === "knows" && (presentIds.has(r.holder) || r.holder === "user"))) {
-        unaware.push(fact);
-      }
-    }
-    const parts: string[] = [];
-    if (knows.length) parts.push(`KNOWS: ${knows.slice(0, 3).join("; ")}`);
-    if (believes.length) parts.push(`BELIEVES: ${believes.slice(0, 2).join("; ")}`);
-    if (wrong.length) parts.push(`WRONG: ${wrong.slice(0, 2).join("; ")}`);
-    if (unaware.length) parts.push(`DOES NOT KNOW: ${unaware.slice(0, 3).join("; ")}`);
-    if (parts.length) lines.push(`${c.name} — ${parts.join(". ")}.`);
+  const here = new Set(Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.dead).map((c) => c.id));
+  if (![...here].some((id) => id !== "user")) return [];
+  const lines: string[] = [];
+  for (const f of factsInPlay(state, query, maxFacts)) {
+    const truth = f.truth !== "unknown" ? ` (${f.truth})` : "";
+    const stances = Object.values(f.stances)
+      .filter((s) => here.has(s.holder) || s.holder === "user")
+      .sort((a, b) => b.msgIndex - a.msgIndex)
+      .slice(0, 5)
+      .map((s) => {
+        if (s.status === "wrong") return `${nm(s.holder)} wrongly believes ${s.version ? `"${s.version}"` : "otherwise"}`;
+        if (s.status === "unaware") return `${nm(s.holder)} doesn't know`;
+        const how = s.derived ? "heard it said" : s.how ? howVerb(s.status, s.how).replace(/^(was |believes it \()/, "").replace(/\)$/, "") : "";
+        return `${nm(s.holder)} ${s.status === "knows" ? "knows" : s.status}${how ? ` (${how})` : ""}`;
+      });
+    const unaware = unawareOf(state, f).filter((id) => here.has(id)).map(nm);
+    const parts = [...stances, ...(unaware.length ? [`news to ${unaware.slice(0, 4).join(", ")}`] : [])];
+    lines.push(`#${f.key} "${f.statement}"${truth} — ${parts.join("; ") || "no one here knows it"}.`);
   }
-  void nm;
+  if (lines.length) lines.push(`(Reuse a fact's #key in know lines about it; write the fact itself, not how it came out.)`);
   return lines;
 }
 
@@ -234,8 +217,9 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
   if (input.genreNudge) lanes.genre = `[GENRE] ${input.genreNudge}`;
   if (input.plants?.length) lanes.plants = `[PLANTS] ${input.plants.join(" · ")}`;
   if (input.returning) lanes.returning = `[RETURNING] ${input.returning}`;
+  if (input.notPeople?.length) lanes.notPeople = `[NOT PEOPLE] ${input.notPeople.join(", ")}: not characters (a force, power or thing). Keep them out of cast, mood, bond, ladder and know lines.`;
 
-  const order = ["now", "present", "constraints", "knowledge", "romance", "arrived", "craft", "genre", "plants", "returning"];
+  const order = ["now", "present", "constraints", "knowledge", "romance", "arrived", "craft", "genre", "plants", "returning", "notPeople"];
   const text = `<ledger-note>\n${order.filter((k) => lanes[k]).map((k) => lanes[k]).join("\n")}\n</ledger-note>`;
   return { text, tokens: estTokens(text), lanes };
 }

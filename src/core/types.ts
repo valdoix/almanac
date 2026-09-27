@@ -161,6 +161,55 @@ export interface KnowRow {
   at: StoryTime | null;
   msgIndex: number;
   supersededBy?: string;
+  /** The fact this row is about (FactState.key). */
+  factKey?: string;
+}
+
+/** Where one person stands on a fact. */
+export interface FactStance {
+  holder: string;
+  status: KnowStatus;
+  /** How they came to it, as written: "deduced from her unfinished sentence". */
+  how?: string;
+  /** Their own (different, usually wrong) version of it. */
+  version?: string;
+  /** Not written by the model: they were in the room when it was said aloud. */
+  derived?: boolean;
+  msgIndex: number;
+  at: StoryTime | null;
+}
+
+/** One step in how a fact came out. */
+export interface FactEntry {
+  holder: string;
+  status: KnowStatus;
+  how?: string;
+  version?: string;
+  /** Anything else the line carried: the evidence, what they still don't know. */
+  note?: string;
+  derived?: boolean;
+  msgIndex: number;
+  at: StoryTime | null;
+}
+
+/** A fact the story tracks: one statement, who stands where on it, and how it came out. */
+export interface FactState {
+  key: string;
+  statement: string;
+  truth: KnowTruth;
+  /** Statement set by the player; the story no longer rewrites it. */
+  locked?: boolean;
+  hidden?: boolean;
+  /** Normalised phrasings seen for it, for matching lines without a key. */
+  aliases: string[];
+  /** Other keys it has had (an automatic key replaced by the model's own). */
+  altKeys?: string[];
+  /** The key was made up from the wording, not written by the model. */
+  autoKey?: boolean;
+  stances: Record<string, FactStance>;
+  history: FactEntry[];
+  firstMsg: number;
+  lastMsg: number;
 }
 
 export interface ItemState {
@@ -310,6 +359,8 @@ export interface WorldState {
   bonds: Record<string, BondState>;
   ladders: Record<string, LadderState>;
   knowledge: KnowRow[];
+  /** Knowledge compiled into facts (key → fact). */
+  facts?: Record<string, FactState>;
   items: Record<string, ItemState>;
   threads: Record<string, ThreadState>;
   cons: Record<string, ConsState>;
@@ -450,8 +501,10 @@ export interface ChatConfig {
   trackers?: string[];
   theme?: string;
   colors: Record<string, string>; // char id -> css colour
-  /** Names merged by hand: lower-case name → "user" or the character's name. */
+  /** Names merged by hand: lower-case name → "user" or the character's name ("-": not a person). */
   merges?: Record<string, string>;
+  /** Player edits to facts: rename, set truth, merge into another fact, hide. */
+  factEdits?: Record<string, FactEdit>;
   enabledOverride?: boolean;
 }
 
@@ -460,3 +513,11 @@ export const DEFAULT_CHAT_CONFIG: ChatConfig = {
   genres: [],
   colors: {},
 };
+
+export interface FactEdit {
+  statement?: string;
+  truth?: KnowTruth;
+  /** Merge this fact into another key. */
+  into?: string;
+  hidden?: boolean;
+}

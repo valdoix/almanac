@@ -7,7 +7,7 @@ import { VERSION } from "./version";
 import type { AlmanacReport } from "./engines/almanac";
 import type { CharacterState, MessageDelta, WorldState } from "./types";
 import { absMinutes, escapeHtml as e, fmtSpan, fmtTime, hhmm, initials, kpNote } from "./util";
-import { LADDER_NAMES, normFact } from "./state";
+import { LADDER_NAMES } from "./state";
 
 /** Voice-slot palette (slot 0 = the player). Tuned for contrast on both paper and night skins. */
 export const SLOT_COLORS = ["#9b6a0e", "#c02f52", "#6b45c6", "#0a7d6d", "#1f6fb2", "#b0521c", "#8a3f9e", "#2f7d4f", "#b3871a", "#4f5fbf", "#a8406f", "#51741a", "#1b7e93"];
@@ -83,14 +83,7 @@ ${h.cause ? `<div class="alm-bond__why">“${e(h.cause)}”${b.from !== "user" &
 function knowledgeTable(state: WorldState, colors: Record<string, string>, userName: string): string {
   const present = Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead).slice(0, 5);
   if (!present.length) return "";
-  const rows = state.knowledge.filter((k) => !k.supersededBy && state.msgCount - k.msgIndex <= 30);
-  const facts: { fact: string; rows: typeof rows }[] = [];
-  for (const r of rows) {
-    const n = normFact(r.fact);
-    const f = facts.find((x) => normFact(x.fact) === n);
-    if (f) f.rows.push(r);
-    else facts.push({ fact: r.fact, rows: [r] });
-  }
+  const facts = Object.values(state.facts ?? {}).filter((f) => !f.hidden && state.msgCount - f.lastMsg <= 30).sort((a, b) => a.lastMsg - b.lastMsg);
   if (!facts.length) return "";
   let irony = "";
   // Rows of divs on a shared grid rather than a <table>: the host's message
@@ -98,20 +91,21 @@ function knowledgeTable(state: WorldState, colors: Record<string, string>, userN
   const head = `<div class="alm-km__r alm-km__h" role="row"><span role="columnheader">Fact</span>${present.map((c) => `<span role="columnheader">${mini(c, colors)}</span>`).join("")}</div>`;
   const body = facts.slice(-8).map((f) => {
     const cells = present.map((c) => {
-      const r = f.rows.filter((x) => x.holder === c.id).pop();
+      const s = f.stances[c.id];
       let pill = `<span class="alm-kp un">— unaware</span>`;
-      if (r) {
-        if (r.status === "wrong" || (r.status !== "knows" && r.truth === "false")) {
-          pill = `<span class="alm-kp wrong">✗ ${e(r.status === "wrong" ? "wrong" : r.status)}</span>`;
+      if (s) {
+        if (s.status === "wrong" || (s.status !== "knows" && s.status !== "unaware" && f.truth === "false")) {
+          pill = `<span class="alm-kp wrong">✗ ${e(s.status === "wrong" ? "wrong" : s.status)}</span>`;
+          if (s.version) pill += kpNote(`thinks “${s.version}”`);
           if (!irony) irony = `${e(c.name)} is certain of something false.`;
-        } else if (r.status === "knows") pill = `<span class="alm-kp knows">✓ knows</span>`;
-        else if (r.status === "unaware") pill = `<span class="alm-kp un">— unaware</span>`;
-        else pill = `<span class="alm-kp sus">? ${e(r.status)}</span>`;
-        if (r.source) pill += kpNote(r.source);
+        } else if (s.status === "knows") pill = `<span class="alm-kp knows">✓ ${s.derived ? "heard it" : "knows"}</span>`;
+        else if (s.status === "unaware") pill = `<span class="alm-kp un">— unaware</span>`;
+        else pill = `<span class="alm-kp sus">? ${e(s.status)}</span>`;
+        if (s.how && !s.derived && s.status !== "wrong") pill += kpNote(s.how);
       }
       return `<div class="alm-km__c" role="cell" data-who="${e(c.name)}">${pill}</div>`;
     });
-    return `<div class="alm-km__r" role="row"><div class="alm-km__f" role="rowheader">${e(f.fact.replace(/\{\{user\}\}/g, userName))}</div>${cells.join("")}</div>`;
+    return `<div class="alm-km__r" role="row"><div class="alm-km__f" role="rowheader">${e(f.statement.replace(/\{\{user\}\}/g, userName))}</div>${cells.join("")}</div>`;
   });
   return `<div class="alm-km-wrap"><div class="alm-km alm-km--${present.length}" role="table" aria-label="Who knows what">${head}${body.join("")}</div></div>${irony ? `<div class="alm-irony"><span class="i">🎭</span><span><b>Dramatic irony:</b> ${irony}</span></div>` : ""}`;
 }

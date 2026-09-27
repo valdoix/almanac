@@ -3,7 +3,7 @@
 // derive: lore-seeded baselines, archivist prose, user edits (locked), routines,
 // hidden pressures, colours and user keys.
 
-import type { WorldState, KnowRow } from "./types";
+import type { WorldState } from "./types";
 import { fmtTime, slug, uniq } from "./util";
 import { LADDER_NAMES, normFact, overlap } from "./state";
 
@@ -177,28 +177,18 @@ export function buildCodex(state: WorldState, store: CodexStore): CodexRecord[] 
     });
   }
 
-  // Facts (knowledge grouped by fact)
-  const groups: { norm: string; rows: KnowRow[] }[] = [];
-  for (const k of state.knowledge) {
-    if (k.supersededBy) continue;
-    const n = normFact(k.fact);
-    const g = groups.find((x) => x.norm === n || overlap(x.norm, n) > 0.75);
-    if (g) g.rows.push(k);
-    else groups.push({ norm: n, rows: [k] });
-  }
-  for (const g of groups) {
-    const fact = g.rows[g.rows.length - 1].fact;
-    const truth = g.rows.find((r) => r.truth !== "unknown")?.truth ?? "unknown";
-    const id = `fact:${slug(fact).slice(0, 48)}`;
-    const last = Math.max(...g.rows.map((r) => r.msgIndex));
+  // Facts: one record per fact, with where each person stands on it.
+  for (const f of Object.values(state.facts ?? {})) {
+    if (f.hidden) continue;
+    const stances = Object.values(f.stances);
     put({
-      id, kind: "fact", tense: "now", name: fact, aliases: [], keys: [],
-      summary: `Fact${truth !== "unknown" ? ` (${truth})` : ""}: ${fact}.`,
-      body: { truth, holders: g.rows.map((r) => ({ id: r.holder, status: r.status, source: r.source, truth: r.truth, at: r.at })) },
-      links: g.rows.map((r) => ({ rel: r.status, to: `char:${r.holder}` })),
-      scope: { knownBy: g.rows.filter((r) => r.status === "knows").map((r) => r.holder) },
-      provenance: { msgIndex: g.rows.map((r) => r.msgIndex), source: "story" },
-      salience: 0.55 * recency(last), lastSeen: last, status: "active",
+      id: `fact:${f.key}`, kind: "fact", tense: "now", name: f.statement, aliases: [], keys: [],
+      summary: `Fact${f.truth !== "unknown" ? ` (${f.truth})` : ""}: ${f.statement}.`,
+      body: { key: f.key, truth: f.truth, holders: stances.map((s) => ({ id: s.holder, status: s.status, source: s.how, version: s.version, at: s.at })) },
+      links: stances.map((s) => ({ rel: s.status, to: `char:${s.holder}` })),
+      scope: { knownBy: stances.filter((s) => s.status === "knows").map((s) => s.holder) },
+      provenance: { msgIndex: f.history.map((h) => h.msgIndex), source: "story" },
+      salience: 0.55 * recency(f.lastMsg), lastSeen: f.lastMsg, status: "active",
     });
   }
 

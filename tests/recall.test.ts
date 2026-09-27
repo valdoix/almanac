@@ -99,12 +99,12 @@ describe("recall and note", () => {
     expect(facts).toMatch(/Do not let Kael act on the truth/);
   });
 
-  test("knowledge brief lists what NPCs don't know", () => {
+  test("knowledge brief: one line per fact in play, with who knows it and who it is news to", () => {
     const state = world();
-    const kb = knowledgeBrief(state, "the cargo Vance sold", "Wren");
-    expect(kb.join("\n")).toContain("Kael — ");
-    expect(kb.join("\n")).toMatch(/WRONG: bandits took the cargo/);
-    expect(kb.join("\n")).toMatch(/DOES NOT KNOW: the cargo was never Vance's to sell/);
+    const kb = knowledgeBrief(state, "the cargo Vance sold", "Wren").join("\n");
+    expect(kb).toMatch(/#cargo-never-vance "the cargo was never Vance's to sell" \(true\) — Mara knows \(saw it\); news to Kael\./);
+    expect(kb).toMatch(/"bandits took the cargo" \(false\) — Kael believes/);
+    expect(kb).toMatch(/Reuse a fact's #key/);
   });
 
   test("ledger note lanes", () => {
@@ -158,5 +158,28 @@ describe("telemetry and pressures", () => {
     store.overlays["lore:kael"] = { id: "lore:kael", standalone: true, kind: "person", name: "Kael", provenance: { source: "lore" } };
     const d = detectDivergence(state, buildCodex(state, store));
     expect(d[0]).toMatchObject({ id: "lore:kael" });
+  });
+});
+
+describe("who heard it", () => {
+  const scene = (lines: string) => `Prose.
+<ledger>
+${lines}
+mode: social
+</ledger>`;
+  const fold = (msgs: string[]) => new LedgerRuntime().fold(toPath(msgs.map((c, i) => m(i, c))), OPTS).state;
+  const open = scene("cast: Buffy@spot · Giles@peri · Willow@peri");
+
+  test("people in the room when it was said aloud heard it", () => {
+    const st = fold([open, scene("know Buffy: #line the slayer line ends with her | said it aloud to everyone · knows · true")]);
+    expect(st.facts!.line.stances.giles).toMatchObject({ status: "knows", derived: true });
+    expect(knowledgeBrief(st, "the slayer line", "Wren").join("\n")).toMatch(/Giles knows \(heard it said\)/);
+  });
+  test("arriving later, or a private source, is still news", () => {
+    const late = fold([scene("cast: Buffy@spot · Giles@peri"), scene("know Buffy: #line the slayer line ends with her | told Giles · knows · true"), scene("cast: Willow@arrive(← the hall)")]);
+    expect(late.facts!.line.stances.willow).toBeUndefined();
+    expect(knowledgeBrief(late, "the slayer line", "Wren").join("\n")).toMatch(/news to Willow/);
+    const whisper = fold([open, scene("know Buffy: #line the slayer line ends with her | whispered it to herself · knows · true")]);
+    expect(whisper.facts!.line.stances.giles).toBeUndefined();
   });
 });

@@ -4,6 +4,7 @@
 
 import type { OpName, ParsedLedger, ParsedOp, SceneHeader } from "./types";
 import { unescapeHtml } from "./util";
+import { splitFact } from "./facts";
 
 const OP_ALIASES: Record<string, OpName> = {
   clock: "clock", time: "clock", elapsed: "clock",
@@ -398,7 +399,11 @@ const PARSERS: Record<OpName, LineParser> = {
       } else note(raw); // free text is a note (keeps its case)
     }
     if (status === "wrong" && truth === "unknown") truth = "false";
-    p.args = { fact: fact.trim(), status, truth, source };
+    // "#heaven Buffy was in Heaven — her silence (direct observation). DOES NOT KNOW: …"
+    // → key, statement, and the rest as a note for the fact's history.
+    const f = splitFact(fact);
+    if (!f.statement && !f.key) return null;
+    p.args = { fact: f.statement, key: f.key, note: f.note, unawareOf: f.unawareOf, status, truth, source };
     p.cause = source;
     return p;
   },

@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.4.2";
+var VERSION = "1.5.0";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -942,6 +942,14 @@ ${S("posy")} .alm-btn--primary,${S("posy")} .almp .btn.primary{background:var(--
 var SKIN_CSS = tokens() + `
 ` + SIGNATURES;
 
+// src/core/facts.ts
+var STOP = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
+
+// src/core/state.ts
+var NOT_A_PERSON = "-";
+var CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "status", "journal"]);
+var STOP2 = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
+
 // src/frontend/orrery.ts
 var GROUPS = [
   { id: "people", label: "People", color: "#ff8fa3", icon: "cast", pages: ["cast", "bonds", "knowledge"] },
@@ -1120,6 +1128,9 @@ class AlmanacApp {
   asOf = Infinity;
   graphAxis = "";
   npcOnly = false;
+  factQuery = "";
+  editingFact = null;
+  openFacts = new Set;
   chronFilter = "all";
   chronOpen = new Set;
   codexFilter = "";
@@ -1232,7 +1243,14 @@ ${this.castCard(c)}
 ${c.journal?.length ? `<h4>In their own words</h4>${c.journal.map((j) => `<div class="muted">“${escapeHtml(j.text)}”</div>`).join("")}` : ""}
 ${c.isUser ? "" : `<h4>Hidden pressure (narrator-only)</h4><div class="row"><span class="spoiler grow" tabindex="0">${escapeHtml(c.pressure || "— none drawn yet —")}</span><button class="btn" data-act="editPressure" data-id="${escapeHtml(c.id)}">edit</button></div>`}
 ${this.mergeRow(v, c)}
-</div>`).join("") || `<div class="empty">No one has appeared yet.</div>`}</div>`;
+${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn danger" data-act="notPerson" data-name="${escapeHtml(c.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button></div>`}
+</div>`).join("") || `<div class="empty">No one has appeared yet.</div>`}</div>${this.removedRow(v)}`;
+  }
+  removedRow(v) {
+    const gone = Object.entries(v.config?.merges ?? {}).filter(([, to]) => to === NOT_A_PERSON).map(([n]) => n);
+    if (!gone.length)
+      return "";
+    return `<h4>Removed from the cast</h4><div class="card flat"><p class="muted" style="margin:0 0 8px"><small>Not characters: the story's lines about them as people are ignored, and the model is told to leave them out.</small></p><div class="row">${gone.map((n) => `<span class="pill">${escapeHtml(n)} <button class="btn" data-act="restorePerson" data-name="${escapeHtml(n)}" title="Put it back in the cast" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div></div>`;
   }
   mergeRow(v, c) {
     const merges = v.config?.merges ?? {};
@@ -1253,24 +1271,44 @@ ${this.mergeRow(v, c)}
 <h4>All bonds</h4><div class="list">${v.bonds.map((b) => `<div class="rec"><div class="hd"><b>${escapeHtml(b.fromName)} → ${escapeHtml(b.toName)}</b>${b.label ? `<span class="pill">${escapeHtml(b.label)}</span>` : ""}${b.ladder ? `<span class="pill">♡ tier ${b.ladder.tier}</span>` : ""}</div><div class="muted">${Object.entries(b.axes).map(([k, x]) => `${k} ${x > 0 ? "+" : ""}${x}`).join(" · ")}</div>${b.history.slice(-2).map((h) => `<div class="muted"><small>${escapeHtml(h.axis)} ${h.delta > 0 ? "+" : ""}${h.delta}${h.cause ? ` — ${escapeHtml(h.cause)}` : ""}</small></div>`).join("")}</div>`).join("") || `<div class="empty">No bonds yet.</div>`}</div>`;
   }
   tab_knowledge(v) {
-    if (!v.knowledge.length)
-      return `<div class="empty">No knowledge recorded yet. The model records it with <code>know</code> lines.</div>`;
-    const people = v.cast.filter((c) => !c.dead);
-    const byId = new Map(people.map((c) => [c.id, c]));
-    const cards = [...v.knowledge].reverse().map((f) => {
-      const holders = f.holders.filter((h) => h.status !== "unaware");
-      const unaware = people.filter((c) => !holders.some((h) => h.id === c.id)).map((c) => c.isUser ? v.names?.user || c.name : c.name);
-      const chips = holders.map((h) => {
-        const c = byId.get(h.id);
-        const wrong = h.status === "wrong" || h.status !== "knows" && f.truth === "false";
-        const cls = wrong ? "wrong" : h.status === "knows" ? "knows" : "sus";
-        return `<div class="almk-h"><span class="alm-mini" style="--c:${escapeHtml(c?.color ?? "#888")}">${escapeHtml(initials(h.name))}</span><div class="almk-h__b"><b>${escapeHtml(h.name)}</b> <span class="alm-kp ${cls}">${wrong ? "✗ wrong" : h.status === "knows" ? "✓ knows" : `? ${escapeHtml(h.status)}`}</span>${h.source ? kpNote(h.source) : ""}</div></div>`;
-      }).join("");
-      const truth = f.truth !== "unknown" ? `<span class="pill${f.truth === "false" ? " warn" : ""}">${escapeHtml(f.truth)}</span>` : "";
-      return `<div class="card flat almk"><div class="almk-q"><span class="grow">${escapeHtml(f.fact)}</span>${truth}</div>${chips || `<div class="muted">No one knows this yet.</div>`}${unaware.length ? `<div class="almk-un">unaware: ${escapeHtml(unaware.slice(0, 8).join(", "))}${unaware.length > 8 ? "…" : ""}</div>` : ""}</div>`;
+    const hidden = v.hiddenFacts ?? [];
+    if (!v.knowledge.length && !hidden.length)
+      return `<div class="empty">No facts yet. The model records them with <code>know</code> lines, and each fact collects who knows it and how.</div>`;
+    const people = new Map(v.cast.map((c) => [c.id, c]));
+    const q = this.factQuery.trim().toLowerCase();
+    const shown = v.knowledge.filter((f) => !q || `${f.key} ${f.statement} ${f.stances.map((s) => s.name).join(" ")}`.toLowerCase().includes(q));
+    const chip = (s) => {
+      const c = people.get(s.id);
+      const cls = s.status === "wrong" ? "wrong" : s.status === "knows" ? "knows" : s.status === "unaware" ? "un" : "sus";
+      const icon = s.status === "wrong" ? "✗" : s.status === "knows" ? "✓" : s.status === "unaware" ? "—" : "?";
+      const label = s.status === "wrong" ? "wrong" : s.status === "knows" ? s.derived ? "heard it" : "knows" : s.status;
+      return `<div class="almk-h"><span class="alm-mini" style="--c:${escapeHtml(c?.color ?? "#888")}">${escapeHtml(initials(s.name))}</span><div class="almk-h__b"><b>${escapeHtml(s.name)}</b><span class="alm-kp ${cls}">${icon} ${escapeHtml(label)}</span>${s.version ? `<small class="almk-ver">thinks “${escapeHtml(s.version)}”</small>` : ""}${s.how && !s.derived ? kpNote(s.how) : ""}</div></div>`;
+    };
+    const cards = shown.map((f) => {
+      if (this.editingFact === f.key)
+        return this.factEditor(v, f);
+      const truth = f.truth !== "unknown" ? `<span class="pill${f.truth === "false" ? " warn" : ""}" title="Whether the fact is true">${f.truth === "true" ? "true" : f.truth === "false" ? "false" : "partly true"}</span>` : "";
+      const unaware = f.unaware.map((u) => u.name);
+      const hist = f.history.map((h) => `<li><time>${escapeHtml(h.when)}</time> <b>${escapeHtml(h.name)}</b> ${escapeHtml(h.verb)}${h.version ? `: “${escapeHtml(h.version)}”` : ""}${h.how && !h.derived && !h.verb.toLowerCase().includes(h.how.toLowerCase()) ? ` <span class="muted">— ${escapeHtml(h.how)}</span>` : ""}${h.note ? `<small class="almk-note">${escapeHtml(h.note)}</small>` : ""}</li>`).join("");
+      return `<div class="card flat almk"><div class="almk-q"><span class="almk-key" title="The model refers to this fact as #${escapeHtml(f.key)}">#${escapeHtml(f.key)}</span><b class="grow">${escapeHtml(f.statement)}</b>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}<button class="btn" data-act="factEdit" data-id="${escapeHtml(f.key)}" title="Rename, set the truth, merge or hide">edit</button></div>
+<div class="almk-st">${f.stances.filter((s) => s.status !== "unaware").map(chip).join("") || `<div class="muted">No one knows this yet.</div>`}</div>
+${unaware.length ? `<div class="almk-un">Doesn't know yet: ${escapeHtml(unaware.slice(0, 6).join(", "))}${unaware.length > 6 ? ` +${unaware.length - 6}` : ""}</div>` : ""}
+<details class="almk-hist"${this.openFacts.has(f.key) ? " open" : ""} data-fact="${escapeHtml(f.key)}"><summary>How it came out · ${f.history.length}</summary><ol>${hist}</ol></details></div>`;
     }).join("");
-    const irony = v.knowledge.filter((f) => f.truth === "false" && f.holders.some((h) => h.status !== "unaware")).slice(0, 3);
-    return `${irony.map((f) => `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${escapeHtml(f.holders.filter((h) => h.status !== "unaware").map((h) => h.name).join(", "))} ${f.holders.filter((h) => h.status !== "unaware").length > 1 ? "are" : "is"} certain that “${escapeHtml(f.fact)}”, which isn't true.</span></div>`).join("")}<div class="list">${cards}</div>`;
+    const irony = v.knowledge.flatMap((f) => f.stances.filter((s) => s.status === "wrong" || s.status !== "unaware" && f.truth === "false").map((s) => ({ f, s }))).slice(0, 3);
+    const ironyHtml = irony.map(({ f, s }) => `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${escapeHtml(s.name)} ${s.version ? `thinks “${escapeHtml(s.version)}”, but ${escapeHtml(f.statement)}` : `is certain that “${escapeHtml(f.statement)}”, which isn't true`}.</span></div>`).join("");
+    const search = `<div class="row" style="margin-bottom:8px"><input type="text" data-set="factQuery" value="${escapeHtml(this.factQuery)}" placeholder="Find a fact or a person…" aria-label="Find a fact or a person" class="grow"><span class="muted"><small>${shown.length} of ${v.knowledge.length}</small></span></div>`;
+    const hiddenHtml = hidden.length ? `<h4>Hidden facts</h4><div class="row">${hidden.map((h) => `<span class="pill">${escapeHtml(h.statement)} <button class="btn" data-act="factRestore" data-id="${escapeHtml(h.key)}" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div>` : "";
+    return `${ironyHtml}${search}<div class="list">${cards || `<div class="empty">Nothing matches.</div>`}</div>${hiddenHtml}`;
+  }
+  factEditor(v, f) {
+    const others = v.knowledge.filter((o) => o.key !== f.key);
+    const truthOpts = [["", "as the story says"], ["true", "true"], ["false", "false"], ["partial", "partly true"], ["unknown", "unknown"]];
+    const cur = v.config?.factEdits?.[f.key] ?? {};
+    return `<div class="card almk almk--edit"><label class="f">The fact, in a few words<input type="text" id="almFactStmt" value="${escapeHtml(f.statement)}"></label>
+<label class="f">Is it true?<select id="almFactTruth">${truthOpts.map(([k, l]) => `<option value="${k}"${(cur.truth ?? "") === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+${others.length ? `<label class="f">Same fact as…<select id="almFactInto"><option value="">— a separate fact —</option>${others.map((o) => `<option value="${escapeHtml(o.key)}">#${escapeHtml(o.key)} ${escapeHtml(o.statement)}</option>`).join("")}</select></label>` : ""}
+<div class="row"><button class="btn primary" data-act="factSave" data-id="${escapeHtml(f.key)}">Save</button><button class="btn" data-act="factCancel">Cancel</button><span class="grow"></span><button class="btn danger" data-act="factHide" data-id="${escapeHtml(f.key)}" title="Hide it from this page and from the model's note">Hide</button></div></div>`;
   }
   tab_codex(v) {
     const kinds = [...new Set(v.codex.map((r) => r.kind))];
@@ -1322,7 +1360,7 @@ ${r.kind === "place" ? `<label class="f">Hours (e.g. open 20:00 to 02:00)<input 
     return `<div class="card flat"><h4>Coverage</h4><div class="bar"><i style="width:${cov.volume}%;background:${LEVEL_COLOR.volume}"></i><i style="width:${cov.arc}%;background:${LEVEL_COLOR.arc}"></i><i style="width:${cov.chapter}%;background:${LEVEL_COLOR.chapter}"></i><i style="width:${cov.raw}%;background:var(--alm-line)"></i></div>
 <div class="chron-legend">${legend("volume", "Volumes", cnt.volume ?? 0)}${legend("arc", "Arcs", cnt.arc ?? 0)}${legend("chapter", "Chapters", cnt.chapter ?? 0)}${legend("raw", "Raw turns", 0)}</div>
 <p class="muted" style="margin:8px 0"><small>In the prompt: <b>${t(prompt)}</b> tokens of summaries and <b>${t(tok.raw)}</b> of raw turns.${tok.replaced ? ` The summaries stand in for ${t(tok.replaced)} tokens of old turns${saved > 0 ? `, saving ${t(saved)}` : ""}.` : ""}</small></p>
-<p class="muted">Old turns are summarised at scene boundaries, hidden, and replaced in the prompt by their chapter. Chapters fold into arcs and arcs into volumes as the story grows. The last ${v.settings.rawTail} messages always stay raw.</p>
+<p class="muted">Old turns are summarised at scene boundaries, hidden, and replaced in the prompt by their chapter. Chapters fold into arcs and arcs into volumes as the story grows. The last ${v.settings.rawTail} messages stay raw, or fewer if they pass ~${Number(v.settings.rawTailTokens ?? 12000).toLocaleString()} tokens (never fewer than 6); raise the raw tail cap in Settings to keep more.</p>
 <div class="row"><span class="muted grow"><small>Detail: <b>${escapeHtml(v.settings.summaryDetail ?? "detailed")}</b> (change it in Settings)</small></span><button class="btn" data-act="chronicleRewrite" title="Redo every unlocked chapter, arc and volume at the current detail">Rewrite all</button><button class="btn primary" data-act="chronicleRun">Summarise now</button></div></div>
 <div class="row chron-filter" role="group" aria-label="Show">${seg("all", "All")}${seg("volume", "Volumes", cnt.volume ?? 0)}${seg("arc", "Arcs", cnt.arc ?? 0)}${seg("chapter", "Chapters", cnt.chapter ?? 0)}</div>
 <div class="list">${shown.map((u) => block(u, 0)).join("") || `<div class="empty">${all.length ? `No ${f}s yet.` : "No chapters yet. They appear once enough scenes have scrolled past the raw tail."}</div>`}</div>`;
@@ -1397,6 +1435,13 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
   }
   onClick(ev) {
     const t = ev.target;
+    const hist = t.closest("summary")?.parentElement;
+    if (hist?.dataset.fact) {
+      if (hist.open)
+        this.openFacts.delete(hist.dataset.fact);
+      else
+        this.openFacts.add(hist.dataset.fact);
+    }
     const pageBtn = t.closest("[data-page]");
     if (pageBtn) {
       this.go(pageBtn.dataset.page);
@@ -1508,6 +1553,79 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
       case "chronicleRun":
         this.send({ type: "chronicle", action: "run" });
         break;
+      case "factEdit":
+        this.editingFact = id ?? null;
+        this.render();
+        break;
+      case "factCancel":
+        this.editingFact = null;
+        this.render();
+        break;
+      case "factSave": {
+        if (!id)
+          break;
+        const val = (sel) => this.root.querySelector(sel)?.value?.trim() ?? "";
+        const f = this.view?.knowledge.find((x) => x.key === id);
+        const edits = { ...this.view?.config?.factEdits ?? {} };
+        const next = { ...edits[id] ?? {} };
+        const stmt = val("#almFactStmt");
+        if (stmt && stmt !== f?.statement)
+          next.statement = stmt;
+        const truth = val("#almFactTruth");
+        if (truth)
+          next.truth = truth;
+        else
+          delete next.truth;
+        const into = val("#almFactInto");
+        if (into)
+          next.into = into;
+        edits[id] = next;
+        this.editingFact = null;
+        this.send({ type: "config", patch: { factEdits: edits } });
+        break;
+      }
+      case "factHide":
+      case "factRestore": {
+        if (!id)
+          break;
+        const edits = { ...this.view?.config?.factEdits ?? {} };
+        const next = { ...edits[id] ?? {} };
+        if (act.act === "factHide")
+          next.hidden = true;
+        else
+          delete next.hidden;
+        edits[id] = next;
+        this.editingFact = null;
+        this.send({ type: "config", patch: { factEdits: edits } });
+        break;
+      }
+      case "notPerson": {
+        const b = t.closest("button");
+        if (b && b.dataset.armed !== "1") {
+          b.dataset.armed = "1";
+          b.textContent = "Click again to remove";
+          setTimeout(() => {
+            if (b.isConnected) {
+              b.dataset.armed = "";
+              b.textContent = "Not a person — remove";
+            }
+          }, 4000);
+          break;
+        }
+        const c = this.view?.cast.find((x) => x.name === act.name);
+        const merges = { ...this.view?.config?.merges ?? {} };
+        for (const n of [act.name, ...c?.aliases ?? []])
+          if (n)
+            merges[String(n).toLowerCase()] = NOT_A_PERSON;
+        this.send({ type: "config", patch: { merges } });
+        break;
+      }
+      case "restorePerson": {
+        const merges = { ...this.view?.config?.merges ?? {} };
+        delete merges[String(act.name ?? "").toLowerCase()];
+        this.send({ type: "config", patch: { merges } });
+        break;
+      }
       case "unmerge": {
         const merges = { ...this.view?.config?.merges ?? {} };
         delete merges[String(act.name ?? "").toLowerCase()];
@@ -1765,8 +1883,9 @@ details.alm-env>summary::-webkit-details-marker{display:none}
   background:radial-gradient(circle at 35% 30%,color-mix(in oklab,var(--c) 60%,#fff),var(--c) 60%,color-mix(in oklab,var(--c) 60%,#000))!important;
   color:var(--alm-on-voice)!important;font:700 15px/1 var(--alm-font-display)!important;box-shadow:0 3px 8px rgba(0,0,0,.3),inset 0 0 0 3px rgba(0,0,0,.12);transition:transform .4s,opacity .4s}
 .alm-env__cue{display:block!important;margin-top:12px;font:500 10.5px/1.45 var(--alm-font-mono)!important;letter-spacing:.06em;text-transform:uppercase;color:var(--alm-muted)!important}
-.alm-env__hint{display:block!important;margin-top:6px;font-style:italic!important;font-size:12px!important;line-height:1!important;font-family:var(--alm-font-body)!important;color:var(--c)!important}
-.alm-env__hint::after{content:"break the seal"}
+/* The preset writes "break the seal" into the hint for standalone mode; here the text comes from ::after (so it can say "reseal"). */
+.alm-env__hint{display:block!important;margin-top:6px;font-style:italic!important;font-size:0!important;line-height:1!important;font-family:var(--alm-font-body)!important;color:var(--c)!important}
+.alm-env__hint::after{content:"break the seal";font-size:12px}
 details.alm-env[open] .alm-env__hint::after{content:"reseal"}
 details.alm-env[open] .alm-env__flap{transform:rotateX(180deg)}
 details.alm-env[open] .alm-env__wax{transform:translateY(-44px) scale(.7);opacity:0}
@@ -2052,6 +2171,18 @@ var PANEL_CSS = `
 .almk-h__b{min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
 .almk-h__b .alm-kp__n{flex-basis:100%;margin-top:0;max-width:none}
 .almk-un{font-size:11.5px;color:var(--alm-muted)}
+.almk-key{flex:none;font:500 10.5px/1.6 var(--alm-font-mono);padding:1px 7px;border-radius:6px;background:color-mix(in oklab,var(--alm-accent) 12%,var(--alm-panel));color:var(--alm-accent)}
+.almk-q b{font-weight:650;font-size:15px;line-height:1.3;min-width:0}
+.almk-q .btn{flex:none;padding:4px 9px}
+.almk-st{display:grid;gap:6px}
+.almk-ver{font-style:italic;color:var(--alm-danger)}
+.almk-hist>summary{cursor:pointer;font:500 11px/1.4 var(--alm-font-mono);color:var(--alm-muted);letter-spacing:.04em}
+.almk-hist ol{margin:8px 0 0;padding:0 0 0 14px;border-left:2px solid var(--alm-line);list-style:none;display:grid;gap:7px}
+.almk-hist li{position:relative;font-size:13px;line-height:1.4}
+.almk-hist li::before{content:"";position:absolute;left:-19px;top:6px;width:8px;height:8px;border-radius:50%;background:var(--alm-accent);box-shadow:0 0 0 2px var(--alm-panel)}
+.almk-hist time{display:block;font:500 10.5px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
+.almk-note{display:block;color:var(--alm-muted);font-size:11.5px;margin-top:2px}
+.almk--edit{border-color:var(--alm-accent)}
 .almp .alm-warnbox{border-color:color-mix(in oklab,var(--alm-warn) 55%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 10%,var(--alm-panel))}
 /* ── Orrery navigation ── */
 .almo{position:relative;display:flex;flex-direction:column;min-height:100%;background:color-mix(in oklab,var(--alm-panel-2) 55%,var(--alm-panel));background-image:var(--alm-texture);--almo-font:"Syne",var(--alm-font-display)}

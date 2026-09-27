@@ -223,7 +223,7 @@ export function renderRecord(r: CodexRecord, state: WorldState, present: string[
   const diverged = r.body.divergedNote ? ` [History — ${r.body.divergedNote}]` : "";
   switch (r.kind) {
     case "fact": {
-      const holders = (r.body.holders ?? []) as { id: string; status: string; source?: string; truth?: string }[];
+      const holders = (r.body.holders ?? []) as { id: string; status: string; source?: string; truth?: string; version?: string }[];
       const pres = holders.filter((h) => present.includes(h.id));
       const abs = holders.filter((h) => !present.includes(h.id));
       const lines = [`${tag}Fact${r.body.truth && r.body.truth !== "unknown" ? ` (${r.body.truth})` : ""}: ${r.name}.`];
@@ -232,7 +232,7 @@ export function renderRecord(r: CodexRecord, state: WorldState, present: string[
       const presentNpc = present.filter((p) => p !== "user");
       const unaware = presentNpc.filter((p) => !holders.some((h) => h.id === p));
       if (unaware.length) lines.push(`  Unaware: ${unaware.map((p) => nameOf(state, p, userName)).join(", ")}.`);
-      const wrong = pres.filter((h) => h.status === "wrong" || (h.status !== "knows" && h.truth === "false"));
+      const wrong = pres.filter((h: any) => h.status === "wrong" || h.version || (h.status !== "knows" && (h.truth ?? r.body.truth) === "false"));
       const knowers = pres.filter((h) => h.status === "knows");
       if (wrong.length) lines.push(`  → Do not let ${wrong.map((h) => nameOf(state, h.id, userName)).join(" or ")} act on the truth.`);
       else if (knowers.length && unaware.length) lines.push(`  → ${knowers.map((h) => nameOf(state, h.id, userName)).join(", ")} may hint; ${unaware.map((p) => nameOf(state, p, userName)).join(", ")} cannot know it yet.`);

@@ -4,9 +4,10 @@
 // caller: only messages on the active path (current swipes) are folded.
 
 import type {
-  BondAxis, BondState, CharacterState, EventSource, KnowRow, LedgerEvent, MessageDelta,
+  BondAxis, BondState, CharacterState, EventSource, FactEdit, KnowRow, LedgerEvent, MessageDelta,
   ParsedLedger, ParsedOp, WorldState,
 } from "./types";
+import { fileKnow } from "./facts";
 import { ALL_AXES, BIPOLAR_AXES } from "./types";
 import { absMinutes, addMinutes, clamp, fmtSpan, fromAbs, MIN_PER_DAY, slug, type StoryTime } from "./util";
 
@@ -21,6 +22,8 @@ export interface FoldOptions {
   startTime?: StoryTime | null;
   /** Names the player merged by hand: lower-case name → "user" or the name it belongs to. */
   merges?: Record<string, string>;
+  /** Player edits to facts (rename, truth, merge, hide). */
+  factEdits?: Record<string, FactEdit>;
 }
 
 /** "Gabriel#0|flat", "“Mara”", "Kael's" → the bare lower-case name. */
@@ -87,6 +90,7 @@ export function emptyState(): WorldState {
     bonds: {},
     ladders: {},
     knowledge: [],
+    facts: {},
     items: {},
     threads: {},
     cons: {},
@@ -166,6 +170,7 @@ export class Folder {
     let n = name.replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").trim();
     if (!n) return null;
     const mergedTo = this.opts.merges?.[n.toLowerCase()];
+    if (mergedTo === NOT_A_PERSON) return null;
     if (mergedTo && mergedTo !== "user") n = mergedTo;
     if (this.isUser(name) || this.isUser(n)) {
       this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
@@ -237,7 +242,7 @@ export class Folder {
         }
         continue;
       }
-      if (this.isUser(s.name)) continue;
+      if (this.isUser(s.name) || this.notAPerson(s.name)) continue;
       const existing = this.charId(s.name, msgIndex, false);
       if (existing) continue;
       const id = this.charId(s.name, msgIndex, true)!;
@@ -379,6 +384,11 @@ export class Folder {
     const innerOps = new Set(["mood", "journal", "status"]);
     if (innerOps.has(op.op) && op.subject && this.isUser(op.subject) && this.opts.sealed && !this.opts.personaThoughts && src !== "user") {
       return reject("the player's inner state belongs to the player (sealed persona)");
+    }
+
+    // Names the player removed from the cast (a force, a spell, a place): lines about them as people are dropped.
+    if (CHAR_OPS.has(op.op) && (this.notAPerson(op.subject) || this.notAPerson(op.object))) {
+      return reject(`${this.notAPerson(op.subject) ? op.subject : op.object} is not a person (removed from the cast)`);
     }
 
     switch (op.op) {
@@ -619,15 +629,19 @@ export class Folder {
       case "know": {
         const holder = this.charId(op.subject!, mi)!;
         const row: KnowRow = {
-          id: `k${mi}_${st.knowledge.length}`, holder, fact: a.fact, status: a.status, source: a.source, truth: a.truth,
+          id: `k${mi}_${st.knowledge.length}`, holder, fact: a.fact ?? "", status: a.status, source: a.source, truth: a.truth,
           at: st.time ? { ...st.time } : null, msgIndex: mi,
         };
-        const norm = normFact(a.fact);
+        // File it under its fact (by #key, else by wording); a holder's newer line on the same fact replaces the older one.
+        const key = fileKnow(st, row, a, this.opts.factEdits);
+        row.factKey = key;
+        const fact = st.facts![key];
+        if (!row.fact) row.fact = fact.statement;
         for (const old of st.knowledge) {
-          if (old.holder === holder && !old.supersededBy && (normFact(old.fact) === norm || overlap(normFact(old.fact), norm) > 0.7)) old.supersededBy = row.id;
+          if (old.holder === holder && !old.supersededBy && old.factKey === key) old.supersededBy = row.id;
         }
         st.knowledge.push(row);
-        const line = `🧠 ${this.nm(holder)} ${a.status}: ${a.fact}${a.truth === "false" ? " (false)" : ""}`;
+        const line = `🧠 ${this.nm(holder)} ${a.status}: ${fact.statement}${a.truth === "false" ? " (false)" : ""}`;
         if (strict && !a.source) return { verdict: "warned", reason: "knowledge without a source", line };
         return { verdict: "accepted", line };
       }
@@ -849,10 +863,16 @@ export class Folder {
     return this.state.chars[id]?.name ?? id;
   }
 
-  /** Parties to a debt or consequence: a known place, else a character. */
+  /** Parties to a debt or consequence: a known place, else a character; a name removed from the cast stays as written. */
   private partyId(name: string, mi: number): string | undefined {
     const pid = `loc:${slug(name.trim())}`;
-    return this.state.places[pid] ? pid : this.charId(name, mi) ?? undefined;
+    if (this.state.places[pid]) return pid;
+    return this.charId(name, mi) ?? (this.notAPerson(name) ? name.trim() : undefined);
+  }
+
+  private notAPerson(name?: string): boolean {
+    if (!name) return false;
+    return this.opts.merges?.[name.replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").trim().toLowerCase()] === NOT_A_PERSON;
   }
 
   /** Holders are characters, or places for items left somewhere. */
@@ -988,6 +1008,11 @@ export function fmtClock(minute: number): string {
   const m = ((minute % MIN_PER_DAY) + MIN_PER_DAY) % MIN_PER_DAY;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
+
+/** The merge target that marks a name as not a person (removed from the cast). */
+export const NOT_A_PERSON = "-";
+/** Ops whose subject or object must be a person. */
+const CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "status", "journal"]);
 
 export function normFact(s: string): string {
   return s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
