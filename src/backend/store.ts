@@ -73,7 +73,15 @@ export interface ChatMeta {
   heat: Record<string, KeyHeat>;
   injected: Record<string, number[]>;
   lastInjected: string[];
-  feed: { at: number; tier: string; items: { id: string; name: string; score: number; reasons: string[]; injected: boolean }[]; tokens: number }[];
+  feed: {
+    at: number;
+    tier: string;
+    /** `via`: an injected record went in the <recall> block or as a forced entry in the mirror lorebook. */
+    items: { id: string; name: string; score: number; reasons: string[]; injected: boolean; via?: "recall" | "mirror" }[];
+    tokens: number;
+    /** Chronicle summaries the prompt carried. */
+    chronicle?: { id: string; name: string }[];
+  }[];
   mirror: { bookId?: string; entries: Record<string, { entryId: string; hash: string; wrote?: string }> };
   lore: { books: Record<string, LoreBookState>; review: { entryId: string; bookId: string; title: string; kind: string; confidence: number }[]; lastScan?: number };
   arrivals: Arrival[];
@@ -83,6 +91,8 @@ export interface ChatMeta {
   clerked?: Record<string, { hash: string; result: "ok" | "none" | "failed" | "clean" }>;
   /** The last time a turn went to the model without the note (cleared by the next good plan). */
   planError?: PlanError | null;
+  /** Chronicle unit ids the last prompt carried. */
+  chronicleShown?: string[];
   telemetry?: CraftReport | null;
   greetedReturn?: number;
 }

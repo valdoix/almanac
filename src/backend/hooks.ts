@@ -194,12 +194,13 @@ export function registerPromptInterceptor() {
         if (f !== t) msgs[i] = setText(msgs[i], f);
       }
 
-      // 2. Chronicle: drop covered turns and splice summaries in place.
+      // 2. Chronicle: drop covered turns and put this turn's summaries where they were.
       const breakdown: { messageIndex: number; name: string }[] = [];
       if (settings.chronicle && files.chronicle.units.length) {
         validateUnits(files.chronicle, L.path);
         const idToIndex = new Map(L.path.map((m) => [m.id, m.index]));
-        const res = splice(msgs as any[], files.chronicle, idToIndex);
+        const units = (plan.chronicle ?? []).map((id) => files.chronicle.units.find((u) => u.id === id && !u.stale && !u.ghost)).filter((u) => !!u);
+        const res = splice(msgs as any[], files.chronicle, idToIndex, units);
         msgs = res.messages as LlmMessageDTO[];
         for (const inj of res.injected) breakdown.push({ messageIndex: inj.index, name: inj.name });
       }

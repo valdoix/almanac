@@ -338,45 +338,169 @@ function unitHeader(u) {
   const when = u.storyStart ? ` \xB7 ${u.storyStart}${u.storyEnd && u.storyEnd !== u.storyStart ? ` \u2013 ${u.storyEnd}` : ""}` : "";
   return `[${cap(u.level)} ${u.no}: ${u.title}${when}${u.place ? ` \xB7 ${u.place}` : ""}]`;
 }
-function splice(messages, store, idToIndex) {
+function splice(messages, store, idToIndex, units) {
   const cover = coverageMap(store);
-  if (!cover.size)
+  if (!cover.size && !units.length)
     return { messages, injected: [], dropped: 0 };
+  const pending = [...units].sort((a, b) => a.startIdx - b.startIdx);
   const out = [];
   const injected = [];
-  const emitted = new Set;
+  const flush = (before) => {
+    while (pending.length && pending[0].endIdx < before) {
+      const u = pending.shift();
+      out.push({ role: "system", content: `${unitHeader(u)}
+${u.text}` });
+      injected.push({ index: out.length - 1, name: `ALMANAC \xB7 ${cap(u.level)} ${u.no}` });
+    }
+  };
   let dropped = 0;
+  let lastHistory = -1;
   for (const m of messages) {
     const idx = m.__isChatHistory ? m.sourceIndexInChat ?? (m.sourceMessageId ? idToIndex.get(m.sourceMessageId) : undefined) : undefined;
-    const unit = idx != null ? cover.get(idx) : undefined;
-    if (unit) {
-      if (!emitted.has(unit.id)) {
-        emitted.add(unit.id);
-        out.push({ role: "system", content: `${unitHeader(unit)}
-${unit.text}` });
-        injected.push({ index: out.length - 1, name: `ALMANAC \xB7 ${cap(unit.level)} ${unit.no}` });
-      }
+    if (idx != null && cover.has(idx)) {
       dropped++;
       continue;
     }
+    if (idx != null)
+      flush(idx);
     out.push(m);
+    if (m.__isChatHistory)
+      lastHistory = out.length - 1;
+  }
+  if (pending.length) {
+    const tail = out.splice(lastHistory + 1);
+    flush(Infinity);
+    out.push(...tail);
   }
   return { messages: out, injected, dropped };
 }
-function zoomCandidates(store, query, limit = 2) {
-  const cover = coverageMap(store);
-  const coarse = new Set([...cover.values()].filter((u) => u.level !== "chapter").flatMap((u) => u.children ?? []));
-  const words = new Set(query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3));
-  if (!words.size)
+function storySoFar(store) {
+  return [...new Set(coverageMap(store).values())].sort((a, b) => a.startIdx - b.startIdx);
+}
+function finestUnits(store) {
+  const rank = { chapter: 1, arc: 2, volume: 3 };
+  const map = new Map;
+  for (const u of store.units) {
+    if (u.stale || u.ghost)
+      continue;
+    for (let i = u.startIdx;i <= u.endIdx; i++) {
+      const cur = map.get(i);
+      if (!cur || rank[u.level] < rank[cur.level])
+        map.set(i, u);
+    }
+  }
+  return [...new Set(map.values())].sort((a, b) => a.startIdx - b.startIdx);
+}
+var STOP = new Set("that this with from have were they them their there what when where which while would could should about into your just been then than like over only some back down still even more very will said says tell told know knows going being because through before after again other each those these here make made look looks looked asks asked turn turns hand hands eyes face voice head something nothing thing things want wants away around across against also another anything every everything maybe really right left little long much must never next once open other perhaps quite same seems since sure take takes took think thought though toward under until upon well went whole without yeah okay mean means come comes came gets give gives gave keep kept last let's lets while inside outside enough almost already always behind beside between both during either else ever first half later least less many most near off onto own part past second several shall should side small soon such their theirs there's they're three time times today tonight too two unless whom whose why yes yet your yours".split(" "));
+function terms(text) {
+  const out = new Set;
+  for (const raw of text.toLowerCase().split(/[^\p{L}\p{N}']+/u)) {
+    const w = raw.replace(/^'+|'+$/g, "").replace(/'s$/, "");
+    if (w.length < 4 || STOP.has(w) || /^\d+$/.test(w))
+      continue;
+    out.add(w.length > 5 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+  }
+  return out;
+}
+var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function scoreUnits(units, q) {
+  if (!units.length)
     return [];
-  return store.units.filter((u) => coarse.has(u.id) && !u.stale).map((u) => {
-    const t = u.text.toLowerCase();
-    let hits = 0;
-    for (const w of words)
-      if (t.includes(w))
-        hits++;
-    return { id: u.id, title: unitHeader(u), text: u.text, score: hits / words.size };
-  }).filter((x) => x.score >= 0.34).sort((a, b) => b.score - a.score).slice(0, limit);
+  const n = units.length;
+  const texts = units.map((u) => `${u.title}
+${u.place ?? ""}
+${u.text}`);
+  const idf = (df) => df > 0 && df <= n / 2 ? Math.log((n + 1) / df) : 0;
+  const scores = units.map(() => ({ score: 0, matched: [] }));
+  const segs = [[q.player, 3], [q.lastReply, 2], [q.scene, 1]];
+  for (const names of mergeNames(q.entities ?? [])) {
+    const alts = [...new Set(names.map((s) => s.trim()).filter((s) => s.length >= 3 && !STOP.has(s.toLowerCase())))].sort((a, b) => b.length - a.length);
+    if (!alts.length)
+      continue;
+    const bound = (x) => `(?<![p{L}p{N}])${escapeRe(x)}(?![p{L}p{N}])`;
+    const proper = alts.filter((x) => /^\p{Lu}/u.test(x));
+    const plain = alts.filter((x) => !/^\p{Lu}/u.test(x));
+    const res = [proper.length ? new RegExp(proper.map(bound).join("|"), "u") : null, plain.length ? new RegExp(plain.map(bound).join("|"), "iu") : null].filter((r) => !!r);
+    const has = (t) => res.some((r) => r.test(t));
+    const w = Math.max(0, ...segs.filter(([t]) => t && has(t)).map(([, w]) => w));
+    if (!w)
+      continue;
+    const hits = texts.map(has);
+    const k = idf(hits.filter(Boolean).length) * w;
+    if (!k)
+      continue;
+    hits.forEach((h, i) => {
+      if (!h)
+        return;
+      scores[i].score += k;
+      scores[i].matched.push(alts[0]);
+    });
+  }
+  const bags = texts.map((t) => terms(t));
+  const df = new Map;
+  for (const b of bags)
+    for (const w of b)
+      df.set(w, (df.get(w) ?? 0) + 1);
+  const rare = Math.max(1, Math.floor(n / 6));
+  const mine = [...terms(q.player)].filter((t) => t.length >= 5 && !t.includes("'") && (df.get(t) ?? 0) > 0 && df.get(t) <= rare);
+  const bg = q.background ?? [];
+  const bgDf = new Map(mine.map((t) => [t, 0]));
+  for (const m of bg)
+    for (const t of terms(m))
+      if (bgDf.has(t))
+        bgDf.set(t, bgDf.get(t) + 1);
+  const bgMax = Math.max(2, bg.length * 0.05);
+  for (const t of mine) {
+    const d = df.get(t);
+    if (bgDf.get(t) > bgMax)
+      continue;
+    const k = 1.5 * idf(d);
+    bags.forEach((b, i) => {
+      if (!b.has(t) || scores[i].matched.some((m) => m.toLowerCase().includes(t)))
+        return;
+      scores[i].score += k;
+      scores[i].matched.push(t);
+    });
+  }
+  return units.map((unit, i) => ({ unit, ...scores[i] }));
+}
+function mergeNames(entities) {
+  const groups = [];
+  for (const names of entities) {
+    const g = new Set(names.map((x) => x.trim()).filter(Boolean));
+    const keys = new Set([...g].map((x) => x.toLowerCase()));
+    for (let i = groups.length - 1;i >= 0; i--) {
+      if (![...groups[i]].some((x) => keys.has(x.toLowerCase())))
+        continue;
+      for (const x of groups[i])
+        g.add(x);
+      groups.splice(i, 1);
+    }
+    groups.push(g);
+  }
+  return groups.map((g) => [...g]);
+}
+var RELEVANT_SCORE = 4.5;
+var RELEVANT_MAX = 3;
+var ZOOM_MAX = 2;
+function pickChronicle(store, mode, q) {
+  if (mode === "all")
+    return [...storySoFar(store), ...zoomCandidates(store, q)].sort((a, b) => a.startIdx - b.startIdx || rankOf(b) - rankOf(a));
+  const fine = finestUnits(store);
+  if (!fine.length)
+    return [];
+  const latest = fine[fine.length - 1];
+  const picked = scoreUnits(fine.slice(0, -1), q).filter((x) => x.score >= RELEVANT_SCORE).sort((a, b) => b.score - a.score).slice(0, RELEVANT_MAX).map((x) => x.unit);
+  return [...picked, latest].sort((a, b) => a.startIdx - b.startIdx);
+}
+var rankOf = (u) => ({ chapter: 1, arc: 2, volume: 3 })[u.level];
+function zoomCandidates(store, q, limit = ZOOM_MAX) {
+  const shown = new Set(storySoFar(store).map((u) => u.id));
+  const chapters = store.units.filter((u) => u.level === "chapter" && !u.stale && !u.ghost);
+  const folded = new Set(chapters.filter((u) => !shown.has(u.id)).map((u) => u.id));
+  if (!folded.size)
+    return [];
+  return scoreUnits(chapters, q).filter((x) => folded.has(x.unit.id) && x.score >= RELEVANT_SCORE).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.unit);
 }
 
 // src/core/knowparse.ts
@@ -1796,7 +1920,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.7.2";
+var VERSION = "1.8.0";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -1812,6 +1936,7 @@ var DEFAULT_SETTINGS = {
   fanIn: 4,
   hideCovered: true,
   chronicle: true,
+  chronicleInject: "all",
   summarizerConnection: "",
   summaryDetail: "detailed",
   summaryFocus: "",
@@ -1857,7 +1982,7 @@ var DEFAULT_CHAT_CONFIG = {
 };
 
 // src/core/facts.ts
-var STOP = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));
+var STOP2 = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));
 var IRREGULAR = { died: "die", dies: "die", dead: "die", death: "die", dying: "die", killed: "kill", killing: "kill", lives: "live", lived: "live", alive: "live" };
 function stem(w) {
   if (IRREGULAR[w])
@@ -1873,7 +1998,7 @@ function stem(w) {
   return w;
 }
 function words(s) {
-  return normFact(s).split(" ").filter((w) => w.length > 1 && !STOP.has(w)).map(stem);
+  return normFact(s).split(" ").filter((w) => w.length > 1 && !STOP2.has(w)).map(stem);
 }
 function sameFact(a, b) {
   const A = new Set(words(a));
@@ -1891,7 +2016,7 @@ function sameFact(a, b) {
 var MATCH = 0.7;
 var slugKey = (s) => s.toLowerCase().replace(/^#/, "").replace(/[^\p{L}\p{N}_-]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 function newKey(facts, statement) {
-  const raw = normFact(statement).split(" ").filter((w) => w.length > 1 && !STOP.has(w));
+  const raw = normFact(statement).split(" ").filter((w) => w.length > 1 && !STOP2.has(w));
   const base = slugKey(raw.slice(0, 3).join("-")) || "fact";
   let k = base;
   for (let i = 2;facts[k]; i++)
@@ -3869,10 +3994,10 @@ var CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "unawa
 function normFact(s) {
   return s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
 }
-var STOP2 = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
+var STOP3 = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
 function overlap2(a, b) {
-  const A = new Set(a.split(" ").filter((w) => w && !STOP2.has(w)));
-  const B = new Set(b.split(" ").filter((w) => w && !STOP2.has(w)));
+  const A = new Set(a.split(" ").filter((w) => w && !STOP3.has(w)));
+  const B = new Set(b.split(" ").filter((w) => w && !STOP3.has(w)));
   if (!A.size || !B.size)
     return 0;
   let n = 0;
@@ -6562,28 +6687,6 @@ function recall(input) {
     if (used >= budget)
       break;
   }
-  for (const z of input.zoom ?? []) {
-    if (used >= budget)
-      break;
-    const t = `[Earlier \u2014 ${z.title}] ${z.text}`;
-    const record = {
-      id: z.id,
-      kind: "history",
-      tense: "past",
-      name: z.title,
-      aliases: [],
-      keys: [],
-      summary: z.text,
-      body: {},
-      links: [],
-      scope: {},
-      provenance: { source: "story" },
-      salience: z.score,
-      lastSeen: 0,
-      status: "active"
-    };
-    addItem({ record, score: z.score, reasons: ["zoom-in"], lane: "zoom" }, [t, truncateTokens(t, 160)]);
-  }
   const text = items.length ? `<recall>
 ${items.map((i) => i.text).join(`
 `)}
@@ -7197,7 +7300,11 @@ async function planTurn(chatId, genType, userId, opts = {}) {
     const byEntry = new Map(Object.entries(meta.mirror.entries).map(([cid, v]) => [v.entryId, cid]));
     semantic = act.filter((a) => a.source === "vector" && byEntry.has(a.id)).map((a) => ({ recordId: byEntry.get(a.id), score: a.score ?? 0.5 }));
   }
-  const zoom = zoomCandidates(files.chronicle, `${player} ${lastReply}`);
+  const scene = [st.place.join(" \u203A "), ...Object.values(st.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).map((c) => c.name), ...Object.values(st.threads).filter((t) => t.status !== "resolved").map((t) => t.title)].join(" \xB7 ");
+  const entities = L.records.filter((r) => r.kind === "person" || r.kind === "object" || r.kind === "group" || r.kind === "place" && /^\p{Lu}/u.test(r.name)).map((r) => [r.name, ...r.aliases ?? []]);
+  const cq = { player, lastReply, scene, entities, background: L.path.map((m) => m.content) };
+  const chronMode = settings.chronicleInject === "relevant" ? "relevant" : "all";
+  const chronicle = settings.chronicle ? pickChronicle(files.chronicle, chronMode, cq).map((u) => u.id) : [];
   const rc = recall({
     state: st,
     records: L.records,
@@ -7206,7 +7313,6 @@ async function planTurn(chatId, genType, userId, opts = {}) {
     lastReply,
     recent,
     semantic,
-    zoom,
     heat: settings.keyHeat ? meta.heat : undefined,
     injectedHistory: meta.injected,
     usedLastTurn: new Set(meta.lastInjected),
@@ -7220,7 +7326,7 @@ async function planTurn(chatId, genType, userId, opts = {}) {
   const recallItems = [];
   const mirrorActive = settings.mirror !== "off" && !!meta.mirror.bookId;
   for (const it of rc.items) {
-    if (mirrorActive && meta.mirror.entries[it.record.id] && it.lane !== "zoom")
+    if (mirrorActive && meta.mirror.entries[it.record.id])
       mirrorPicks[it.record.id] = it.text ?? it.record.summary;
     else if (it.text)
       recallItems.push(it.text);
@@ -7304,13 +7410,20 @@ ${b.body}
     enabled: true,
     note: noteRes.text,
     recallText,
+    chronicle,
     mirrorPicks,
     mirrorChronicle: new Set(Object.entries(meta.mirror.entries).filter(([id]) => id.startsWith("chron:")).map(([, v]) => v.entryId)),
     lorePicks,
     loreManagedBooks,
     divergence,
     tier,
-    feed: { at: Date.now(), tier, items: rc.feed, tokens: rc.tokens + noteRes.tokens },
+    feed: {
+      at: Date.now(),
+      tier,
+      tokens: rc.tokens + noteRes.tokens,
+      items: rc.feed.map((f) => f.injected ? { ...f, via: mirrorPicks[f.id] ? "mirror" : "recall" } : f),
+      chronicle: chronicle.map((id) => files.chronicle.units.find((u) => u.id === id)).filter((u) => !!u).map((u) => ({ id: u.id, name: `${u.level[0].toUpperCase()}${u.level.slice(1)} ${u.no}: ${u.title}` }))
+    },
     firedKeys: rc.firedKeys,
     injectedIds: rc.items.map((i) => i.record.id),
     returning: !!returning,
@@ -7323,6 +7436,7 @@ ${b.body}
     for (const k of Object.keys(meta.injected))
       meta.injected[k] = meta.injected[k].slice(-6);
     meta.lastInjected = plan.injectedIds;
+    meta.chronicleShown = chronicle;
     if (plan.feed)
       meta.feed = [plan.feed, ...meta.feed].slice(0, 12);
     if (returning)
@@ -7331,7 +7445,7 @@ ${b.body}
       a.delivered = true;
   }
   plans.set(chatId, plan);
-  debug(`plan ${chatId}: note ${noteRes.tokens}t, recall ${rc.tokens}t, mirror ${Object.keys(mirrorPicks).length}, lore ${lorePicks.size}`);
+  debug(`plan ${chatId}: note ${noteRes.tokens}t, recall ${rc.tokens}t, chronicle ${chronicle.length} (${chronMode}), mirror ${Object.keys(mirrorPicks).length}, lore ${lorePicks.size}`);
   return plan;
 }
 function scaleBudgets(total, tier) {
@@ -7718,7 +7832,8 @@ function registerPromptInterceptor() {
       if (settings.chronicle && files.chronicle.units.length) {
         validateUnits(files.chronicle, L.path);
         const idToIndex = new Map(L.path.map((m) => [m.id, m.index]));
-        const res = splice(msgs, files.chronicle, idToIndex);
+        const units = (plan.chronicle ?? []).map((id) => files.chronicle.units.find((u) => u.id === id && !u.stale && !u.ghost)).filter((u) => !!u);
+        const res = splice(msgs, files.chronicle, idToIndex, units);
         msgs = res.messages;
         for (const inj of res.injected)
           breakdown.push({ messageIndex: inj.index, name: inj.name });
@@ -8032,7 +8147,9 @@ async function buildView(chatId, userId) {
   const gaps = Object.entries(st.gaps ?? {}).filter(([, g]) => g.length).map(([id, g]) => ({ id, name: nm(id), gaps: [...g].sort((a, b) => b.lastMsg - a.lastMsg).map((x) => ({ text: x.text, stale: st.msgCount - x.lastMsg > 40 })) }));
   const knowers = people.map((c) => ({ id: c.id, name: nm(c.id), here: isHere(c) }));
   const cover = coverageMap(files.chronicle);
-  const inPrompt = new Set([...cover.values()].map((u) => u.id));
+  const relevantOnly = settings.chronicleInject === "relevant";
+  const inPrompt = new Set(!settings.chronicle ? [] : relevantOnly ? meta.chronicleShown ?? [] : [...storySoFar(files.chronicle).map((u) => u.id), ...meta.chronicleShown ?? []]);
+  const pool = new Set((relevantOnly ? finestUnits(files.chronicle) : storySoFar(files.chronicle)).map((u) => u.id));
   const live = files.chronicle.units.filter((u) => !u.stale && !u.ghost);
   const units = files.chronicle.units.map((u) => {
     const parent = live.find((p) => p.id !== u.id && p.children?.includes(u.id));
@@ -8054,7 +8171,8 @@ async function buildView(chatId, userId) {
       children: u.children ?? [],
       parent: parent?.id,
       tokens: estTokens(u.text),
-      folded: !u.stale && !u.ghost && !inPrompt.has(u.id)
+      folded: !u.stale && !u.ghost && !pool.has(u.id) && !inPrompt.has(u.id),
+      inPrompt: inPrompt.has(u.id)
     };
   });
   const total = Math.max(1, L.path.length);
@@ -8140,7 +8258,7 @@ async function buildView(chatId, userId) {
     planError: meta.planError ?? null,
     hiddenFacts,
     codex: L.records.map((r) => ({ id: r.id, kind: r.kind, name: r.name, summary: r.summary, keys: r.keys, locked: !!r.locked, status: r.status, source: r.provenance.source, narratorOnly: !!r.scope.narratorOnly, salience: Math.round(r.salience * 100) / 100, body: pickBody(r.body), aliases: r.aliases })),
-    chronicle: { units, coverage, tokens, counts: levelCounts },
+    chronicle: { units, coverage, tokens, counts: levelCounts, mode: !settings.chronicle ? "off" : relevantOnly ? "relevant" : "all" },
     timeline: st.milestones.slice(-120).map((m) => ({ at: m.at ? fmtTime(m.at) : "", day: m.at?.day ?? null, kind: m.kind, text: m.text, msgIndex: m.msgIndex })),
     world: {
       factions: Object.values(st.factions).map((f) => ({ name: f.name, clocks: Object.values(f.clocks) })),

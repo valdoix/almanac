@@ -3,7 +3,7 @@
 import { VERSION } from "../core/version";
 import { voiceColor, speakerCss } from "../core/render";
 import { absMinutes, estTokens, fmtSpan, fmtTime, hhmm } from "../core/util";
-import { coverageMap } from "../core/chronicle";
+import { coverageMap, finestUnits, storySoFar } from "../core/chronicle";
 import { factKind, factsInPlay, isHere, isKnower, lackOf, lackText, stanceVerb, storyStamp } from "../core/facts";
 import { debounce, describe, host, warn } from "./host";
 import { ledgerFor } from "./ledger";
@@ -33,7 +33,7 @@ export interface UIView {
   clerk: { mode: string; running: boolean; repair: number; unread: number; replies: number };
   planError: { at: number; where: string; genType: string; message: string; stack: string } | null;
   codex: any[];
-  chronicle: { units: any[]; coverage: Record<string, number>; tokens: Record<string, number>; counts: Record<string, number> };
+  chronicle: { units: any[]; coverage: Record<string, number>; tokens: Record<string, number>; counts: Record<string, number>; mode: "all" | "relevant" | "off" };
   timeline: any[];
   world: any;
   lore: any;
@@ -91,16 +91,20 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
   // Per person: what they don't know, in words.
   const gaps = Object.entries(st.gaps ?? {}).filter(([, g]) => g.length).map(([id, g]) => ({ id, name: nm(id), gaps: [...g].sort((a, b) => b.lastMsg - a.lastMsg).map((x) => ({ text: x.text, stale: st.msgCount - x.lastMsg > 40 })) }));
   const knowers = people.map((c) => ({ id: c.id, name: nm(c.id), here: isHere(c) }));
-  // Which unit stands in for each message in the prompt; a unit none of them uses has been folded into a coarser one.
+  // Which units the prompt carries. The whole story: the coarsest unit for each stretch
+  // (the rest are folded into it). Only when relevant: the ones the last turn used.
   const cover = coverageMap(files.chronicle);
-  const inPrompt = new Set([...cover.values()].map((u) => u.id));
+  const relevantOnly = settings.chronicleInject === "relevant";
+  const inPrompt = new Set(!settings.chronicle ? [] : relevantOnly ? (meta.chronicleShown ?? []) : [...storySoFar(files.chronicle).map((u) => u.id), ...(meta.chronicleShown ?? [])]);
+  // The units this mode draws from; the others stand aside (folded into an arc, or read as chapters instead).
+  const pool = new Set((relevantOnly ? finestUnits(files.chronicle) : storySoFar(files.chronicle)).map((u) => u.id));
   const live = files.chronicle.units.filter((u) => !u.stale && !u.ghost);
   const units = files.chronicle.units.map((u) => {
     const parent = live.find((p) => p.id !== u.id && p.children?.includes(u.id));
     return {
       id: u.id, level: u.level, no: u.no, title: u.title, startIdx: u.startIdx, endIdx: u.endIdx, storyStart: u.storyStart, storyEnd: u.storyEnd, text: u.text,
       locked: !!u.locked, ghost: !!u.ghost, stale: !!u.stale, count: u.msgIds.length, detail: u.detail, children: u.children ?? [],
-      parent: parent?.id, tokens: estTokens(u.text), folded: !u.stale && !u.ghost && !inPrompt.has(u.id),
+      parent: parent?.id, tokens: estTokens(u.text), folded: !u.stale && !u.ghost && !pool.has(u.id) && !inPrompt.has(u.id), inPrompt: inPrompt.has(u.id),
     };
   });
   const total = Math.max(1, L.path.length);
@@ -153,7 +157,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     planError: meta.planError ?? null,
     hiddenFacts,
     codex: L.records.map((r) => ({ id: r.id, kind: r.kind, name: r.name, summary: r.summary, keys: r.keys, locked: !!r.locked, status: r.status, source: r.provenance.source, narratorOnly: !!r.scope.narratorOnly, salience: Math.round(r.salience * 100) / 100, body: pickBody(r.body), aliases: r.aliases })),
-    chronicle: { units, coverage, tokens, counts: levelCounts },
+    chronicle: { units, coverage, tokens, counts: levelCounts, mode: !settings.chronicle ? "off" : relevantOnly ? "relevant" : "all" },
     timeline: st.milestones.slice(-120).map((m) => ({ at: m.at ? fmtTime(m.at) : "", day: m.at?.day ?? null, kind: m.kind, text: m.text, msgIndex: m.msgIndex })),
     world: {
       factions: Object.values(st.factions).map((f) => ({ name: f.name, clocks: Object.values(f.clocks) })),

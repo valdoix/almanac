@@ -90,20 +90,6 @@ describe("recall and note", () => {
     expect(r.feed.find((f) => f.id.startsWith("cons:"))?.reasons.join(" ")).toMatch(/due/);
   });
 
-  test("a zoomed-in chapter is a whole record (turn planning reads its provenance)", () => {
-    const state = world();
-    const recs = buildCodex(state, emptyCodexStore());
-    const r = recall({
-      state, records: recs, index: new KeyIndex(recs), playerMsg: "Back to the harbour.", lastReply: "", recent: [],
-      zoom: [{ id: "c2", title: "Chapter 2", text: "The harbourmaster's letter burned.", score: 0.8 }],
-      tier: "routine", budget: 800, allowNarratorOnly: true, userName: "Wren",
-    });
-    const z = r.items.find((i) => i.lane === "zoom");
-    expect(z?.text).toContain("[Earlier — Chapter 2]");
-    expect(z?.record.provenance.source).toBe("story");
-    expect(z?.record.scope).toEqual({});
-  });
-
   test("knowledge-perspective fact rendering", () => {
     const state = world();
     const recs = buildCodex(state, emptyCodexStore());

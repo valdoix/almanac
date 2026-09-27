@@ -217,48 +217,217 @@ export interface SpliceMessage {
 }
 
 /**
- * Drop chat-history turns covered by a chronicle unit and put the unit's text
- * where they were (flush each summary before the next visible message).
+ * Drop chat-history turns covered by a chronicle unit, and put `units` (the
+ * summaries chosen for this turn) where those turns were, in story order: each
+ * one before the first visible turn that comes after it. Covered turns are
+ * usually hidden, so the host has already left them out; the summaries still go
+ * in, or the model would never see the story before the raw tail.
  */
-export function splice<T extends SpliceMessage>(messages: T[], store: ChronicleStore, idToIndex: Map<string, number>): { messages: T[]; injected: { index: number; name: string }[]; dropped: number } {
+export function splice<T extends SpliceMessage>(messages: T[], store: ChronicleStore, idToIndex: Map<string, number>, units: ChronicleUnit[]): { messages: T[]; injected: { index: number; name: string }[]; dropped: number } {
   const cover = coverageMap(store);
-  if (!cover.size) return { messages, injected: [], dropped: 0 };
+  if (!cover.size && !units.length) return { messages, injected: [], dropped: 0 };
+  const pending = [...units].sort((a, b) => a.startIdx - b.startIdx);
   const out: T[] = [];
   const injected: { index: number; name: string }[] = [];
-  const emitted = new Set<string>();
+  const flush = (before: number) => {
+    while (pending.length && pending[0].endIdx < before) {
+      const u = pending.shift()!;
+      out.push({ role: "system", content: `${unitHeader(u)}\n${u.text}` } as T);
+      injected.push({ index: out.length - 1, name: `ALMANAC · ${cap(u.level)} ${u.no}` });
+    }
+  };
   let dropped = 0;
+  let lastHistory = -1;
   for (const m of messages) {
     const idx = m.__isChatHistory ? (m.sourceIndexInChat ?? (m.sourceMessageId ? idToIndex.get(m.sourceMessageId) : undefined)) : undefined;
-    const unit = idx != null ? cover.get(idx) : undefined;
-    if (unit) {
-      if (!emitted.has(unit.id)) {
-        emitted.add(unit.id);
-        out.push({ role: "system", content: `${unitHeader(unit)}\n${unit.text}` } as T);
-        injected.push({ index: out.length - 1, name: `ALMANAC · ${cap(unit.level)} ${unit.no}` });
-      }
+    if (idx != null && cover.has(idx)) {
       dropped++;
       continue;
     }
+    if (idx != null) flush(idx);
     out.push(m);
+    if (m.__isChatHistory) lastHistory = out.length - 1;
+  }
+  if (pending.length) {
+    // Nothing visible after them: put them at the end of the chat history.
+    const tail = out.splice(lastHistory + 1);
+    flush(Infinity);
+    out.push(...tail);
   }
   return { messages: out, injected, dropped };
 }
 
-/** Zoom-in: when a fact lies inside an arc/volume span, offer the finer chapter text. */
-export function zoomCandidates(store: ChronicleStore, query: string, limit = 2): { id: string; title: string; text: string; score: number }[] {
-  const cover = coverageMap(store);
-  const coarse = new Set([...cover.values()].filter((u) => u.level !== "chapter").flatMap((u) => u.children ?? []));
-  const words = new Set(query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3));
-  if (!words.size) return [];
-  return store.units
-    .filter((u) => coarse.has(u.id) && !u.stale)
-    .map((u) => {
-      const t = u.text.toLowerCase();
-      let hits = 0;
-      for (const w of words) if (t.includes(w)) hits++;
-      return { id: u.id, title: unitHeader(u), text: u.text, score: hits / words.size };
-    })
-    .filter((x) => x.score >= 0.34)
+// ---------------------------------------------------------------------------
+// Which summaries go in the prompt
+// ---------------------------------------------------------------------------
+
+export type ChronicleInjection = "all" | "relevant";
+
+/** The whole story so far, once: the coarsest live unit for each stretch, in order. */
+export function storySoFar(store: ChronicleStore): ChronicleUnit[] {
+  return [...new Set(coverageMap(store).values())].sort((a, b) => a.startIdx - b.startIdx);
+}
+
+/** The finest live unit for each stretch (the chapters, where they survive), in order. */
+export function finestUnits(store: ChronicleStore): ChronicleUnit[] {
+  const rank = { chapter: 1, arc: 2, volume: 3 } as const;
+  const map = new Map<number, ChronicleUnit>();
+  for (const u of store.units) {
+    if (u.stale || u.ghost) continue;
+    for (let i = u.startIdx; i <= u.endIdx; i++) {
+      const cur = map.get(i);
+      if (!cur || rank[u.level] < rank[cur.level]) map.set(i, u);
+    }
+  }
+  return [...new Set(map.values())].sort((a, b) => a.startIdx - b.startIdx);
+}
+
+/** Text the current turn is about, weighted: the player's message counts most. */
+export interface ChronicleQuery {
+  player: string;
+  lastReply: string;
+  /** Place, who is present, open threads. */
+  scene: string;
+  /** Things the story tracks (people, places, objects, threads), each with every name it goes by. */
+  entities?: string[][];
+  /** The chat's messages: a word most of them use is not rare, however few summaries use it. */
+  background?: string[];
+}
+
+const STOP = new Set(
+  ("that this with from have were they them their there what when where which while would could should about into your just been then than like over only some back down still even more very will said says tell told know knows going being because through before after again other each those these here make made look looks looked asks asked turn turns hand hands eyes face voice head something nothing thing things want wants away around across against also another anything every everything maybe really right left little long much must never next once open other perhaps quite same seems since sure take takes took think thought though toward under until upon well went whole without yeah okay mean means come comes came gets give gives gave keep kept last let's lets while inside outside enough almost already always behind beside between both during either else ever first half later least less many most near off onto own part past second several shall should side small soon such their theirs there's they're three time times today tonight too two unless whom whose why yes yet your yours").split(" "),
+);
+
+function terms(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of text.toLowerCase().split(/[^\p{L}\p{N}']+/u)) {
+    const w = raw.replace(/^'+|'+$/g, "").replace(/'s$/, "");
+    if (w.length < 4 || STOP.has(w) || /^\d+$/.test(w)) continue;
+    out.add(w.length > 5 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+  }
+  return out;
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * How much each unit has to do with this turn. Two signals:
+ * - Names: a person, place, object or thread the turn mentions (the player's
+ *   message, the scene, or the last reply) that the summary mentions too.
+ * - Rare words from the player's message that few summaries use.
+ * Both are weighted by how few units share them, and anything in more than half
+ * the units is ignored: the lead, the player's character and the home they share
+ * say nothing about which chapter matters. Ordinary prose words from the model's
+ * long replies are left out, because every summary is full of them.
+ */
+export function scoreUnits(units: ChronicleUnit[], q: ChronicleQuery): { unit: ChronicleUnit; score: number; matched: string[] }[] {
+  if (!units.length) return [];
+  const n = units.length;
+  const texts = units.map((u) => `${u.title}\n${u.place ?? ""}\n${u.text}`);
+  const idf = (df: number) => (df > 0 && df <= n / 2 ? Math.log((n + 1) / df) : 0);
+  const scores = units.map(() => ({ score: 0, matched: [] as string[] }));
+
+  // Names the turn mentions, by the strongest place it mentions them. The scene
+  // (who is here, where) counts least: it is the same turn after turn.
+  const segs = [[q.player, 3], [q.lastReply, 2], [q.scene, 1]] as const;
+  for (const names of mergeNames(q.entities ?? [])) {
+    // A name written with a capital is matched with one ("Will" the person, not "will");
+    // aliases that are ordinary words are dropped.
+    const alts = [...new Set(names.map((s) => s.trim()).filter((s) => s.length >= 3 && !STOP.has(s.toLowerCase())))].sort((a, b) => b.length - a.length);
+    if (!alts.length) continue;
+    const bound = (x: string) => `(?<![\p{L}\p{N}])${escapeRe(x)}(?![\p{L}\p{N}])`;
+    const proper = alts.filter((x) => /^\p{Lu}/u.test(x));
+    const plain = alts.filter((x) => !/^\p{Lu}/u.test(x));
+    const res = [proper.length ? new RegExp(proper.map(bound).join("|"), "u") : null, plain.length ? new RegExp(plain.map(bound).join("|"), "iu") : null].filter((r): r is RegExp => !!r);
+    const has = (t: string) => res.some((r) => r.test(t));
+    const w = Math.max(0, ...segs.filter(([t]) => t && has(t)).map(([, w]) => w));
+    if (!w) continue;
+    const hits = texts.map(has);
+    const k = idf(hits.filter(Boolean).length) * w;
+    if (!k) continue;
+    hits.forEach((h, i) => {
+      if (!h) return;
+      scores[i].score += k;
+      scores[i].matched.push(alts[0]);
+    });
+  }
+
+  // Rare words in the player's own message (a horse, a burnt letter): rare in the
+  // summaries and in the chat itself. Two are needed to count.
+  const bags = texts.map((t) => terms(t));
+  const df = new Map<string, number>();
+  for (const b of bags) for (const w of b) df.set(w, (df.get(w) ?? 0) + 1);
+  const rare = Math.max(1, Math.floor(n / 6));
+  const mine = [...terms(q.player)].filter((t) => t.length >= 5 && !t.includes("'") && (df.get(t) ?? 0) > 0 && df.get(t)! <= rare);
+  const bg = q.background ?? [];
+  const bgDf = new Map(mine.map((t) => [t, 0]));
+  for (const m of bg) for (const t of terms(m)) if (bgDf.has(t)) bgDf.set(t, bgDf.get(t)! + 1);
+  const bgMax = Math.max(2, bg.length * 0.05);
+  for (const t of mine) {
+    const d = df.get(t)!;
+    if (bgDf.get(t)! > bgMax) continue;
+    const k = 1.5 * idf(d);
+    bags.forEach((b, i) => {
+      if (!b.has(t) || scores[i].matched.some((m) => m.toLowerCase().includes(t))) return;
+      scores[i].score += k;
+      scores[i].matched.push(t);
+    });
+  }
+  return units.map((unit, i) => ({ unit, ...scores[i] }));
+}
+
+/** Joins entries that share a name (a person the story tracks and the same person in a lorebook). */
+function mergeNames(entities: string[][]): string[][] {
+  const groups: Set<string>[] = [];
+  for (const names of entities) {
+    const g = new Set(names.map((x) => x.trim()).filter(Boolean));
+    const keys = new Set([...g].map((x) => x.toLowerCase()));
+    for (let i = groups.length - 1; i >= 0; i--) {
+      if (![...groups[i]].some((x) => keys.has(x.toLowerCase()))) continue;
+      for (const x of groups[i]) g.add(x);
+      groups.splice(i, 1);
+    }
+    groups.push(g);
+  }
+  return groups.map((g) => [...g]);
+}
+
+/** A unit is relevant with one rare name, or a few rare words, in common with the turn. */
+const RELEVANT_SCORE = 4.5;
+const RELEVANT_MAX = 3;
+const ZOOM_MAX = 2;
+
+/**
+ * The summaries this turn's prompt carries, in story order.
+ * - all: the whole story so far, at the coarsest level that covers each stretch,
+ *   plus (in full) up to two chapters folded into an arc or volume that this turn touches.
+ * - relevant: the latest summary (it leads into the turns the model can see), and
+ *   up to three earlier chapters this turn touches.
+ */
+export function pickChronicle(store: ChronicleStore, mode: ChronicleInjection, q: ChronicleQuery): ChronicleUnit[] {
+  if (mode === "all") return [...storySoFar(store), ...zoomCandidates(store, q)].sort((a, b) => a.startIdx - b.startIdx || rankOf(b) - rankOf(a));
+  const fine = finestUnits(store);
+  if (!fine.length) return [];
+  const latest = fine[fine.length - 1];
+  const picked = scoreUnits(fine.slice(0, -1), q)
+    .filter((x) => x.score >= RELEVANT_SCORE)
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .slice(0, RELEVANT_MAX)
+    .map((x) => x.unit);
+  return [...picked, latest].sort((a, b) => a.startIdx - b.startIdx);
+}
+
+const rankOf = (u: ChronicleUnit) => ({ chapter: 1, arc: 2, volume: 3 })[u.level];
+
+/** Zoom-in (whole-story mode): chapters folded into an arc or volume that this turn touches. */
+export function zoomCandidates(store: ChronicleStore, q: ChronicleQuery, limit = ZOOM_MAX): ChronicleUnit[] {
+  const shown = new Set(storySoFar(store).map((u) => u.id));
+  const chapters = store.units.filter((u) => u.level === "chapter" && !u.stale && !u.ghost);
+  const folded = new Set(chapters.filter((u) => !shown.has(u.id)).map((u) => u.id));
+  if (!folded.size) return [];
+  return scoreUnits(chapters, q)
+    .filter((x) => folded.has(x.unit.id) && x.score >= RELEVANT_SCORE)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.unit);
 }

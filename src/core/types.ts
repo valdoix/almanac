@@ -475,6 +475,8 @@ export interface Settings {
   fanIn: number;
   hideCovered: boolean;
   chronicle: boolean;
+  /** Which summaries go in the prompt: the whole story every turn, or only the ones this turn touches. */
+  chronicleInject: "all" | "relevant";
   summarizerConnection: string;
   /** How much the chronicle keeps: brief, standard, detailed or exhaustive. */
   summaryDetail: "brief" | "standard" | "detailed" | "exhaustive";
@@ -529,6 +531,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fanIn: 4,
   hideCovered: true,
   chronicle: true,
+  chronicleInject: "all",
   summarizerConnection: "",
   summaryDetail: "detailed",
   summaryFocus: "",

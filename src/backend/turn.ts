@@ -3,7 +3,7 @@
 // mirror/lore decisions; the prompt interceptor then injects note + recall.
 
 import { detectDivergence } from "../core/codex";
-import { zoomCandidates } from "../core/chronicle";
+import { pickChronicle } from "../core/chronicle";
 import { buildLedgerNote } from "../core/note";
 import { chekhovNudges } from "../core/pressures";
 import { recall, tierGuess } from "../core/recall";
@@ -24,6 +24,8 @@ export interface TurnPlan {
   enabled: boolean;
   note: string;
   recallText: string;
+  /** Chronicle unit ids whose summaries go in this prompt. */
+  chronicle: string[];
   mirrorPicks: Record<string, string>; // codexId → rendered text for this prompt
   mirrorChronicle: Set<string>; // mirror entry ids that must never be host-injected
   lorePicks: Set<string>; // lore entry ids to force
@@ -90,9 +92,17 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     semantic = act.filter((a) => a.source === "vector" && byEntry.has(a.id)).map((a) => ({ recordId: byEntry.get(a.id)!, score: a.score ?? 0.5 }));
   }
 
-  const zoom = zoomCandidates(files.chronicle, `${player} ${lastReply}`);
+  // Chronicle: the summaries of the turns before the raw tail (see pickChronicle).
+  const scene = [st.place.join(" › "), ...Object.values(st.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).map((c) => c.name), ...Object.values(st.threads).filter((t) => t.status !== "resolved").map((t) => t.title)].join(" · ");
+  // Names to match: people, groups, objects, and places with a proper name (not "kitchen").
+  const entities = L.records
+    .filter((r) => r.kind === "person" || r.kind === "object" || r.kind === "group" || (r.kind === "place" && /^\p{Lu}/u.test(r.name)))
+    .map((r) => [r.name, ...(r.aliases ?? [])]);
+  const cq = { player, lastReply, scene, entities, background: L.path.map((m) => m.content) };
+  const chronMode = settings.chronicleInject === "relevant" ? "relevant" : "all";
+  const chronicle = settings.chronicle ? pickChronicle(files.chronicle, chronMode, cq).map((u) => u.id) : [];
   const rc = recall({
-    state: st, records: L.records, index: L.index, playerMsg: player, lastReply, recent, semantic, zoom,
+    state: st, records: L.records, index: L.index, playerMsg: player, lastReply, recent, semantic,
     heat: settings.keyHeat ? meta.heat : undefined, injectedHistory: meta.injected, usedLastTurn: new Set(meta.lastInjected),
     leadGenre: leadGenre(meta), tier, budget: Math.round(settings.recallBudget * 0.46), allowNarratorOnly: true, userName: L.names.user,
   });
@@ -103,7 +113,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   const recallItems: string[] = [];
   const mirrorActive = settings.mirror !== "off" && !!meta.mirror.bookId;
   for (const it of rc.items) {
-    if (mirrorActive && meta.mirror.entries[it.record.id] && it.lane !== "zoom") mirrorPicks[it.record.id] = it.text ?? it.record.summary;
+    if (mirrorActive && meta.mirror.entries[it.record.id]) mirrorPicks[it.record.id] = it.text ?? it.record.summary;
     else if (it.text) recallItems.push(it.text);
   }
   const recallText = recallItems.length ? `<recall>\n${recallItems.join("\n")}\n</recall>` : "";
@@ -162,10 +172,15 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   }
 
   const plan: TurnPlan = {
-    chatId, genType, createdAt: Date.now(), enabled: true, note: noteRes.text, recallText, mirrorPicks,
+    chatId, genType, createdAt: Date.now(), enabled: true, note: noteRes.text, recallText, chronicle, mirrorPicks,
     mirrorChronicle: new Set(Object.entries(meta.mirror.entries).filter(([id]) => id.startsWith("chron:")).map(([, v]) => v.entryId)),
     lorePicks, loreManagedBooks, divergence, tier,
-    feed: { at: Date.now(), tier, items: rc.feed, tokens: rc.tokens + noteRes.tokens },
+    feed: {
+      at: Date.now(), tier, tokens: rc.tokens + noteRes.tokens,
+      // Where each injected record went: the <recall> block, or a forced entry in the mirror lorebook.
+      items: rc.feed.map((f) => (f.injected ? { ...f, via: mirrorPicks[f.id] ? ("mirror" as const) : ("recall" as const) } : f)),
+      chronicle: chronicle.map((id) => files.chronicle.units.find((u) => u.id === id)).filter((u) => !!u).map((u) => ({ id: u.id, name: `${u.level[0].toUpperCase()}${u.level.slice(1)} ${u.no}: ${u.title}` })),
+    },
     firedKeys: rc.firedKeys, injectedIds: rc.items.map((i) => i.record.id), returning: !!returning, formatExample, speechFix,
   };
   if (!opts.dryRun) {
@@ -173,12 +188,13 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     for (const id of plan.injectedIds) (meta.injected[id] ??= []).push(st.msgCount);
     for (const k of Object.keys(meta.injected)) meta.injected[k] = meta.injected[k].slice(-6);
     meta.lastInjected = plan.injectedIds;
+    meta.chronicleShown = chronicle;
     if (plan.feed) meta.feed = [plan.feed, ...meta.feed].slice(0, 12);
     if (returning) meta.greetedReturn = L.path.length;
     for (const a of arrivals) a.delivered = true;
   }
   plans.set(chatId, plan);
-  debug(`plan ${chatId}: note ${noteRes.tokens}t, recall ${rc.tokens}t, mirror ${Object.keys(mirrorPicks).length}, lore ${lorePicks.size}`);
+  debug(`plan ${chatId}: note ${noteRes.tokens}t, recall ${rc.tokens}t, chronicle ${chronicle.length} (${chronMode}), mirror ${Object.keys(mirrorPicks).length}, lore ${lorePicks.size}`);
   return plan;
 }
 

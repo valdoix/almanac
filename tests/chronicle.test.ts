@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { LedgerRuntime, toPath, type RawChatMessage } from "../src/core/branch";
-import { coverageGaps, emptyChronicle, makeUnit, planChronicle, splice, validateUnits, zoomCandidates } from "../src/core/chronicle";
+import { coverageGaps, emptyChronicle, makeUnit, pickChronicle, planChronicle, splice, storySoFar, validateUnits, zoomCandidates, type ChronicleUnit } from "../src/core/chronicle";
 import { classify, seedOverlays } from "../src/core/lore";
 import { codexToLorebook, healthCheck, linkEntries, normalizeEntry, simulateActivation, toLumiverse, validateEntry } from "../src/core/creator";
 import { extractOps } from "../src/core/extractor";
@@ -45,7 +45,7 @@ describe("chronicle", () => {
     store.units.push(makeUnit(job, "Title: The Long Morning\nWhat happened: Mara and Wren crossed town.", path, state, store));
     const msgs = [{ role: "system" as const, content: "sys" }, ...path.map((m) => ({ role: (m.isUser ? "user" : "assistant") as "user" | "assistant", content: m.content, __isChatHistory: true, sourceMessageId: m.id, sourceIndexInChat: m.index }))];
     const idx = new Map(path.map((m) => [m.id, m.index]));
-    const out = splice(msgs, store, idx);
+    const out = splice(msgs, store, idx, storySoFar(store));
     expect(out.dropped).toBe(job.endIdx - job.startIdx + 1);
     expect(out.messages[1].content).toMatch(/^\[Chapter 1: The Long Morning/);
     expect(out.injected[0].index).toBe(1);
@@ -53,16 +53,61 @@ describe("chronicle", () => {
     const edited = path.map((m) => (m.index === 2 ? { ...m, content: m.content + " edited" } : m));
     const stale = validateUnits(store, edited);
     expect(stale).toHaveLength(1);
-    expect(splice(msgs, store, idx).dropped).toBe(0);
+    expect(splice(msgs, store, idx, storySoFar(store)).dropped).toBe(0);
+    expect(storySoFar(store)).toEqual([]);
   });
 
-  test("arcs roll up chapters; zoom-in finds the finer chapter", () => {
+  test("summaries go in even when the covered turns are hidden and never reach the prompt", () => {
+    const rt = new LedgerRuntime();
+    const path = toPath(longChat(60));
+    const { state } = rt.fold(path, OPTS);
+    const store = emptyChronicle();
+    const job = planChronicle(path, state, store, { rawTail: 20, rawTailTokens: 12000, chapterThresholdTokens: 6000, fanIn: 4 })!;
+    store.units.push(makeUnit(job, "Title: The Long Morning\nWhat happened: Mara and Wren crossed town.", path, state, store));
+    // The host leaves hidden turns out: only the raw tail arrives.
+    const visible = path.filter((m) => m.index > job.endIdx);
+    const msgs = [{ role: "system" as const, content: "sys" }, ...visible.map((m) => ({ role: (m.isUser ? "user" : "assistant") as "user" | "assistant", content: m.content, __isChatHistory: true, sourceMessageId: m.id, sourceIndexInChat: m.index })), { role: "system" as const, content: "post-history" }];
+    const out = splice(msgs, store, new Map(path.map((m) => [m.id, m.index])), storySoFar(store));
+    expect(out.dropped).toBe(0);
+    expect(out.messages).toHaveLength(msgs.length + 1);
+    expect(out.messages[1].content).toMatch(/^\[Chapter 1: The Long Morning/);
+    expect((out.messages[2] as any).sourceIndexInChat).toBe(job.endIdx + 1);
+    expect(out.injected).toEqual([{ index: 1, name: "ALMANAC · Chapter 1" }]);
+  });
+
+  test("the whole story, or only what the turn touches", () => {
+    const store = emptyChronicle();
+    const texts = [
+      "Buffy and Gabriel walk the cemetery. Buffy stakes a fledgling by the mausoleum.",
+      "Buffy and Gabriel share waffles at the diner. Ruth the cat steals a strip of bacon.",
+      "Buffy finds the black stone in Willow's basement; the runes on it glow when Gabriel touches it.",
+      "Buffy and Gabriel argue on the porch about the promise he made to Valeria.",
+      "Buffy and Gabriel patrol again. Buffy is quiet about heaven.",
+      "Buffy and Gabriel sleep at the shelter after the fight at the Bronze.",
+    ];
+    texts.forEach((text, i) => store.units.push({ id: `c${i}`, level: "chapter", no: i + 1, title: `Ch${i + 1}`, startIdx: i * 10, endIdx: i * 10 + 9, msgIds: [], signature: "", text, createdAt: 0 } as ChronicleUnit));
+    store.units.push({ id: "a1", level: "arc", no: 1, title: "Arc", startIdx: 0, endIdx: 39, msgIds: [], signature: "", text: "The first nights.", children: ["c0", "c1", "c2", "c3"], createdAt: 0 });
+    expect(pickChronicle(store, "all", { player: "", lastReply: "", scene: "" }).map((u) => u.id)).toEqual(["a1", "c4", "c5"]);
+    const q = { player: "I take the black stone out and turn the glowing runes toward the light.", lastReply: "Buffy watches you.", scene: "Revello Drive · Buffy · Gabriel" };
+    expect(pickChronicle(store, "relevant", q).map((u) => u.id)).toEqual(["c2", "c5"]);
+    // Names that run through every chapter pick nothing on their own; the latest always goes.
+    expect(pickChronicle(store, "relevant", { player: "Buffy looks at Gabriel.", lastReply: "", scene: "Buffy · Gabriel" }).map((u) => u.id)).toEqual(["c5"]);
+  });
+
+  test("arcs roll up chapters; a turn that touches a folded chapter brings it back in full", () => {
     const store = emptyChronicle();
     for (let i = 0; i < 4; i++) store.units.push({ id: `c${i}`, level: "chapter", no: i + 1, title: `Ch${i}`, startIdx: i * 10, endIdx: i * 10 + 9, msgIds: [], signature: "", text: i === 2 ? "The harbourmaster's letter burned in the stove." : "Nothing much.", createdAt: 0 });
     const job = planChronicle(toPath(longChat(60)), { sceneLog: [] } as any, store, { rawTail: 20, rawTailTokens: 99999, chapterThresholdTokens: 6000, fanIn: 4 });
     expect(job?.level).toBe("arc");
     store.units.push({ id: "a1", level: "arc", no: 1, title: "Arc", startIdx: 0, endIdx: 39, msgIds: [], signature: "", text: "A long stretch.", children: ["c0", "c1", "c2", "c3"], createdAt: 0 });
-    expect(zoomCandidates(store, "what happened to the harbourmaster letter")[0]?.id).toBe("c2");
+    const q = { player: "What happened to the harbourmaster's letter?", lastReply: "", scene: "" };
+    expect(zoomCandidates(store, q)[0]?.id).toBe("c2");
+    // The whole story: the arc, with the chapter the turn touches right after it, uncut.
+    const picked = pickChronicle(store, "all", q);
+    expect(picked.map((u) => u.id)).toEqual(["a1", "c2"]);
+    const msgs = [{ role: "user" as const, content: "now", __isChatHistory: true, sourceIndexInChat: 50 }];
+    const out = splice(msgs, store, new Map(), picked);
+    expect(out.messages.map((m) => m.content)).toEqual(["[Arc 1: Arc]\nA long stretch.", "[Chapter 3: Ch2]\nThe harbourmaster's letter burned in the stove.", "now"]);
   });
 
   test("coverage gaps list important subjects the summary missed", () => {

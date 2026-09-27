@@ -1,5 +1,6 @@
 // Recall: hybrid, knowledge-aware retrieval into a budgeted block.
-// Stages: query segments → candidates (keys, graph, temporal, semantic, zoom-in)
+// Stages: query segments → candidates (keys, graph, temporal, semantic)
+// (Chapters folded into an arc come back through the chronicle, not here.)
 // → scoring → knowledge-perspective rendering → tiered compression to budget.
 
 import type { CodexRecord } from "./codex";
@@ -18,7 +19,6 @@ export interface RecallInput {
   lastReply: string;
   recent: string[];
   semantic?: { recordId: string; score: number }[];
-  zoom?: { id: string; title: string; text: string; score: number }[];
   heat?: Record<string, KeyHeat>;
   injectedHistory?: Record<string, number[]>; // recordId -> msgCounts when injected
   usedLastTurn?: Set<string>;
@@ -33,7 +33,7 @@ export interface RecallItem {
   record: CodexRecord;
   score: number;
   reasons: string[];
-  lane: "detail" | "document" | "zoom";
+  lane: "detail" | "document";
   text?: string;
 }
 
@@ -198,17 +198,6 @@ export function recall(input: RecallInput): RecallResult {
     addItem({ ...x, lane: x.record.kind === "document" ? "document" : "detail" }, [full, mid, x.record.summary]);
     if (used >= budget) break;
   }
-  for (const z of input.zoom ?? []) {
-    if (used >= budget) break;
-    const t = `[Earlier — ${z.title}] ${z.text}`;
-    // A whole record, not a partial cast: callers read provenance and scope on every item.
-    const record: CodexRecord = {
-      id: z.id, kind: "history", tense: "past", name: z.title, aliases: [], keys: [], summary: z.text, body: {}, links: [], scope: {},
-      provenance: { source: "story" }, salience: z.score, lastSeen: 0, status: "active",
-    };
-    addItem({ record, score: z.score, reasons: ["zoom-in"], lane: "zoom" }, [t, truncateTokens(t, 160)]);
-  }
-
   const text = items.length ? `<recall>\n${items.map((i) => i.text).join("\n")}\n</recall>` : "";
   const injected = new Set(items.map((i) => i.record.id));
   return {

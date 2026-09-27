@@ -171,9 +171,12 @@ Still open: Mara owes {{user}} a favour · Who took the locket from Kael? · The
 
 ### 5.3 Hiding and splicing
 1. When a chapter is accepted, its messages are flagged `hidden` via `spindle.chat.setMessagesHidden` (UI dimming and exclusion from vector memory).
-2. Because Lumiverse's `hidden` **does not** remove messages from prompt assembly, the **interceptor drops covered `__isChatHistory` messages and inserts the summary exactly where they were** (LumiBooks' `injection.ts` algorithm: flush every summary whose span ends before the next visible message).
+2. Lumiverse leaves `hidden` messages out of prompt assembly, so the covered turns usually never reach the interceptor. The interceptor therefore does not wait to find them: it puts the summaries chosen for the turn before the first visible turn that comes after them, in story order, and drops any covered turn that does reach it (when hiding is off). An earlier version only put a summary where a covered turn still stood, so with hiding on no summary ever reached the model.
 3. Arcs supersede chapters and volumes supersede arcs. Only the highest active tier is injected for any span.
-4. **Zoom-in recall:** when Recall finds a strongly relevant fact inside an arc-covered span, it can inject the finer **chapter** summary (or a verbatim excerpt from the hidden raw messages) as a `<recall>` item. Compression never loses reachability.
+4. **Which summaries (setting `chronicleInject`):**
+   - **all** (default): the whole story so far on every turn, once, at the coarsest level that covers each stretch (volumes, then arcs, then leftover chapters). When the turn touches a chapter folded into an arc or volume, up to two such chapters also go in, whole, right after their arc. Compression never loses reachability.
+   - **relevant**: the latest summary (it leads into the raw tail) plus up to three earlier chapters the turn touches.
+   - "Touches" means sharing a name the story tracks (a person, a group, an object, or a place with a proper name) with the player's message, the last reply or the scene; or sharing two rare words with the player's message ("rare" meaning rare in the summaries and in the chat). A name or word that more than half the summaries use counts for nothing.
 5. Editing or deleting a covered message invalidates that summary (signature divergence, like LumiBooks' cursor). It is re-summarised in the background; until then the raw messages are unhidden.
 
 ### 5.4 Chronicle UI

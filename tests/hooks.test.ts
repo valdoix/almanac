@@ -152,6 +152,31 @@ describe("extension hooks with the preset", () => {
     expect(hist.content).toBe(`[spk=Buffy#1|flat]"Great. Another one."[/spk]`);
   });
 
+  test("chapters go in the prompt although the turns they cover are hidden", async () => {
+    const { spanSignature } = await import("../src/core/chronicle");
+    const { toPath } = await import("../src/core/branch");
+    const path = toPath(messages as any);
+    const chronKey = [...files.keys()].find((k) => k.includes(CHAT) && /meta/.test(k))!.replace(/meta\.json$/, "chronicle.json");
+    const unit = { id: "ch1", level: "chapter", no: 1, title: "The Dock", startIdx: 0, endIdx: 0, msgIds: ["m0"], signature: spanSignature(path, 0, 0), text: "Mara met Wren on the dock.", createdAt: 0 };
+    files.set(chronKey, JSON.stringify({ units: [unit], hidden: ["m0"], version: 1 }));
+    const { loadChat } = await import("../src/backend/store");
+    (await loadChat(CHAT, USER)).chronicle = JSON.parse(files.get(chronKey)!);
+    // The host leaves the hidden opening out of the prompt.
+    const prompt = [
+      { role: "system", content: CHARTER },
+      { role: "user", content: SAMPLE_USER, __isChatHistory: true, sourceMessageId: "m1", sourceIndexInChat: 1 },
+      { role: "assistant", content: SAMPLE_REPLY, __isChatHistory: true, sourceMessageId: "m2", sourceIndexInChat: 2 },
+      { role: "user", content: "I tell Kael to put the glass down." },
+    ];
+    await hooks.context({ chatId: CHAT, userId: USER, generationType: "normal" });
+    const res = await hooks.prompt(prompt, { chatId: CHAT, userId: USER, generationType: "normal" });
+    const i = res.messages.findIndex((m: any) => /^\[Chapter 1: The Dock/.test(m.content));
+    expect(i).toBe(1);
+    // Before the first raw turn (Recall, when there is any, sits between them).
+    expect(res.messages.findIndex((m: any) => m.sourceMessageId === "m1")).toBeGreaterThan(i);
+    expect(res.breakdown.some((b: any) => b.name === "ALMANAC · Chapter 1")).toBe(true);
+  });
+
   test("a turn that went out without the note shows in the drawer until a plan works again", async () => {
     const { notePlanError } = await import("../src/backend/turn");
     const { buildView } = await import("../src/backend/view");
