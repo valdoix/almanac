@@ -29,6 +29,7 @@ export interface TurnPlan {
   mirrorPicks: Record<string, string>; // codexId → rendered text for this prompt
   mirrorChronicle: Set<string>; // mirror entry ids that must never be host-injected
   lorePicks: Set<string>; // lore entry ids to force
+  loreFold: Record<string, string>; // lore entry id → mirror codex id whose card carries its text
   loreManagedBooks: Set<string>;
   divergence: Record<string, string>; // lore entry id → note
   tier: "routine" | "charged" | "pivotal";
@@ -118,14 +119,18 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   }
   const recallText = recallItems.length ? `<recall>\n${recallItems.join("\n")}\n</recall>` : "";
 
-  // Lore bridge decisions
+  // Lore bridge decisions. A story record that carries a lore baseline (Buffy, joined to her lore
+  // entry) goes out as one card: its mirror entry carries the lore text, and the lore entry stays out.
   const lorePicks = new Set<string>();
+  const loreFold: Record<string, string> = {};
   const loreManagedBooks = new Set<string>();
   for (const [bookId, b] of Object.entries(meta.lore.books)) if (b.mode === "managed") loreManagedBooks.add(bookId);
   for (const it of rc.items) {
     const le = it.record.provenance?.loreEntryId;
     const lb = it.record.provenance?.loreBookId;
-    if (le && lb && meta.lore.books[lb] && meta.lore.books[lb].mode !== "native") lorePicks.add(le);
+    if (!le || !lb || !meta.lore.books[lb] || meta.lore.books[lb].mode === "native") continue;
+    if (mirrorPicks[it.record.id] && it.record.provenance.source !== "lore") loreFold[le] = it.record.id;
+    else lorePicks.add(le);
   }
   const divergence: Record<string, string> = {};
   for (const d of detectDivergence(st, L.records)) {
@@ -174,7 +179,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   const plan: TurnPlan = {
     chatId, genType, createdAt: Date.now(), enabled: true, note: noteRes.text, recallText, chronicle, mirrorPicks,
     mirrorChronicle: new Set(Object.entries(meta.mirror.entries).filter(([id]) => id.startsWith("chron:")).map(([, v]) => v.entryId)),
-    lorePicks, loreManagedBooks, divergence, tier,
+    lorePicks, loreFold, loreManagedBooks, divergence, tier,
     feed: {
       at: Date.now(), tier, tokens: rc.tokens + noteRes.tokens,
       // Where each injected record went: the <recall> block, or a forced entry in the mirror lorebook.

@@ -225,8 +225,11 @@ export function buildCodex(state: WorldState, store: CodexStore): CodexRecord[] 
     });
   }
 
-  // Overlays: keys, locked edits, lore/archivist standalone records
+  // Overlays: keys, locked edits, lore/archivist standalone records.
+  // A lore person the story already tracks joins that person's record instead of standing beside it.
+  const joins = loreJoins(state, store.overlays);
   for (const ov of Object.values(store.overlays)) {
+    if (joins.has(ov.id)) continue;
     const base = out.get(ov.id);
     if (!base && !ov.standalone) continue;
     const rec: CodexRecord = base ?? {
@@ -249,13 +252,108 @@ export function buildCodex(state: WorldState, store: CodexStore): CodexRecord[] 
     if (ov.divergedNote) rec.body.divergedNote = ov.divergedNote;
     out.set(rec.id, rec);
   }
+  for (const [oid, target] of joins) {
+    const rec = out.get(target);
+    if (rec) joinLore(rec, store.overlays[oid], out);
+  }
 
   // Model keys from `keys` ops
   for (const [rid, keys] of Object.entries(state.keys)) {
-    const r = out.get(rid) ?? out.get(rid.replace(/^custom:/, "char:"));
+    const r = out.get(rid) ?? out.get(rid.replace(/^custom:/, "char:")) ?? out.get(joins.get(rid) ?? "");
     if (r) r.keys = uniq([...r.keys, ...keys]);
   }
   return [...out.values()];
+}
+
+const norm = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[’`]/g, "'").replace(/\s+/g, " ").trim();
+// Titles and kin words: "Dr." is nobody's first name, and a story's "Mom" is not the lore's "Mom".
+const TITLE = /^(mr|mrs|ms|miss|dr|doctor|uncle|aunt|auntie|grandpa|grandma|grandfather|grandmother|granny|nana|sir|lady|lord|father|mother|brother|sister|mom|mum|dad|mama|papa|captain|professor|boss|the)\.?$/i;
+
+/**
+ * Lore person overlays that describe a person the story already tracks: overlay id → story record id.
+ * Joined on the full name or an alias (Valeria Ahearn's alias "Valeria"), or on the first name when
+ * only one lore person and one story person carry it. A name another lore person owns never joins.
+ */
+export function loreJoins(state: WorldState, overlays: Record<string, CodexOverlay>): Map<string, string> {
+  const out = new Map<string, string>();
+  const lore = Object.values(overlays).filter((o) => o.provenance?.source === "lore" && o.kind === "person" && o.name);
+  if (!lore.length) return out;
+  const story = Object.values(state.chars).map((c) => ({ id: `char:${c.id}`, names: uniq([c.name, ...c.aliases].map(norm).filter(Boolean)) }));
+  const storyIds = new Set(story.map((s) => s.id));
+  const loreNames = new Set(lore.map((o) => norm(o.name!)));
+  const words = (o: CodexOverlay) => norm(o.name!).split(" ");
+  const firstOf = (o: CodexOverlay) => {
+    const t = words(o);
+    return t.length > 1 && t[0].length >= 3 && !TITLE.test(t[0]) ? t[0] : null;
+  };
+  // Built from the person's own name ("Buffy", "Mr. Clark") or a nickname ("Val", or a key naming someone else).
+  const derived = (o: CodexOverlay, n: string) => n.split(" ").some((t) => words(o).includes(t));
+  const namesOf = (o: CodexOverlay) => uniq([norm(o.name!), ...(o.aliases ?? []).map(norm).filter((a) => a && !loreNames.has(a) && !TITLE.test(a))]);
+  // Which lore people answer to each name; a claim from one's own name outranks a nickname claim.
+  const owners = new Map<string, { strong: Set<string>; weak: Set<string> }>();
+  const claim = (n: string, id: string, strong: boolean) => {
+    const o = owners.get(n) ?? { strong: new Set<string>(), weak: new Set<string>() };
+    (strong ? o.strong : o.weak).add(id);
+    owners.set(n, o);
+  };
+  for (const o of lore) {
+    for (const n of namesOf(o)) claim(n, o.id, derived(o, n));
+    const f = firstOf(o);
+    if (f) claim(f, o.id, true);
+  }
+  const ownedBy = (n: string, id: string) => {
+    const o = owners.get(n);
+    const set = o?.strong.size ? o.strong : o?.weak;
+    return !!set && set.size === 1 && set.has(id);
+  };
+  const claims = new Map<string, { lore: string; exact: boolean }[]>();
+  for (const o of lore) {
+    if (storyIds.has(o.id)) {
+      out.set(o.id, o.id); // same id: already the story's record
+      continue;
+    }
+    const full = norm(o.name!);
+    const names = namesOf(o).filter((n) => ownedBy(n, o.id));
+    const find = (ns: string[]) => story.filter((s) => s.names.some((n) => ns.includes(n)));
+    // Surest first: the full name, then aliases built from it ("Buffy Anne Summers", "Walter"), then nicknames.
+    const tiers = [names.filter((n) => n === full), names.filter((n) => n !== full && derived(o, n)), names.filter((n) => !derived(o, n))];
+    let hit: typeof story = [];
+    for (const t of tiers) if (!hit.length && t.length) hit = find(t);
+    let exact = true;
+    const f = firstOf(o);
+    if (!hit.length && f && ownedBy(f, o.id)) {
+      // "Valeria" in the story, "Valeria Ahearn" in the lore: a bare first name only.
+      hit = find([f]);
+      exact = false;
+    }
+    if (hit.length !== 1) continue;
+    const list = claims.get(hit[0].id) ?? [];
+    list.push({ lore: o.id, exact });
+    claims.set(hit[0].id, list);
+  }
+  for (const [target, list] of claims) {
+    if ([...out.values()].includes(target)) continue; // the story person already has its own lore record
+    const exact = list.filter((c) => c.exact);
+    const pick = exact.length ? exact : list;
+    if (pick.length === 1) out.set(pick[0].lore, target);
+  }
+  return out;
+}
+
+/** Fold a lore baseline into the story's record: its facts fill gaps, the story keeps name, summary and status. */
+function joinLore(rec: CodexRecord, ov: CodexOverlay, all: Map<string, CodexRecord>) {
+  const others = new Set<string>();
+  for (const r of all.values()) if (r.kind === "person" && r.id !== rec.id) others.add(norm(r.name));
+  const mine = norm(rec.name);
+  rec.aliases = uniq([...rec.aliases, ...[ov.name ?? "", ...(ov.aliases ?? [])].filter((a) => a && norm(a) !== mine && !others.has(norm(a)) && !rec.aliases.some((x) => norm(x) === norm(a)))]);
+  for (const [k, v] of Object.entries(ov.body ?? {})) if (rec.body[k] == null) rec.body[k] = v;
+  if (ov.summary) rec.body.lore = ov.summary;
+  rec.body.loreStatus = ov.status ?? "active";
+  if (ov.links) rec.links = [...rec.links, ...ov.links];
+  if (ov.scope) rec.scope = { ...ov.scope, ...rec.scope };
+  if (ov.provenance?.loreEntryId && !rec.provenance.loreEntryId) rec.provenance = { ...rec.provenance, loreEntryId: ov.provenance.loreEntryId, loreBookId: ov.provenance.loreBookId };
+  rec.keys = uniq([...rec.keys, ...(ov.userKeys ?? []), ...(ov.keys ?? [])]);
+  if (ov.divergedNote && !rec.body.divergedNote) rec.body.divergedNote = ov.divergedNote;
 }
 
 function cap(s: string): string {
@@ -266,6 +364,11 @@ function cap(s: string): string {
 export function detectDivergence(state: WorldState, records: CodexRecord[]): { id: string; note: string }[] {
   const out: { id: string; note: string }[] = [];
   for (const r of records) {
+    // A story person carrying a lore baseline: the story says dead, the lore still has them alive.
+    if (r.kind === "person" && r.provenance.source !== "lore" && r.status === "dead" && r.body.loreStatus && r.body.loreStatus !== "dead") {
+      const c = state.chars[r.id.slice(5)];
+      if (c) out.push({ id: r.id, note: `${c.name} is dead (as of message ${c.lastSeen + 1})` });
+    }
     if (r.provenance.source !== "lore") continue;
     const name = r.name.toLowerCase();
     const c = Object.values(state.chars).find((x) => x.name.toLowerCase() === name || name.endsWith(x.name.toLowerCase()));

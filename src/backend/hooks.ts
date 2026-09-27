@@ -57,24 +57,41 @@ export function registerWorldInfoInterceptor() {
       const forced: string[] = [];
       const enabled: string[] = [];
       const mutated: { id: string; content: string }[] = [];
+      const cidOf = (e: (typeof ctx.entries)[number]) => (e.extensions as any)?.almanac?.codexId as string | undefined;
+      const withHistory = (e: (typeof ctx.entries)[number]) => (plan?.divergence[e.id] ? `[History — as of now: ${plan.divergence[e.id]}.] ${e.content}` : e.content);
+      // One card per person: a picked story record carries its lore entry's text, and the lore entry stays out.
+      const folded = new Map<string, string>(); // codex id → lore text
+      if (plan && mirrorBook) {
+        const picked = new Set(ctx.entries.filter((e) => e.world_book_id === mirrorBook && plan!.mirrorPicks[cidOf(e) ?? ""]).map((e) => cidOf(e)!));
+        for (const e of ctx.entries) {
+          const cid = plan.loreFold[e.id];
+          if (cid && picked.has(cid) && !e.disabled && e.content.trim() && files.meta.lore.books[e.world_book_id]) folded.set(cid, withHistory(e));
+        }
+      }
       for (const e of ctx.entries) {
         if (mirrorBook && e.world_book_id === mirrorBook) {
-          const cid = (e.extensions as any)?.almanac?.codexId as string | undefined;
+          const cid = cidOf(e);
           if (!cid || cid.startsWith("chron:") || !plan?.mirrorPicks[cid]) {
             disabled.push(e.id);
             continue;
           }
           forced.push(e.id);
           enabled.push(e.id);
-          mutated.push({ id: e.id, content: plan.mirrorPicks[cid] });
+          const lore = folded.get(cid);
+          mutated.push({ id: e.id, content: lore ? `${lore}\n[Now] ${plan.mirrorPicks[cid]}` : plan.mirrorPicks[cid] });
           continue;
         }
         if (!plan) continue;
         const book = files.meta.lore.books[e.world_book_id];
         if (!book) continue;
-        if (plan.divergence[e.id]) mutated.push({ id: e.id, content: `[History — as of now: ${plan.divergence[e.id]}.] ${e.content}` });
+        const into = plan.loreFold[e.id];
+        if (into && folded.has(into)) {
+          disabled.push(e.id);
+          continue;
+        }
+        if (plan.divergence[e.id]) mutated.push({ id: e.id, content: withHistory(e) });
         if (book.mode === "native") continue;
-        if (plan.lorePicks.has(e.id)) {
+        if (plan.lorePicks.has(e.id) || into) {
           forced.push(e.id);
         } else if (book.mode === "managed" && !e.constant) {
           disabled.push(e.id);

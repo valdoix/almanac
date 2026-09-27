@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { LedgerRuntime, toPath, type RawChatMessage } from "../src/core/branch";
 import { buildCodex, emptyCodexStore, detectDivergence } from "../src/core/codex";
+import { classify, seedOverlays } from "../src/core/lore";
 import { cleanKeys, KeyIndex, updateHeat } from "../src/core/keys";
 import { recall, tierGuess } from "../src/core/recall";
 import { buildLedgerNote, knowledgeBrief } from "../src/core/note";
@@ -54,6 +55,62 @@ describe("codex and keys", () => {
     const mara = recs.find((r) => r.id === "char:mara")!;
     expect(mara.summary).toBe("Mara is a smuggler.");
     expect(mara.keys).toContain("smuggling");
+  });
+
+  test("a lore person the story tracks joins the story's record instead of standing beside it", () => {
+    const state = world();
+    const store = emptyCodexStore();
+    const lore = (id: string, name: string, aliases: string[], summary: string, entry: string) =>
+      (store.overlays[id] = { id, standalone: true, kind: "person", name, aliases, summary, body: { role: "smuggler" }, status: "active", provenance: { source: "lore", loreEntryId: entry, loreBookId: "book" } });
+    lore("char:mara_vell", "Mara Vell", ["Mara", "Kael"], "Mara Vell runs contraband through Lowmarket.", "e-mara");
+    lore("char:kael_dunn", "Kael Dunn", [], "Kael Dunn is a sellsword.", "e-kael");
+    lore("char:vance", "Vance", [], "Vance is a harbour broker.", "e-vance");
+    const recs = buildCodex(state, store);
+    const people = recs.filter((r) => r.kind === "person").map((r) => r.id);
+    expect(people).not.toContain("char:mara_vell");
+    expect(people).not.toContain("char:kael_dunn");
+    expect(people).toContain("char:vance");
+    const mara = recs.find((r) => r.id === "char:mara")!;
+    expect(mara.name).toBe("Mara");
+    expect(mara.provenance).toMatchObject({ source: "story", loreEntryId: "e-mara", loreBookId: "book" });
+    expect(mara.body.lore).toBe("Mara Vell runs contraband through Lowmarket.");
+    expect(mara.body.role).toBe("smuggler");
+    expect(mara.aliases).toContain("Mara Vell");
+    expect(mara.aliases).not.toContain("Kael"); // another person's name is nobody's alias
+    // Kael joins on the first name alone: one lore Kael, one story Kael.
+    expect(recs.find((r) => r.id === "char:kael")!.provenance.loreEntryId).toBe("e-kael");
+  });
+
+  test("a first name two lore people share joins neither", () => {
+    const state = world();
+    const store = emptyCodexStore();
+    for (const [id, name] of [["char:kael_dunn", "Kael Dunn"], ["char:kael_morrow", "Kael Morrow"]])
+      store.overlays[id] = { id, standalone: true, kind: "person", name, summary: `${name}.`, provenance: { source: "lore", loreEntryId: id, loreBookId: "book" } };
+    const ids = buildCodex(state, store).map((r) => r.id);
+    expect(ids).toContain("char:kael_dunn");
+    expect(ids).toContain("char:kael_morrow");
+    expect(buildCodex(state, store).find((r) => r.id === "char:kael")!.provenance.loreEntryId).toBeUndefined();
+  });
+
+  test("lore aliases leave out other entries' names and possessive keys", () => {
+    const entry = (id: string, comment: string, key: string[], content: string) => classify({ id, world_book_id: "b", comment, key, content });
+    const ov = seedOverlays([
+      entry("e1", "Character: Buffy Summers", ["Buffy Summers", "Buffy", "Buffy Anne Summers", "Buffybot", "Buffy's"], "Buffy Summers is a human Vampire Slayer."),
+      entry("e2", "Character: Buffybot", ["Buffybot", "the Bot"], "The Buffybot is a robot built in Buffy's likeness."),
+      entry("e3", "Character: Dawn Summers", ["Dawn", "Buffy"], "Dawn Summers is Buffy's sister."),
+    ]);
+    expect(ov["char:buffy_summers"].aliases).toEqual(["Buffy", "Buffy Anne Summers"]);
+    expect(ov["char:dawn_summers"].aliases).toEqual(["Dawn"]);
+  });
+
+  test("a joined person the story killed still reads as alive in the lore: divergence", () => {
+    const state = world();
+    state.chars.kael.dead = true;
+    const store = emptyCodexStore();
+    store.overlays["char:kael_dunn"] = { id: "char:kael_dunn", standalone: true, kind: "person", name: "Kael Dunn", summary: "Kael Dunn is a sellsword.", status: "active", provenance: { source: "lore", loreEntryId: "e-kael", loreBookId: "book" } };
+    const recs = buildCodex(state, store);
+    expect(recs.find((r) => r.id === "char:kael")!.status).toBe("dead");
+    expect(detectDivergence(state, recs).some((d) => d.id === "char:kael" && /dead/.test(d.note))).toBe(true);
   });
 
   test("key hygiene", () => {
@@ -164,7 +221,8 @@ describe("telemetry and pressures", () => {
     const store = emptyCodexStore();
     store.overlays["lore:kael"] = { id: "lore:kael", standalone: true, kind: "person", name: "Kael", provenance: { source: "lore" } };
     const d = detectDivergence(state, buildCodex(state, store));
-    expect(d[0]).toMatchObject({ id: "lore:kael" });
+    // The lore Kael is the story's Kael: the note lands on the joined record.
+    expect(d[0]).toMatchObject({ id: "char:kael" });
   });
 });
 

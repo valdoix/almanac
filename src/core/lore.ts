@@ -177,6 +177,23 @@ const KIND_PREFIX: Partial<Record<CodexKind, string>> = {
 /** Turn classified lore into Codex overlays (baseline records, "true as the story begins"). */
 export function seedOverlays(items: Classified[], opts: { userName?: string } = {}): Record<string, CodexOverlay> {
   const out: Record<string, CodexOverlay> = {};
+  const low = (s: string) => s.toLowerCase().replace(/’/g, "'").trim();
+  const titles = new Set(items.map((c) => low(c.name)));
+  // Which people answer to each name or alias (keys often name whoever the entry mentions).
+  const claims = new Map<string, number>();
+  for (const c of items) if (c.kind === "person") for (const n of new Set([c.name, ...c.aliases].map(low))) claims.set(n, (claims.get(n) ?? 0) + 1);
+  const user = opts.userName ? low(opts.userName) : "";
+  const aliasesOf = (c: Classified) => {
+    const own = low(c.name).split(/\s+/);
+    return c.aliases.filter((a) => {
+      const n = low(a);
+      if (n === low(c.name) || /'s$/.test(n)) return false; // possessive key forms ("Rack's") aren't names
+      if (titles.has(n)) return false; // another entry's title: "Buffybot" is not Buffy
+      if (user && (n === user || n === user.split(/\s+/)[0])) return false;
+      // Claimed by another person too, and not part of this one's own name: nobody's alias.
+      return (claims.get(n) ?? 0) <= 1 || n.split(/\s+/).every((t) => own.includes(t));
+    });
+  };
   for (const c of items) {
     if (c.kind === "meta") continue;
     const prefix = KIND_PREFIX[c.kind] ?? "lore:";
@@ -209,7 +226,7 @@ export function seedOverlays(items: Classified[], opts: { userName?: string } = 
       kind: c.kind,
       tense: c.tense,
       name: c.name,
-      aliases: c.aliases,
+      aliases: aliasesOf(c),
       summary: c.kind === "forecast" ? `Upcoming (not yet true): ${c.summary}` : c.kind === "belief" && c.mistaken ? `${c.summary} (a mistaken belief)` : c.summary,
       body,
       links,

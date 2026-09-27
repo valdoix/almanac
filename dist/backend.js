@@ -1920,7 +1920,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.8.0";
+var VERSION = "1.8.1";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -4813,7 +4813,10 @@ function buildCodex(state, store) {
       status: "active"
     });
   }
+  const joins = loreJoins(state, store.overlays);
   for (const ov of Object.values(store.overlays)) {
+    if (joins.has(ov.id))
+      continue;
     const base = out.get(ov.id);
     if (!base && !ov.standalone)
       continue;
@@ -4860,12 +4863,111 @@ function buildCodex(state, store) {
       rec.body.divergedNote = ov.divergedNote;
     out.set(rec.id, rec);
   }
+  for (const [oid, target] of joins) {
+    const rec = out.get(target);
+    if (rec)
+      joinLore(rec, store.overlays[oid], out);
+  }
   for (const [rid, keys] of Object.entries(state.keys)) {
-    const r = out.get(rid) ?? out.get(rid.replace(/^custom:/, "char:"));
+    const r = out.get(rid) ?? out.get(rid.replace(/^custom:/, "char:")) ?? out.get(joins.get(rid) ?? "");
     if (r)
       r.keys = uniq([...r.keys, ...keys]);
   }
   return [...out.values()];
+}
+var norm = (s) => s.normalize("NFKD").replace(/[\u0300-\u036F]/g, "").toLowerCase().replace(/[\u2019`]/g, "'").replace(/\s+/g, " ").trim();
+var TITLE = /^(mr|mrs|ms|miss|dr|doctor|uncle|aunt|auntie|grandpa|grandma|grandfather|grandmother|granny|nana|sir|lady|lord|father|mother|brother|sister|mom|mum|dad|mama|papa|captain|professor|boss|the)\.?$/i;
+function loreJoins(state, overlays) {
+  const out = new Map;
+  const lore = Object.values(overlays).filter((o) => o.provenance?.source === "lore" && o.kind === "person" && o.name);
+  if (!lore.length)
+    return out;
+  const story = Object.values(state.chars).map((c) => ({ id: `char:${c.id}`, names: uniq([c.name, ...c.aliases].map(norm).filter(Boolean)) }));
+  const storyIds = new Set(story.map((s) => s.id));
+  const loreNames = new Set(lore.map((o) => norm(o.name)));
+  const words = (o) => norm(o.name).split(" ");
+  const firstOf = (o) => {
+    const t = words(o);
+    return t.length > 1 && t[0].length >= 3 && !TITLE.test(t[0]) ? t[0] : null;
+  };
+  const derived = (o, n) => n.split(" ").some((t) => words(o).includes(t));
+  const namesOf = (o) => uniq([norm(o.name), ...(o.aliases ?? []).map(norm).filter((a) => a && !loreNames.has(a) && !TITLE.test(a))]);
+  const owners = new Map;
+  const claim = (n, id, strong) => {
+    const o = owners.get(n) ?? { strong: new Set, weak: new Set };
+    (strong ? o.strong : o.weak).add(id);
+    owners.set(n, o);
+  };
+  for (const o of lore) {
+    for (const n of namesOf(o))
+      claim(n, o.id, derived(o, n));
+    const f = firstOf(o);
+    if (f)
+      claim(f, o.id, true);
+  }
+  const ownedBy = (n, id) => {
+    const o = owners.get(n);
+    const set = o?.strong.size ? o.strong : o?.weak;
+    return !!set && set.size === 1 && set.has(id);
+  };
+  const claims = new Map;
+  for (const o of lore) {
+    if (storyIds.has(o.id)) {
+      out.set(o.id, o.id);
+      continue;
+    }
+    const full = norm(o.name);
+    const names = namesOf(o).filter((n) => ownedBy(n, o.id));
+    const find = (ns) => story.filter((s) => s.names.some((n) => ns.includes(n)));
+    const tiers = [names.filter((n) => n === full), names.filter((n) => n !== full && derived(o, n)), names.filter((n) => !derived(o, n))];
+    let hit = [];
+    for (const t of tiers)
+      if (!hit.length && t.length)
+        hit = find(t);
+    let exact = true;
+    const f = firstOf(o);
+    if (!hit.length && f && ownedBy(f, o.id)) {
+      hit = find([f]);
+      exact = false;
+    }
+    if (hit.length !== 1)
+      continue;
+    const list = claims.get(hit[0].id) ?? [];
+    list.push({ lore: o.id, exact });
+    claims.set(hit[0].id, list);
+  }
+  for (const [target, list] of claims) {
+    if ([...out.values()].includes(target))
+      continue;
+    const exact = list.filter((c) => c.exact);
+    const pick = exact.length ? exact : list;
+    if (pick.length === 1)
+      out.set(pick[0].lore, target);
+  }
+  return out;
+}
+function joinLore(rec, ov, all) {
+  const others = new Set;
+  for (const r of all.values())
+    if (r.kind === "person" && r.id !== rec.id)
+      others.add(norm(r.name));
+  const mine = norm(rec.name);
+  rec.aliases = uniq([...rec.aliases, ...[ov.name ?? "", ...ov.aliases ?? []].filter((a) => a && norm(a) !== mine && !others.has(norm(a)) && !rec.aliases.some((x) => norm(x) === norm(a)))]);
+  for (const [k, v] of Object.entries(ov.body ?? {}))
+    if (rec.body[k] == null)
+      rec.body[k] = v;
+  if (ov.summary)
+    rec.body.lore = ov.summary;
+  rec.body.loreStatus = ov.status ?? "active";
+  if (ov.links)
+    rec.links = [...rec.links, ...ov.links];
+  if (ov.scope)
+    rec.scope = { ...ov.scope, ...rec.scope };
+  if (ov.provenance?.loreEntryId && !rec.provenance.loreEntryId)
+    rec.provenance = { ...rec.provenance, loreEntryId: ov.provenance.loreEntryId, loreBookId: ov.provenance.loreBookId };
+  rec.keys = uniq([...rec.keys, ...ov.userKeys ?? [], ...ov.keys ?? []]);
+  if (ov.divergedNote && !rec.body.divergedNote)
+    rec.body.divergedNote = ov.divergedNote;
 }
 function cap2(s) {
   return s ? s[0].toUpperCase() + s.slice(1) : s;
@@ -4873,6 +4975,11 @@ function cap2(s) {
 function detectDivergence(state, records) {
   const out = [];
   for (const r of records) {
+    if (r.kind === "person" && r.provenance.source !== "lore" && r.status === "dead" && r.body.loreStatus && r.body.loreStatus !== "dead") {
+      const c = state.chars[r.id.slice(5)];
+      if (c)
+        out.push({ id: r.id, note: `${c.name} is dead (as of message ${c.lastSeen + 1})` });
+    }
     if (r.provenance.source !== "lore")
       continue;
     const name = r.name.toLowerCase();
@@ -7336,6 +7443,7 @@ ${recallItems.join(`
 `)}
 </recall>` : "";
   const lorePicks = new Set;
+  const loreFold = {};
   const loreManagedBooks = new Set;
   for (const [bookId, b] of Object.entries(meta.lore.books))
     if (b.mode === "managed")
@@ -7343,7 +7451,11 @@ ${recallItems.join(`
   for (const it of rc.items) {
     const le = it.record.provenance?.loreEntryId;
     const lb = it.record.provenance?.loreBookId;
-    if (le && lb && meta.lore.books[lb] && meta.lore.books[lb].mode !== "native")
+    if (!le || !lb || !meta.lore.books[lb] || meta.lore.books[lb].mode === "native")
+      continue;
+    if (mirrorPicks[it.record.id] && it.record.provenance.source !== "lore")
+      loreFold[le] = it.record.id;
+    else
       lorePicks.add(le);
   }
   const divergence = {};
@@ -7414,6 +7526,7 @@ ${b.body}
     mirrorPicks,
     mirrorChronicle: new Set(Object.entries(meta.mirror.entries).filter(([id]) => id.startsWith("chron:")).map(([, v]) => v.entryId)),
     lorePicks,
+    loreFold,
     loreManagedBooks,
     divergence,
     tier,
@@ -7691,16 +7804,29 @@ function registerWorldInfoInterceptor() {
       const forced = [];
       const enabled = [];
       const mutated = [];
+      const cidOf = (e) => e.extensions?.almanac?.codexId;
+      const withHistory = (e) => plan?.divergence[e.id] ? `[History \u2014 as of now: ${plan.divergence[e.id]}.] ${e.content}` : e.content;
+      const folded = new Map;
+      if (plan && mirrorBook) {
+        const picked = new Set(ctx.entries.filter((e) => e.world_book_id === mirrorBook && plan.mirrorPicks[cidOf(e) ?? ""]).map((e) => cidOf(e)));
+        for (const e of ctx.entries) {
+          const cid = plan.loreFold[e.id];
+          if (cid && picked.has(cid) && !e.disabled && e.content.trim() && files.meta.lore.books[e.world_book_id])
+            folded.set(cid, withHistory(e));
+        }
+      }
       for (const e of ctx.entries) {
         if (mirrorBook && e.world_book_id === mirrorBook) {
-          const cid = e.extensions?.almanac?.codexId;
+          const cid = cidOf(e);
           if (!cid || cid.startsWith("chron:") || !plan?.mirrorPicks[cid]) {
             disabled.push(e.id);
             continue;
           }
           forced.push(e.id);
           enabled.push(e.id);
-          mutated.push({ id: e.id, content: plan.mirrorPicks[cid] });
+          const lore = folded.get(cid);
+          mutated.push({ id: e.id, content: lore ? `${lore}
+[Now] ${plan.mirrorPicks[cid]}` : plan.mirrorPicks[cid] });
           continue;
         }
         if (!plan)
@@ -7708,11 +7834,16 @@ function registerWorldInfoInterceptor() {
         const book = files.meta.lore.books[e.world_book_id];
         if (!book)
           continue;
+        const into = plan.loreFold[e.id];
+        if (into && folded.has(into)) {
+          disabled.push(e.id);
+          continue;
+        }
         if (plan.divergence[e.id])
-          mutated.push({ id: e.id, content: `[History \u2014 as of now: ${plan.divergence[e.id]}.] ${e.content}` });
+          mutated.push({ id: e.id, content: withHistory(e) });
         if (book.mode === "native")
           continue;
-        if (plan.lorePicks.has(e.id)) {
+        if (plan.lorePicks.has(e.id) || into) {
           forced.push(e.id);
         } else if (book.mode === "managed" && !e.constant) {
           disabled.push(e.id);
@@ -8456,7 +8587,7 @@ async function doSync(chatId, userId) {
     for (const r of L.records) {
       if (r.id === "char:user" || r.kind === "meta")
         continue;
-      if (r.provenance.source === "lore" && !r.id.startsWith("lore:") && !L.state.chars[r.id.slice(5)]) {
+      if (r.provenance.source === "lore" && !r.id.startsWith("lore:")) {
         continue;
       }
       const content = settings.mirror === "full" ? renderRecord(r, L.state, present, true, L.names.user) : r.summary;
@@ -9074,6 +9205,27 @@ var KIND_PREFIX = {
 };
 function seedOverlays(items, opts = {}) {
   const out = {};
+  const low = (s) => s.toLowerCase().replace(/\u2019/g, "'").trim();
+  const titles = new Set(items.map((c) => low(c.name)));
+  const claims = new Map;
+  for (const c of items)
+    if (c.kind === "person")
+      for (const n of new Set([c.name, ...c.aliases].map(low)))
+        claims.set(n, (claims.get(n) ?? 0) + 1);
+  const user = opts.userName ? low(opts.userName) : "";
+  const aliasesOf = (c) => {
+    const own = low(c.name).split(/\s+/);
+    return c.aliases.filter((a) => {
+      const n = low(a);
+      if (n === low(c.name) || /'s$/.test(n))
+        return false;
+      if (titles.has(n))
+        return false;
+      if (user && (n === user || n === user.split(/\s+/)[0]))
+        return false;
+      return (claims.get(n) ?? 0) <= 1 || n.split(/\s+/).every((t) => own.includes(t));
+    });
+  };
   for (const c of items) {
     if (c.kind === "meta")
       continue;
@@ -9126,7 +9278,7 @@ function seedOverlays(items, opts = {}) {
       kind: c.kind,
       tense: c.tense,
       name: c.name,
-      aliases: c.aliases,
+      aliases: aliasesOf(c),
       summary: c.kind === "forecast" ? `Upcoming (not yet true): ${c.summary}` : c.kind === "belief" && c.mistaken ? `${c.summary} (a mistaken belief)` : c.summary,
       body,
       links,
