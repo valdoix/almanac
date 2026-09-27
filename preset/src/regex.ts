@@ -105,6 +105,17 @@ const DESK_BTN = (id: string, label: string, primary = false) =>
 
 const send = (id: string, title: string, content: string, subtitle = "") => ({ id, type: "send", multi_select: false, cost: "1", limit: "", title, subtitle, content });
 
+// Emphasis inside a speech or thought mark, on the same line and before its close.
+const IN_MARK = R`(?<=\[(?:spk|thk)=[^\]\n]*\](?:(?!\[\/(?:spk|thk)\])[^\n])*?)`;
+const EMPHASIS: RegexDef[] = [
+  { id: "alm-show-speech-strong", name: "Dialogue · bold inside speech", layer: "display", target: ["display"], order: 57,
+    find: IN_MARK + R`(\*\*|__)(?=\S)([^*_\n]+?)(?<=\S)\1`, rep: "<strong>$2</strong>" },
+  { id: "alm-show-speech-em", name: "Dialogue · italics inside speech", layer: "display", target: ["display"], order: 58,
+    find: IN_MARK + R`(?<![*\w])\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?![*\w])`, rep: "<em>$1</em>" },
+  { id: "alm-show-speech-em2", name: "Dialogue · italics inside speech (underscores)", layer: "display", target: ["display"], order: 58,
+    find: IN_MARK + R`(?<![_\w])_(?=[^\s_])([^_\n]+?)(?<=[^\s_])_(?![_\w])`, rep: "<em>$1</em>" },
+];
+
 // ── The suite ───────────────────────────────────────────────────────────────
 export const REGEX: RegexDef[] = [
   // Response repair (runs once on the stored reply)
@@ -259,6 +270,9 @@ export const REGEX: RegexDef[] = [
   },
 
   // Display: dialogue (one style is live, chosen by the Dialogue style setting)
+  // Markdown isn't read inside the HTML the cards become, so *emphasis* in a
+  // spoken line is turned into tags first.
+  ...EMPHASIS,
   {
     id: "alm-show-speech-block", name: "Dialogue · voice cards (paragraph start)", layer: "display", target: ["display"], order: 60, macros: "raw",
     find: gate(styleIs("blocks")) + R`(^|\n)[ \t]*` + SPK + SPK_BODY_LINE + R`[ \t]*([^\n]*)`,

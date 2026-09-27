@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.1.2";
+var VERSION = "1.2.0";
 
 // src/frontend/orrery.ts
 var GROUPS = [
@@ -716,8 +716,8 @@ ${r.kind === "place" ? `<label class="f">Hours (e.g. open 20:00 to 02:00)<input 
     return `<div class="card flat"><h4>Coverage</h4><div class="bar"><i style="width:${cov.volume}%;background:#7b5bd6"></i><i style="width:${cov.arc}%;background:var(--alm-accent-2)"></i><i style="width:${cov.chapter}%;background:var(--alm-accent)"></i><i style="width:${cov.raw}%;background:var(--alm-line)"></i></div>
 <div class="row muted"><small>volumes ${cov.volume}% · arcs ${cov.arc}% · chapters ${cov.chapter}% · raw ${cov.raw}%</small></div>
 <p class="muted">Old turns are summarised at scene boundaries, hidden, and replaced in the prompt by their chapter. The last ${v.settings.rawTail} messages always stay raw.</p>
-<button class="btn primary" data-act="chronicleRun">Summarise now</button></div>
-<div class="list">${units.map((u) => `<div class="rec"><div class="hd"><span class="kind">${escapeHtml(u.level)} ${u.no}</span><b class="grow">${escapeHtml(u.title)}</b>${u.locked ? `<span class="pill">\uD83D\uDD12</span>` : ""}${u.ghost ? `<span class="pill">ghost</span>` : ""}${u.stale ? `<span class="pill">stale</span>` : ""}</div>
+<div class="row"><span class="muted grow"><small>Detail: <b>${escapeHtml(v.settings.summaryDetail ?? "detailed")}</b> (change it in Settings)</small></span><button class="btn" data-act="chronicleRewrite" title="Redo every unlocked chapter, arc and volume at the current detail">Rewrite all</button><button class="btn primary" data-act="chronicleRun">Summarise now</button></div></div>
+<div class="list">${units.map((u) => `<div class="rec"><div class="hd"><span class="kind">${escapeHtml(u.level)} ${u.no}</span><b class="grow">${escapeHtml(u.title)}</b>${u.locked ? `<span class="pill">\uD83D\uDD12</span>` : ""}${u.ghost ? `<span class="pill">ghost</span>` : ""}${u.stale ? `<span class="pill">stale</span>` : ""}${u.detail ? `<span class="pill">${escapeHtml(u.detail)}</span>` : ""}</div>
 <div class="muted"><small>messages ${u.startIdx + 1}–${u.endIdx + 1}${u.storyStart ? ` · ${escapeHtml(u.storyStart)}${u.storyEnd && u.storyEnd !== u.storyStart ? ` – ${escapeHtml(u.storyEnd)}` : ""}` : ""}</small></div>
 <details><summary class="muted">read / edit</summary><textarea data-unit="${escapeHtml(u.id)}" style="min-height:140px">${escapeHtml(u.text)}</textarea><div class="row"><button class="btn" data-act="unitSave" data-id="${escapeHtml(u.id)}">Save</button><button class="btn" data-act="unitLock" data-id="${escapeHtml(u.id)}">${u.locked ? "Unlock" : "Lock"}</button><button class="btn" data-act="unitGhost" data-id="${escapeHtml(u.id)}">${u.ghost ? "Unghost" : "Ghost"}</button><button class="btn" data-act="unitRegen" data-id="${escapeHtml(u.id)}">Regenerate</button><button class="btn danger" data-act="unitUnhide" data-id="${escapeHtml(u.id)}">Unhide span</button></div></details></div>`).join("") || `<div class="empty">No chapters yet. They appear once enough scenes have scrolled past the raw tail.</div>`}</div>`;
   }
@@ -735,7 +735,7 @@ ${r.kind === "place" ? `<label class="f">Hours (e.g. open 20:00 to 02:00)<input 
 ${w.factions.length ? `<h4>Factions</h4><div class="alm-clocks">${w.factions.flatMap((f) => f.clocks.map((c) => `<div class="alm-clock">${ring(c.cur, c.max, "var(--alm-danger)")}<div><strong>${escapeHtml(f.name)}: ${escapeHtml(c.name)}</strong></div></div>`)).join("")}</div>` : ""}
 ${w.deadlines.length ? `<h4>Deadlines</h4><ul class="alm-list">${w.deadlines.map((d) => `<li class="${d.passed && !d.done ? "due" : ""}">${escapeHtml(d.title)} — ${escapeHtml(d.at)}${d.done ? " (done)" : d.passed ? " (passed)" : ` · ${escapeHtml(d.left)} left`}</li>`).join("")}</ul>` : ""}
 ${w.threads.length ? `<h4>Threads</h4><div class="list">${w.threads.map((t) => `<div class="rec"><div class="hd"><b class="grow">${escapeHtml(t.title)}</b><span class="pill">${escapeHtml(t.status)}</span></div>${t.latest ? `<div class="muted">${escapeHtml(t.latest)}</div>` : ""}${t.blocker ? `<div class="alm-tag warn">blocked: ${escapeHtml(t.blocker)}</div>` : ""}</div>`).join("")}</div>` : ""}
-${w.items.length ? `<h4>Items</h4><div class="alm-inv">${w.items.map((i) => `<div class="alm-it"><span class="alm-it__ic">${i.gone ? "✗" : "✦"}</span><div><b>${escapeHtml(i.name)}</b><span class="alm-it__h">${escapeHtml(i.gone ? "gone" : i.holder || "?")}</span>${i.custody.map((c) => `<small class="muted">${escapeHtml(c.from || "?")} → ${escapeHtml(c.to || "?")}${c.how ? ` (${escapeHtml(c.how)})` : ""}</small>`).join("<br>")}</div></div>`).join("")}</div>` : ""}
+${w.items.length ? `<h4>Items</h4><div class="alm-inv">${w.items.map((i) => `<div class="alm-it"><span class="alm-it__ic">${i.gone ? "✗" : "✦"}</span><div><b>${escapeHtml(i.name)}</b><span class="alm-it__h">${escapeHtml(i.gone ? "gone" : i.holder || "?")}${i.where && !i.gone ? ` · ${escapeHtml(i.where)}` : ""}</span>${i.custody.map((c) => `<small class="muted">${escapeHtml(c.from || "?")} → ${escapeHtml(c.to || "?")}${c.how ? ` (${escapeHtml(c.how)})` : ""}</small>`).join("<br>")}</div></div>`).join("")}</div>` : ""}
 ${w.rumors.length ? `<h4>Rumours</h4><ul class="alm-list">${w.rumors.map((r) => `<li>\uD83D\uDDE3 ${escapeHtml(r.text)} <small class="muted">(${r.hops} hop${r.hops === 1 ? "" : "s"})</small></li>`).join("")}</ul>` : ""}
 ${w.rep.length ? `<h4>Reputation</h4>${w.rep.map((r) => `<span class="pill">${escapeHtml(r.group)} ${r.score > 0 ? "+" : ""}${r.score}${r.tags.length ? ` · ${escapeHtml(r.tags.join(", "))}` : ""}</span>`).join("")}` : ""}
 ${w.gauges.length ? `<h4>Gauges</h4><div class="alm-clocks">${w.gauges.map((g) => `<div class="alm-clock">${ring(g.cur, g.max, "var(--alm-accent)")}<div><strong>${escapeHtml(g.name)}</strong><span>${escapeHtml(g.cause ?? "")}</span></div></div>`).join("")}</div>` : ""}
@@ -781,7 +781,7 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
     return `<h3>This chat</h3><div class="card flat"><div class="row"><span class="grow">Ledger in this chat: <b>${v.enabled ? "on" : "off"}</b>${v.config.enabledOverride == null ? " (automatic)" : ""}</span><button class="btn" data-act="enable">On</button><button class="btn" data-act="disable">Off</button><button class="btn" data-act="auto">Automatic</button></div></div>
 <h3>Core</h3><div class="card flat"><label class="f">Enable<select data-setting="enabled"><option value="auto"${s.enabled === "auto" ? " selected" : ""}>automatic (ALMANAC chats)</option><option value="on"${s.enabled === "on" ? " selected" : ""}>every chat</option><option value="off"${s.enabled === "off" ? " selected" : ""}>off</option></select></label>
 <label class="f">Validation${sel("strictness", [["strict", "strict — reject impossible changes"], ["lenient", "lenient — warn only"]])}</label>${chk("autoRepair", "Repair missing ledgers automatically")}${chk("formatAid", "Show the model last turn's ledger as a format example")}${chk("debug", "Debug logging")}</div>
-<h3>Chronicle</h3><div class="card flat">${chk("chronicle", "Summarise old turns into chapters, arcs and volumes")}${chk("hideCovered", "Hide covered turns")}<label class="f">Raw tail (messages)${num("rawTail", 6, 400)}</label><label class="f">Raw tail cap (tokens)${num("rawTailTokens", 1000)}</label><label class="f">Chapter size (tokens)${num("chapterThresholdTokens", 1000)}</label><label class="f">Fan-in (chapters per arc, arcs per volume)${num("fanIn", 2, 12)}</label><label class="f">Summariser connection id (empty = your default)${txt("summarizerConnection")}</label></div>
+<h3>Chronicle</h3><div class="card flat">${chk("chronicle", "Summarise old turns into chapters, arcs and volumes")}${chk("hideCovered", "Hide covered turns")}<label class="f">Raw tail (messages)${num("rawTail", 6, 400)}</label><label class="f">Raw tail cap (tokens)${num("rawTailTokens", 1000)}</label><label class="f">Chapter size (tokens)${num("chapterThresholdTokens", 1000)}</label><label class="f">Fan-in (chapters per arc, arcs per volume)${num("fanIn", 2, 12)}</label><label class="f">Summary detail${sel("summaryDetail", [["brief", "brief — the essentials (≈100–200 words a chapter)"], ["standard", "standard — facts and changes (≈150–350)"], ["detailed", "detailed — scene by scene, where things stand (≈350–650)"], ["exhaustive", "exhaustive — beats, texture, voices (≈700–1200)"]])}</label><label class="f">Always keep in summaries (optional)${txt("summaryFocus", "outfits, injuries, Buffy's lies, pet names…")}</label><p class="muted">More detail keeps more of the story in memory, at the cost of prompt tokens. New chapters use the new setting; <b>Rewrite all</b> on the Chronicle page redoes the old ones.</p><label class="f">Summariser connection id (empty = your default)${txt("summarizerConnection")}</label></div>
 <h3>Recall</h3><div class="card flat"><label class="f">Injection budget (tokens)${num("recallBudget", 400, 20000)}</label><label class="f">Recall placement${sel("recallPlacement", [["before_history", "before chat history"], ["depth4", "4 messages from the end"]])}</label>${chk("keyHeat", "Demote keys that fire without being used")}<label class="f">Max keys per record${num("maxKeys", 4, 24)}</label></div>
 <h3>Storage (hybrid)</h3><div class="card flat"><p class="muted">The extension's storage is the source of truth (branch-safe, rebuildable). The mirror lorebook is a readable, editable projection attached to this chat only.</p><label class="f">Mirror lorebook${sel("mirror", [["off", "off"], ["summaries", "summaries"], ["full", "full records"]])}</label>${chk("mirrorVectorize", "Vectorise mirror entries (semantic recall; needs an embedding provider)")}</div>
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
@@ -889,6 +889,22 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
       case "chronicleRun":
         this.send({ type: "chronicle", action: "run" });
         break;
+      case "chronicleRewrite": {
+        const b = t.closest("button");
+        if (b && b.dataset.armed !== "1") {
+          b.dataset.armed = "1";
+          b.textContent = "Click again to rewrite";
+          setTimeout(() => {
+            if (b.isConnected) {
+              b.dataset.armed = "";
+              b.textContent = "Rewrite all";
+            }
+          }, 4000);
+          break;
+        }
+        this.send({ type: "chronicle", action: "rewriteAll" });
+        break;
+      }
       case "unitSave":
         this.send({ type: "chronicle", action: "edit", unitId: id, text: this.root.querySelector(`textarea[data-unit="${id}"]`)?.value });
         break;

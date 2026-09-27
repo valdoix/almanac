@@ -168,6 +168,8 @@ export interface ItemState {
   name: string;
   holder?: string; // character id, or "place:..." / "gone"
   condition?: string;
+  /** The spot within the holder or place: "jacket pocket", "on the table". */
+  where?: string;
   quantity?: number;
   custody: { from?: string; to?: string; how?: string; at: StoryTime | null; msgIndex: number }[];
   gone?: boolean;
@@ -342,6 +344,10 @@ export interface Settings {
   hideCovered: boolean;
   chronicle: boolean;
   summarizerConnection: string;
+  /** How much the chronicle keeps: brief, standard, detailed or exhaustive. */
+  summaryDetail: "brief" | "standard" | "detailed" | "exhaustive";
+  /** Free text the summariser always keeps ("outfits", "Buffy's lies"). */
+  summaryFocus: string;
   recallBudget: number;
   recallPlacement: "before_history" | "depth4";
   controller: "off" | "collapsed";
@@ -387,6 +393,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hideCovered: true,
   chronicle: true,
   summarizerConnection: "",
+  summaryDetail: "detailed",
+  summaryFocus: "",
   recallBudget: 2400,
   recallPlacement: "before_history",
   controller: "off",

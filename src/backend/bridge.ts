@@ -160,6 +160,29 @@ export function registerBridge() {
               toast(userId, "info", "Summarising…");
               toast(userId, "success", `${await runChronicle(m.chatId, userId, true)} new chronicle entries.`);
               break;
+            case "rewriteAll": {
+              // Drop every unlocked unit (arcs and volumes too), unhide the turns
+              // they covered, and let the chronicle run again at the current detail.
+              const drop = files.chronicle.units.filter((x) => !x.locked);
+              const ids = drop.filter((x) => x.level === "chapter").flatMap((x) => x.msgIds);
+              files.chronicle.units = files.chronicle.units.filter((x) => x.locked);
+              files.chronicle.hidden = files.chronicle.hidden.filter((id) => !ids.includes(id));
+              for (let i = 0; i < ids.length; i += 500) await host.chat.setMessagesHidden(m.chatId, ids.slice(i, i + 500), false).catch(() => undefined);
+              save(m.chatId, "chronicle", userId, 0);
+              toast(userId, "info", `Rewriting ${drop.length} summaries…`);
+              setTimeout(async () => {
+                let total = 0;
+                for (let pass = 0; pass < 40; pass++) {
+                  const n = await runChronicle(m.chatId, userId, true).catch(() => 0);
+                  total += n;
+                  if (!n) break;
+                }
+                toast(userId, "success", `${total} chronicle entries rewritten.`);
+                pushState(m.chatId, userId);
+                syncMirror(m.chatId, userId);
+              }, 200);
+              break;
+            }
             case "edit":
               if (u) Object.assign(u, { text: String(m.text ?? u.text), title: String(m.title ?? u.title), locked: true });
               break;

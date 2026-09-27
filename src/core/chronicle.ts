@@ -26,6 +26,8 @@ export interface ChronicleUnit {
   locked?: boolean;
   ghost?: boolean;
   stale?: boolean;
+  /** The summary detail setting it was written at. */
+  detail?: string;
 }
 
 export interface ChronicleStore {

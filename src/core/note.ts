@@ -37,6 +37,26 @@ function vad(c: CharacterState): string {
   return parts.length ? ` ${parts.join(" ")}` : "";
 }
 
+/**
+ * Meters go to the model as plain words ("exhausted"), not "fatigue 4": a
+ * number in the note gets copied straight into the prose.
+ */
+const METER_WORDS: Record<string, string[]> = {
+  health: ["near death", "badly hurt", "hurt", "", "", ""],
+  fatigue: ["", "", "", "tired", "exhausted", "dead on their feet"],
+  hunger: ["", "", "", "hungry", "very hungry", "starving"],
+  thirst: ["", "", "", "thirsty", "parched", "desperate for water"],
+  pain: ["", "", "", "in pain", "in bad pain", "in agony"],
+  intox: ["", "", "", "tipsy", "drunk", "blind drunk"],
+  arousal: ["", "", "", "aroused", "very aroused", "desperate with want"],
+  composure: ["cracking", "barely holding together", "strained", "", "", ""],
+};
+
+export function meterWord(k: string, v: number): string {
+  const w = METER_WORDS[k]?.[Math.max(0, Math.min(5, Math.round(v)))];
+  return w || `${v >= 4 ? "very " : ""}${k === "cold" ? "cold" : `high ${k}`}`;
+}
+
 export function capsule(c: CharacterState, state: WorldState, opts: { sealed: boolean; nsfw?: boolean; pressure?: string; full: boolean }): string {
   const bits: string[] = [c.tier === "spot" ? "spotlight" : c.tier === "peri" ? "periphery" : "here"];
   if (c.activity) bits.push(c.activity);
@@ -44,8 +64,9 @@ export function capsule(c: CharacterState, state: WorldState, opts: { sealed: bo
   if (inner && c.mood?.name) bits.push(`${c.mood.name}${vad(c)}`);
   const meters = Object.entries(c.meters)
     .filter(([k, v]) => v != null && (v >= 3 || (k === "health" && v <= 2) || (k === "composure" && v <= 1)) && (k !== "arousal" || opts.nsfw))
-    .map(([k, v]) => `${k} ${v}${v! >= 4 ? "!" : ""}`);
-  if (meters.length && (inner || !["arousal", "composure"].some((k) => meters[0].startsWith(k)))) bits.push(meters.join(", "));
+    .map(([k, v]) => ({ k, word: meterWord(k, v!) }));
+  const shown = meters.filter((m) => inner || !["arousal", "composure"].includes(m.k)).map((m) => m.word);
+  if (shown.length) bits.push(shown.join(", "));
   const flags = c.flags.filter((f) => !f.startsWith("scar"));
   if (flags.length) bits.push(flags.slice(-3).join(", "));
   if (c.injuries.length) bits.push(c.injuries.map((i) => `${i.where} (${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? ", treated" : ""})`).join(", "));

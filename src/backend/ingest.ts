@@ -8,7 +8,7 @@ import { coverageGaps, makeUnit, planChronicle, spanSignature, transcriptFor, va
 import { extractLedgerBlock, parseLine } from "../core/dsl";
 import { extractOps } from "../core/extractor";
 import { drawPressures } from "../core/pressures";
-import { archivistPrompt, extractJson, repairPrompt, rollupPrompt, simulatorPrompt, summaryPrompt } from "../core/prompts";
+import { archivistPrompt, extractJson, repairPrompt, rollupPrompt, simulatorPrompt, summaryPrompt, summaryPriorChars, summaryWords } from "../core/prompts";
 import { craftReport } from "../core/telemetry";
 import { absMinutes, fmtTime, fromAbs, hash, plainProse, uid } from "../core/util";
 import { levelOf, seedFor } from "../core/engines/weather";
@@ -150,19 +150,23 @@ export async function runChronicle(chatId: string, userId?: string, force = fals
       if (job.level === "chapter") {
         const transcript = transcriptFor(path, job, L.names.user, L.names.char);
         const prev = files.chronicle.units.filter((u) => u.level === "chapter" && !u.stale).sort((a, b) => b.endIdx - a.endIdx)[0];
-        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, words: [150, 350], prior: prev ? `${prev.title}: ${prev.text.slice(0, 600)}` : undefined });
+        const detail = settings.summaryDetail;
+        const focus = settings.summaryFocus;
+        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, prior: prev ? `${prev.title}: ${prev.text.slice(0, summaryPriorChars(detail))}` : undefined });
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary" });
         const gaps = coverageGaps(text, L.events, L.state, job.startIdx, job.endIdx);
         if (gaps.length) {
-          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, words: [150, 380], mustInclude: gaps });
+          const [lo, hi] = summaryWords("chapter", detail);
+          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, words: [lo, hi + 30 + gaps.length * 15], mustInclude: gaps });
           text = await quiet([sys(p2.system), usr(p2.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary (coverage)" }).catch(() => text);
         }
       } else {
-        const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}\n${c.text}`), L.names.user);
+        const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}\n${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus);
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: `${job.level} summary` });
       }
       if (!text || text.length < 40) break;
       const unit = makeUnit(job, text, path, L.state, files.chronicle);
+      unit.detail = settings.summaryDetail;
       files.chronicle.units.push(unit);
       made++;
       if (job.level === "chapter" && settings.hideCovered && has("chat_mutation")) {

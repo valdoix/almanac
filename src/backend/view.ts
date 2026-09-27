@@ -124,7 +124,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       threads: Object.values(st.threads), clues: st.clues, plants: st.plants, canon: st.canon.slice(-20),
       calendar: al ? { weekday: al.weekday, date: al.date, season: al.season } : null,
       climate: L.almanacConfig(meta, settings).climate || "temperate maritime (default)",
-      items: Object.values(st.items).map((i) => ({ name: i.name, holder: i.holder ? nm(i.holder) : "", gone: !!i.gone, condition: i.condition, custody: i.custody.slice(-4).map((c) => ({ from: c.from ? nm(c.from) : "", to: c.to ? nm(c.to) : "", how: c.how })) })),
+      items: Object.values(st.items).map((i) => ({ name: i.name, holder: i.holder ? nm(i.holder) : "", where: i.where, gone: !!i.gone, condition: i.condition, custody: i.custody.slice(-4).map((c) => ({ from: c.from ? nm(c.from) : "", to: c.to ? nm(c.to) : "", how: c.how })) })),
     },
     lore: meta.lore,
     feed: meta.feed,

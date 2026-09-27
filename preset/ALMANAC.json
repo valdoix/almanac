@@ -2,7 +2,7 @@
   "name": "ALMANAC",
   "description": "A living-world roleplay preset: deep characters with private minds, autonomous NPCs who relate to each other, a knowledge firewall, real time and weather, genre contracts that change the story, a sealed persona, and a line-based ledger that drives trackers and memory. Works alone; pairs with the ALMANAC Ledger extension for verified state, chapters, recall and a deterministic almanac.",
   "coverUrl": null,
-  "presetVersion": "1.0.1",
+  "presetVersion": "1.0.2",
   "schemaVersion": 2,
   "samplerOverrides": {
     "enabled": true,
@@ -388,7 +388,7 @@
       "characterTagTrigger": [],
       "group": null,
       "categoryMode": null,
-      "content": "[CAST ENGINE]\nEvery present character carries a full state, shown through behaviour and never listed: body (health, injuries, fatigue, hunger, thirst, pain, intoxication{{if::{{ne::{{getvar::alm_nsfw}}::off}}}}, arousal{{/if}}, temperature, wet or dishevelled), mind (a precise named emotion — \"humiliated\", \"relieved-and-ashamed\", never \"upset\" — with valence, arousal and dominance; composure that drains under pressure and cracks at zero), drives (want now · fear · need · tactic · agenda), mask (shown vs felt, and the tell that leaks), regard toward each person from their own side, memory in their own slant, knowledge, appearance (outfit, carried things, marks that persist until changed) and presence (spotlight, periphery, off-scene).\nHow state shapes the page: high arousal + low dominance → short clauses, fragments, fidgeting, exits. High arousal + high dominance → clipped, still, pressure through silence. Low valence + low arousal → flat affect, late replies, small gestures. Earned anger stays anger — never softened into sadness or fear; anger and vulnerability can coexist. Under stress, syntax breaks before vocabulary does. Any need at 4 or 5 shows this reply (the hungry snap, the exhausted misread).\nTime wears on bodies: hunger rises over hours awake, thirst faster in heat or work, fatigue with waking hours and exertion; sleep restores; intoxication fades; untreated wounds hurt and worsen; injuries heal on their own schedules and leave marks.\nFidelity: the card outranks habit — reread it and lead with the least-used facet. Swap test: if another character could say the line unchanged, rewrite it until only this person could. Keep each consequential voice distinct in syntax, diction, rhythm, how they handle emotion, and two or three physical tells. New people are built first — a concern, a contradiction, a habit, one private fact — then named for their culture, class and era.\n{{switch::{{var::npc_depth}}::essential::Depth: one telling behaviour per person.::layered::Depth: a readable inner life through subtext.::forensic::Depth: hesitations, contradictions, the second thought under the first.}}\n{{if::{{isGroupChat}}}}Group chat: {{charFocused}} leads this reply; everyone else present keeps living in the scene within the speaker cap.{{/if}}",
+      "content": "[CAST ENGINE]\nEvery present character carries a full state, shown through behaviour and never listed: body (health, injuries, fatigue, hunger, thirst, pain, intoxication{{if::{{ne::{{getvar::alm_nsfw}}::off}}}}, arousal{{/if}}, temperature, wet or dishevelled), mind (a precise named emotion — \"humiliated\", \"relieved-and-ashamed\", never \"upset\" — with valence, arousal and dominance; composure that drains under pressure and cracks at zero), drives (want now · fear · need · tactic · agenda), mask (shown vs felt, and the tell that leaks), regard toward each person from their own side, memory in their own slant, knowledge, appearance (outfit, carried things, marks that persist until changed) and presence (spotlight, periphery, off-scene).\nHow state shapes the page: high arousal + low dominance → short clauses, fragments, fidgeting, exits. High arousal + high dominance → clipped, still, pressure through silence. Low valence + low arousal → flat affect, late replies, small gestures. Earned anger stays anger — never softened into sadness or fear; anger and vulnerability can coexist. Under stress, syntax breaks before vocabulary does. Any need at 4 or 5 shows this reply (the hungry snap, the exhausted misread). Numbers and meter names are bookkeeping for the ledger: prose never says \"fatigue 4\" or \"hunger 3\" — it shows the yawn, the slurred word, the hand on the stomach.\nTime wears on bodies: hunger rises over hours awake, thirst faster in heat or work, fatigue with waking hours and exertion; sleep restores; intoxication fades; untreated wounds hurt and worsen; injuries heal on their own schedules and leave marks.\nFidelity: the card outranks habit — reread it and lead with the least-used facet. Swap test: if another character could say the line unchanged, rewrite it until only this person could. Keep each consequential voice distinct in syntax, diction, rhythm, how they handle emotion, and two or three physical tells. New people are built first — a concern, a contradiction, a habit, one private fact — then named for their culture, class and era.\n{{switch::{{var::npc_depth}}::essential::Depth: one telling behaviour per person.::layered::Depth: a readable inner life through subtext.::forensic::Depth: hesitations, contradictions, the second thought under the first.}}\n{{if::{{isGroupChat}}}}Group chat: {{charFocused}} leads this reply; everyone else present keeps living in the scene within the speaker cap.{{/if}}",
       "id": "alm-cast",
       "name": "Cast Engine",
       "variables": [
@@ -4603,6 +4603,96 @@
         }
       },
       {
+        "script_id": "alm-show-speech-strong",
+        "name": "ALMANAC · Dialogue · bold inside speech",
+        "folder": "ALMANAC",
+        "description": "",
+        "find_regex": "(?<=\\[(?:spk|thk)=[^\\]\\n]*\\](?:(?!\\[\\/(?:spk|thk)\\])[^\\n])*?)(\\*\\*|__)(?=\\S)([^*_\\n]+?)(?<=\\S)\\1",
+        "replace_string": "<strong>$2</strong>",
+        "flags": "g",
+        "placement": [
+          "ai_output"
+        ],
+        "scope": "global",
+        "scope_id": null,
+        "target": [
+          "display"
+        ],
+        "min_depth": null,
+        "max_depth": null,
+        "trim_strings": [],
+        "run_on_edit": true,
+        "substitute_macros": "none",
+        "disabled": false,
+        "sort_order": 57,
+        "actions": [],
+        "metadata": {
+          "suite": "ALMANAC",
+          "schema": "lumiverse-regex-v1",
+          "layer": "display"
+        }
+      },
+      {
+        "script_id": "alm-show-speech-em",
+        "name": "ALMANAC · Dialogue · italics inside speech",
+        "folder": "ALMANAC",
+        "description": "",
+        "find_regex": "(?<=\\[(?:spk|thk)=[^\\]\\n]*\\](?:(?!\\[\\/(?:spk|thk)\\])[^\\n])*?)(?<![*\\w])\\*(?=[^\\s*])([^*\\n]+?)(?<=[^\\s*])\\*(?![*\\w])",
+        "replace_string": "<em>$1</em>",
+        "flags": "g",
+        "placement": [
+          "ai_output"
+        ],
+        "scope": "global",
+        "scope_id": null,
+        "target": [
+          "display"
+        ],
+        "min_depth": null,
+        "max_depth": null,
+        "trim_strings": [],
+        "run_on_edit": true,
+        "substitute_macros": "none",
+        "disabled": false,
+        "sort_order": 58,
+        "actions": [],
+        "metadata": {
+          "suite": "ALMANAC",
+          "schema": "lumiverse-regex-v1",
+          "layer": "display"
+        }
+      },
+      {
+        "script_id": "alm-show-speech-em2",
+        "name": "ALMANAC · Dialogue · italics inside speech (underscores)",
+        "folder": "ALMANAC",
+        "description": "",
+        "find_regex": "(?<=\\[(?:spk|thk)=[^\\]\\n]*\\](?:(?!\\[\\/(?:spk|thk)\\])[^\\n])*?)(?<![_\\w])_(?=[^\\s_])([^_\\n]+?)(?<=[^\\s_])_(?![_\\w])",
+        "replace_string": "<em>$1</em>",
+        "flags": "g",
+        "placement": [
+          "ai_output"
+        ],
+        "scope": "global",
+        "scope_id": null,
+        "target": [
+          "display"
+        ],
+        "min_depth": null,
+        "max_depth": null,
+        "trim_strings": [],
+        "run_on_edit": true,
+        "substitute_macros": "none",
+        "disabled": false,
+        "sort_order": 58,
+        "actions": [],
+        "metadata": {
+          "suite": "ALMANAC",
+          "schema": "lumiverse-regex-v1",
+          "layer": "display"
+        }
+      },
+      {
         "script_id": "alm-show-speech-block",
         "name": "ALMANAC · Dialogue · voice cards (paragraph start)",
         "folder": "ALMANAC",
@@ -5207,7 +5297,7 @@
   },
   "metadata": {
     "almanac": {
-      "version": "1.0.1",
+      "version": "1.0.2",
       "companion": "almanac_ledger",
       "design": "design/02-preset-almanac.md"
     }

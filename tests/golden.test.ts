@@ -113,3 +113,34 @@ describe("speaker labels", () => {
     expect(craft?.content).toContain("never write Name#N: or Name#N|tone:");
   });
 });
+
+describe("emphasis inside speech", () => {
+  test("*italics* and **bold** in a spoken line become tags; narration is left to markdown", async () => {
+    const { REGEX } = await import("../preset/src/regex");
+    let out = `She said *hi*.\n[spk=Buffy#1|flat]"Young men don't say *alrighty-lefty*, Gabriel. **Ever.**"[/spk] *walks off*\n[spk=Gabriel#0]"2 * 3 = 6"[/spk]`;
+    for (const id of ["alm-show-speech-strong", "alm-show-speech-em", "alm-show-speech-em2"]) {
+      const r = REGEX.find((x) => x.id === id)!;
+      out = out.replace(new RegExp(r.find, r.flags ?? "g"), r.rep);
+    }
+    expect(out).toBe(`She said *hi*.\n[spk=Buffy#1|flat]"Young men don't say <em>alrighty-lefty</em>, Gabriel. <strong>Ever.</strong>"[/spk] *walks off*\n[spk=Gabriel#0]"2 * 3 = 6"[/spk]`);
+  });
+});
+
+describe("meters and summaries", () => {
+  test("the note names meters in words, never 'fatigue 4'", async () => {
+    const { meterWord } = await import("../src/core/note");
+    expect(meterWord("fatigue", 4)).toBe("exhausted");
+    expect(meterWord("hunger", 5)).toBe("starving");
+    expect(meterWord("fatigue", 4)).not.toMatch(/\d/);
+  });
+  test("summary detail changes length and sections", async () => {
+    const { summaryPrompt } = await import("../src/core/prompts");
+    const brief = summaryPrompt("chapter", { userName: "Gabriel", transcript: "x", detail: "brief" });
+    const full = summaryPrompt("chapter", { userName: "Gabriel", transcript: "x", detail: "exhaustive", focus: "outfits" });
+    expect(brief.system).toContain("100–200 words");
+    expect(brief.user).not.toContain("Where things stand");
+    expect(full.system).toContain("700–1200 words");
+    expect(full.user).toContain("Where things stand");
+    expect(full.system).toContain("always keep: outfits");
+  });
+});

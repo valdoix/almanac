@@ -116,3 +116,17 @@ bond Mara>Kael: affection +5 — shared a drink
     expect(state.unverified).toContain(1);
   });
 });
+
+describe("item holders", () => {
+  test("a location phrase is never a new character", () => {
+    const rt = new LedgerRuntime();
+    const r1 = `Prose.\n<ledger>\ncast: Buffy@spot\nitem Necklace: +Buffy\nmode: social\n</ledger>`;
+    const r2 = `Prose.\n<ledger>\nitem Necklace: held by Buffy in jacket pocket (held in Buffy's hand (visible))\nitem Ring: in Buffy's jacket pocket (no change)\nitem Knife: under the loose floorboard\nitem Necklace: no change\nmode: social\n</ledger>`;
+    const { state } = rt.fold(toPath([msg(0, r1), msg(1, "Go on.", true), msg(2, r2)]), OPTS);
+    expect(Object.values(state.chars).map((c) => c.name).sort()).toEqual(["Buffy"]);
+    expect(state.items["item:necklace"].holder).toBe("buffy");
+    expect(state.items["item:necklace"].where).toBe("jacket pocket");
+    expect(state.items["item:ring"].holder).toBe("buffy");
+    expect(state.items["item:knife"].where).toBe("under the loose floorboard");
+  });
+});

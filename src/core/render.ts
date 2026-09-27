@@ -189,7 +189,7 @@ export function renderDrawer(inp: DrawerInput): string {
         const holder = i.holder ? state.chars[i.holder] : undefined;
         const last = i.custody[i.custody.length - 1];
         const icon = ITEM_ICONS.find(([re]) => re.test(i.name))?.[1] ?? "✦";
-        return `<div class="alm-it"><span class="alm-it__ic">${icon}</span><div><b>${e(i.name)}${i.quantity && i.quantity > 1 ? ` ×${i.quantity}` : ""}</b><span class="alm-it__h">${mini(holder, colors, i.holder)}${e(holder?.name ?? i.holder ?? "?")}${last?.at ? ` · since ${e(fmtTime(last.at))}` : ""}</span>${last?.how ? e(last.how) : ""}${i.condition ? ` · ${e(i.condition)}` : ""}</div></div>`;
+        return `<div class="alm-it"><span class="alm-it__ic">${icon}</span><div><b>${e(i.name)}${i.quantity && i.quantity > 1 ? ` ×${i.quantity}` : ""}</b><span class="alm-it__h">${mini(holder, colors, i.holder)}${e(holder?.name ?? (i.holder?.startsWith("loc:") ? state.places[i.holder]?.name ?? i.holder.slice(4) : i.holder) ?? "?")}${i.where ? ` · ${e(i.where)}` : ""}${last?.at ? ` · since ${e(fmtTime(last.at))}` : ""}</span>${last?.how ? e(last.how) : ""}${i.condition ? ` · ${e(i.condition)}` : ""}</div></div>`;
       }).join("")}</div>`));
     }
   }

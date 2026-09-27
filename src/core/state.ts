@@ -550,13 +550,22 @@ export class Folder {
           this.milestone(mi, "item", `${it.name} is gone${op.cause ? ` (${op.cause})` : ""}`);
           return { verdict: "accepted", line: `🎒 ${it.name} → gone` };
         }
-        const toId = toRaw ? this.holderId(toRaw, mi) : undefined;
-        it.custody.push({ from: it.holder, to: toId, how: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
-        if (it.custody.length > 20) it.custody = it.custody.slice(-20);
+        const to = toRaw ? this.parseHolder(toRaw, mi) : {};
+        if (to.same) {
+          if (to.where) it.where = to.where;
+          if (a.quantity != null) it.quantity = a.quantity;
+          return { verdict: "accepted", line: `🎒 ${it.name}: ${this.nm(it.holder)}${it.where ? ` (${it.where})` : ""}` };
+        }
+        const toId = to.id;
+        if (toId !== it.holder || to.where !== it.where) {
+          it.custody.push({ from: it.holder, to: toId, how: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
+          if (it.custody.length > 20) it.custody = it.custody.slice(-20);
+        }
         it.holder = toId;
+        it.where = to.where;
         it.gone = false;
         if (a.quantity != null) it.quantity = a.quantity;
-        return { verdict: "accepted", line: `🎒 ${it.name}: ${a.from ? this.nm(fromId!) + " → " : ""}${this.nm(toId)}` };
+        return { verdict: "accepted", line: `🎒 ${it.name}: ${a.from ? this.nm(fromId!) + " → " : ""}${this.nm(toId)}${to.where ? ` (${to.where})` : ""}` };
       }
       case "thread": {
         const tid = `thread:${slug(op.subject!)}`;
@@ -589,8 +598,8 @@ export class Folder {
       }
       case "owe":
       case "cons": {
-        const who = this.holderId(op.subject!, mi)!;
-        const whom = op.object ? this.holderId(op.object, mi) : undefined;
+        const who = this.partyId(op.subject!, mi)!;
+        const whom = op.object ? this.partyId(op.object, mi) : undefined;
         const cid = `cons:${slug(`${who}_${whom ?? ""}_${a.what}`)}`;
         const existing = st.cons[cid] ?? Object.values(st.cons).find((c) => c.who === who && c.whom === whom && overlap(normFact(c.what), normFact(a.what)) > 0.6);
         const c = existing ?? { id: cid, kind: a.kind, who, whom, what: a.what, status: "open" as const, since: st.time ? { ...st.time } : null, msgIndex: mi };
@@ -732,14 +741,66 @@ export class Folder {
     return this.state.chars[id]?.name ?? id;
   }
 
+  /** Parties to a debt or consequence: a known place, else a character. */
+  private partyId(name: string, mi: number): string | undefined {
+    const pid = `loc:${slug(name.trim())}`;
+    return this.state.places[pid] ? pid : this.charId(name, mi) ?? undefined;
+  }
+
   /** Holders are characters, or places for items left somewhere. */
   holderId(name: string, mi: number): string | undefined {
     const n = name.trim();
     if (!n) return undefined;
     if (/^(the )?(floor|ground|table|room|here)$/i.test(n) || n.startsWith("loc:")) return `loc:${slug(this.state.place[this.state.place.length - 1] ?? n)}`;
-    const pid = `loc:${slug(n)}`;
-    if (this.state.places[pid]) return pid;
-    return this.charId(n, mi) ?? undefined;
+    return this.parseHolder(n, mi).id;
+  }
+
+  /**
+   * Reads where an item ended up. Models write this loosely — "held by Buffy in
+   * jacket pocket (visible)", "in Buffy's jacket pocket (no change)", "on the
+   * table" — so only a bare name, or a name found inside the phrase, makes a
+   * holder; the rest is kept as the spot (`where`), never as a new character.
+   */
+  parseHolder(raw: string, mi: number): { id?: string; where?: string; same?: boolean } {
+    let s = raw;
+    for (let i = 0; i < 4 && /\([^()]*\)/.test(s); i++) s = s.replace(/\s*\([^()]*\)/g, "");
+    s = s.replace(/\s+/g, " ").replace(/[.;,]+$/, "").trim();
+    if (!s || /^(no change|unchanged|same|still|as before)$/i.test(s)) return { same: true };
+    const known = (n: string) => this.charId(n.replace(/^(the|a)\s+/i, ""), mi, false) ?? undefined;
+    const spot = (w?: string) => w?.replace(/^(?:in|on|at|inside|under|in the|on the)\s+/i, "").trim() || undefined;
+    const tail = (w?: string) => spot(w?.replace(/^(?:in|on|at|inside|under|within|tucked in|hidden in)\s+/i, ""));
+    // "held by Buffy in jacket pocket", "with Mara", "given to Kael"
+    const by = /^(?:held|carried|kept|worn|owned|taken|pocketed|hidden|stashed)?\s*(?:by|with|to)\s+(.+?)(?:\s+(?:in|on|at|inside|under|around|behind)\s+(.+))?$/i.exec(s);
+    if (by) {
+      const id = known(by[1]) ?? (this.looksLikeName(by[1]) ? this.charId(by[1], mi) ?? undefined : undefined);
+      if (id) return { id, where: tail(by[2]) };
+    }
+    // "in Buffy's jacket pocket", "Mara's satchel", "your coat"
+    const pos = /^(?:(?:in|on|at|inside|under|around|behind|tucked in|hidden in)\s+)?(?:the\s+)?([A-Z\u00C0-\u00DE][\w\u00C0-\u024F'’-]*(?:\s+[A-Z\u00C0-\u00DE][\w\u00C0-\u024F'’-]*){0,3})['’]s?\s+(.+)$/.exec(s);
+    if (pos) {
+      const id = known(pos[1]) ?? (this.looksLikeName(pos[1]) ? this.charId(pos[1], mi) ?? undefined : undefined);
+      if (id) return { id, where: pos[2].trim() };
+    }
+    const mine = /^(?:(?:in|on|at|inside|under)\s+)?(?:your|my)\s+(.+)$/i.exec(s);
+    if (mine) return { id: this.charId("user", mi) ?? undefined, where: mine[1].trim() };
+    const exact = known(s);
+    if (exact) return { id: exact };
+    const pid = `loc:${slug(s)}`;
+    if (this.state.places[pid]) return { id: pid };
+    if (this.looksLikeName(s)) return { id: this.charId(s, mi) ?? undefined };
+    // A spot, not a person: left here, at the current place.
+    const here = this.state.place[this.state.place.length - 1];
+    return { id: here ? `loc:${slug(here)}` : undefined, where: s };
+  }
+
+  /** A short capitalised name ("Mara", "Captain Voss"), not a phrase. */
+  private looksLikeName(s: string): boolean {
+    const t = s.trim();
+    if (!t || t.length > 40 || /[()\d:]/.test(t) || !/^[A-Z\u00C0-\u00DE]/.test(t)) return false;
+    const words = t.split(/\s+/);
+    if (words.length > 4) return false;
+    const filler = /^(in|on|at|by|the|a|an|from|with|under|inside|near|behind|held|carried|no|change|pocket|bag|hand|table|floor)$/i;
+    return !words.some((w, i) => filler.test(w) && !(i > 0 && /^(of|the)$/i.test(w) && /^[A-Z]/.test(words[i + 1] ?? "")));
   }
 
   /** `keys Name:` can target a character, item, thread, place, faction or document. */
