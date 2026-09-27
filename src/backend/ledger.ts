@@ -87,6 +87,7 @@ export class ChatLedger {
       sealed,
       personaThoughts: meta.detected.personaThoughts,
       romance: meta.detected.romance ?? meta.config.romance,
+      merges: meta.config.merges,
       startTime: start ? { day: startDay ? parseInt(startDay[1], 10) : 1, minute: parseInt(start[1], 10) * 60 + parseInt(start[2], 10) } : null,
     };
   }

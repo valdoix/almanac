@@ -19,6 +19,46 @@ export interface FoldOptions {
   personaThoughts?: boolean;
   romance?: string; // off | slow | measured | fast | established
   startTime?: StoryTime | null;
+  /** Names the player merged by hand: lower-case name → "user" or the name it belongs to. */
+  merges?: Record<string, string>;
+}
+
+/** "Gabriel#0|flat", "“Mara”", "Kael's" → the bare lower-case name. */
+function bareName(name: string): string {
+  return name.replace(/\|[^|]*$/, "").replace(/#\d+\s*$/, "").replace(/^["“'‘]|["”'’]$/g, "").replace(/['’]s$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** Optimal string alignment distance, stopping early past `max`. */
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let rowMin = Infinity;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      rowMin = Math.min(rowMin, d[i][j]);
+    }
+    if (rowMin > max) return max + 1;
+  }
+  return d[a.length][b.length];
+}
+
+/**
+ * A misspelling of a known name ("Gabuel" for "Gabriel", "Bufy" for "Buffy").
+ * Deliberately narrow: single words, same first letter, six letters or more,
+ * and never a longer form of the name ("Gabriela" is someone else).
+ */
+export function isTypoOf(n: string, known: string): boolean {
+  if (!n || !known || n === known || n.includes(" ") || known.includes(" ")) return false;
+  if (n[0] !== known[0] || Math.abs(n.length - known.length) > 1) return false;
+  const long = Math.max(n.length, known.length);
+  if (Math.min(n.length, known.length) < 5 || long < 6) return false;
+  if (n.startsWith(known) || known.startsWith(n)) return false;
+  const max = long >= 7 ? 2 : 1;
+  return editDistance(n, known, max) <= max;
 }
 
 export const CONFIDENCE: Record<EventSource, number> = {
@@ -75,15 +115,21 @@ export class Folder {
   state: WorldState;
   opts: FoldOptions;
   private userKeys: Set<string>;
+  private userFirst: string[];
 
   constructor(opts: FoldOptions, state?: WorldState) {
     this.opts = opts;
     this.state = state ?? emptyState();
+    const merged = Object.entries(opts.merges ?? {}).filter(([, to]) => to === "user").map(([from]) => from);
     this.userKeys = new Set(
-      [opts.userName, ...(opts.userAliases ?? []), "{{user}}", "user", "you", "player"]
+      [opts.userName, ...(opts.userAliases ?? []), ...merged, "{{user}}", "user", "you", "player"]
         .filter(Boolean)
         .map((s) => s.toLowerCase().trim()),
     );
+    // "Gabriel" for the persona "Gabriel Winters"
+    this.userFirst = [opts.userName, ...(opts.userAliases ?? [])]
+      .map((s) => (s ?? "").toLowerCase().trim().split(/\s+/)[0])
+      .filter((f) => f && f.length >= 3 && !["the", "mr", "mrs", "ms", "dr", "sir", "lady", "lord"].includes(f.replace(/\.$/, "")));
     if (!this.state.time && opts.startTime) this.state.time = { ...opts.startTime };
   }
 
@@ -91,15 +137,36 @@ export class Folder {
   // Identity
   // -------------------------------------------------------------------------
 
+  /**
+   * The player's character, however the model writes it: the full persona
+   * name, an alias, the first name alone, a slot-0 speaker mark, a name the
+   * player merged by hand, or a small misspelling of the name.
+   */
   isUser(name: string): boolean {
-    return this.userKeys.has(name.toLowerCase().trim());
+    if (/#0\s*(?:\|[^|]*)?$/.test(name.trim())) return true;
+    const n = bareName(name);
+    if (!n) return false;
+    if (this.userKeys.has(n) || this.userKeys.has(name.toLowerCase().trim())) return true;
+    if (this.state.chars.user?.aliases.some((a) => a.toLowerCase() === n)) return true;
+    if (n.includes(" ")) return false;
+    if (this.npcNamed(n)) return false;
+    const full = (this.opts.userName ?? "").toLowerCase().trim();
+    if (this.userFirst.includes(n)) return true;
+    return [...this.userFirst, full].some((k) => isTypoOf(n, k));
+  }
+
+  /** A character other than the player already goes by this exact name. */
+  private npcNamed(low: string): boolean {
+    return Object.values(this.state.chars).some((c) => !c.isUser && (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low)));
   }
 
   /** Resolve a written name to a character id, creating the character on first sight. */
   charId(name: string, msgIndex: number, create = true): string | null {
-    const n = name.replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").trim();
+    let n = name.replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").trim();
     if (!n) return null;
-    if (this.isUser(n)) {
+    const mergedTo = this.opts.merges?.[n.toLowerCase()];
+    if (mergedTo && mergedTo !== "user") n = mergedTo;
+    if (this.isUser(name) || this.isUser(n)) {
       this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
       return "user";
     }
@@ -117,6 +184,12 @@ export class Folder {
         c.name = n;
       } else if (!c.aliases.includes(n)) c.aliases.push(n);
       return c.id;
+    }
+    // A misspelling of someone already here ("Bufy") is them, not a newcomer.
+    const typo = Object.values(this.state.chars).filter((c) => !c.isUser && [c.name, ...c.aliases].some((a) => isTypoOf(low, a.toLowerCase())));
+    if (typo.length === 1) {
+      if (!typo[0].aliases.includes(n)) typo[0].aliases.push(n);
+      return typo[0].id;
     }
     if (!create) return null;
     let id = slug(n);
@@ -153,6 +226,16 @@ export class Folder {
   /** Adopt voice slots the model already used in [spk=Name#N] marks. */
   adoptSpeakers(speakers: { name: string; slot?: number }[], msgIndex: number): void {
     for (const s of speakers) {
+      // Slot 0 is the player's voice: whatever name the mark uses is theirs.
+      if (s.slot === 0) {
+        const nm = s.name.replace(/#\d+$/, "").trim();
+        const low = bareName(nm);
+        if (low && !this.npcNamed(low) && !this.isUser(nm)) {
+          const u = this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
+          if (!u.aliases.some((a) => a.toLowerCase() === low)) u.aliases.push(nm);
+        }
+        continue;
+      }
       if (this.isUser(s.name)) continue;
       const existing = this.charId(s.name, msgIndex, false);
       if (existing) continue;

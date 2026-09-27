@@ -445,6 +445,8 @@ export interface ChatConfig {
   trackers?: string[];
   theme?: string;
   colors: Record<string, string>; // char id -> css colour
+  /** Names merged by hand: lower-case name → "user" or the character's name. */
+  merges?: Record<string, string>;
   enabledOverride?: boolean;
 }
 

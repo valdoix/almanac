@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.2.0";
+var VERSION = "1.2.1";
 
 // src/frontend/orrery.ts
 var GROUPS = [
@@ -658,7 +658,15 @@ ${c.activity ? `<div class="alm-cc__row"><b>doing</b>${escapeHtml(c.activity)}</
 ${this.castCard(c)}
 ${c.journal?.length ? `<h4>In their own words</h4>${c.journal.map((j) => `<div class="muted">“${escapeHtml(j.text)}”</div>`).join("")}` : ""}
 ${c.isUser ? "" : `<h4>Hidden pressure (narrator-only)</h4><div class="row"><span class="spoiler grow" tabindex="0">${escapeHtml(c.pressure || "— none drawn yet —")}</span><button class="btn" data-act="editPressure" data-id="${escapeHtml(c.id)}">edit</button></div>`}
+${this.mergeRow(v, c)}
 </div>`).join("") || `<div class="empty">No one has appeared yet.</div>`}</div>`;
+  }
+  mergeRow(v, c) {
+    const merges = v.config?.merges ?? {};
+    const mine = Object.entries(merges).filter(([, to]) => c.isUser ? to === "user" : to.toLowerCase() === c.name.toLowerCase()).map(([from]) => from);
+    const chips = mine.map((n2) => `<span class="pill">${escapeHtml(n2)} <button class="btn" data-act="unmerge" data-name="${escapeHtml(n2)}" title="Split this name off again" style="padding:0 6px;margin-left:4px">✕</button></span>`).join("");
+    const pick = c.isUser ? "" : `<label class="f">Same person as…<select data-merge="${escapeHtml(c.name)}"><option value="">— no, a different person —</option><option value="user">${escapeHtml(v.names?.user || "You")} (you)</option>${v.cast.filter((o) => !o.isUser && o.id !== c.id).map((o) => `<option value="${escapeHtml(o.name)}">${escapeHtml(o.name)}</option>`).join("")}</select></label>`;
+    return pick || chips ? `<div class="alm-merge">${chips ? `<div class="row"><small class="muted">Also written as:</small>${chips}</div>` : ""}${pick}</div>` : "";
   }
   tab_bonds(v) {
     const nodes = v.cast.filter((c) => !c.dead || v.bonds.some((b) => b.from === c.id || b.to === c.id)).map((c) => ({ id: c.id, name: c.isUser ? v.names.user || "You" : c.name, color: c.color, spot: c.tier === "spot", user: c.isUser }));
@@ -889,6 +897,12 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
       case "chronicleRun":
         this.send({ type: "chronicle", action: "run" });
         break;
+      case "unmerge": {
+        const merges = { ...this.view?.config?.merges ?? {} };
+        delete merges[String(act.name ?? "").toLowerCase()];
+        this.send({ type: "config", patch: { merges } });
+        break;
+      }
       case "chronicleRewrite": {
         const b = t.closest("button");
         if (b && b.dataset.armed !== "1") {
@@ -970,6 +984,14 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
     }
     if (d.color) {
       this.send({ type: "color", charId: d.color, color: t.value });
+      return;
+    }
+    if (d.merge != null && t.value) {
+      const c = this.view?.cast.find((x) => x.name === d.merge);
+      const merges = { ...this.view?.config?.merges ?? {} };
+      for (const n2 of [d.merge, ...c?.aliases ?? []])
+        merges[String(n2).toLowerCase()] = t.value;
+      this.send({ type: "config", patch: { merges } });
       return;
     }
     if (d.loreMode)

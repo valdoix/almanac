@@ -1309,7 +1309,7 @@ function parseMessage(text) {
 }
 
 // src/core/version.ts
-var VERSION = "1.2.0";
+var VERSION = "1.2.1";
 
 // src/core/types.ts
 var BIPOLAR_AXES = ["trust", "affection", "respect", "comfort"];
@@ -1366,6 +1366,42 @@ var DEFAULT_CHAT_CONFIG = {
 };
 
 // src/core/state.ts
+function bareName(name) {
+  return name.replace(/\|[^|]*$/, "").replace(/#\d+\s*$/, "").replace(/^["\u201C'\u2018]|["\u201D'\u2019]$/g, "").replace(/['\u2019]s$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function editDistance(a, b, max) {
+  if (Math.abs(a.length - b.length) > max)
+    return max + 1;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1;j <= b.length; j++)
+    d[0][j] = j;
+  for (let i = 1;i <= a.length; i++) {
+    let rowMin = Infinity;
+    for (let j = 1;j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      rowMin = Math.min(rowMin, d[i][j]);
+    }
+    if (rowMin > max)
+      return max + 1;
+  }
+  return d[a.length][b.length];
+}
+function isTypoOf(n, known) {
+  if (!n || !known || n === known || n.includes(" ") || known.includes(" "))
+    return false;
+  if (n[0] !== known[0] || Math.abs(n.length - known.length) > 1)
+    return false;
+  const long = Math.max(n.length, known.length);
+  if (Math.min(n.length, known.length) < 5 || long < 6)
+    return false;
+  if (n.startsWith(known) || known.startsWith(n))
+    return false;
+  const max = long >= 7 ? 2 : 1;
+  return editDistance(n, known, max) <= max;
+}
 var CONFIDENCE = {
   user: 1,
   model: 0.9,
@@ -1421,21 +1457,46 @@ class Folder {
   state;
   opts;
   userKeys;
+  userFirst;
   constructor(opts, state) {
     this.opts = opts;
     this.state = state ?? emptyState();
-    this.userKeys = new Set([opts.userName, ...opts.userAliases ?? [], "{{user}}", "user", "you", "player"].filter(Boolean).map((s) => s.toLowerCase().trim()));
+    const merged = Object.entries(opts.merges ?? {}).filter(([, to]) => to === "user").map(([from]) => from);
+    this.userKeys = new Set([opts.userName, ...opts.userAliases ?? [], ...merged, "{{user}}", "user", "you", "player"].filter(Boolean).map((s) => s.toLowerCase().trim()));
+    this.userFirst = [opts.userName, ...opts.userAliases ?? []].map((s) => (s ?? "").toLowerCase().trim().split(/\s+/)[0]).filter((f) => f && f.length >= 3 && !["the", "mr", "mrs", "ms", "dr", "sir", "lady", "lord"].includes(f.replace(/\.$/, "")));
     if (!this.state.time && opts.startTime)
       this.state.time = { ...opts.startTime };
   }
   isUser(name) {
-    return this.userKeys.has(name.toLowerCase().trim());
+    if (/#0\s*(?:\|[^|]*)?$/.test(name.trim()))
+      return true;
+    const n = bareName(name);
+    if (!n)
+      return false;
+    if (this.userKeys.has(n) || this.userKeys.has(name.toLowerCase().trim()))
+      return true;
+    if (this.state.chars.user?.aliases.some((a) => a.toLowerCase() === n))
+      return true;
+    if (n.includes(" "))
+      return false;
+    if (this.npcNamed(n))
+      return false;
+    const full = (this.opts.userName ?? "").toLowerCase().trim();
+    if (this.userFirst.includes(n))
+      return true;
+    return [...this.userFirst, full].some((k) => isTypoOf(n, k));
+  }
+  npcNamed(low) {
+    return Object.values(this.state.chars).some((c) => !c.isUser && (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low)));
   }
   charId(name, msgIndex, create = true) {
-    const n = name.replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").trim();
+    let n = name.replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").trim();
     if (!n)
       return null;
-    if (this.isUser(n)) {
+    const mergedTo = this.opts.merges?.[n.toLowerCase()];
+    if (mergedTo && mergedTo !== "user")
+      n = mergedTo;
+    if (this.isUser(name) || this.isUser(n)) {
       this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
       return "user";
     }
@@ -1454,6 +1515,12 @@ class Folder {
       } else if (!c.aliases.includes(n))
         c.aliases.push(n);
       return c.id;
+    }
+    const typo = Object.values(this.state.chars).filter((c) => !c.isUser && [c.name, ...c.aliases].some((a) => isTypoOf(low, a.toLowerCase())));
+    if (typo.length === 1) {
+      if (!typo[0].aliases.includes(n))
+        typo[0].aliases.push(n);
+      return typo[0].id;
     }
     if (!create)
       return null;
@@ -1501,6 +1568,16 @@ class Folder {
   }
   adoptSpeakers(speakers, msgIndex) {
     for (const s of speakers) {
+      if (s.slot === 0) {
+        const nm = s.name.replace(/#\d+$/, "").trim();
+        const low = bareName(nm);
+        if (low && !this.npcNamed(low) && !this.isUser(nm)) {
+          const u = this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
+          if (!u.aliases.some((a) => a.toLowerCase() === low))
+            u.aliases.push(nm);
+        }
+        continue;
+      }
       if (this.isUser(s.name))
         continue;
       const existing = this.charId(s.name, msgIndex, false);
@@ -4100,6 +4177,7 @@ class ChatLedger {
       sealed,
       personaThoughts: meta.detected.personaThoughts,
       romance: meta.detected.romance ?? meta.config.romance,
+      merges: meta.config.merges,
       startTime: start ? { day: startDay ? parseInt(startDay[1], 10) : 1, minute: parseInt(start[1], 10) * 60 + parseInt(start[2], 10) } : null
     };
   }

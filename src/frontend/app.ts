@@ -147,7 +147,17 @@ ${c.activity ? `<div class="alm-cc__row"><b>doing</b>${e(c.activity)}</div>` : "
 ${this.castCard(c)}
 ${c.journal?.length ? `<h4>In their own words</h4>${c.journal.map((j: any) => `<div class="muted">“${e(j.text)}”</div>`).join("")}` : ""}
 ${c.isUser ? "" : `<h4>Hidden pressure (narrator-only)</h4><div class="row"><span class="spoiler grow" tabindex="0">${e(c.pressure || "— none drawn yet —")}</span><button class="btn" data-act="editPressure" data-id="${e(c.id)}">edit</button></div>`}
+${this.mergeRow(v, c)}
 </div>`).join("") || `<div class="empty">No one has appeared yet.</div>`}</div>`;
+  }
+
+  /** "Same person as…" for duplicates the model invented, and the names already merged into this one. */
+  mergeRow(v: any, c: any): string {
+    const merges: Record<string, string> = v.config?.merges ?? {};
+    const mine = Object.entries(merges).filter(([, to]) => (c.isUser ? to === "user" : to.toLowerCase() === c.name.toLowerCase())).map(([from]) => from);
+    const chips = mine.map((n) => `<span class="pill">${e(n)} <button class="btn" data-act="unmerge" data-name="${e(n)}" title="Split this name off again" style="padding:0 6px;margin-left:4px">✕</button></span>`).join("");
+    const pick = c.isUser ? "" : `<label class="f">Same person as…<select data-merge="${e(c.name)}"><option value="">— no, a different person —</option><option value="user">${e(v.names?.user || "You")} (you)</option>${v.cast.filter((o: any) => !o.isUser && o.id !== c.id).map((o: any) => `<option value="${e(o.name)}">${e(o.name)}</option>`).join("")}</select></label>`;
+    return pick || chips ? `<div class="alm-merge">${chips ? `<div class="row"><small class="muted">Also written as:</small>${chips}</div>` : ""}${pick}</div>` : "";
   }
 
   tab_bonds(v: any): string {
@@ -354,6 +364,12 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
         break;
       }
       case "chronicleRun": this.send({ type: "chronicle", action: "run" }); break;
+      case "unmerge": {
+        const merges = { ...(this.view?.config?.merges ?? {}) };
+        delete merges[String(act.name ?? "").toLowerCase()];
+        this.send({ type: "config", patch: { merges } });
+        break;
+      }
       case "chronicleRewrite": {
         // Two clicks: the first arms the button (no browser dialogs inside the host).
         const b = t.closest("button") as HTMLButtonElement | null;
@@ -409,6 +425,14 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
     }
     if (d.color) {
       this.send({ type: "color", charId: d.color, color: t.value });
+      return;
+    }
+    if (d.merge != null && t.value) {
+      // Every name this character went by now resolves to the chosen one; the story refolds.
+      const c = this.view?.cast.find((x: any) => x.name === d.merge);
+      const merges = { ...(this.view?.config?.merges ?? {}) };
+      for (const n of [d.merge, ...(c?.aliases ?? [])]) merges[String(n).toLowerCase()] = t.value;
+      this.send({ type: "config", patch: { merges } });
       return;
     }
     if (d.loreMode) this.send({ type: "lore", action: "mode", bookId: d.loreMode, value: t.value });

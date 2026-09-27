@@ -130,3 +130,40 @@ describe("item holders", () => {
     expect(state.items["item:knife"].where).toBe("under the loose floorboard");
   });
 });
+
+describe("the player's character", () => {
+  const P: FoldOptions = { ...OPTS, userName: "Gabriel Winters" };
+  const r = (body: string) => `Prose.\n<ledger>\n${body}\nmode: social\n</ledger>`;
+
+  test("first name, a typo and a slot-0 mark are all the persona", () => {
+    const rt = new LedgerRuntime();
+    const path = toPath([
+      msg(0, `[spk=Buffy#1]"Morning."[/spk]\n` + r("cast: Buffy@spot(at the table) · Gabriel@spot(plating waffles, glasses on)")),
+      msg(1, "I sit.", true),
+      msg(2, r("bond Buffy>Gabuel: trust +1 — he made waffles")),
+      msg(3, "More.", true),
+      msg(4, `[spk=Gabe#0]"Eat up."[/spk]\n` + r("cast: Buffy@spot · Gabe@spot")),
+    ]);
+    const { state } = rt.fold(path, P);
+    expect(Object.values(state.chars).filter((c) => !c.isUser).map((c) => c.name)).toEqual(["Buffy"]);
+    expect(state.chars.user.name).toBe("Gabriel Winters");
+    expect(state.chars.user.activity).toBe("plating waffles, glasses on");
+    expect(state.chars.user.aliases).toContain("Gabe");
+  });
+
+  test("a longer form of the name is someone else, and a hand merge folds a name in", () => {
+    const rt = new LedgerRuntime();
+    const path = toPath([msg(0, r("cast: Gabriela@spot · Winnie@peri"))]);
+    expect(Object.keys(rt.fold(path, P).state.chars).sort()).toEqual(["gabriela", "winnie"]);
+    const merged = rt.fold(path, { ...P, merges: { winnie: "user" } }).state;
+    expect(Object.keys(merged.chars).sort()).toEqual(["gabriela", "user"]);
+  });
+
+  test("a misspelt NPC name joins the NPC", () => {
+    const rt = new LedgerRuntime();
+    const path = toPath([msg(0, r("cast: Theodora@spot")), msg(1, "Hi.", true), msg(2, r("mood Theodroa: wary"))]);
+    const { state } = rt.fold(path, P);
+    expect(Object.keys(state.chars)).toEqual(["theodora"]);
+    expect(state.chars.theodora.mood?.name).toBe("wary");
+  });
+});
