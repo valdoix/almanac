@@ -316,6 +316,7 @@ function setStance(
   note?: string,
 ): boolean {
   const cur = f.stances[holder];
+  if (cur?.set || f.cleared?.includes(holder)) return false;
   if (s.derived && cur && cur.status !== "unaware") return false;
   const route = s.route ?? routeOf(s.how);
   f.stances[holder] = compact({ holder, status: s.status, how: s.how, route, from: s.from, version: s.version, derived: s.derived, msgIndex: ctx.mi, at: ctx.at });
@@ -561,7 +562,9 @@ export function fileKnow(ctx: KnowCtx, holder: string, a: KnowArgs): string[] {
     let teller: string | null = null;
     let tellTo: { to: string; channel: string } | null = null;
     if ((it.status === "knows" || it.status === "believes") && !PRIVATE.test(how) && !KEPT.test(evidence)) {
-      const from0 = (it.from ? ctx.who(it.from, false) : null) ?? sourceIn(ctx, it.note);
+      // "Gabriel Winters, aloud": the how opens with who said it.
+      const lead = /^([A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+){0,2})\s*(?:,|→|->|\baloud\b)/u.exec(how);
+      const from0 = (it.from ? ctx.who(it.from, false) : null) ?? sourceIn(ctx, it.note) ?? (lead ? ctx.who(lead[1], false) : null);
       // "Gabriel is a Slayer (heard him say it)": most likely from the person it's about.
       const subj = subjectOf(ctx, stmt);
       const said = how && SPOKEN.test(how) ? from0 ?? (subj && subj !== holder ? subj : null) : from0;
@@ -576,7 +579,9 @@ export function fileKnow(ctx: KnowCtx, holder: string, a: KnowArgs): string[] {
       // "told · believes" with nothing to place it in the scene: only the teller is known to have it.
       else if (!aloud && said && said !== holder) teller = said;
     }
-    if (/^["“][^"“”]+["”]$/.test(stmt)) stmt = aloud?.by ? `${ctx.nm(aloud.by)} said ${stmt}` : `someone said ${stmt}`;
+    // A whole fact in quotes ("Gabriel is the first male Slayer") is the fact; a bare phrase ("Gabe-o") is words said.
+    if (/^["“][^"“”]+["”]$/.test(stmt) && stmt.split(/\s+/).length >= 5) stmt = stmt.slice(1, -1).trim();
+    else if (/^["“][^"“”]+["”]$/.test(stmt)) stmt = aloud?.by ? `${ctx.nm(aloud.by)} said ${stmt}` : `someone said ${stmt}`;
     const { f, keyed } = resolveFact(ctx, it.key, stmt, holder);
     keys.push(f.key);
     // A different wording marked wrong/false is this holder's own version.
@@ -628,6 +633,14 @@ export function fileReveal(ctx: KnowCtx, a: RevealArgs): string {
       if (ctx.st.chars[id]) ctx.st.chars[id].voiced = true;
     }
   }
+  // "Buffy, privately observed": nothing came out to anyone. It's the source's own.
+  if (by && !named.length && !a.everyone && !isPublicChannel(a.channel) && !/letter|note|written|wrote|text|message/.test(a.channel)) {
+    const how = [a.channel, a.how].filter(Boolean).join(" ");
+    setStance(ctx, f, by, { status: "knows", how: how || undefined });
+    linkGaps(ctx, f);
+    ctx.canon.push(`know ${ctx.nm(by)}: #${f.key} ${f.statement}${how ? ` | ${how}` : ""}`);
+    return f.key;
+  }
   comeOut(ctx, f, { by, channel: a.channel, named, everyone: a.everyone });
   linkGaps(ctx, f);
   if (a.how && by) {
@@ -668,16 +681,65 @@ export function fileSecret(ctx: KnowCtx, a: SecretArgs): string {
 export function fileUnaware(ctx: KnowCtx, holder: string, things: string[]): void {
   const gaps: string[] = [];
   const keyed: string[] = [];
+  const facts = ctx.st.facts ?? {};
   for (const t of things) {
-    const k = t.startsWith("#") ? slugKey(t) : findFact(ctx.st.facts ?? {}, t);
-    const f = k ? ctx.st.facts?.[k] : undefined;
+    // "#heaven", or "#heaven Buffy was in Heaven": the key, and the words if it isn't tracked.
+    const km = /^#([\p{L}\p{N}_-]+)\s*(.*)$/u.exec(t);
+    const text = km ? km[2].trim() : t;
+    let k: string | undefined;
+    if (km) {
+      const s = slugKey(km[1]);
+      k = facts[s] ? s : Object.values(facts).find((f) => f.altKeys?.includes(s))?.key;
+    }
+    k ??= text ? findFact(facts, text) : undefined;
+    const f = k ? facts[k] : undefined;
     if (f) {
       if (!standsOn(f.stances[holder]) || f.stances[holder].derived) setStance(ctx, f, holder, { status: "unaware", route: "stated", how: "the story says they don't know" });
       keyed.push(`#${f.key}`);
-    } else gaps.push(t.replace(/^#/, ""));
+    } else if (text) gaps.push(text);
   }
   for (const g of gaps) addGap(ctx, holder, g);
   ctx.canon.push(`unaware ${ctx.nm(holder)}: ${[...keyed, ...gaps].join(" · ")}`);
+}
+
+/**
+ * The player's say: facts they added, and where they put people. Applied after every
+ * message, so it holds whatever the story writes later.
+ */
+export function applyFactEdits(st: WorldState, mi: number, edits: Record<string, FactEdit>): void {
+  for (const [key, e] of Object.entries(edits)) {
+    if (e.into || (!e.people && e.added === undefined)) continue;
+    const facts = (st.facts ??= {});
+    let f = facts[key] ?? Object.values(facts).find((x) => x.altKeys?.includes(key));
+    if (!f && e.added !== undefined && mi >= e.added) {
+      f = facts[key] = { key, statement: e.statement || key.replace(/-/g, " "), truth: e.truth ?? "unknown", aliases: [normFact(e.statement || key)], stances: {}, history: [], firstMsg: mi, lastMsg: mi, added: true, locked: true };
+    }
+    if (!f) continue;
+    if (e.statement) {
+      f.statement = e.statement;
+      f.locked = true;
+    }
+    if (e.truth) f.truth = e.truth;
+    if (e.hidden) f.hidden = true;
+    for (const [id, want] of Object.entries(e.people ?? {})) {
+      if (!st.chars[id]) continue;
+      const cur = f.stances[id];
+      if (want === "none") {
+        if (cur) delete f.stances[id];
+        if (f.keptFrom?.includes(id)) f.keptFrom = f.keptFrom.filter((x) => x !== id);
+        if (!f.cleared?.includes(id)) f.cleared = [...(f.cleared ?? []), id];
+        continue;
+      }
+      if (cur?.set && cur.status === want) continue;
+      const route: KnowRoute | undefined = want === "unaware" ? "stated" : cur?.route;
+      f.stances[id] = compact({ holder: id, status: want, how: "you set this", route, from: want === "unaware" ? undefined : cur?.from, set: true, msgIndex: cur?.msgIndex ?? mi, at: cur?.at ?? (st.time ? { ...st.time } : null) });
+      f.history.push(compact({ holder: id, status: want, how: "you set this", route, msgIndex: mi, at: st.time ? { ...st.time } : null }));
+      if (want !== "unaware") {
+        if (f.keptFrom?.includes(id)) f.keptFrom = f.keptFrom.filter((x) => x !== id);
+        if (want !== "wrong") closeGaps(st, id, f);
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -754,14 +816,34 @@ export function lackOf(st: WorldState, f: FactState, id: string): LackReason | n
   if (s) return s.status === "unaware" ? (s.route === "hidden" ? "hidden" : s.route === "missed" ? "missed" : "stated") : null;
   if (f.keptFrom?.includes(id)) return "hidden";
   const c = st.chars[id];
-  if (!f.out?.length || !isKnower(c)) return null;
+  if (!f.out?.length || !isKnower(c) || f.cleared?.includes(id)) return null;
   const first = f.out[0].msgIndex;
   // Someone new to the story may have known it all along — unless they walked into the
   // very scene where it came out, after it did (an arrival hears nothing said before).
   if (c.firstSeen >= first && sceneOf(st, c.firstSeen) !== sceneOf(st, first)) return null;
   if (f.out.some((o) => (o as any).room?.includes(id))) return "unheard";
-  return "missed";
+  // Not there when it came out only means something if it was news then. Gabriel telling
+  // Buffy he's a Slayer says nothing about whether Walter, his Watcher, knows.
+  return isNews(f) ? "missed" : null;
 }
+
+const FOUND: KnowRoute[] = ["deduced", "sensed", "saw", "read", "overheard", "heard", "told", "rumour"];
+
+/**
+ * Was the fact news when it first came out? Its teller found it out in the story first
+ * (read it off the stone, worked it out, was told), or it is something that happened in
+ * the story (an offer, a joke, a fight). Something the teller simply already knew (who
+ * they are, their cat's name) may be known to anyone who wasn't there.
+ */
+export function isNews(f: FactState): boolean {
+  const out = f.out?.[0];
+  if (!out) return false;
+  if (f.history.some((h) => (!out.by || h.holder === out.by) && h.msgIndex <= out.msgIndex && !h.derived && h.route && FOUND.includes(h.route) && h.status !== "unaware")) return true;
+  return DEED.test(f.statement);
+}
+
+// A statement that is something happening in the story, not a standing fact.
+const DEED = /\b(?:said|told|asked|offered|admitted|confessed|refused|joked|made a joke|laughed|promised|lied|whispered|shouted|agreed|accepted|kissed|hugged|killed|fought|attacked|saved|pulled|dug|arrived|left|cried|wept|broke down|slapped|chose|decided|threatened|begged|swore|called (?:him|her|them)sel(?:f|ves))\b/i;
 
 function sceneOf(st: WorldState, mi: number): number {
   let no = 0;

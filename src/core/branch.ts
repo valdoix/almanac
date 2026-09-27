@@ -5,7 +5,7 @@
 // edits, engine/sim ops) are stored separately, keyed to msgId + swipe, and are
 // folded only when their message+swipe is on the path.
 
-import { parseMessage } from "./dsl";
+import { parseLine, parseMessage } from "./dsl";
 import { Folder, type FoldOptions } from "./state";
 import type { EventSource, LedgerEvent, OpName, ParsedLedger, ParsedOp, WorldState } from "./types";
 import { deepClone, hash } from "./util";
@@ -142,7 +142,9 @@ export class LedgerRuntime {
           const at = base.ops.findIndex((o) => kinds.has(o.op));
           const pos = at < 0 ? kept.findIndex((o) => o.op === "mode") : base.ops.slice(0, at).filter((o) => !kinds.has(o.op)).length;
           const cut = pos < 0 ? kept.length : pos;
-          base = { ...base, ops: [...kept.slice(0, cut), ...clerk.ops, ...kept.slice(cut)] };
+          // Read again from the raw lines, so a better reader fixes lines stored before it.
+          const ops = clerk.ops.map((o) => (o.raw ? parseLine(o.raw, true) ?? o : o)).filter((o) => kinds.has(o.op));
+          base = { ...base, ops: [...kept.slice(0, cut), ...ops, ...kept.slice(cut)] };
         }
         const extras = sides.filter((s) => !s.replaces && !s.replacesOps?.length);
         const extraOps = extras.flatMap((s) => s.ops);

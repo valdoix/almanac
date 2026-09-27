@@ -118,6 +118,9 @@ export interface CharacterState {
   flags: string[];
   injuries: Injury[];
   look?: string;
+  /** Set by the player on the Cast page. */
+  age?: string;
+  appearance?: string;
   status?: string;
   journal: { text: string; at: StoryTime | null; msgIndex: number }[];
   dead?: boolean;
@@ -210,6 +213,8 @@ export interface FactStance {
   version?: string;
   /** Not written for this person; the engine worked it out: the source, a witness, or a secret's keeping. */
   derived?: "source" | "witness" | "secret";
+  /** Set by the player; the story doesn't change it. */
+  set?: boolean;
   msgIndex: number;
   at: StoryTime | null;
 }
@@ -259,6 +264,10 @@ export interface FactState {
   /** A secret: who keeps it, and from whom (those still without it). */
   keepers?: string[];
   keptFrom?: string[];
+  /** People the player said have no record either way (no "wasn't there" guess). */
+  cleared?: string[];
+  /** Added by the player, not the story. */
+  added?: boolean;
   firstMsg: number;
   lastMsg: number;
 }
@@ -580,7 +589,17 @@ export interface ChatConfig {
   merges?: Record<string, string>;
   /** Player edits to facts: rename, set truth, merge into another fact, hide. */
   factEdits?: Record<string, FactEdit>;
+  /** Player edits to the cast, by character id: a new name, age and appearance, or someone added by hand. */
+  castEdits?: Record<string, CastEdit>;
   enabledOverride?: boolean;
+}
+
+export interface CastEdit {
+  name?: string;
+  age?: string;
+  appearance?: string;
+  /** Added by the player: the message they join the story at. */
+  added?: number;
 }
 
 export const DEFAULT_CHAT_CONFIG: ChatConfig = {
@@ -595,4 +614,8 @@ export interface FactEdit {
   /** Merge this fact into another key. */
   into?: string;
   hidden?: boolean;
+  /** Where people stand, set by the player: a stance, "unaware", or "none" (no record either way). */
+  people?: Record<string, KnowStatus | "none">;
+  /** A fact the player added: the message it was added at. */
+  added?: number;
 }

@@ -154,7 +154,8 @@ export function stripLedger(text: string): string {
 // Line parsing
 // ---------------------------------------------------------------------------
 
-export function parseLine(rawLine: string): ParsedOp | null {
+/** One ledger line. `oneFact`: a knowledge line holds a single fact (the clerk's lines). */
+export function parseLine(rawLine: string, oneFact = false): ParsedOp | null {
   let line = rawLine.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim();
   if (!line || line.startsWith("//") || line.startsWith("#")) return null;
   const m = /^([A-Za-z_]+)\b\s*([^:]*?)\s*:\s*([\s\S]*)$/.exec(line);
@@ -176,13 +177,13 @@ export function parseLine(rawLine: string): ParsedOp | null {
   }
   const base: ParsedOp = { op, args: {}, raw: rawLine.trim() };
   try {
-    return PARSERS[op](base, subject, rest) ?? null;
+    return PARSERS[op](base, subject, rest, oneFact) ?? null;
   } catch {
     return null;
   }
 }
 
-type LineParser = (p: ParsedOp, subject: string, rest: string) => ParsedOp | null;
+type LineParser = (p: ParsedOp, subject: string, rest: string, oneFact?: boolean) => ParsedOp | null;
 
 function parseClockSpec(s: string): Record<string, any> | null {
   const t = s.trim().toLowerCase();
@@ -376,11 +377,11 @@ const PARSERS: Record<OpName, LineParser> = {
     p.args = { tier: parseInt(t[1], 10), rel: /^[+-]/.test(t[1]) };
     return p;
   },
-  know(p, s, rest) {
+  know(p, s, rest, oneFact) {
     if (!s) return null;
     p.subject = s;
     // One fact per item: bundles split, routes lifted, "does not know …" pulled out (knowparse).
-    const k = parseKnowRest(rest);
+    const k = parseKnowRest(rest, oneFact);
     if (!k) return null;
     p.args = k;
     p.cause = k.source;

@@ -43,7 +43,7 @@ describe("reading knowledge lines as models write them", () => {
     expect(parseLine(`reveal #locket: Wren took the locket | Joss → Mara, whispered · true`)!.args).toMatchObject({ source: "Joss", listeners: ["Mara"], everyone: false, channel: "whispered", truth: "true" });
     expect(parseLine(`reveal: #debt the price is her peace | said aloud by Valeria`)!.args).toMatchObject({ key: "debt", source: "Valeria", everyone: true });
     expect(parseLine(`secret #called: Gabriel was Called when Buffy died | Valeria keeps it from Buffy and Gabriel`)!.args).toMatchObject({ keepers: ["Valeria"], from: ["Buffy", "Gabriel"] });
-    expect(parseLine(`unaware Buffy: who raised her · #heaven`)!.args.things).toEqual(["who raised her", "#heaven"]);
+    expect(parseLine(`unaware Buffy: who raised her · #heaven`)!.args.things).toEqual(["who raised her"]);
   });
 });
 
@@ -242,5 +242,60 @@ describe("the knowledge clerk", () => {
     expect(p.user).toContain('#gabe-o "Gabriel calls himself "Gabe-o""');
     expect(p.user).toContain("Buffy: \"Gabe-o?\"");
     expect(p.system).toMatch(/never a belief, suspicion, feeling or thought of Gabriel Winters's/);
+  });
+});
+
+describe("the player's say", () => {
+  const cast = `cast: Buffy@spot · Gabriel@spot`;
+  const speak = `[spk=Buffy#1]"…"[/spk] [spk=Walter#2]"…"[/spk]`;
+
+  test("a line without the | keeps its stance and truth out of the fact", () => {
+    const k = parseLine(`know Buffy: #gabriel-attraction she is attracted to Gabriel · believes it · true`, true)!.args;
+    expect(k.items.map((i: any) => i.statement)).toEqual(["she is attracted to Gabriel"]);
+    expect(k.items[0]).toMatchObject({ status: "believes", truth: "true" });
+    const v = parseLine(`know Valeria: Buffy's second signature is her Slayer essence · deduced from the stone's response · true`, true)!.args;
+    expect(v.items).toHaveLength(1);
+    expect(v.items[0]).toMatchObject({ statement: "Buffy's second signature is her Slayer essence", truth: "true", how: "deduced from the stone's response" });
+    const s = parseLine(`know Buffy: she said no without thinking · self · believes/true`, true)!.args;
+    expect(s.items[0]).toMatchObject({ statement: "she said no without thinking", status: "believes", truth: "true" });
+    const one = parseLine(`know Buffy: #promise Gabriel offered to help; she accepted · knows · true`, true)!.args;
+    expect(one.items.map((i: any) => i.statement)).toEqual(["Gabriel offered to help, she accepted"]);
+  });
+
+  test("someone away when an old truth is told isn't marked as not knowing it; news they missed still counts", () => {
+    const { state } = foldRaw([
+      reply(0, turn(`cast: Walter@spot`, `[spk=Walter#2]"Morning."[/spk]`)),
+      reply(1, turn(`${cast} · Walter@off\nat: Graveyard\nclock: +3h\nreveal #slayer: Gabriel is a Slayer | Gabriel, aloud\nknow Buffy: #debt the stone shows a debt in her | read it off the stone · knows · true\nreveal #debt: the stone shows a debt in her | Buffy, aloud`)),
+    ]);
+    expect(lackOf(state, state.facts!.slayer, "walter")).toBeNull();
+    expect(lackOf(state, state.facts!.debt, "walter")).toBe("missed");
+  });
+
+  test("the player sets who knows a fact, adds facts and deletes them", () => {
+    const lines = [`cast: Walter@spot`, `${cast}\nreveal #slayer: Gabriel is a Slayer | Gabriel, aloud\nsecret #heaven: Buffy was in Heaven | kept by Buffy · from Gabriel`];
+    const { state } = fold(lines, {
+      factEdits: {
+        slayer: { people: { walter: "knows" } },
+        heaven: { people: { user: "none" } },
+        watcher: { statement: "Walter is Gabriel's Watcher", truth: "true", added: 1, people: { walter: "knows", user: "knows" } },
+      },
+    });
+    expect(state.facts!.slayer.stances.walter).toMatchObject({ status: "knows", set: true });
+    expect(lackOf(state, state.facts!.heaven, "user")).toBeNull();
+    expect(state.facts!.watcher).toMatchObject({ statement: "Walter is Gabriel's Watcher", truth: "true", added: true });
+    expect(factKind(state.facts!.watcher)).toBe("shared");
+    // A later line doesn't undo what the player set.
+    const later = fold([...lines, `unaware Walter: #slayer`], { factEdits: { slayer: { people: { walter: "knows" } } } }).state;
+    expect(later.facts!.slayer.stances.walter.status).toBe("knows");
+  });
+
+  test("the player renames someone, gives an age and appearance, and adds a person", () => {
+    const { state } = fold([`cast: Buffy@spot`, `know Buffy: #sky the sky is red | saw it`], {
+      castEdits: { buffy: { name: "Buffy Summers", age: "20", appearance: "small, blonde" }, giles: { name: "Rupert Giles", added: 1 } },
+    });
+    expect(state.chars.buffy).toMatchObject({ name: "Buffy Summers", age: "20", appearance: "small, blonde" });
+    expect(state.chars.buffy.aliases).toContain("Buffy");
+    expect(state.facts!.sky.stances.buffy.status).toBe("knows");
+    expect(state.chars.giles).toMatchObject({ name: "Rupert Giles", voiced: true });
   });
 });

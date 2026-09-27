@@ -24,6 +24,8 @@ const KIND_HELP: Record<string, string> = {
   noted: "One person noticed it; no one is known to lack it (never sent to the model)",
 };
 
+const PERSON_OPTS: [string, string][] = [["", "as the story says"], ["knows", "knows it"], ["believes", "believes it"], ["suspects", "suspects it"], ["doubts", "doubts it"], ["wrong", "has it wrong"], ["unaware", "doesn't know"], ["none", "no record either way"]];
+
 export class AlmanacApp {
   ctx: SpindleFrontendContext;
   root: HTMLElement;
@@ -37,6 +39,8 @@ export class AlmanacApp {
   factKind: "play" | "shared" | "noted" | "all" = "play";
   factPerson = "";
   editingFact: string | null = null;
+  /** Cast page: the character being edited ("__new": adding someone). */
+  editingChar: string | null = null;
   openFacts = new Set<string>();
   clerkProgress = "";
   /** Chronicle page: which level to list, and which units show their folded children. */
@@ -159,19 +163,32 @@ ${v.recall ? `<details><summary class="muted">Recall block</summary><pre>${e(v.r
 <div class="alm-cc__bd"><div class="alm-cc__nm">${e(c.name)}</div>${c.mood?.name ? `<div class="alm-cc__em">${e(c.mood.name)}</div>` : ""}${vad}
 ${meters.length ? `<div class="alm-meters">${meters.map(([k, x]) => `<span>${e(k)}</span>${seg(x as number)}`).join("")}</div>` : ""}
 <div class="alm-tags">${(c.flags ?? []).slice(-4).map((f: string) => `<span class="alm-tag">${e(f)}</span>`).join("")}${(c.injuries ?? []).map((i: any) => `<span class="alm-tag warn">${e(i.where)}</span>`).join("")}${(c.held ?? []).slice(0, 3).map((h: string) => `<span class="alm-tag">holds: ${e(h)}</span>`).join("")}</div>
-${c.activity ? `<div class="alm-cc__row"><b>doing</b>${e(c.activity)}</div>` : ""}${!compact && c.look ? `<div class="alm-cc__row"><b>look</b>${e(c.look)}</div>` : ""}${!compact && c.place ? `<div class="alm-cc__row"><b>where</b>${e(c.place)}</div>` : ""}
+${c.activity ? `<div class="alm-cc__row"><b>doing</b>${e(c.activity)}</div>` : ""}${!compact && c.age ? `<div class="alm-cc__row"><b>age</b>${e(c.age)}${c.ageSet ? "" : ` <small class="muted" title="From the lore">(lore)</small>`}</div>` : ""}${!compact && c.appearance ? `<div class="alm-cc__row"><b>appearance</b>${e(c.appearance)}</div>` : ""}${!compact && c.look ? `<div class="alm-cc__row"><b>look</b>${e(c.look)}</div>` : ""}${!compact && c.place ? `<div class="alm-cc__row"><b>where</b>${e(c.place)}</div>` : ""}
 </div></article>`;
   }
 
   tab_cast(v: any): string {
-    return `<div class="list">${v.cast.map((c: any) => `<div class="card">
-<div class="row"><span class="alm-mini" style="--c:${e(c.color)}">${e(initials(c.name))}</span><b class="grow">${e(c.name)}${c.aliases?.length ? ` <small class="muted">(${e(c.aliases.join(", "))})</small>` : ""}</b><span class="pill">slot ${c.slot}</span><input type="color" class="swatch" data-color="${e(c.id)}" value="${e(toHex(c.color))}" title="${c.isUser ? "Your persona's colour" : "Voice colour"}" aria-label="${e(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}"></div>
-${this.castCard(c)}
+    const add = this.editingChar === "__new"
+      ? this.charEditor(null)
+      : `<div class="row" style="margin-bottom:8px"><span class="grow"></span><button class="btn" data-act="charAdd" title="Add someone the story hasn't named yet, or who should be tracked from now on">+ Add a person</button></div>`;
+    return `${add}<div class="list">${v.cast.map((c: any) => `<div class="card">
+<div class="row"><span class="alm-mini" style="--c:${e(c.color)}">${e(initials(c.name))}</span><b class="grow">${e(c.name)}${c.aliases?.length ? ` <small class="muted">(${e(c.aliases.join(", "))})</small>` : ""}</b><span class="pill">slot ${c.slot}</span><button class="btn" data-act="charEdit" data-id="${e(c.id)}" title="${c.isUser ? "Age and appearance" : "Name, age and appearance"}">edit</button><input type="color" class="swatch" data-color="${e(c.id)}" value="${e(toHex(c.color))}" title="${c.isUser ? "Your persona's colour" : "Voice colour"}" aria-label="${e(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}"></div>
+${this.editingChar === c.id ? this.charEditor(c) : this.castCard(c)}
 ${c.journal?.length ? `<h4>In their own words</h4>${c.journal.map((j: any) => `<div class="muted">“${e(j.text)}”</div>`).join("")}` : ""}
 ${c.isUser ? "" : `<h4>Hidden pressure (narrator-only)</h4><div class="row"><span class="spoiler grow" tabindex="0">${e(c.pressure || "— none drawn yet —")}</span><button class="btn" data-act="editPressure" data-id="${e(c.id)}">edit</button></div>`}
 ${this.mergeRow(v, c)}
 ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn danger" data-act="notPerson" data-name="${e(c.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button></div>`}
 </div>`).join("") || `<div class="empty">No one has appeared yet.</div>`}</div>${this.removedRow(v)}`;
+  }
+
+  /** Name, age and appearance (a new person when `c` is null). The persona's name comes from Lumiverse. */
+  charEditor(c: any | null): string {
+    const id = c?.id ?? "__new";
+    const name = c?.isUser ? `<p class="muted"><small>Your persona's name comes from Lumiverse.</small></p>` : `<label class="f">Name<input type="text" id="almCharName" value="${e(c?.name ?? "")}" placeholder="${c ? "" : "Walter Hale"}"></label>${c ? `<p class="muted"><small>The old name keeps working in the story's lines.</small></p>` : ""}`;
+    return `<div class="card almk--edit">${name}
+<label class="f">Age<input type="text" id="almCharAge" value="${e(c?.ageSet ? c.age : "")}" placeholder="${e(c?.age && !c.ageSet ? `${c.age} (from the lore)` : "e.g. 24, early fifties, ageless")}"></label>
+<label class="f">Appearance<textarea id="almCharLook" placeholder="Build, hair, eyes, what people notice first">${e(c?.appearance ?? "")}</textarea></label>
+<div class="row"><button class="btn primary" data-act="charSave" data-id="${e(id)}">${c ? "Save" : "Add"}</button><button class="btn" data-act="charCancel">Cancel</button></div></div>`;
   }
 
   /** Names taken out of the cast, with a way back. */
@@ -205,12 +222,13 @@ ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8
   tab_knowledge(v: any): string {
     const hidden = v.hiddenFacts ?? [];
     const clerk = this.clerkBar(v);
-    if (!v.knowledge.length && !hidden.length) return `${clerk}<div class="empty">No facts yet. The model records them with <code>reveal</code>, <code>know</code> and <code>secret</code> lines; each fact collects who has it, how it reached them, and who it's kept from.</div>`;
+    const adding = this.editingFact === "__new" ? this.factEditor(v, null) : `<div class="row" style="margin-bottom:8px"><span class="grow"></span><button class="btn" data-act="factAdd" title="Add a fact the story hasn't recorded, and say who knows it">+ Add a fact</button></div>`;
+    if (!v.knowledge.length && !hidden.length) return `${clerk}${adding}<div class="empty">No facts yet. The model records them with <code>reveal</code>, <code>know</code> and <code>secret</code> lines; each fact collects who has it, how it reached them, and who it's kept from.</div>`;
     const people = new Map<string, any>(v.cast.map((c: any) => [c.id, c]));
     const q = this.factQuery.trim().toLowerCase();
     const who = this.factPerson;
     const kinds: Record<string, (f: any) => boolean> = {
-      play: (f) => f.kind === "secret" || f.kind === "belief" || f.inPlay,
+      play: (f) => f.kind === "secret" || f.kind === "belief" || f.inPlay || f.added,
       shared: (f) => f.kind === "shared",
       noted: (f) => f.kind === "noted",
       all: () => true,
@@ -233,7 +251,7 @@ ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8
       const truth = f.truth !== "unknown" ? `<span class="pill${f.truth === "false" ? " warn" : ""}" title="Whether the fact is true">${f.truth === "true" ? "true" : f.truth === "false" ? "false" : "partly true"}</span>` : "";
       const hist = f.history.map((h: any) => `<li><time>${e(h.when)}</time> <b>${e(h.name)}</b> ${e(h.verb)}${h.version ? `: “${e(h.version)}”` : ""}${h.how && !h.derived && !h.verb.toLowerCase().includes(h.how.toLowerCase()) ? ` <span class="muted">— ${e(h.how)}</span>` : ""}${h.note ? `<small class="almk-note">${e(h.note)}</small>` : ""}</li>`).join("");
       const kept = f.keepers.length ? `<div class="almk-un">🤫 Kept by ${e(f.keepers.map((k: any) => k.name).join(", "))}${f.keptFrom.length ? ` from ${e(f.keptFrom.map((k: any) => k.name).join(", "))}` : ""}</div>` : "";
-      return `<div class="card flat almk almk--${e(f.kind)}"><div class="almk-top"><span class="almk-key" title="The model refers to this fact as #${e(f.key)}">#${e(f.key)}</span><span class="pill almk-kind" title="${e(KIND_HELP[f.kind] ?? "")}">${e(KIND[f.kind] ?? f.kind)}</span>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}<span class="grow"></span><button class="btn" data-act="factEdit" data-id="${e(f.key)}" title="Rename, set the truth, merge or hide">edit</button></div>
+      return `<div class="card flat almk almk--${e(f.kind)}"><div class="almk-top"><span class="almk-key" title="The model refers to this fact as #${e(f.key)}">#${e(f.key)}</span><span class="pill almk-kind" title="${e(KIND_HELP[f.kind] ?? "")}">${e(KIND[f.kind] ?? f.kind)}</span>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}<span class="grow"></span><button class="btn" data-act="factEdit" data-id="${e(f.key)}" title="Rename, set the truth, set who knows it, or merge">edit</button><button class="btn danger" data-act="factDelete" data-id="${e(f.key)}" title="Delete this fact from the page and the model's note (you can restore it below)">delete</button></div>
 <b class="almk-stmt">${e(f.statement)}</b>
 <div class="almk-st">${f.stances.map(chip).join("") || `<div class="muted">No one has it yet.</div>`}${f.lacks.map(lackChip).join("")}</div>
 ${kept}
@@ -246,9 +264,9 @@ ${kept}
     const filters = `<div class="row almk-filters">${seg("play", "In play")}${seg("shared", "Shared")}${seg("noted", "Noted")}${seg("all", "All")}<span class="grow"></span><select data-set="factPerson" aria-label="Show one person"><option value="">everyone</option>${(v.knowers ?? []).map((p: any) => `<option value="${e(p.id)}"${p.id === who ? " selected" : ""}>${e(p.name)}${p.here ? " · here" : ""}</option>`).join("")}</select></div>`;
     const search = `<div class="row" style="margin-bottom:8px"><input type="text" data-set="factQuery" value="${e(this.factQuery)}" placeholder="Find a fact or a person…" aria-label="Find a fact or a person" class="grow"><span class="muted"><small>${shown.length} of ${v.knowledge.length}</small></span></div>`;
     const person = who ? this.personKnowledge(v, who) : "";
-    const hiddenHtml = hidden.length ? `<h4>Hidden facts</h4><div class="row">${hidden.map((h: any) => `<span class="pill">${e(h.statement)} <button class="btn" data-act="factRestore" data-id="${e(h.key)}" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div>` : "";
+    const hiddenHtml = hidden.length ? `<h4>Deleted facts</h4><div class="row">${hidden.map((h: any) => `<span class="pill">${e(h.statement)} <button class="btn" data-act="factRestore" data-id="${e(h.key)}" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div>` : "";
     const empty = this.factKind === "play" ? "No secrets or beliefs in play. <b>Shared</b> and <b>Noted</b> hold the rest." : "Nothing matches.";
-    return `${clerk}${ironyHtml}${filters}${search}${person}<div class="list">${cards || `<div class="empty">${empty}</div>`}</div>${hiddenHtml}`;
+    return `${clerk}${ironyHtml}${filters}${search}${person}${adding}<div class="list">${cards || `<div class="empty">${empty}</div>`}</div>${hiddenHtml}`;
   }
 
   /** One person: what they have, what they lack and why, and the gaps in their own words. */
@@ -279,15 +297,24 @@ ${kept}
     return `<div class="card flat almk-clerk"><div class="row"><span class="grow"><b>Knowledge clerk</b> <span class="muted">— ${e(mode)}.${e(status)}</span></span>${button}</div></div>`;
   }
 
-  /** Rename a fact, say whether it's true, fold it into another, or hide it. */
-  factEditor(v: any, f: any): string {
-    const others = v.knowledge.filter((o: any) => o.key !== f.key);
-    const truthOpts = [["", "as the story says"], ["true", "true"], ["false", "false"], ["partial", "partly true"], ["unknown", "unknown"]];
-    const cur = v.config?.factEdits?.[f.key] ?? {};
-    return `<div class="card almk almk--edit"><label class="f">The fact, in a few words<input type="text" id="almFactStmt" value="${e(f.statement)}"></label>
+  /** Rename a fact, say whether it's true, set who knows it, fold it into another, or delete it. */
+  factEditor(v: any, fact: any | null): string {
+    const f = fact ?? { key: "__new", statement: "", stances: [], lacks: [] };
+    const others = fact ? v.knowledge.filter((o: any) => o.key !== f.key) : [];
+    const truthOpts = [["", fact ? "as the story says" : "not said"], ["true", "true"], ["false", "false"], ["partial", "partly true"], ["unknown", "unknown"]];
+    const cur = fact ? v.config?.factEdits?.[f.key] ?? {} : {};
+    return `<div class="card almk almk--edit"><label class="f">The fact, in a few words<input type="text" id="almFactStmt" value="${e(f.statement)}" placeholder="${fact ? "" : "Walter is Gabriel's Watcher"}"></label>
 <label class="f">Is it true?<select id="almFactTruth">${truthOpts.map(([k, l]) => `<option value="${k}"${(cur.truth ?? "") === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
 ${others.length ? `<label class="f">Same fact as…<select id="almFactInto"><option value="">— a separate fact —</option>${others.map((o: any) => `<option value="${e(o.key)}">#${e(o.key)} ${e(o.statement)}</option>`).join("")}</select></label>` : ""}
-<div class="row"><button class="btn primary" data-act="factSave" data-id="${e(f.key)}">Save</button><button class="btn" data-act="factCancel">Cancel</button><span class="grow"></span><button class="btn danger" data-act="factHide" data-id="${e(f.key)}" title="Hide it from this page and from the model's note">Hide</button></div></div>`;
+<h4>Who knows it</h4><div class="list">${(v.knowers ?? []).map((p: any) => {
+      const now = f.stances.find((s: any) => s.id === p.id);
+      const lack = f.lacks.find((l: any) => l.id === p.id);
+      const said = now ? now.verb : lack ? lack.text : "no record";
+      if (!fact) return `<label class="f">${e(p.name)}<select data-person="${e(p.id)}">${PERSON_OPTS.filter(([k]) => k !== "none").map(([k, l]) => `<option value="${k}">${k ? l : "—"}</option>`).join("")}</select></label>`;
+      const want = cur.people?.[p.id] ?? "";
+      return `<label class="f">${e(p.name)} <small class="muted">— now: ${e(said)}</small><select data-person="${e(p.id)}">${PERSON_OPTS.map(([k, l]) => `<option value="${k}"${want === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>`;
+    }).join("")}</div>
+<div class="row"><button class="btn primary" data-act="factSave" data-id="${e(f.key)}">${fact ? "Save" : "Add"}</button><button class="btn" data-act="factCancel">Cancel</button><span class="grow"></span>${fact ? `<button class="btn danger" data-act="factHide" data-id="${e(f.key)}" title="Delete it from this page and from the model's note">Delete</button>` : ""}</div></div>`;
   }
 
 
@@ -504,13 +531,58 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
       }
       case "chronicleRun": this.send({ type: "chronicle", action: "run" }); break;
       case "factEdit": this.editingFact = id ?? null; this.render(); break;
+      case "factAdd": this.editingFact = "__new"; this.render(); break;
+      case "charAdd": this.editingChar = "__new"; this.render(); break;
+      case "charEdit": this.editingChar = this.editingChar === id ? null : id ?? null; this.render(); break;
+      case "charCancel": this.editingChar = null; this.render(); break;
+      case "charSave": {
+        if (!id) break;
+        const val = (sel: string) => (this.root.querySelector(sel) as HTMLInputElement | HTMLTextAreaElement | null)?.value?.trim();
+        const name = val("#almCharName");
+        const age = val("#almCharAge") ?? "";
+        const appearance = val("#almCharLook") ?? "";
+        const edits = { ...(this.view?.config?.castEdits ?? {}) };
+        const cast: any[] = this.view?.cast ?? [];
+        if (id === "__new") {
+          if (!name) break;
+          const low = name.toLowerCase();
+          const taken = cast.find((c) => c.name.toLowerCase() === low || c.aliases?.some((a: string) => a.toLowerCase() === low));
+          if (taken) {
+            window.alert(`${taken.name} is already in the cast.`);
+            break;
+          }
+          let key = low.normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "person";
+          while (cast.some((c) => c.id === key) || edits[key]) key += "_";
+          edits[key] = { name, ...(age ? { age } : {}), ...(appearance ? { appearance } : {}), added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
+        } else {
+          const c = cast.find((x) => x.id === id);
+          const next: any = { ...(edits[id] ?? {}) };
+          if (name && !c?.isUser && name !== c?.name) next.name = name;
+          next.age = age;
+          next.appearance = appearance;
+          edits[id] = next;
+        }
+        this.editingChar = null;
+        this.send({ type: "config", patch: { castEdits: edits } });
+        break;
+      }
       case "factCancel": this.editingFact = null; this.render(); break;
       case "factSave": {
         if (!id) break;
         const val = (sel: string) => (this.root.querySelector(sel) as HTMLInputElement | HTMLSelectElement | null)?.value?.trim() ?? "";
         const f = this.view?.knowledge.find((x: any) => x.key === id);
         const edits = { ...(this.view?.config?.factEdits ?? {}) };
-        const next: any = { ...(edits[id] ?? {}) };
+        let key = id;
+        if (id === "__new") {
+          const words = val("#almFactStmt");
+          if (!words) break;
+          const taken = new Set([...(this.view?.knowledge ?? []).map((x: any) => x.key), ...(this.view?.hiddenFacts ?? []).map((x: any) => x.key), ...Object.keys(edits)]);
+          const base = words.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").split(" ").filter((w) => w.length > 2 && !/^(the|and|that|was|his|her|their|with|from|has|have|who|for)$/.test(w)).slice(0, 3).join("-") || "fact";
+          key = base;
+          for (let i = 2; taken.has(key); i++) key = `${base}-${i}`;
+          edits[key] = { added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
+        }
+        const next: any = { ...(edits[key] ?? {}) };
         const stmt = val("#almFactStmt");
         if (stmt && stmt !== f?.statement) next.statement = stmt;
         const truth = val("#almFactTruth");
@@ -518,17 +590,34 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
         else delete next.truth;
         const into = val("#almFactInto");
         if (into) next.into = into;
-        edits[id] = next;
+        const people: Record<string, string> = {};
+        this.root.querySelectorAll<HTMLSelectElement>("select[data-person]").forEach((sel) => {
+          if (sel.value) people[sel.dataset.person!] = sel.value;
+        });
+        if (Object.keys(people).length) next.people = people;
+        else delete next.people;
+        if (id === "__new") next.statement = stmt;
+        edits[key] = next;
         this.editingFact = null;
         this.send({ type: "config", patch: { factEdits: edits } });
         break;
       }
+      case "factDelete": {
+        const b = t.closest("button") as HTMLButtonElement | null;
+        if (b && b.dataset.armed !== "1") {
+          b.dataset.armed = "1";
+          b.textContent = "Click again to delete";
+          setTimeout(() => { if (b.isConnected) { b.dataset.armed = ""; b.textContent = "delete"; } }, 4000);
+          break;
+        }
+      }
+      // falls through
       case "factHide":
       case "factRestore": {
         if (!id) break;
         const edits = { ...(this.view?.config?.factEdits ?? {}) };
         const next: any = { ...(edits[id] ?? {}) };
-        if (act.act === "factHide") next.hidden = true;
+        if (act.act !== "factRestore") next.hidden = true;
         else delete next.hidden;
         edits[id] = next;
         this.editingFact = null;

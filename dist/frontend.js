@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.6.0";
+var VERSION = "1.7.0";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -1155,6 +1155,7 @@ var KIND_HELP = {
   shared: "Two or more people have it",
   noted: "One person noticed it; no one is known to lack it (never sent to the model)"
 };
+var PERSON_OPTS = [["", "as the story says"], ["knows", "knows it"], ["believes", "believes it"], ["suspects", "suspects it"], ["doubts", "doubts it"], ["wrong", "has it wrong"], ["unaware", "doesn't know"], ["none", "no record either way"]];
 
 class AlmanacApp {
   ctx;
@@ -1168,6 +1169,7 @@ class AlmanacApp {
   factKind = "play";
   factPerson = "";
   editingFact = null;
+  editingChar = null;
   openFacts = new Set;
   clerkProgress = "";
   chronFilter = "all";
@@ -1272,18 +1274,27 @@ ${v.recall ? `<details><summary class="muted">Recall block</summary><pre>${escap
 <div class="alm-cc__bd"><div class="alm-cc__nm">${escapeHtml(c.name)}</div>${c.mood?.name ? `<div class="alm-cc__em">${escapeHtml(c.mood.name)}</div>` : ""}${vad}
 ${meters.length ? `<div class="alm-meters">${meters.map(([k, x]) => `<span>${escapeHtml(k)}</span>${seg(x)}`).join("")}</div>` : ""}
 <div class="alm-tags">${(c.flags ?? []).slice(-4).map((f) => `<span class="alm-tag">${escapeHtml(f)}</span>`).join("")}${(c.injuries ?? []).map((i) => `<span class="alm-tag warn">${escapeHtml(i.where)}</span>`).join("")}${(c.held ?? []).slice(0, 3).map((h) => `<span class="alm-tag">holds: ${escapeHtml(h)}</span>`).join("")}</div>
-${c.activity ? `<div class="alm-cc__row"><b>doing</b>${escapeHtml(c.activity)}</div>` : ""}${!compact && c.look ? `<div class="alm-cc__row"><b>look</b>${escapeHtml(c.look)}</div>` : ""}${!compact && c.place ? `<div class="alm-cc__row"><b>where</b>${escapeHtml(c.place)}</div>` : ""}
+${c.activity ? `<div class="alm-cc__row"><b>doing</b>${escapeHtml(c.activity)}</div>` : ""}${!compact && c.age ? `<div class="alm-cc__row"><b>age</b>${escapeHtml(c.age)}${c.ageSet ? "" : ` <small class="muted" title="From the lore">(lore)</small>`}</div>` : ""}${!compact && c.appearance ? `<div class="alm-cc__row"><b>appearance</b>${escapeHtml(c.appearance)}</div>` : ""}${!compact && c.look ? `<div class="alm-cc__row"><b>look</b>${escapeHtml(c.look)}</div>` : ""}${!compact && c.place ? `<div class="alm-cc__row"><b>where</b>${escapeHtml(c.place)}</div>` : ""}
 </div></article>`;
   }
   tab_cast(v) {
-    return `<div class="list">${v.cast.map((c) => `<div class="card">
-<div class="row"><span class="alm-mini" style="--c:${escapeHtml(c.color)}">${escapeHtml(initials(c.name))}</span><b class="grow">${escapeHtml(c.name)}${c.aliases?.length ? ` <small class="muted">(${escapeHtml(c.aliases.join(", "))})</small>` : ""}</b><span class="pill">slot ${c.slot}</span><input type="color" class="swatch" data-color="${escapeHtml(c.id)}" value="${escapeHtml(toHex(c.color))}" title="${c.isUser ? "Your persona's colour" : "Voice colour"}" aria-label="${escapeHtml(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}"></div>
-${this.castCard(c)}
+    const add = this.editingChar === "__new" ? this.charEditor(null) : `<div class="row" style="margin-bottom:8px"><span class="grow"></span><button class="btn" data-act="charAdd" title="Add someone the story hasn't named yet, or who should be tracked from now on">+ Add a person</button></div>`;
+    return `${add}<div class="list">${v.cast.map((c) => `<div class="card">
+<div class="row"><span class="alm-mini" style="--c:${escapeHtml(c.color)}">${escapeHtml(initials(c.name))}</span><b class="grow">${escapeHtml(c.name)}${c.aliases?.length ? ` <small class="muted">(${escapeHtml(c.aliases.join(", "))})</small>` : ""}</b><span class="pill">slot ${c.slot}</span><button class="btn" data-act="charEdit" data-id="${escapeHtml(c.id)}" title="${c.isUser ? "Age and appearance" : "Name, age and appearance"}">edit</button><input type="color" class="swatch" data-color="${escapeHtml(c.id)}" value="${escapeHtml(toHex(c.color))}" title="${c.isUser ? "Your persona's colour" : "Voice colour"}" aria-label="${escapeHtml(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}"></div>
+${this.editingChar === c.id ? this.charEditor(c) : this.castCard(c)}
 ${c.journal?.length ? `<h4>In their own words</h4>${c.journal.map((j) => `<div class="muted">“${escapeHtml(j.text)}”</div>`).join("")}` : ""}
 ${c.isUser ? "" : `<h4>Hidden pressure (narrator-only)</h4><div class="row"><span class="spoiler grow" tabindex="0">${escapeHtml(c.pressure || "— none drawn yet —")}</span><button class="btn" data-act="editPressure" data-id="${escapeHtml(c.id)}">edit</button></div>`}
 ${this.mergeRow(v, c)}
 ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn danger" data-act="notPerson" data-name="${escapeHtml(c.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button></div>`}
 </div>`).join("") || `<div class="empty">No one has appeared yet.</div>`}</div>${this.removedRow(v)}`;
+  }
+  charEditor(c) {
+    const id = c?.id ?? "__new";
+    const name = c?.isUser ? `<p class="muted"><small>Your persona's name comes from Lumiverse.</small></p>` : `<label class="f">Name<input type="text" id="almCharName" value="${escapeHtml(c?.name ?? "")}" placeholder="${c ? "" : "Walter Hale"}"></label>${c ? `<p class="muted"><small>The old name keeps working in the story's lines.</small></p>` : ""}`;
+    return `<div class="card almk--edit">${name}
+<label class="f">Age<input type="text" id="almCharAge" value="${escapeHtml(c?.ageSet ? c.age : "")}" placeholder="${escapeHtml(c?.age && !c.ageSet ? `${c.age} (from the lore)` : "e.g. 24, early fifties, ageless")}"></label>
+<label class="f">Appearance<textarea id="almCharLook" placeholder="Build, hair, eyes, what people notice first">${escapeHtml(c?.appearance ?? "")}</textarea></label>
+<div class="row"><button class="btn primary" data-act="charSave" data-id="${escapeHtml(id)}">${c ? "Save" : "Add"}</button><button class="btn" data-act="charCancel">Cancel</button></div></div>`;
   }
   removedRow(v) {
     const gone = Object.entries(v.config?.merges ?? {}).filter(([, to]) => to === NOT_A_PERSON).map(([n]) => n);
@@ -1312,13 +1323,14 @@ ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8
   tab_knowledge(v) {
     const hidden = v.hiddenFacts ?? [];
     const clerk = this.clerkBar(v);
+    const adding = this.editingFact === "__new" ? this.factEditor(v, null) : `<div class="row" style="margin-bottom:8px"><span class="grow"></span><button class="btn" data-act="factAdd" title="Add a fact the story hasn't recorded, and say who knows it">+ Add a fact</button></div>`;
     if (!v.knowledge.length && !hidden.length)
-      return `${clerk}<div class="empty">No facts yet. The model records them with <code>reveal</code>, <code>know</code> and <code>secret</code> lines; each fact collects who has it, how it reached them, and who it's kept from.</div>`;
+      return `${clerk}${adding}<div class="empty">No facts yet. The model records them with <code>reveal</code>, <code>know</code> and <code>secret</code> lines; each fact collects who has it, how it reached them, and who it's kept from.</div>`;
     const people = new Map(v.cast.map((c) => [c.id, c]));
     const q = this.factQuery.trim().toLowerCase();
     const who = this.factPerson;
     const kinds = {
-      play: (f) => f.kind === "secret" || f.kind === "belief" || f.inPlay,
+      play: (f) => f.kind === "secret" || f.kind === "belief" || f.inPlay || f.added,
       shared: (f) => f.kind === "shared",
       noted: (f) => f.kind === "noted",
       all: () => true
@@ -1342,7 +1354,7 @@ ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8
       const truth = f.truth !== "unknown" ? `<span class="pill${f.truth === "false" ? " warn" : ""}" title="Whether the fact is true">${f.truth === "true" ? "true" : f.truth === "false" ? "false" : "partly true"}</span>` : "";
       const hist = f.history.map((h) => `<li><time>${escapeHtml(h.when)}</time> <b>${escapeHtml(h.name)}</b> ${escapeHtml(h.verb)}${h.version ? `: “${escapeHtml(h.version)}”` : ""}${h.how && !h.derived && !h.verb.toLowerCase().includes(h.how.toLowerCase()) ? ` <span class="muted">— ${escapeHtml(h.how)}</span>` : ""}${h.note ? `<small class="almk-note">${escapeHtml(h.note)}</small>` : ""}</li>`).join("");
       const kept = f.keepers.length ? `<div class="almk-un">\uD83E\uDD2B Kept by ${escapeHtml(f.keepers.map((k) => k.name).join(", "))}${f.keptFrom.length ? ` from ${escapeHtml(f.keptFrom.map((k) => k.name).join(", "))}` : ""}</div>` : "";
-      return `<div class="card flat almk almk--${escapeHtml(f.kind)}"><div class="almk-top"><span class="almk-key" title="The model refers to this fact as #${escapeHtml(f.key)}">#${escapeHtml(f.key)}</span><span class="pill almk-kind" title="${escapeHtml(KIND_HELP[f.kind] ?? "")}">${escapeHtml(KIND[f.kind] ?? f.kind)}</span>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}<span class="grow"></span><button class="btn" data-act="factEdit" data-id="${escapeHtml(f.key)}" title="Rename, set the truth, merge or hide">edit</button></div>
+      return `<div class="card flat almk almk--${escapeHtml(f.kind)}"><div class="almk-top"><span class="almk-key" title="The model refers to this fact as #${escapeHtml(f.key)}">#${escapeHtml(f.key)}</span><span class="pill almk-kind" title="${escapeHtml(KIND_HELP[f.kind] ?? "")}">${escapeHtml(KIND[f.kind] ?? f.kind)}</span>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}<span class="grow"></span><button class="btn" data-act="factEdit" data-id="${escapeHtml(f.key)}" title="Rename, set the truth, set who knows it, or merge">edit</button><button class="btn danger" data-act="factDelete" data-id="${escapeHtml(f.key)}" title="Delete this fact from the page and the model's note (you can restore it below)">delete</button></div>
 <b class="almk-stmt">${escapeHtml(f.statement)}</b>
 <div class="almk-st">${f.stances.map(chip).join("") || `<div class="muted">No one has it yet.</div>`}${f.lacks.map(lackChip).join("")}</div>
 ${kept}
@@ -1354,9 +1366,9 @@ ${kept}
     const filters = `<div class="row almk-filters">${seg("play", "In play")}${seg("shared", "Shared")}${seg("noted", "Noted")}${seg("all", "All")}<span class="grow"></span><select data-set="factPerson" aria-label="Show one person"><option value="">everyone</option>${(v.knowers ?? []).map((p) => `<option value="${escapeHtml(p.id)}"${p.id === who ? " selected" : ""}>${escapeHtml(p.name)}${p.here ? " · here" : ""}</option>`).join("")}</select></div>`;
     const search = `<div class="row" style="margin-bottom:8px"><input type="text" data-set="factQuery" value="${escapeHtml(this.factQuery)}" placeholder="Find a fact or a person…" aria-label="Find a fact or a person" class="grow"><span class="muted"><small>${shown.length} of ${v.knowledge.length}</small></span></div>`;
     const person = who ? this.personKnowledge(v, who) : "";
-    const hiddenHtml = hidden.length ? `<h4>Hidden facts</h4><div class="row">${hidden.map((h) => `<span class="pill">${escapeHtml(h.statement)} <button class="btn" data-act="factRestore" data-id="${escapeHtml(h.key)}" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div>` : "";
+    const hiddenHtml = hidden.length ? `<h4>Deleted facts</h4><div class="row">${hidden.map((h) => `<span class="pill">${escapeHtml(h.statement)} <button class="btn" data-act="factRestore" data-id="${escapeHtml(h.key)}" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div>` : "";
     const empty = this.factKind === "play" ? "No secrets or beliefs in play. <b>Shared</b> and <b>Noted</b> hold the rest." : "Nothing matches.";
-    return `${clerk}${ironyHtml}${filters}${search}${person}<div class="list">${cards || `<div class="empty">${empty}</div>`}</div>${hiddenHtml}`;
+    return `${clerk}${ironyHtml}${filters}${search}${person}${adding}<div class="list">${cards || `<div class="empty">${empty}</div>`}</div>${hiddenHtml}`;
   }
   personKnowledge(v, id) {
     const p = (v.knowers ?? []).find((x) => x.id === id);
@@ -1379,14 +1391,24 @@ ${kept}
     const button = c.running ? `<span class="pill on">reading…${this.clerkProgress ? ` ${escapeHtml(this.clerkProgress)}` : ""}</span><button class="btn" data-act="clerkStop" title="Stop after the reply it's reading; tidying again carries on from there">Stop</button>` : unread ? `<button class="btn" data-act="clerkTidy" title="Read every reply the clerk hasn't read yet, oldest first, and rewrite its knowledge lines cleanly: one quiet generation each. You can stop and carry on later.">Tidy the whole chat · ${unread} to read</button>` : c.replies ? `<span class="pill">every reply read</span>` : "";
     return `<div class="card flat almk-clerk"><div class="row"><span class="grow"><b>Knowledge clerk</b> <span class="muted">— ${escapeHtml(mode)}.${escapeHtml(status)}</span></span>${button}</div></div>`;
   }
-  factEditor(v, f) {
-    const others = v.knowledge.filter((o) => o.key !== f.key);
-    const truthOpts = [["", "as the story says"], ["true", "true"], ["false", "false"], ["partial", "partly true"], ["unknown", "unknown"]];
-    const cur = v.config?.factEdits?.[f.key] ?? {};
-    return `<div class="card almk almk--edit"><label class="f">The fact, in a few words<input type="text" id="almFactStmt" value="${escapeHtml(f.statement)}"></label>
+  factEditor(v, fact) {
+    const f = fact ?? { key: "__new", statement: "", stances: [], lacks: [] };
+    const others = fact ? v.knowledge.filter((o) => o.key !== f.key) : [];
+    const truthOpts = [["", fact ? "as the story says" : "not said"], ["true", "true"], ["false", "false"], ["partial", "partly true"], ["unknown", "unknown"]];
+    const cur = fact ? v.config?.factEdits?.[f.key] ?? {} : {};
+    return `<div class="card almk almk--edit"><label class="f">The fact, in a few words<input type="text" id="almFactStmt" value="${escapeHtml(f.statement)}" placeholder="${fact ? "" : "Walter is Gabriel's Watcher"}"></label>
 <label class="f">Is it true?<select id="almFactTruth">${truthOpts.map(([k, l]) => `<option value="${k}"${(cur.truth ?? "") === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
 ${others.length ? `<label class="f">Same fact as…<select id="almFactInto"><option value="">— a separate fact —</option>${others.map((o) => `<option value="${escapeHtml(o.key)}">#${escapeHtml(o.key)} ${escapeHtml(o.statement)}</option>`).join("")}</select></label>` : ""}
-<div class="row"><button class="btn primary" data-act="factSave" data-id="${escapeHtml(f.key)}">Save</button><button class="btn" data-act="factCancel">Cancel</button><span class="grow"></span><button class="btn danger" data-act="factHide" data-id="${escapeHtml(f.key)}" title="Hide it from this page and from the model's note">Hide</button></div></div>`;
+<h4>Who knows it</h4><div class="list">${(v.knowers ?? []).map((p) => {
+      const now = f.stances.find((s) => s.id === p.id);
+      const lack = f.lacks.find((l) => l.id === p.id);
+      const said = now ? now.verb : lack ? lack.text : "no record";
+      if (!fact)
+        return `<label class="f">${escapeHtml(p.name)}<select data-person="${escapeHtml(p.id)}">${PERSON_OPTS.filter(([k]) => k !== "none").map(([k, l]) => `<option value="${k}">${k ? l : "—"}</option>`).join("")}</select></label>`;
+      const want = cur.people?.[p.id] ?? "";
+      return `<label class="f">${escapeHtml(p.name)} <small class="muted">— now: ${escapeHtml(said)}</small><select data-person="${escapeHtml(p.id)}">${PERSON_OPTS.map(([k, l]) => `<option value="${k}"${want === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>`;
+    }).join("")}</div>
+<div class="row"><button class="btn primary" data-act="factSave" data-id="${escapeHtml(f.key)}">${fact ? "Save" : "Add"}</button><button class="btn" data-act="factCancel">Cancel</button><span class="grow"></span>${fact ? `<button class="btn danger" data-act="factHide" data-id="${escapeHtml(f.key)}" title="Delete it from this page and from the model's note">Delete</button>` : ""}</div></div>`;
   }
   tab_codex(v) {
     const kinds = [...new Set(v.codex.map((r) => r.kind))];
@@ -1652,6 +1674,57 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
         this.editingFact = id ?? null;
         this.render();
         break;
+      case "factAdd":
+        this.editingFact = "__new";
+        this.render();
+        break;
+      case "charAdd":
+        this.editingChar = "__new";
+        this.render();
+        break;
+      case "charEdit":
+        this.editingChar = this.editingChar === id ? null : id ?? null;
+        this.render();
+        break;
+      case "charCancel":
+        this.editingChar = null;
+        this.render();
+        break;
+      case "charSave": {
+        if (!id)
+          break;
+        const val = (sel) => this.root.querySelector(sel)?.value?.trim();
+        const name = val("#almCharName");
+        const age = val("#almCharAge") ?? "";
+        const appearance = val("#almCharLook") ?? "";
+        const edits = { ...this.view?.config?.castEdits ?? {} };
+        const cast = this.view?.cast ?? [];
+        if (id === "__new") {
+          if (!name)
+            break;
+          const low = name.toLowerCase();
+          const taken = cast.find((c) => c.name.toLowerCase() === low || c.aliases?.some((a) => a.toLowerCase() === low));
+          if (taken) {
+            window.alert(`${taken.name} is already in the cast.`);
+            break;
+          }
+          let key = low.normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "person";
+          while (cast.some((c) => c.id === key) || edits[key])
+            key += "_";
+          edits[key] = { name, ...age ? { age } : {}, ...appearance ? { appearance } : {}, added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
+        } else {
+          const c = cast.find((x) => x.id === id);
+          const next = { ...edits[id] ?? {} };
+          if (name && !c?.isUser && name !== c?.name)
+            next.name = name;
+          next.age = age;
+          next.appearance = appearance;
+          edits[id] = next;
+        }
+        this.editingChar = null;
+        this.send({ type: "config", patch: { castEdits: edits } });
+        break;
+      }
       case "factCancel":
         this.editingFact = null;
         this.render();
@@ -1662,7 +1735,19 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
         const val = (sel) => this.root.querySelector(sel)?.value?.trim() ?? "";
         const f = this.view?.knowledge.find((x) => x.key === id);
         const edits = { ...this.view?.config?.factEdits ?? {} };
-        const next = { ...edits[id] ?? {} };
+        let key = id;
+        if (id === "__new") {
+          const words = val("#almFactStmt");
+          if (!words)
+            break;
+          const taken = new Set([...(this.view?.knowledge ?? []).map((x) => x.key), ...(this.view?.hiddenFacts ?? []).map((x) => x.key), ...Object.keys(edits)]);
+          const base = words.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").split(" ").filter((w) => w.length > 2 && !/^(the|and|that|was|his|her|their|with|from|has|have|who|for)$/.test(w)).slice(0, 3).join("-") || "fact";
+          key = base;
+          for (let i = 2;taken.has(key); i++)
+            key = `${base}-${i}`;
+          edits[key] = { added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
+        }
+        const next = { ...edits[key] ?? {} };
         const stmt = val("#almFactStmt");
         if (stmt && stmt !== f?.statement)
           next.statement = stmt;
@@ -1674,10 +1759,35 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
         const into = val("#almFactInto");
         if (into)
           next.into = into;
-        edits[id] = next;
+        const people = {};
+        this.root.querySelectorAll("select[data-person]").forEach((sel) => {
+          if (sel.value)
+            people[sel.dataset.person] = sel.value;
+        });
+        if (Object.keys(people).length)
+          next.people = people;
+        else
+          delete next.people;
+        if (id === "__new")
+          next.statement = stmt;
+        edits[key] = next;
         this.editingFact = null;
         this.send({ type: "config", patch: { factEdits: edits } });
         break;
+      }
+      case "factDelete": {
+        const b = t.closest("button");
+        if (b && b.dataset.armed !== "1") {
+          b.dataset.armed = "1";
+          b.textContent = "Click again to delete";
+          setTimeout(() => {
+            if (b.isConnected) {
+              b.dataset.armed = "";
+              b.textContent = "delete";
+            }
+          }, 4000);
+          break;
+        }
       }
       case "factHide":
       case "factRestore": {
@@ -1685,7 +1795,7 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
           break;
         const edits = { ...this.view?.config?.factEdits ?? {} };
         const next = { ...edits[id] ?? {} };
-        if (act.act === "factHide")
+        if (act.act !== "factRestore")
           next.hidden = true;
         else
           delete next.hidden;

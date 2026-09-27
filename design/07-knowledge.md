@@ -119,8 +119,18 @@ When the player says "Gabe-o" again: `#gabriel-name-voice "Gabriel's name-voice 
 - Filters: **In play** (secrets and beliefs), **Shared**, **Noted**, **All**, plus a person picker.
 - With a person picked, the page shows what they have, suspect and are wrong about, what they lack and why, and their gaps.
 - Each card: #key, the fact, truth, kind, who has it and how (said it · heard it · lived it · told by X · deduced), who lacks it and why, and who keeps it from whom. The history of how it came out is folded.
-- Edit is as before (rename, truth, merge, hide).
+- **edit**: rename, truth, merge, and **who knows it**: one choice per person (as the story says · knows · believes · suspects · doubts · has it wrong · doesn't know · no record either way). Stored in `factEdits[key].people` and applied after every message, so a later line never undoes it; "no record" also switches off the "wasn't there" inference for that person.
+- **delete** on the card (click twice). Deleted facts are listed at the bottom with **restore**.
+- **+ Add a fact**: a statement, its truth and who knows it. Stored as `factEdits[key]` with `added` (the message it joins at).
 - **Tidy the whole chat** runs the clerk over every reply it has not read yet (one call each), with progress and a Stop button.
+
+### "Wasn't there when it came out" needs news
+
+Being away when something is said only counts as not knowing it when it was news then: the teller found it out in the story first (read it, worked it out, was told), or it's something that happened in the story (an offer, a joke, a fight). Gabriel telling Buffy he's a Slayer says nothing about whether Walter, his Watcher, knows, so Walter is left blank.
+
+### Clerk lines are read as one fact
+
+The clerk often writes `fact · heard Valeria · knows · true` with no `|`. The trailing stance, truth and how are read as the line's meta, not as more facts, and a clerk line is always one fact ("…; she accepted" stays in it). Stored clerk lines are read again from their raw text on every fold, so a better reader fixes old tidies. A fact written whole in quotes is the fact, unquoted; a short quoted phrase ("Gabe-o") is still words said.
 
 ## 8. Compatibility
 

@@ -4,11 +4,11 @@
 // caller: only messages on the active path (current swipes) are folded.
 
 import type {
-  BondAxis, BondState, CharacterState, EventSource, FactEdit, KnowRow, LedgerEvent, MessageDelta,
+  BondAxis, BondState, CastEdit, CharacterState, EventSource, FactEdit, KnowRow, LedgerEvent, MessageDelta,
   ParsedLedger, ParsedOp, WorldState,
 } from "./types";
 import { KNOW_OPS } from "./types";
-import { canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
+import { applyFactEdits, canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
 import { parseLine } from "./dsl";
 import type { KnowArgs } from "./knowparse";
 import { ALL_AXES, BIPOLAR_AXES } from "./types";
@@ -25,8 +25,10 @@ export interface FoldOptions {
   startTime?: StoryTime | null;
   /** Names the player merged by hand: lower-case name → "user" or the name it belongs to. */
   merges?: Record<string, string>;
-  /** Player edits to facts (rename, truth, merge, hide). */
+  /** Player edits to facts (rename, truth, merge, hide, who knows it, added facts). */
   factEdits?: Record<string, FactEdit>;
+  /** Player edits to the cast (names, age, appearance, people added by hand). */
+  castEdits?: Record<string, CastEdit>;
 }
 
 /** "Gabriel#0|flat", "“Mara”", "Kael's" → the bare lower-case name. */
@@ -208,6 +210,27 @@ export class Folder {
     return id;
   }
 
+  /** The player's say on the cast: names, age, appearance, and people added by hand. Applied after every message. */
+  private applyCastEdits(mi: number): void {
+    for (const [id, e] of Object.entries(this.opts.castEdits ?? {})) {
+      let c = this.state.chars[id];
+      if (!c && e.added !== undefined && mi >= e.added && e.name) {
+        c = this.ensureChar(id, e.name, mi, false);
+        c.voiced = true;
+        c.tier ??= "off";
+      }
+      if (!c) continue;
+      const name = e.name?.trim();
+      if (name && c.name !== name && !c.isUser) {
+        if (!c.aliases.some((a) => a.toLowerCase() === c.name.toLowerCase())) c.aliases.push(c.name);
+        c.aliases = c.aliases.filter((a) => a.toLowerCase() !== name.toLowerCase());
+        c.name = name;
+      }
+      if (e.age !== undefined) c.age = e.age.trim() || undefined;
+      if (e.appearance !== undefined) c.appearance = e.appearance.trim() || undefined;
+    }
+  }
+
   private ensureChar(id: string, name: string, msgIndex: number, isUser: boolean): CharacterState {
     let c = this.state.chars[id];
     if (!c) {
@@ -373,6 +396,8 @@ export class Folder {
     for (const k of Object.keys(canon)) if (+k < msgIndex - 40) delete canon[+k];
     st.knowRepair = (st.knowRepair ?? []).filter((i) => i !== msgIndex && i >= msgIndex - 200);
     if (kc.repaired && ops.some((o) => KNOW_OPS.includes(o.op))) st.knowRepair.push(msgIndex);
+    this.applyCastEdits(msgIndex);
+    applyFactEdits(st, msgIndex, this.opts.factEdits ?? {});
     closeMetGaps(st);
     if (!fromUser) st.lastReply = msgIndex;
     this.kctx = null;

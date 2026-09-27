@@ -558,8 +558,10 @@ function readMeta(meta) {
   let truth;
   const how = [];
   for (const raw of meta.split(/\s*[\u00B7;]\s*|\s*,\s*(?=(?:knows?|believes?|suspects?|doubts?|wrong|unaware|true|false|partial|unknown)\b)/i).map((x) => x.trim()).filter(Boolean)) {
-    const b = raw.toLowerCase();
+    const b = raw.toLowerCase().replace(/^still\s+/, "").replace(/\s+(?:it|this|that|so)$/, "");
     const lead = LEAD_STANCE.exec(raw);
+    if (/^(?:\u2026|\.\.\.)$/.test(b))
+      continue;
     if (STATUS_WORD.test(b))
       status = normStatus(b);
     else if (TRUTH_WORD.test(b))
@@ -572,13 +574,34 @@ function readMeta(meta) {
   }
   return { status, truth, how: how.length ? how.join("; ") : undefined };
 }
-function parseKnowRest(rest) {
+var META_TOKEN = /^(?:(?:still\s+)?(?:knows?|believes?|suspects?|doubts?|wrong|unaware|denies)(?:\s+(?:it|this|that|so))?|true|false|partial|unknown|half-true|mixed|partly true|\u2026|\.\.\.)$/i;
+var META_PAIR = /^(?:knows?|believes?|suspects?|doubts?|wrong)\s*[/,]\s*(?:true|false|partial|unknown)$/i;
+var isMetaToken = (p) => META_TOKEN.test(p.trim()) || META_PAIR.test(p.trim());
+function peelMeta(text) {
+  const pieces = splitTop(text, /\s+[\u00B7\u2022]\s+/g);
+  if (pieces.length < 2 || !isMetaToken(pieces[pieces.length - 1]))
+    return null;
+  let cut = pieces.length;
+  while (cut > 1 && isMetaToken(pieces[cut - 1]))
+    cut--;
+  const how = pieces[cut - 1];
+  if (cut > 1 && (ROUTE_HINT.test(how) || LEAD_PERCEPTION.test(how) || /^(?:self|herself|himself|themselves|own|her own|his own|their own)\b/i.test(how) || /\btold (?:her|him|them)\b/i.test(how)) && how.split(/\s+/).length <= 8)
+    cut--;
+  const meta = pieces.slice(cut).map((p) => p.replace(/\s*\/\s*/, " \xB7 ")).join(" \xB7 ");
+  return { fact: pieces.slice(0, cut).join(" \xB7 "), meta };
+}
+function parseKnowRest(rest, single = false) {
   const neg = pullNegations(rest);
   const negations = neg.negations;
-  const bar = splitTop(neg.rest, /\s*\|\s*/g);
+  let bar = splitTop(neg.rest, /\s*\|\s*/g);
+  if (bar.length === 1) {
+    const peeled = peelMeta(bar[0]);
+    if (peeled)
+      bar = [peeled.fact, peeled.meta];
+  }
   const factPart = bar[0] ?? "";
-  const meta = readMeta(bar.slice(1).join(" \xB7 "));
-  const pieces = splitTop(factPart, /\s+[\u00B7\u2022]\s+|;\s+|\s+\/\/\s+/g);
+  const meta = readMeta(bar.slice(1).join(" \xB7 ").replace(/\b(knows?|believes?|suspects?|doubts?|wrong)\s*\/\s*(true|false|partial|unknown)\b/gi, "$1 \xB7 $2"));
+  const pieces = single ? [factPart.replace(/\s+[\u00B7\u2022]\s+|;\s+/g, ", ")] : splitTop(factPart, /\s+[\u00B7\u2022]\s+|;\s+|\s+\/\/\s+/g);
   if (pieces.length > 1 && meta.how) {
     const bits = meta.how.split(/;\s*/).map((b) => b.trim()).filter(Boolean);
     const extra = bits.filter((b) => !ROUTE_HINT.test(b) && b.split(/\s+/).length >= 3);
@@ -769,7 +792,9 @@ function parseSecretRest(subject, rest) {
 }
 function parseUnawareRest(rest) {
   const text = rest.replace(/^\s*(?:of|that)\s+/i, "");
-  return splitTop(text, /\s+[\u00B7\u2022]\s+|;\s+|,\s*(?:or\s+|and\s+)?|\s+or\s+/g).map((p) => clean(p.replace(/^(?:that|about|of)\s+/i, ""))).filter(Boolean);
+  const parts = splitTop(text, /\s+[\u00B7\u2022]\s+|;\s+|,\s*(?:or\s+|and\s+)?|\s+or\s+/g).map((p) => clean(p.replace(/^(?:that|about|of)\s+/i, ""))).filter((p) => p && !/^(?:\u2026|\.\.\.)$/.test(p) && !isMetaToken(p));
+  const prose = parts.some((p) => !p.startsWith("#"));
+  return parts.filter((p) => !(prose && /^#[\p{L}\p{N}_-]+$/u.test(p)) && !/^(?:from|via|per|according to|heard from|told by)\b/i.test(p));
 }
 
 // src/core/dsl.ts
@@ -1025,7 +1050,7 @@ function extractLedgerBlock(text) {
   const format = /^[[{]/.test(body) ? "json" : "dsl";
   return { body, truncated, format };
 }
-function parseLine(rawLine) {
+function parseLine(rawLine, oneFact = false) {
   let line = rawLine.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s+/, "").trim();
   if (!line || line.startsWith("//") || line.startsWith("#"))
     return null;
@@ -1049,7 +1074,7 @@ function parseLine(rawLine) {
   }
   const base = { op, args: {}, raw: rawLine.trim() };
   try {
-    return PARSERS[op](base, subject, rest) ?? null;
+    return PARSERS[op](base, subject, rest, oneFact) ?? null;
   } catch {
     return null;
   }
@@ -1277,11 +1302,11 @@ var PARSERS = {
     p.args = { tier: parseInt(t[1], 10), rel: /^[+-]/.test(t[1]) };
     return p;
   },
-  know(p, s, rest) {
+  know(p, s, rest, oneFact) {
     if (!s)
       return null;
     p.subject = s;
-    const k = parseKnowRest(rest);
+    const k = parseKnowRest(rest, oneFact);
     if (!k)
       return null;
     p.args = k;
@@ -1771,7 +1796,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.6.0";
+var VERSION = "1.7.0";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -2084,6 +2109,8 @@ function takeWording(f, stmt, keyed) {
 }
 function setStance(ctx, f, holder, s, note) {
   const cur = f.stances[holder];
+  if (cur?.set || f.cleared?.includes(holder))
+    return false;
   if (s.derived && cur && cur.status !== "unaware")
     return false;
   const route = s.route ?? routeOf(s.how);
@@ -2306,7 +2333,8 @@ function fileKnow(ctx, holder, a) {
     let teller = null;
     let tellTo = null;
     if ((it.status === "knows" || it.status === "believes") && !PRIVATE.test(how) && !KEPT.test(evidence)) {
-      const from0 = (it.from ? ctx.who(it.from, false) : null) ?? sourceIn(ctx, it.note);
+      const lead = /^([A-Z][\p{L}'\u2019-]+(?:\s+[A-Z][\p{L}'\u2019-]+){0,2})\s*(?:,|\u2192|->|\baloud\b)/u.exec(how);
+      const from0 = (it.from ? ctx.who(it.from, false) : null) ?? sourceIn(ctx, it.note) ?? (lead ? ctx.who(lead[1], false) : null);
       const subj = subjectOf(ctx, stmt);
       const said = how && SPOKEN.test(how) ? from0 ?? (subj && subj !== holder ? subj : null) : from0;
       aloud = heardAloud(ctx, `${stmt} ${it.note ?? ""}`);
@@ -2321,7 +2349,9 @@ function fileKnow(ctx, holder, a) {
       else if (!aloud && said && said !== holder)
         teller = said;
     }
-    if (/^["\u201C][^"\u201C\u201D]+["\u201D]$/.test(stmt))
+    if (/^["\u201C][^"\u201C\u201D]+["\u201D]$/.test(stmt) && stmt.split(/\s+/).length >= 5)
+      stmt = stmt.slice(1, -1).trim();
+    else if (/^["\u201C][^"\u201C\u201D]+["\u201D]$/.test(stmt))
       stmt = aloud?.by ? `${ctx.nm(aloud.by)} said ${stmt}` : `someone said ${stmt}`;
     const { f, keyed } = resolveFact(ctx, it.key, stmt, holder);
     keys.push(f.key);
@@ -2384,6 +2414,13 @@ function fileReveal(ctx, a) {
         ctx.st.chars[id].voiced = true;
     }
   }
+  if (by && !named.length && !a.everyone && !isPublicChannel(a.channel) && !/letter|note|written|wrote|text|message/.test(a.channel)) {
+    const how = [a.channel, a.how].filter(Boolean).join(" ");
+    setStance(ctx, f, by, { status: "knows", how: how || undefined });
+    linkGaps(ctx, f);
+    ctx.canon.push(`know ${ctx.nm(by)}: #${f.key} ${f.statement}${how ? ` | ${how}` : ""}`);
+    return f.key;
+  }
   comeOut(ctx, f, { by, channel: a.channel, named, everyone: a.everyone });
   linkGaps(ctx, f);
   if (a.how && by) {
@@ -2427,19 +2464,73 @@ function fileSecret(ctx, a) {
 function fileUnaware(ctx, holder, things) {
   const gaps = [];
   const keyed = [];
+  const facts = ctx.st.facts ?? {};
   for (const t of things) {
-    const k = t.startsWith("#") ? slugKey(t) : findFact(ctx.st.facts ?? {}, t);
-    const f = k ? ctx.st.facts?.[k] : undefined;
+    const km = /^#([\p{L}\p{N}_-]+)\s*(.*)$/u.exec(t);
+    const text = km ? km[2].trim() : t;
+    let k;
+    if (km) {
+      const s = slugKey(km[1]);
+      k = facts[s] ? s : Object.values(facts).find((f) => f.altKeys?.includes(s))?.key;
+    }
+    k ??= text ? findFact(facts, text) : undefined;
+    const f = k ? facts[k] : undefined;
     if (f) {
       if (!standsOn(f.stances[holder]) || f.stances[holder].derived)
         setStance(ctx, f, holder, { status: "unaware", route: "stated", how: "the story says they don't know" });
       keyed.push(`#${f.key}`);
-    } else
-      gaps.push(t.replace(/^#/, ""));
+    } else if (text)
+      gaps.push(text);
   }
   for (const g of gaps)
     addGap(ctx, holder, g);
   ctx.canon.push(`unaware ${ctx.nm(holder)}: ${[...keyed, ...gaps].join(" \xB7 ")}`);
+}
+function applyFactEdits(st, mi, edits) {
+  for (const [key, e] of Object.entries(edits)) {
+    if (e.into || !e.people && e.added === undefined)
+      continue;
+    const facts = st.facts ??= {};
+    let f = facts[key] ?? Object.values(facts).find((x) => x.altKeys?.includes(key));
+    if (!f && e.added !== undefined && mi >= e.added) {
+      f = facts[key] = { key, statement: e.statement || key.replace(/-/g, " "), truth: e.truth ?? "unknown", aliases: [normFact(e.statement || key)], stances: {}, history: [], firstMsg: mi, lastMsg: mi, added: true, locked: true };
+    }
+    if (!f)
+      continue;
+    if (e.statement) {
+      f.statement = e.statement;
+      f.locked = true;
+    }
+    if (e.truth)
+      f.truth = e.truth;
+    if (e.hidden)
+      f.hidden = true;
+    for (const [id, want] of Object.entries(e.people ?? {})) {
+      if (!st.chars[id])
+        continue;
+      const cur = f.stances[id];
+      if (want === "none") {
+        if (cur)
+          delete f.stances[id];
+        if (f.keptFrom?.includes(id))
+          f.keptFrom = f.keptFrom.filter((x) => x !== id);
+        if (!f.cleared?.includes(id))
+          f.cleared = [...f.cleared ?? [], id];
+        continue;
+      }
+      if (cur?.set && cur.status === want)
+        continue;
+      const route = want === "unaware" ? "stated" : cur?.route;
+      f.stances[id] = compact({ holder: id, status: want, how: "you set this", route, from: want === "unaware" ? undefined : cur?.from, set: true, msgIndex: cur?.msgIndex ?? mi, at: cur?.at ?? (st.time ? { ...st.time } : null) });
+      f.history.push(compact({ holder: id, status: want, how: "you set this", route, msgIndex: mi, at: st.time ? { ...st.time } : null }));
+      if (want !== "unaware") {
+        if (f.keptFrom?.includes(id))
+          f.keptFrom = f.keptFrom.filter((x) => x !== id);
+        if (want !== "wrong")
+          closeGaps(st, id, f);
+      }
+    }
+  }
 }
 var WH = new Set("who whom whose what which why how when where whether if".split(" "));
 var gapWords = (s) => words(s).filter((w) => !WH.has(w));
@@ -2503,15 +2594,25 @@ function lackOf(st, f, id) {
   if (f.keptFrom?.includes(id))
     return "hidden";
   const c = st.chars[id];
-  if (!f.out?.length || !isKnower(c))
+  if (!f.out?.length || !isKnower(c) || f.cleared?.includes(id))
     return null;
   const first = f.out[0].msgIndex;
   if (c.firstSeen >= first && sceneOf(st, c.firstSeen) !== sceneOf(st, first))
     return null;
   if (f.out.some((o) => o.room?.includes(id)))
     return "unheard";
-  return "missed";
+  return isNews(f) ? "missed" : null;
 }
+var FOUND = ["deduced", "sensed", "saw", "read", "overheard", "heard", "told", "rumour"];
+function isNews(f) {
+  const out = f.out?.[0];
+  if (!out)
+    return false;
+  if (f.history.some((h) => (!out.by || h.holder === out.by) && h.msgIndex <= out.msgIndex && !h.derived && h.route && FOUND.includes(h.route) && h.status !== "unaware"))
+    return true;
+  return DEED.test(f.statement);
+}
+var DEED = /\b(?:said|told|asked|offered|admitted|confessed|refused|joked|made a joke|laughed|promised|lied|whispered|shouted|agreed|accepted|kissed|hugged|killed|fought|attacked|saved|pulled|dug|arrived|left|cried|wept|broke down|slapped|chose|decided|threatened|begged|swore|called (?:him|her|them)sel(?:f|ves))\b/i;
 function sceneOf(st, mi) {
   let no = 0;
   for (const s of st.sceneLog) {
@@ -2767,6 +2868,29 @@ class Folder {
     this.ensureChar(id, n, msgIndex, false);
     return id;
   }
+  applyCastEdits(mi) {
+    for (const [id, e] of Object.entries(this.opts.castEdits ?? {})) {
+      let c = this.state.chars[id];
+      if (!c && e.added !== undefined && mi >= e.added && e.name) {
+        c = this.ensureChar(id, e.name, mi, false);
+        c.voiced = true;
+        c.tier ??= "off";
+      }
+      if (!c)
+        continue;
+      const name = e.name?.trim();
+      if (name && c.name !== name && !c.isUser) {
+        if (!c.aliases.some((a) => a.toLowerCase() === c.name.toLowerCase()))
+          c.aliases.push(c.name);
+        c.aliases = c.aliases.filter((a) => a.toLowerCase() !== name.toLowerCase());
+        c.name = name;
+      }
+      if (e.age !== undefined)
+        c.age = e.age.trim() || undefined;
+      if (e.appearance !== undefined)
+        c.appearance = e.appearance.trim() || undefined;
+    }
+  }
   ensureChar(id, name, msgIndex, isUser) {
     let c = this.state.chars[id];
     if (!c) {
@@ -2941,6 +3065,8 @@ class Folder {
     st.knowRepair = (st.knowRepair ?? []).filter((i) => i !== msgIndex && i >= msgIndex - 200);
     if (kc.repaired && ops.some((o) => KNOW_OPS.includes(o.op)))
       st.knowRepair.push(msgIndex);
+    this.applyCastEdits(msgIndex);
+    applyFactEdits(st, msgIndex, this.opts.factEdits ?? {});
     closeMetGaps(st);
     if (!fromUser)
       st.lastReply = msgIndex;
@@ -4264,7 +4390,8 @@ class LedgerRuntime {
           const at = base.ops.findIndex((o) => kinds.has(o.op));
           const pos = at < 0 ? kept.findIndex((o) => o.op === "mode") : base.ops.slice(0, at).filter((o) => !kinds.has(o.op)).length;
           const cut = pos < 0 ? kept.length : pos;
-          base = { ...base, ops: [...kept.slice(0, cut), ...clerk.ops, ...kept.slice(cut)] };
+          const ops = clerk.ops.map((o) => o.raw ? parseLine(o.raw, true) ?? o : o).filter((o) => kinds.has(o.op));
+          base = { ...base, ops: [...kept.slice(0, cut), ...ops, ...kept.slice(cut)] };
         }
         const extras = sides.filter((s) => !s.replaces && !s.replacesOps?.length);
         const extraOps = extras.flatMap((s) => s.ops);
@@ -5885,6 +6012,8 @@ class ChatLedger {
       personaThoughts: meta.detected.personaThoughts,
       romance: meta.detected.romance ?? meta.config.romance,
       merges: meta.config.merges,
+      factEdits: meta.config.factEdits,
+      castEdits: meta.config.castEdits,
       startTime: start ? { day: startDay ? parseInt(startDay[1], 10) : 1, minute: parseInt(start[1], 10) * 60 + parseInt(start[2], 10) } : null
     };
   }
@@ -6830,7 +6959,7 @@ function parseClerk(text) {
     return [];
   const ops = [];
   for (const line of body.split(/\r?\n/)) {
-    const op = parseLine(line);
+    const op = parseLine(line, true);
     if (op && KNOW_OPS.includes(op.op))
       ops.push(op);
   }
@@ -7838,6 +7967,7 @@ async function buildView(chatId, userId) {
     lastMsg: f.lastMsg,
     kind: factKind(f),
     inPlay: inPlay.has(f.key),
+    added: !!f.added,
     stances: Object.values(f.stances).filter((s) => s.status !== "unaware").sort((a, b) => a.msgIndex - b.msgIndex).map((s) => ({
       id: s.holder,
       name: nm(s.holder),
@@ -7951,6 +8081,10 @@ async function buildView(chatId, userId) {
       dead: !!c.dead,
       isUser: c.isUser,
       lastSeen: c.lastSeen,
+      age: c.age ?? loreAge(L.records, c.name, c.aliases),
+      ageSet: !!c.age,
+      appearance: c.appearance,
+      edit: meta.config.castEdits?.[c.id] ?? null,
       held: Object.values(st.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name)
     })),
     bonds: Object.values(st.bonds).map((b) => ({ from: b.from, to: b.to, fromName: nm(b.from), toName: nm(b.to), axes: b.axes, label: b.label, tags: b.tags, history: b.history.slice(-6), ladder: st.ladders[`${b.from}>${b.to}`] ?? null, lastMsg: b.history.at(-1)?.msgIndex ?? 0 })),
@@ -8005,6 +8139,25 @@ function pushState(chatId, userId) {
       warn(`push state: ${describe(err)}`);
     }
   });
+}
+var NUM_WORDS = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ");
+var TENS = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+function loreAge(records, name, aliases) {
+  const names = new Set([name, ...aliases].map((n) => n.toLowerCase()));
+  const r = records.find((x) => x.kind === "person" && [x.name, ...x.aliases].some((n) => names.has(n.toLowerCase())));
+  if (!r)
+    return;
+  const m = /\b(\d{1,3}|[a-z]+(?:-[a-z]+)?)[- ]years?[- ]old\b|\baged? (\d{1,3})\b/i.exec(r.summary);
+  if (!m)
+    return;
+  if (m[2])
+    return m[2];
+  const w = m[1].toLowerCase();
+  if (/^\d+$/.test(w))
+    return w;
+  const [a, b] = w.split("-");
+  const n = (TENS[a] ?? (NUM_WORDS.indexOf(a) + 1 || 0)) + (b ? NUM_WORDS.indexOf(b) + 1 : 0);
+  return n > 0 ? String(n) : undefined;
 }
 
 // src/core/extractor.ts

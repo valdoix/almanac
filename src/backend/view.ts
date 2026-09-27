@@ -77,7 +77,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
   const people = Object.values(st.chars).filter((c) => isKnower(c));
   const inPlay = new Set(factsInPlay(st, "", 8).map((f) => f.key));
   const facts = allFacts.filter((f) => !f.hidden).sort((a, b) => b.lastMsg - a.lastMsg).map((f) => ({
-    key: f.key, statement: f.statement, truth: f.truth, locked: !!f.locked, lastMsg: f.lastMsg, kind: factKind(f), inPlay: inPlay.has(f.key),
+    key: f.key, statement: f.statement, truth: f.truth, locked: !!f.locked, lastMsg: f.lastMsg, kind: factKind(f), inPlay: inPlay.has(f.key), added: !!f.added,
     stances: Object.values(f.stances).filter((s) => s.status !== "unaware").sort((a, b) => a.msgIndex - b.msgIndex).map((s) => ({
       id: s.holder, name: nm(s.holder), status: s.status, how: s.how, verb: stanceVerb(s, nm), version: s.version, derived: s.derived ?? null, when: storyStamp(s.at),
     })),
@@ -141,6 +141,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       id: c.id, name: c.name, aliases: c.aliases, slot: c.slot, color: voiceColor(c, colors), tier: c.tier ?? "off", activity: c.activity, place: c.place,
       mood: c.mood ?? null, meters: c.meters, flags: c.flags, injuries: c.injuries, look: c.look, status: c.status, pressure: meta.pressures[c.id] ?? null,
       journal: c.journal.slice(-5), dead: !!c.dead, isUser: c.isUser, lastSeen: c.lastSeen,
+      age: c.age ?? loreAge(L.records, c.name, c.aliases), ageSet: !!c.age, appearance: c.appearance, edit: meta.config.castEdits?.[c.id] ?? null,
       held: Object.values(st.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name),
     })),
     bonds: Object.values(st.bonds).map((b) => ({ from: b.from, to: b.to, fromName: nm(b.from), toName: nm(b.to), axes: b.axes, label: b.label, tags: b.tags, history: b.history.slice(-6), ladder: st.ladders[`${b.from}>${b.to}`] ?? null, lastMsg: b.history.at(-1)?.msgIndex ?? 0 })),
@@ -188,4 +189,22 @@ export function pushState(chatId: string, userId?: string) {
       warn(`push state: ${describe(err)}`);
     }
   });
+}
+
+const NUM_WORDS = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ");
+const TENS: Record<string, number> = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+
+/** An age the lore gives in passing ("the seventy-five-year-old patriarch", "aged 24"). */
+export function loreAge(records: { kind: string; name: string; aliases: string[]; summary: string }[], name: string, aliases: string[]): string | undefined {
+  const names = new Set([name, ...aliases].map((n) => n.toLowerCase()));
+  const r = records.find((x) => x.kind === "person" && [x.name, ...x.aliases].some((n) => names.has(n.toLowerCase())));
+  if (!r) return undefined;
+  const m = /\b(\d{1,3}|[a-z]+(?:-[a-z]+)?)[- ]years?[- ]old\b|\baged? (\d{1,3})\b/i.exec(r.summary);
+  if (!m) return undefined;
+  if (m[2]) return m[2];
+  const w = m[1].toLowerCase();
+  if (/^\d+$/.test(w)) return w;
+  const [a, b] = w.split("-");
+  const n = (TENS[a] ?? (NUM_WORDS.indexOf(a) + 1 || 0)) + (b ? NUM_WORDS.indexOf(b) + 1 : 0);
+  return n > 0 ? String(n) : undefined;
 }

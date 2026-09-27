@@ -228,8 +228,9 @@ function readMeta(meta: string): { status?: KnowStatus; truth?: KnowTruth; how?:
   let truth: KnowTruth | undefined;
   const how: string[] = [];
   for (const raw of meta.split(/\s*[·;]\s*|\s*,\s*(?=(?:knows?|believes?|suspects?|doubts?|wrong|unaware|true|false|partial|unknown)\b)/i).map((x) => x.trim()).filter(Boolean)) {
-    const b = raw.toLowerCase();
+    const b = raw.toLowerCase().replace(/^still\s+/, "").replace(/\s+(?:it|this|that|so)$/, "");
     const lead = LEAD_STANCE.exec(raw);
+    if (/^(?:…|\.\.\.)$/.test(b)) continue;
     if (STATUS_WORD.test(b)) status = normStatus(b);
     else if (TRUTH_WORD.test(b)) truth = normTruth(b);
     else if (lead) {
@@ -241,14 +242,41 @@ function readMeta(meta: string): { status?: KnowStatus; truth?: KnowTruth; how?:
   return { status, truth, how: how.length ? how.join("; ") : undefined };
 }
 
-/** `know Holder: …` → items and negations. */
-export function parseKnowRest(rest: string): KnowArgs | null {
+// A stance or truth written as its own piece: "knows", "true", "believes it", "believes/true", "knows · true".
+const META_TOKEN = /^(?:(?:still\s+)?(?:knows?|believes?|suspects?|doubts?|wrong|unaware|denies)(?:\s+(?:it|this|that|so))?|true|false|partial|unknown|half-true|mixed|partly true|…|\.\.\.)$/i;
+const META_PAIR = /^(?:knows?|believes?|suspects?|doubts?|wrong)\s*[/,]\s*(?:true|false|partial|unknown)$/i;
+export const isMetaToken = (p: string) => META_TOKEN.test(p.trim()) || META_PAIR.test(p.trim());
+
+/**
+ * A line written without the `|`: "fact · heard Valeria · knows · true". The stance
+ * and truth at the end (and the one piece before them saying how) are the meta.
+ * Returns the fact part and the meta part, or null when the line doesn't end that way.
+ */
+export function peelMeta(text: string): { fact: string; meta: string } | null {
+  const pieces = splitTop(text, /\s+[·•]\s+/g);
+  if (pieces.length < 2 || !isMetaToken(pieces[pieces.length - 1])) return null;
+  let cut = pieces.length;
+  while (cut > 1 && isMetaToken(pieces[cut - 1])) cut--;
+  // One piece before the tokens that says how they came to it: "heard Valeria", "deduced from the stone", "self".
+  const how = pieces[cut - 1];
+  if (cut > 1 && (ROUTE_HINT.test(how) || LEAD_PERCEPTION.test(how) || /^(?:self|herself|himself|themselves|own|her own|his own|their own)\b/i.test(how) || /\btold (?:her|him|them)\b/i.test(how)) && how.split(/\s+/).length <= 8) cut--;
+  const meta = pieces.slice(cut).map((p) => p.replace(/\s*\/\s*/, " · ")).join(" · ");
+  return { fact: pieces.slice(0, cut).join(" · "), meta };
+}
+
+/** `know Holder: …` → items and negations. `single`: the line holds one fact (the clerk's lines). */
+export function parseKnowRest(rest: string, single = false): KnowArgs | null {
   const neg = pullNegations(rest);
   const negations = neg.negations;
-  const bar = splitTop(neg.rest, /\s*\|\s*/g);
+  let bar = splitTop(neg.rest, /\s*\|\s*/g);
+  if (bar.length === 1) {
+    const peeled = peelMeta(bar[0]);
+    if (peeled) bar = [peeled.fact, peeled.meta];
+  }
   const factPart = bar[0] ?? "";
-  const meta = readMeta(bar.slice(1).join(" · "));
-  const pieces = splitTop(factPart, /\s+[·•]\s+|;\s+|\s+\/\/\s+/g);
+  // Stance and truth split by a slash: "self · believes/true".
+  const meta = readMeta(bar.slice(1).join(" · ").replace(/\b(knows?|believes?|suspects?|doubts?|wrong)\s*\/\s*(true|false|partial|unknown)\b/gi, "$1 · $2"));
+  const pieces = single ? [factPart.replace(/\s+[·•]\s+|;\s+/g, ", ")] : splitTop(factPart, /\s+[·•]\s+|;\s+|\s+\/\/\s+/g);
   // On a bundled line, free text after `|` that isn't a route is one more thing they know
   // ("… · offered his home | cannot go home yet — Joyce's death, Dawn").
   if (pieces.length > 1 && meta.how) {
@@ -454,7 +482,10 @@ export function parseSecretRest(subject: string, rest: string): SecretArgs | nul
 /** `unaware Name: thing · thing` → the things (a #key names a tracked fact). */
 export function parseUnawareRest(rest: string): string[] {
   const text = rest.replace(/^\s*(?:of|that)\s+/i, "");
-  return splitTop(text, /\s+[·•]\s+|;\s+|,\s*(?:or\s+|and\s+)?|\s+or\s+/g)
+  const parts = splitTop(text, /\s+[·•]\s+|;\s+|,\s*(?:or\s+|and\s+)?|\s+or\s+/g)
     .map((p) => clean(p.replace(/^(?:that|about|of)\s+/i, "")))
-    .filter(Boolean);
+    .filter((p) => p && !/^(?:…|\.\.\.)$/.test(p) && !isMetaToken(p));
+  // "the thing · #key" or "the thing · from Buffy saying so": a pointer or a source, not one more gap.
+  const prose = parts.some((p) => !p.startsWith("#"));
+  return parts.filter((p) => !(prose && /^#[\p{L}\p{N}_-]+$/u.test(p)) && !/^(?:from|via|per|according to|heard from|told by)\b/i.test(p));
 }

@@ -107,7 +107,7 @@ export function parseClerk(text: string): ParsedOp[] | null {
   if (/^none\.?$/i.test(body)) return [];
   const ops: ParsedOp[] = [];
   for (const line of body.split(/\r?\n/)) {
-    const op = parseLine(line);
+    const op = parseLine(line, true);
     if (op && KNOW_OPS.includes(op.op)) ops.push(op);
   }
   return ops.slice(0, 8);
