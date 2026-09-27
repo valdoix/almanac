@@ -4,7 +4,8 @@
 
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { AlmanacApp } from "./frontend/app";
-import { FONTS_IMPORT, MESSAGE_CSS, PANEL_CSS, TOKENS } from "./frontend/styles";
+import { MESSAGE_CSS, PANEL_CSS, TOKENS } from "./frontend/styles";
+import { SKIN_CSS, fontsFor } from "./frontend/skins";
 import { openSessionZero } from "./frontend/sessionzero";
 import { hudCard, hudPill, measure } from "./frontend/hud";
 import { VERSION } from "./core/version";
@@ -19,17 +20,74 @@ const COMMANDS: [string, string][] = [
 export function setup(ctx: SpindleFrontendContext) {
   const removers: (() => void)[] = [];
   let fontsOn = true;
+  let skin = "almanac";
   let fontStyle: (() => void) | null = null;
+  let fontSkin = "";
+  // Web fonts: the base set plus the active skin's, swapped when the skin changes.
   const setFonts = (on: boolean) => {
-    if (on && !fontStyle) fontStyle = ctx.dom.addStyle(FONTS_IMPORT);
-    if (!on && fontStyle) {
+    if (fontStyle && (!on || fontSkin !== skin)) {
       fontStyle();
       fontStyle = null;
+    }
+    if (on && !fontStyle) {
+      fontStyle = ctx.dom.addStyle(fontsFor(skin));
+      fontSkin = skin;
     }
     fontsOn = on;
   };
   setFonts(true);
-  removers.push(ctx.dom.addStyle(TOKENS + MESSAGE_CSS + PANEL_CSS));
+  removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS));
+
+  // Light or dark: the player's choice, or Lumiverse's own mode read from its background.
+  let modePref = "auto";
+  const systemDark = () => typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+  const hostMode = (): "light" | "dark" => {
+    if (typeof getComputedStyle !== "function") return systemDark() ? "dark" : "light";
+    const probe = (el: Element | null) => {
+      if (!el) return null;
+      const m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/.exec(getComputedStyle(el).backgroundColor);
+      if (!m || (m[4] != null && parseFloat(m[4]) < 0.5)) return null;
+      const [r, g, b] = [m[1], m[2], m[3]].map(Number);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128 ? "dark" : "light";
+    };
+    const fromVar = getComputedStyle(document.documentElement).getPropertyValue("--lumiverse-bg").trim();
+    if (fromVar) {
+      const tmp = document.createElement("span");
+      tmp.style.cssText = `position:absolute;visibility:hidden;background:${fromVar}`;
+      document.body.append(tmp);
+      const m = probe(tmp);
+      tmp.remove();
+      if (m) return m;
+    }
+    return probe(document.body) ?? probe(document.documentElement) ?? (systemDark() ? "dark" : "light");
+  };
+  const applyMode = () => {
+    let mode: string = modePref;
+    if (mode !== "light" && mode !== "dark") {
+      try {
+        mode = hostMode();
+      } catch {
+        mode = "light";
+      }
+    }
+    document.documentElement.setAttribute("data-alm-mode", mode);
+  };
+  applyMode();
+  // Follow Lumiverse when it switches between light and dark.
+  if (typeof MutationObserver === "function") {
+    const modeWatch = new MutationObserver(() => {
+      if (modePref === "auto") applyMode();
+    });
+    modeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme", "data-mode", "data-color-scheme"] });
+    if (document.body) modeWatch.observe(document.body, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    removers.push(() => modeWatch.disconnect());
+  }
+  if (typeof matchMedia === "function") {
+    const schemeQuery = matchMedia("(prefers-color-scheme: dark)");
+    const onScheme = () => modePref === "auto" && applyMode();
+    schemeQuery.addEventListener?.("change", onScheme);
+    removers.push(() => schemeQuery.removeEventListener?.("change", onScheme));
+  }
   let speakerStyle: (() => void) | null = null;
   let lastSpeakerCss = "";
 
@@ -175,7 +233,14 @@ export function setup(ctx: SpindleFrontendContext) {
         if (displaySig !== undefined || v.version !== VERSION) refreshDisplay();
         displaySig = sig;
       }
-      document.documentElement.setAttribute("data-alm-skin", v.theme || "almanac");
+      skin = v.theme || "almanac";
+      document.documentElement.setAttribute("data-alm-skin", skin);
+      if (fontsOn && fontSkin !== skin) setFonts(true);
+      const pref = v.settings?.skinMode ?? "auto";
+      if (pref !== modePref) {
+        modePref = pref;
+        applyMode();
+      }
       if (v.speakerCss !== lastSpeakerCss) {
         speakerStyle?.();
         speakerStyle = v.speakerCss ? ctx.dom.addStyle(v.speakerCss) : null;
@@ -233,6 +298,10 @@ export function setup(ctx: SpindleFrontendContext) {
     setTimeout(refreshDisplay, 400);
     if (p && "hud" in p) ensureHud(!!p.hud);
     if (p && "fonts" in p) setFonts(!!p.fonts);
+    if (p && "skinMode" in p) {
+      modePref = p.skinMode || "auto";
+      applyMode();
+    }
   }));
 
   // Command button in the input bar's Extras popover.
@@ -279,6 +348,7 @@ export function setup(ctx: SpindleFrontendContext) {
     hud?.destroy();
     tab.destroy();
     document.documentElement.removeAttribute("data-alm-skin");
+    document.documentElement.removeAttribute("data-alm-mode");
     ctx.dom.cleanup();
   };
 }

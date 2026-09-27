@@ -1,9 +1,7 @@
 // The ALMANAC stylesheet (linked mode): regex draws structure, this paints it.
-// Tokens follow Lumiverse's theme by default (Almanac skin) and switch to fixed
-// palettes for Solar / Nocturne / Botanical / Prism / Candy. Standalone "Lite"
+// The base tokens here follow Lumiverse's theme (the "Follow Lumiverse" skin);
+// the fixed skins and their light/dark palettes live in skins.ts. Standalone "Lite"
 // inline styles from the preset regex are overridden here with !important.
-
-export const FONTS_IMPORT = `@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500;1,700&family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Fredoka:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=Oswald:wght@500;600&family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Space+Grotesk:wght@500;700&family=Syne:wght@700;800&display=swap");`;
 
 export const TOKENS = `
 :root{
@@ -22,42 +20,7 @@ export const TOKENS = `
   --alm-shadow:0 18px 40px -26px rgba(40,25,10,.55),0 2px 6px -3px rgba(40,25,10,.18);
   --alm-lift:0 12px 24px -18px rgba(40,25,10,.55);
   --alm-texture:radial-gradient(color-mix(in oklab,var(--alm-ink) 7%,transparent) 1px,transparent 1.3px) 0 0/15px 15px;
-  --alm-on-voice:#fff;
-}
-:root[data-alm-skin="solar"]{
-  --alm-panel:#fffcf4; --alm-panel-2:#f7efdd; --alm-ink:#1c2a44; --alm-muted:#5e6679; --alm-line:#e6dcc6;
-  --alm-accent:#e0664f; --alm-accent-2:#1f3a66; --alm-gold:#c9982c; --alm-good:#2d7a55; --alm-warn:#b77a1c; --alm-danger:#c23b37;
-  --alm-font-display:"Playfair Display","Didot","Bodoni 72",Georgia,serif;
-  --alm-texture:linear-gradient(90deg,rgba(28,42,68,.03) 1px,transparent 1px) 0 0/28px 28px; --alm-on-voice:#fff;
-}
-:root[data-alm-skin="nocturne"]{
-  --alm-panel:#161116; --alm-panel-2:#1e171d; --alm-ink:#ece0d9; --alm-muted:#a39290; --alm-line:#35262c;
-  --alm-accent:#e0566b; --alm-accent-2:#c3c3d4; --alm-gold:#cdb27a; --alm-good:#8fc9a0; --alm-warn:#e2b564; --alm-danger:#ff7a7a;
-  --alm-font-display:"Cormorant Garamond","Iowan Old Style",Georgia,serif;
-  --alm-shadow:0 26px 50px -28px rgba(0,0,0,.95); --alm-lift:0 14px 30px -18px rgba(0,0,0,.95);
-  --alm-texture:radial-gradient(rgba(224,86,107,.06) 1px,transparent 1.5px) 0 0/19px 19px; --alm-on-voice:#140e12;
-}
-:root[data-alm-skin="botanical"]{
-  --alm-panel:#fbfcf5; --alm-panel-2:#f1f5e8; --alm-ink:#20301d; --alm-muted:#5e6c58; --alm-line:#d3dcc4;
-  --alm-accent:#3f7a4a; --alm-accent-2:#b24d68; --alm-gold:#a88a2e; --alm-good:#2f7d4f; --alm-warn:#a8761e; --alm-danger:#b23a4a;
-  --alm-radius:26px; --alm-r-sm:16px;
-  --alm-texture:radial-gradient(60% 60% at 20% 30%,rgba(63,122,74,.05),transparent 60%) 0 0/180px 140px; --alm-on-voice:#fff;
-}
-:root[data-alm-skin="prism"]{
-  --alm-panel:#0d1425; --alm-panel-2:#121c33; --alm-ink:#dbe7ff; --alm-muted:#8397bd; --alm-line:#1f2d4a;
-  --alm-accent:#2ee6c5; --alm-accent-2:#7aa2ff; --alm-gold:#ffd166; --alm-good:#4be39a; --alm-warn:#ffc15e; --alm-danger:#ff6b8a;
-  --alm-font-display:"Space Grotesk","Segoe UI",system-ui,sans-serif; --alm-font-body:"Space Grotesk","Segoe UI",system-ui,sans-serif;
-  --alm-radius:8px; --alm-r-sm:5px;
-  --alm-shadow:0 0 0 1px rgba(46,230,197,.08) inset,0 24px 48px -28px rgba(0,0,0,.9); --alm-lift:0 12px 28px -18px rgba(0,0,0,.95);
-  --alm-texture:linear-gradient(rgba(122,162,255,.05) 1px,transparent 1px) 0 0/100% 24px,linear-gradient(90deg,rgba(122,162,255,.05) 1px,transparent 1px) 0 0/24px 100%;
-  --alm-on-voice:#06101c;
-}
-:root[data-alm-skin="candy"]{
-  --alm-panel:#ffffff; --alm-panel-2:#fff5fa; --alm-ink:#3b2340; --alm-muted:#86698a; --alm-line:#f5cfe1;
-  --alm-accent:#ff3f86; --alm-accent-2:#6c5ce7; --alm-gold:#f5a623; --alm-good:#1f9d6b; --alm-warn:#d88a00; --alm-danger:#e53960;
-  --alm-font-display:"Fredoka","Nunito","Segoe UI Rounded",system-ui,sans-serif; --alm-font-body:"Fredoka","Nunito",system-ui,sans-serif;
-  --alm-radius:24px; --alm-r-sm:16px; --alm-shadow:5px 5px 0 #f5cfe1; --alm-lift:3px 3px 0 #f5cfe1;
-  --alm-texture:radial-gradient(rgba(255,63,134,.10) 1.5px,transparent 2px) 0 0/22px 22px; --alm-on-voice:#fff;
+  --alm-on-voice:#fff; --alm-on-accent:#fff;
 }
 `;
 
@@ -158,7 +121,7 @@ export const MESSAGE_CSS = `
 .alm-ooc{position:relative!important;margin:14px 0!important;padding:14px 16px 12px!important;border:1.5px dashed var(--alm-line)!important;border-radius:var(--alm-r-sm)!important;background:var(--alm-panel-2)!important;color:var(--alm-muted)!important;font-size:.95em}
 .alm-ooc::before{content:"OOC";position:absolute;top:-10px;left:14px;padding:2px 8px;border-radius:6px;background:var(--alm-muted);color:var(--alm-panel);font:500 10px/1.4 var(--alm-font-mono);letter-spacing:.16em}
 .alm-folio{margin:14px 0!important;border:1px solid var(--alm-line)!important;border-radius:var(--alm-r-sm)!important;background:var(--alm-panel)!important;box-shadow:var(--alm-shadow)!important;overflow:hidden}
-.alm-folio__hd{padding:10px 14px!important;background:linear-gradient(90deg,var(--alm-accent),color-mix(in oklab,var(--alm-accent) 60%,var(--alm-accent-2)))!important;color:var(--alm-on-voice)!important;font:600 12px/1.2 var(--alm-font-mono)!important;letter-spacing:.16em;text-transform:uppercase}
+.alm-folio__hd{padding:10px 14px!important;background:linear-gradient(90deg,var(--alm-accent),color-mix(in oklab,var(--alm-accent) 60%,var(--alm-accent-2)))!important;color:var(--alm-on-accent)!important;font:600 12px/1.2 var(--alm-font-mono)!important;letter-spacing:.16em;text-transform:uppercase}
 .alm-folio__bd{padding:12px 16px!important}
 
 /* ── Drawers (unspoken, director's notes, ledger) ── */
@@ -166,14 +129,14 @@ details.alm-drawer{margin:16px 0 0!important;background:var(--alm-panel)!importa
 details.alm-drawer>summary{list-style:none!important;cursor:pointer;display:flex!important;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px!important;font:500 12.5px/1.2 var(--alm-font-mono)!important;color:var(--alm-muted)!important;background:var(--alm-panel-2)!important}
 details.alm-drawer>summary::-webkit-details-marker{display:none}
 details.alm-drawer[open]>summary{border-bottom:1px solid var(--alm-line)}
-.alm-drawer__body{padding:14px!important}
+.alm-drawer__body{padding:14px!important;background-image:var(--alm-texture)}
 .alm-pill{display:inline-flex!important;align-items:center;gap:6px;padding:6px 10px!important;border-radius:999px!important;background:var(--alm-panel)!important;border:1px solid var(--alm-line)!important;color:var(--alm-ink)!important}
 .alm-pill small{color:var(--alm-muted)}
 .alm-pill--warn{color:var(--alm-warn)!important;border-color:color-mix(in oklab,var(--alm-warn) 45%,var(--alm-line))!important}
 .alm-stack{display:inline-flex}
 .alm-stack .alm-mini{margin-left:-5px;box-shadow:0 0 0 2px var(--alm-panel)}
 .alm-stack .alm-mini:first-child{margin-left:0}
-.alm-caret{margin-left:auto;display:inline-flex!important;align-items:center;gap:8px;padding:6px 11px!important;border-radius:999px!important;background:var(--alm-accent)!important;color:var(--alm-panel)!important;font-weight:500}
+.alm-caret{margin-left:auto;display:inline-flex!important;align-items:center;gap:8px;padding:6px 11px!important;border-radius:999px!important;background:var(--alm-accent)!important;color:var(--alm-on-accent)!important;font-weight:500}
 .alm-caret::after{content:"▾";transition:transform .25s}
 details[open]>summary .alm-caret::after{transform:rotate(180deg)}
 .alm-mini{--c:var(--alm-muted);display:inline-grid!important;place-items:center;flex:none;width:22px!important;height:22px!important;border-radius:50%!important;background:var(--c)!important;color:var(--alm-on-voice)!important;font:700 10.5px/1 var(--alm-font-display)!important}
@@ -310,7 +273,7 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
   font:500 12.5px/1 var(--alm-font-mono)!important;color:var(--alm-ink)!important;background:linear-gradient(var(--alm-panel),var(--alm-panel-2))!important;
   border:1px solid var(--alm-line)!important;box-shadow:0 3px 0 var(--alm-line),0 8px 14px -10px rgba(0,0,0,.45)!important;transition:transform .08s,box-shadow .08s}
 .alm-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--alm-line)!important}
-.alm-btn--primary{color:var(--alm-on-voice)!important;background:linear-gradient(color-mix(in oklab,var(--alm-accent) 85%,#fff),var(--alm-accent))!important;border-color:color-mix(in oklab,var(--alm-accent) 70%,#000)!important;box-shadow:0 3px 0 color-mix(in oklab,var(--alm-accent) 60%,#000),0 8px 14px -10px rgba(0,0,0,.45)!important}
+.alm-btn--primary{color:var(--alm-on-accent)!important;background:linear-gradient(color-mix(in oklab,var(--alm-accent) 85%,#fff),var(--alm-accent))!important;border-color:color-mix(in oklab,var(--alm-accent) 70%,#000)!important;box-shadow:0 3px 0 color-mix(in oklab,var(--alm-accent) 60%,#000),0 8px 14px -10px rgba(0,0,0,.45)!important}
 .alm-btn[data-lumiverse-regex-action-used="true"]{opacity:.45;transform:none;cursor:default}
 /* HUD strip */
 .alm-hud{display:flex!important;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px 8px 8px!important;border-radius:999px!important;background:linear-gradient(90deg,#1c2146,#3a3060 60%,#6a4a6a)!important;color:#fff!important;
@@ -370,7 +333,7 @@ export const PANEL_CSS = `
 .almp .hero .gl{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);font:500 11.5px/1 var(--alm-font-mono);margin:6px 6px 0 0}
 .almp .btn{all:unset;display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:7px 11px;border-radius:10px;font:500 12px/1 var(--alm-font-mono);background:linear-gradient(var(--alm-panel),var(--alm-panel-2));border:1px solid var(--alm-line);box-shadow:0 2px 0 var(--alm-line)}
 .almp .btn:active{transform:translateY(1px);box-shadow:none}
-.almp .btn.primary{background:var(--alm-accent);color:var(--alm-on-voice);border-color:color-mix(in oklab,var(--alm-accent) 70%,#000)}
+.almp .btn.primary{background:var(--alm-accent);color:var(--alm-on-accent);border-color:color-mix(in oklab,var(--alm-accent) 70%,#000)}
 .almp .btn.danger{color:var(--alm-danger)}
 .almp .btn[disabled]{opacity:.5;pointer-events:none}
 .almp input[type=text],.almp input[type=number],.almp textarea,.almp select{width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--alm-line);background:var(--alm-panel-2);color:var(--alm-ink);font:inherit}
@@ -378,7 +341,7 @@ export const PANEL_CSS = `
 .almp label.f{display:grid;gap:4px;margin:0 0 10px;font:500 11px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
 .almp label.chk{display:flex;gap:8px;align-items:center;margin:6px 0}
 .almp .pill{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;background:var(--alm-panel-2);border:1px solid var(--alm-line);font:500 11px/1.2 var(--alm-font-mono);color:var(--alm-muted);margin:2px}
-.almp .pill.on{color:var(--alm-on-voice);background:var(--alm-accent);border-color:transparent}
+.almp .pill.on{color:var(--alm-on-accent);background:var(--alm-accent);border-color:transparent}
 .almp .kv{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;font-size:13px}
 .almp .kv b{font:500 10.5px/1.7 var(--alm-font-mono);color:var(--alm-muted);text-transform:uppercase;letter-spacing:.08em}
 .almp .list{display:grid;gap:8px}
@@ -444,7 +407,7 @@ export const PANEL_CSS = `
 .alm-hudc__owed li.due::before{background:var(--alm-warn)}
 .alm-hudc__owed small{color:var(--alm-muted)}
 .alm-hudc__muted{margin:0;color:var(--alm-muted);font-size:12px}
-.alm-hudc__go{display:block;width:100%;margin-top:12px!important;padding:9px 12px!important;border-radius:12px;text-align:center;background:var(--alm-accent)!important;color:var(--alm-on-voice)!important;font-weight:600!important;font-size:12.5px!important}
+.alm-hudc__go{display:block;width:100%;margin-top:12px!important;padding:9px 12px!important;border-radius:12px;text-align:center;background:var(--alm-accent)!important;color:var(--alm-on-accent)!important;font-weight:600!important;font-size:12.5px!important}
 .alm-hudc__go:hover{filter:brightness(1.08)}
 .alm-sz{font-size:14px}
 .alm-sz .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
@@ -457,7 +420,7 @@ export const PANEL_CSS = `
 .almk-un{font-size:11.5px;color:var(--alm-muted)}
 .almp .alm-warnbox{border-color:color-mix(in oklab,var(--alm-warn) 55%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 10%,var(--alm-panel))}
 /* ── Orrery navigation ── */
-.almo{position:relative;display:flex;flex-direction:column;min-height:100%;background:color-mix(in oklab,var(--alm-panel-2) 55%,var(--alm-panel));--almo-font:"Syne",var(--alm-font-display)}
+.almo{position:relative;display:flex;flex-direction:column;min-height:100%;background:color-mix(in oklab,var(--alm-panel-2) 55%,var(--alm-panel));background-image:var(--alm-texture);--almo-font:"Syne",var(--alm-font-display)}
 .almo-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .almo button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
 .almo button:focus-visible{outline:2px solid var(--alm-accent);outline-offset:2px}

@@ -6,6 +6,7 @@ import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { escapeHtml as e } from "../core/util";
 import { buildCalendar, dateFor, fmtDate } from "../core/engines/calendar";
 import { CALENDAR_PRESETS, presetFor } from "../core/engines/calendars";
+import { SKIN_LIST } from "./skins";
 
 export const GENRES: [string, string][] = [
   ["slice_of_life", "Slice of life"], ["romance", "Romance"], ["drama", "Drama"], ["comedy", "Comedy"], ["mystery", "Mystery"],
@@ -18,7 +19,7 @@ const PERSONA: [string, string][] = [["", "(preset setting)"], ["sealed", "Seale
 const NSFW: [string, string][] = [["", "(preset setting)"], ["off", "Off"], ["fade", "Fade to black"], ["sensual", "Sensual"], ["explicit", "Explicit (adults only)"]];
 const ROMANCE: [string, string][] = [["", "(preset setting)"], ["off", "Off"], ["slow", "Slow burn"], ["measured", "Measured"], ["fast", "Fast"], ["established", "Established couple"]];
 const DIFFICULTY: [string, string][] = [["", "(preset setting)"], ["gentle", "Gentle"], ["grounded", "Grounded"], ["hard", "Hard"], ["brutal", "Brutal"]];
-const THEMES: [string, string][] = [["", "Auto (by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]];
+const THEMES: [string, string][] = [["", "Auto (by genre)"], ...SKIN_LIST];
 const ORIGINAL_CALENDAR = "months: Thaw (30), Bloom (30), [Greenfest], Highsun (30), Harvest (30), Fade (30), Deepwinter (30); weekdays: Firstday, Seconday, Midday, Fourthday, Restday; year: 1 AR; seasons: solar";
 const CAL_START_DEFAULT = "Day 1 · 14 October 1923 · 18:40";
 

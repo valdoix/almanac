@@ -374,7 +374,9 @@ export interface Settings {
   mirror: "off" | "summaries" | "full";
   mirrorVectorize: boolean;
   hud: boolean;
-  theme: "preset" | "almanac" | "solar" | "nocturne" | "botanical" | "prism" | "candy";
+  theme: "preset" | "almanac" | "solar" | "nocturne" | "botanical" | "prism" | "candy" | "dossier" | "scriptorium" | "arcana" | "orbital" | "posy" | "lumiverse";
+  /** Light or dark palette for the skin; auto follows Lumiverse. */
+  skinMode: "auto" | "light" | "dark";
   fonts: boolean;
   narratorOnlyToTools: boolean;
   telemetry: boolean;
@@ -422,6 +424,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mirrorVectorize: false,
   hud: true,
   theme: "preset",
+  skinMode: "auto",
   fonts: true,
   narratorOnlyToTools: false,
   telemetry: true,

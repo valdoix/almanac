@@ -49,6 +49,16 @@ The two find each other on their own: with the extension installed, the preset s
 - The **Almanac** drawer tab (extension) opens under a live sky: clock, date, moon, weather and place. The dock at the bottom holds everything. The sun goes to **Now**, and each planet opens its pages on an orbit: **People** (Cast · Bonds with a relationship graph and time scrubber · Knowledge), **Story** (Chronicle · Timeline · World), **Library** (Codex · Lore · Creator) and **Engine** (Recall · Craft · Settings). Under the sky, a switcher moves between the current group's pages, and a planet glows with a count when something needs a look (debts due, lorebook entries to review, unverified turns).
 - **Summaries** (Settings › Chronicle): choose how much each chapter keeps: *brief*, *standard*, *detailed* (the default: scene by scene, plus where everyone stands at the end) or *exhaustive* (adds sensory texture, tells and voices). "Always keep in summaries" lists anything that must never be dropped. **Rewrite all** on the Chronicle page redoes the unlocked summaries at the current level.
 
+## Skins
+
+Eleven skins, each with a light and a dark palette: **Almanac** (field almanac), **Solar Editorial** (magazine), **Nocturne** (gothic romance), **Botanical** (herbarium), **Prism** (holographic), **Candy** (sticker pop), **Dossier** (case file), **Scriptorium** (illuminated manuscript), **Arcana** (spellbook), **Orbital** (station interface) and **Posy** (florals in pink and green). **Follow Lumiverse** takes its colours from your Lumiverse theme instead.
+
+- Pick one in Session Zero (for this chat) or in **Settings › Look**. Left on Auto, the skin follows the lead genre.
+- **Light or dark** (Settings › Look): Auto follows Lumiverse's light/dark mode, or pin either one.
+- Only the active skin's web fonts are loaded.
+- Every character's colour can be changed on the **People › Cast** page, including your persona's.
+- Mockups of every skin in both modes: [design/mockups/skins.html](design/mockups/skins.html).
+
 ## Calendars
 
 The calendar setting (Session Zero, Settings › World engines, or the preset's variables) takes Gregorian by default, a named calendar, or your own world's.

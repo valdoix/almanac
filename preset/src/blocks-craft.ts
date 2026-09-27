@@ -134,7 +134,7 @@ export const craftBlocks = [
         ["letter", "note", "phone", "sign", "notice", "news", "screen", "item", "map", "receipt", "photo", "journal", "omen", "dossier", "contract", "feed", "menu", "ticket", "song", "status"].map((k) => [k, k[0].toUpperCase() + k.slice(1)] as [string, string])),
       sw("meters", "Stat meters", "Status artifacts may carry meters. Best for game-like stories.", 0),
       sel("thoughts_scope", "Whose thoughts", "Who appears in the Unspoken register.", "spotlight", [["spotlight", "Spotlight (1–2)"], ["shift", "Those whose stance changed"], ["present", "Everyone present"]]),
-      sel("theme", "Skin", "Visual skin (the Ledger extension applies it).", "auto", [["auto", "Auto (by lead genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]]),
+      sel("theme", "Skin", "Visual skin (the Ledger extension applies it).", "auto", [["auto", "Auto (by lead genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"], ["dossier", "Dossier"], ["scriptorium", "Scriptorium"], ["arcana", "Arcana"], ["orbital", "Orbital"], ["posy", "Posy"], ["lumiverse", "Follow Lumiverse"]]),
     ],
   },
   {

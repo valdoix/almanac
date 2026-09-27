@@ -2217,6 +2217,36 @@
               "id": "candy",
               "label": "Candy",
               "value": "candy"
+            },
+            {
+              "id": "dossier",
+              "label": "Dossier",
+              "value": "dossier"
+            },
+            {
+              "id": "scriptorium",
+              "label": "Scriptorium",
+              "value": "scriptorium"
+            },
+            {
+              "id": "arcana",
+              "label": "Arcana",
+              "value": "arcana"
+            },
+            {
+              "id": "orbital",
+              "label": "Orbital",
+              "value": "orbital"
+            },
+            {
+              "id": "posy",
+              "label": "Posy",
+              "value": "posy"
+            },
+            {
+              "id": "lumiverse",
+              "label": "Follow Lumiverse",
+              "value": "lumiverse"
             }
           ]
         }

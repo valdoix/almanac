@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ALMANAC Skins</title>
+<meta name="description" content="Mockups of eleven ALMANAC skins, each in light and dark: the six originals redone to stand apart, plus Dossier, Scriptorium, Arcana, Orbital and Posy.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,600;1,400&family=Caveat:wght@500;700&family=Chakra+Petch:wght@500;600;700&family=Cinzel:wght@500;700&family=Cinzel+Decorative:wght@700&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500;1,600&family=Courier+Prime:ital@0;1&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&family=DM+Serif+Display:ital@0;1&family=Dancing+Script:wght@600&family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Fredoka:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,500;0,600;1,500&family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Libre+Franklin:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=Nunito:wght@400;600;700&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Reenie+Beanie&family=Schibsted+Grotesk:wght@400;500;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&family=Space+Grotesk:wght@400;500;700&family=Space+Mono&family=Syne:wght@600;700;800&family=UnifrakturMaguntia&family=Young+Serif&display=swap">
+<style>
+/* ═══════ Showcase chrome (follows the viewer, or the switch at the top) ═══════ */
+:root{
+  --bg:#f4f3ef; --bg-2:#ebe9e3; --ink:#1d1d1f; --muted:#66655f; --line:#d9d6ce; --hi:#8a5d0c;
+  --sans:"Schibsted Grotesk","Segoe UI",system-ui,sans-serif; --mono:"DM Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111216;--bg-2:#18191e;--ink:#ecebe6;--muted:#9b9990;--line:#2a2b31;--hi:#e9c77b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#111216;--bg-2:#18191e;--ink:#ecebe6;--muted:#9b9990;--line:#2a2b31;--hi:#e9c77b;color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);padding:0 16px 72px}
+.wrap{max-width:1240px;margin:0 auto}
+header.top{padding:44px 0 12px;display:grid;gap:12px}
+.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+h1{font:700 clamp(30px,5vw,46px)/1.05 var(--sans);letter-spacing:-.02em;margin:0;text-wrap:balance}
+.lede{margin:0;max-width:70ch;color:color-mix(in oklab,var(--ink) 82%,var(--bg))}
+code{font:400 .88em/1 var(--mono);background:var(--bg-2);border:1px solid var(--line);padding:1px 5px;border-radius:5px}
+.bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px 0;background:color-mix(in oklab,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.jump{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 520px}
+.jump a{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);text-decoration:none;font-weight:500;font-size:13px;white-space:nowrap}
+.jump a i{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg-2)}
+.seg button{font:500 13px/1 var(--sans);padding:8px 12px;border:0;background:transparent;color:var(--muted);cursor:pointer;min-height:34px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.seg-label{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--hi);outline-offset:2px}
+h2.group{margin:44px 0 0;font:700 13px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+
+section.skin{border-top:1px solid var(--line);padding:36px 0 8px;display:grid;gap:20px;scroll-margin-top:64px}
+.intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:10px 44px;align-items:start}
+@media (max-width:860px){.intro{grid-template-columns:minmax(0,1fr)}}
+.intro .num{font:500 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.intro h3{margin:8px 0 4px;font:700 32px/1.1 var(--sans);letter-spacing:-.01em}
+.intro .vibe{margin:0 0 10px;font:500 13px/1.4 var(--mono);color:var(--hi)}
+.intro .pitch{margin:0}
+.intro .was{margin:10px 0 0;font-size:13.5px;color:var(--muted)}
+.intro .was b{color:var(--ink);font-weight:600}
+.intro ul{margin:0;padding-left:18px;display:grid;gap:7px;color:color-mix(in oklab,var(--ink) 78%,var(--bg))}
+.intro ul b{color:var(--ink);font-weight:600}
+.sw{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;margin-top:14px}
+.sw small{font:500 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.sw div{display:flex;flex-wrap:wrap;gap:5px}
+.sw i{width:24px;height:24px;border-radius:50%;border:1px solid color-mix(in oklab,var(--ink) 16%,transparent)}
+.faces{margin-top:10px;font:400 12px/1.6 var(--mono);color:var(--muted)}
+.row2{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+details.tok summary{cursor:pointer;font:500 12px/1 var(--mono);color:var(--muted);padding:6px 0}
+details.tok pre{margin:6px 0 0;padding:12px 14px;border-radius:10px;background:var(--bg-2);border:1px solid var(--line);overflow-x:auto;font:400 11.5px/1.55 var(--mono);white-space:pre;max-height:340px}
+
+/* ═══════ Shared components (drawn only with --alm-* tokens) ═══════ */
+.stage{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:18px;padding:22px;border-radius:22px;
+  background:var(--alm-panel-2);background-image:var(--alm-texture);border:1px solid color-mix(in oklab,var(--alm-line) 60%,transparent);color:var(--alm-ink);transition:background-color .25s}
+@media (max-width:900px){.stage{grid-template-columns:minmax(0,1fr);padding:14px}}
+.chat,.drawer{min-width:0;font-family:var(--alm-font-body)}
+.chat{position:relative;background:var(--alm-panel);border:1px solid var(--alm-line);border-radius:var(--alm-radius);padding:22px 22px 18px;box-shadow:var(--alm-shadow)}
+@media (max-width:560px){.chat{padding:16px 14px 14px}}
+.hdr{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font:500 12px/1.4 var(--alm-font-mono);color:var(--alm-muted);letter-spacing:.03em}
+.hdr b{color:var(--alm-accent);font-weight:500}
+.place{margin-top:6px;font:500 12px/1.4 var(--alm-font-mono);color:var(--alm-muted)}
+.place em{font-style:normal;color:var(--alm-ink)}
+.title{margin:14px 0 10px;font:600 28px/1.12 var(--alm-font-display);color:var(--alm-ink)}
+.prose{margin:0 0 6px;line-height:1.62;font-size:15.5px}
+.chapter{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;margin:22px 0 18px;text-align:center}
+.chapter::before,.chapter::after{content:"";height:10px;background:radial-gradient(circle,var(--alm-gold) 0 2.5px,transparent 3px) center/10px 10px no-repeat,linear-gradient(var(--alm-gold),var(--alm-gold)) center/100% 1px no-repeat}
+.chapter small{display:block;font:500 10.5px/1 var(--alm-font-mono);letter-spacing:.3em;text-transform:uppercase;color:var(--alm-accent)}
+.chapter b{display:block;margin-top:6px;font:600 italic 24px/1.1 var(--alm-font-display)}
+.say{--c:var(--alm-muted);display:grid;grid-template-columns:44px minmax(0,1fr);gap:0 14px;margin:20px 0 14px;align-items:start}
+.say .av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:var(--alm-on-voice);font:700 19px/1 var(--alm-font-display);
+  box-shadow:0 0 0 2.5px var(--alm-panel),0 0 0 4.5px color-mix(in oklab,var(--c) 45%,transparent)}
+.say .bub{position:relative;min-width:0;padding:18px 18px 12px;border-radius:6px var(--alm-radius) var(--alm-radius) var(--alm-radius);
+  background:linear-gradient(135deg,color-mix(in oklab,var(--c) 14%,var(--alm-panel)),color-mix(in oklab,var(--c) 4%,var(--alm-panel)) 70%);
+  border:1px solid color-mix(in oklab,var(--c) 30%,var(--alm-line));box-shadow:var(--alm-lift)}
+.say .tag{position:absolute;top:-10px;left:14px;display:inline-flex;gap:7px;align-items:center;padding:4px 9px;border-radius:6px;background:var(--c);color:var(--alm-on-voice);
+  font:500 10.5px/1 var(--alm-font-mono);letter-spacing:.16em;text-transform:uppercase}
+.say .tag i{font-style:italic;letter-spacing:.02em;text-transform:none;font-family:var(--alm-font-body);font-size:12px;padding-left:7px;border-left:1px solid color-mix(in oklab,var(--alm-on-voice) 45%,transparent)}
+.say .line{display:block;font-size:1.06em;line-height:1.5}
+.say .beat{display:block;margin-top:8px;padding-top:7px;border-top:1px dashed color-mix(in oklab,var(--c) 25%,var(--alm-line));color:var(--alm-muted);font-size:.9em;font-style:italic}
+.say.user{grid-template-columns:minmax(0,1fr) 44px}
+.say.user .av{grid-column:2;grid-row:1}
+.say.user .bub{grid-column:1;grid-row:1;text-align:right;border-radius:var(--alm-radius) 6px var(--alm-radius) var(--alm-radius)}
+.say.user .tag{left:auto;right:14px}
+.thk{--c:var(--alm-muted);display:block;width:fit-content;max-width:88%;margin:16px 0 18px 58px;padding:10px 20px 12px;border-radius:30px;
+  background:color-mix(in oklab,var(--c) 8%,var(--alm-panel));border:1.5px dashed color-mix(in oklab,var(--c) 50%,var(--alm-line));
+  font:600 22px/1.25 var(--alm-font-hand);color:color-mix(in oklab,var(--c) 62%,var(--alm-ink))}
+.thk small{display:block;font:500 9.5px/1.6 var(--alm-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--c)}
+@media (max-width:560px){.thk{margin-left:0;max-width:100%}}
+.drawer{display:grid;gap:12px;align-content:start}
+.sky{position:relative;overflow:hidden;border-radius:var(--alm-radius);padding:16px;color:#fff;background:var(--sky);box-shadow:var(--alm-shadow);isolation:isolate}
+.sky .row{display:flex;align-items:center;gap:12px}
+.sky .clock{font:600 40px/1 var(--alm-font-display);letter-spacing:-.01em;text-shadow:0 1px 10px rgba(0,0,0,.25)}
+.sky .date{font:500 12px/1.35 var(--alm-font-mono);opacity:.95;max-width:22ch;text-shadow:0 1px 6px rgba(0,0,0,.3)}
+.sky .moon{margin-left:auto;flex:none;width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 60% 40%,#f7efd9 0 45%,#bdb4a2 75%);box-shadow:inset 11px 0 0 0 rgba(12,16,44,.8),0 0 22px rgba(247,239,217,.3)}
+.sky .moons{margin-left:auto;display:flex;gap:6px;align-items:center}
+.sky .moons i{border-radius:50%;display:block}
+.sky .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.sky .chips span{padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.24);font:500 11px/1.2 var(--alm-font-mono);backdrop-filter:blur(3px)}
+.card{background:var(--alm-panel);border:1px solid var(--alm-line);border-radius:var(--alm-r-sm);padding:14px;box-shadow:var(--alm-lift)}
+.card h4{margin:0 0 10px;font:500 10.5px/1 var(--alm-font-mono);letter-spacing:.2em;text-transform:uppercase;color:var(--alm-accent)}
+.who{--c:var(--alm-muted);display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:7px 0;border-top:1px solid color-mix(in oklab,var(--alm-line) 70%,transparent)}
+.who:first-of-type{border-top:0;padding-top:0}
+.who .dot{width:28px;height:28px;border-radius:50%;background:var(--c);color:var(--alm-on-voice);display:grid;place-items:center;font:700 13px/1 var(--alm-font-display)}
+.who b{font-weight:600;font-size:14px}
+.who small{display:block;color:var(--alm-muted);font-size:12px}
+.meter{grid-column:2/4;height:6px;border-radius:99px;background:color-mix(in oklab,var(--alm-ink) 10%,transparent);overflow:hidden}
+.meter i{display:block;height:100%;width:var(--v);background:var(--c);border-radius:inherit}
+.mood{font:500 11px/1 var(--alm-font-mono);color:var(--c);text-transform:lowercase}
+.ledger{margin:0;padding:0;list-style:none;display:grid;gap:6px;font:400 12.5px/1.45 var(--alm-font-mono)}
+.ledger li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;align-items:start}
+.ledger li span{color:var(--alm-muted)}
+.ledger em{font-style:normal;color:var(--alm-good)}
+.ledger u{text-decoration:none;color:var(--alm-danger)}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.btn{font:500 12px/1 var(--alm-font-body);padding:8px 12px;border-radius:calc(var(--alm-r-sm) - 2px);border:1px solid var(--alm-line);border-bottom-width:3px;background:var(--alm-panel-2);color:var(--alm-ink)}
+.btn.primary{background:var(--alm-accent);border-color:color-mix(in oklab,var(--alm-accent) 70%,#000);color:var(--alm-on-accent)}
+.stamp{display:inline-block;padding:3px 8px;border:1.5px solid var(--alm-accent);color:var(--alm-accent);font:600 10px/1 var(--alm-font-mono);letter-spacing:.22em;text-transform:uppercase;transform:rotate(-3deg)}
+
+/* ═══════════════════ REDONE ORIGINALS ═══════════════════ */
+
+/* ── ALMANAC · the field almanac (default) ── */
+[data-skin="almanac"]{--alm-font-display:"Fraunces",Georgia,serif;--alm-font-body:"Newsreader",Georgia,serif;--alm-font-mono:"DM Mono",ui-monospace,monospace;--alm-font-hand:"Caveat",cursive;--alm-radius:14px;--alm-r-sm:10px}
+[data-skin="almanac"][data-mode="light"]{--alm-panel:#fbf5e8;--alm-panel-2:#f0e4cc;--alm-ink:#2b2118;--alm-muted:#78674f;--alm-line:#dfcca8;--alm-accent:#b8501f;--alm-accent-2:#2f5d7c;--alm-gold:#c4922c;--alm-good:#3a7f50;--alm-warn:#b27a14;--alm-danger:#b8332a;--alm-on-voice:#fff;--alm-on-accent:#fff;
+  --v1:#2f5d7c;--v2:#7a4b8c;--v3:#b8501f;--alm-shadow:0 18px 36px -26px rgba(70,40,10,.55),0 2px 6px -3px rgba(70,40,10,.18);--alm-lift:0 10px 22px -18px rgba(70,40,10,.55);
+  --alm-texture:radial-gradient(rgba(43,33,24,.08) 1px,transparent 1.3px) 0 0/15px 15px;--sky:linear-gradient(175deg,#f3a45c,#d4726a 45%,#56699f)}
+[data-skin="almanac"][data-mode="dark"]{--alm-panel:#241c14;--alm-panel-2:#19130d;--alm-ink:#f1e6d3;--alm-muted:#b3a189;--alm-line:#3e3226;--alm-accent:#ee8a55;--alm-accent-2:#86b6d8;--alm-gold:#e2b456;--alm-good:#86cf98;--alm-warn:#e9bd60;--alm-danger:#f28072;--alm-on-voice:#19130d;--alm-on-accent:#19130d;
+  --v1:#86b6d8;--v2:#cfa3e6;--v3:#ee8a55;--alm-shadow:0 20px 40px -26px rgba(0,0,0,.85);--alm-lift:0 10px 24px -18px rgba(0,0,0,.9);
+  --alm-texture:radial-gradient(rgba(241,230,211,.06) 1px,transparent 1.3px) 0 0/15px 15px;--sky:linear-gradient(175deg,#2b3566,#171b3a 60%,#0f1026)}
+[data-skin="almanac"] .title{font-style:italic;font-weight:600;letter-spacing:-.01em}
+[data-skin="almanac"] .chapter small::before{content:"☉  ";color:var(--alm-gold);letter-spacing:0}
+[data-skin="almanac"] .card h4{display:flex;gap:8px;align-items:center}
+[data-skin="almanac"] .card h4::after{content:"";flex:1;border-top:1px dotted var(--alm-line)}
+[data-skin="almanac"] .ledger li span{background:linear-gradient(90deg,var(--alm-line) 50%,transparent 0) 0 100%/4px 1px repeat-x;padding-bottom:3px}
+
+/* ── SOLAR · editorial ── */
+[data-skin="solar"]{--alm-font-display:"Playfair Display",Georgia,serif;--alm-font-body:"Libre Franklin","Segoe UI",system-ui,sans-serif;--alm-font-mono:"Libre Franklin",system-ui,sans-serif;--alm-font-hand:"Playfair Display",Georgia,serif;--alm-radius:0px;--alm-r-sm:0px;--alm-texture:none}
+[data-skin="solar"][data-mode="light"]{--alm-panel:#ffffff;--alm-panel-2:#f1efe8;--alm-ink:#111111;--alm-muted:#595959;--alm-line:#d9d6cd;--alm-accent:#ffd21f;--alm-accent-2:#e23d28;--alm-gold:#ffd21f;--alm-good:#1f7a45;--alm-warn:#a86d00;--alm-danger:#d42f1c;--alm-on-voice:#fff;--alm-on-accent:#111;
+  --v1:#1f4fd1;--v2:#e23d28;--v3:#111111;--rule:#111111;--alm-shadow:none;--alm-lift:none;--sky:radial-gradient(circle at 78% 30%,#fff3b0 0 9%,#ffd21f 10% 22%,transparent 23%),linear-gradient(180deg,#ff9b3d,#f4602c)}
+[data-skin="solar"][data-mode="dark"]{--alm-panel:#121212;--alm-panel-2:#050505;--alm-ink:#f6f3ea;--alm-muted:#a6a39b;--alm-line:#2f2f2f;--alm-accent:#ffd21f;--alm-accent-2:#ff6e57;--alm-gold:#ffd21f;--alm-good:#6fd39a;--alm-warn:#ffc246;--alm-danger:#ff6e57;--alm-on-voice:#050505;--alm-on-accent:#111;
+  --v1:#86a8ff;--v2:#ff6e57;--v3:#ffd21f;--rule:#f6f3ea;--alm-shadow:none;--alm-lift:none;--sky:radial-gradient(circle at 78% 30%,#fff3b0 0 7%,#ffd21f 8% 12%,transparent 13%),linear-gradient(180deg,#1d1d1d,#050505)}
+[data-skin="solar"] .chat{border:0;border-top:6px solid var(--rule)}
+[data-skin="solar"] .hdr{text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700}
+[data-skin="solar"] .hdr b{color:var(--alm-ink);background:var(--alm-accent);color:#111;padding:1px 5px}
+[data-skin="solar"] .title{font-weight:900;font-size:36px;line-height:1.02;letter-spacing:-.02em}
+[data-skin="solar"] .title span{background:linear-gradient(transparent 58%,var(--alm-accent) 58% 92%,transparent 92%);box-decoration-break:clone;-webkit-box-decoration-break:clone}
+[data-skin="solar"] .prose:first-of-type::first-line{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:.92em}
+[data-skin="solar"] .say{grid-template-columns:36px minmax(0,1fr)}
+[data-skin="solar"] .say.user{grid-template-columns:minmax(0,1fr) 36px}
+[data-skin="solar"] .say .av{width:36px;height:36px;border-radius:0;box-shadow:none;font-family:"Libre Franklin",sans-serif;font-size:15px}
+[data-skin="solar"] .say .bub{background:none;border:0;border-top:2px solid var(--c);box-shadow:none;padding:10px 0 4px}
+[data-skin="solar"] .say .tag{position:static;background:none;color:var(--c);padding:0 0 6px;font-weight:700;letter-spacing:.14em}
+[data-skin="solar"] .say .tag i{color:var(--alm-muted);border-left-color:var(--alm-line)}
+[data-skin="solar"] .say .line{font:italic 700 22px/1.25 var(--alm-font-display)}
+[data-skin="solar"] .thk{border-radius:0;border:0;border-left:6px solid var(--alm-accent);background:none;font:italic 700 19px/1.3 var(--alm-font-display);padding:2px 0 2px 14px}
+[data-skin="solar"] .chapter{grid-template-columns:auto 1fr;text-align:left;border-top:2px solid var(--rule);padding-top:10px}
+[data-skin="solar"] .chapter::before{display:none}
+[data-skin="solar"] .chapter::after{background:none}
+[data-skin="solar"] .chapter b{font-style:normal;font-weight:900;font-size:26px}
+[data-skin="solar"] .chapter small{color:var(--alm-accent-2);font-weight:700}
+[data-skin="solar"] .card{border:0;border-top:3px solid var(--rule);padding:12px 0 4px;background:none}
+[data-skin="solar"] .card h4{color:var(--alm-ink);font-weight:700;letter-spacing:.16em}
+[data-skin="solar"] .who .dot{border-radius:0}
+[data-skin="solar"] .meter{border-radius:0;height:4px}
+[data-skin="solar"] .sky .clock{font-weight:900}
+[data-skin="solar"] .btn{border:2px solid var(--rule);border-radius:0;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:11px}
+[data-skin="solar"] .btn.primary{border-color:var(--rule)}
+
+/* ── NOCTURNE · gothic romance ── */
+[data-skin="nocturne"]{--alm-font-display:"Cormorant Garamond",Georgia,serif;--alm-font-body:"Crimson Pro",Georgia,serif;--alm-font-mono:"Cormorant Garamond",Georgia,serif;--alm-font-hand:"Cormorant Garamond",Georgia,serif;--alm-radius:10px;--alm-r-sm:6px}
+[data-skin="nocturne"][data-mode="light"]{--alm-panel:#f7f1ec;--alm-panel-2:#eadcd5;--alm-ink:#28131a;--alm-muted:#7a5d64;--alm-line:#d9c2c3;--alm-accent:#8e1b2e;--alm-accent-2:#3f2c55;--alm-gold:#9c7a3c;--alm-good:#3f6d4e;--alm-warn:#9a6a1a;--alm-danger:#8e1b2e;--alm-on-voice:#fff;--alm-on-accent:#fff;
+  --v1:#8e1b2e;--v2:#4c3a78;--v3:#6d4a2b;--alm-shadow:0 22px 40px -28px rgba(60,10,25,.55);--alm-lift:0 10px 22px -18px rgba(60,10,25,.45);
+  --alm-texture:radial-gradient(60% 50% at 50% 0%,rgba(142,27,46,.07),transparent 70%),repeating-linear-gradient(45deg,rgba(40,19,26,.025) 0 1px,transparent 1px 9px);--sky:linear-gradient(175deg,#c9a3a6,#7c3c4f 55%,#3c1626)}
+[data-skin="nocturne"][data-mode="dark"]{--alm-panel:#150c10;--alm-panel-2:#0b0609;--alm-ink:#f0e2df;--alm-muted:#a88c91;--alm-line:#3b2229;--alm-accent:#e4495f;--alm-accent-2:#bea6d4;--alm-gold:#d4b27a;--alm-good:#8ccaa0;--alm-warn:#e3b465;--alm-danger:#ff7a86;--alm-on-voice:#0b0609;--alm-on-accent:#0b0609;
+  --v1:#e4495f;--v2:#bea6d4;--v3:#d4b27a;--alm-shadow:0 26px 50px -28px rgba(0,0,0,.95);--alm-lift:0 14px 30px -18px rgba(0,0,0,.95);
+  --alm-texture:radial-gradient(60% 50% at 50% 0%,rgba(228,73,95,.09),transparent 70%),repeating-linear-gradient(45deg,rgba(240,226,223,.02) 0 1px,transparent 1px 9px);--sky:radial-gradient(40% 60% at 85% 30%,rgba(255,190,120,.35),transparent 70%),linear-gradient(175deg,#3a0f1c,#0b0609)}
+[data-skin="nocturne"] .title{font-style:italic;font-weight:600;font-size:34px;color:var(--alm-accent)}
+[data-skin="nocturne"] .prose{font-size:17px}
+[data-skin="nocturne"] .hdr,[data-skin="nocturne"] .place{font-size:14px;font-style:italic;letter-spacing:.02em}
+[data-skin="nocturne"] .say .av{border-radius:50% 50% 4px 4px;font-style:italic;font-size:22px}
+[data-skin="nocturne"] .say .tag{font-size:13px;letter-spacing:.08em;border-radius:2px;font-style:italic;text-transform:none}
+[data-skin="nocturne"] .say .line{font-size:1.14em}
+[data-skin="nocturne"] .thk{border:0;border-radius:0;background:none;padding:0 0 0 18px;font:italic 500 21px/1.3 var(--alm-font-hand);border-left:1px solid var(--c);position:relative}
+[data-skin="nocturne"] .thk::before{content:"⸙";position:absolute;left:-7px;top:-6px;color:var(--c);background:var(--alm-panel);font-size:14px}
+[data-skin="nocturne"] .chapter small{font-size:13px;letter-spacing:.2em;font-style:italic;text-transform:none}
+[data-skin="nocturne"] .chapter::before,[data-skin="nocturne"] .chapter::after{background:linear-gradient(90deg,transparent,var(--alm-accent) 50%,transparent) center/100% 1px no-repeat}
+[data-skin="nocturne"] .chapter b::before,[data-skin="nocturne"] .chapter b::after{content:" ❧ ";color:var(--alm-gold);font-style:normal;font-size:.7em}
+[data-skin="nocturne"] .card{box-shadow:inset 0 0 0 4px var(--alm-panel),inset 0 0 0 5px var(--alm-line),var(--alm-lift)}
+[data-skin="nocturne"] .card h4,[data-skin="nocturne"] .ledger{font-size:14px;letter-spacing:.06em}
+[data-skin="nocturne"] .card h4{text-transform:none;font-style:italic;font-size:16px}
+[data-skin="nocturne"] .sky .clock{font-style:italic;font-weight:500;font-size:44px}
+
+/* ── BOTANICAL · the herbarium ── */
+[data-skin="botanical"]{--alm-font-display:"Young Serif",Georgia,serif;--alm-font-body:"Source Serif 4",Georgia,serif;--alm-font-mono:"Courier Prime","Courier New",monospace;--alm-font-hand:"Caveat",cursive;--alm-radius:4px;--alm-r-sm:3px}
+[data-skin="botanical"][data-mode="light"]{--alm-panel:#f6f1e3;--alm-panel-2:#dcceab;--alm-ink:#2a291d;--alm-muted:#6c6750;--alm-line:#c9bb95;--alm-accent:#5f7222;--alm-accent-2:#a65a1a;--alm-gold:#b3862a;--alm-good:#4f7a2a;--alm-warn:#a4701c;--alm-danger:#a8401e;--alm-on-voice:#fff;--alm-on-accent:#fff;
+  --v1:#5f7222;--v2:#a65a1a;--v3:#3d6a6a;--alm-shadow:0 1px 0 #cdbf98,0 18px 30px -24px rgba(60,50,20,.55);--alm-lift:0 1px 0 #d8cca8;
+  --alm-texture:radial-gradient(rgba(90,70,30,.10) .8px,transparent 1.2px) 0 0/5px 5px,radial-gradient(50% 40% at 20% 30%,rgba(120,90,40,.10),transparent 70%);--sky:linear-gradient(175deg,#d6dba5,#8fa36a 55%,#4e6a3e)}
+[data-skin="botanical"][data-mode="dark"]{--alm-panel:#1c1d15;--alm-panel-2:#12130d;--alm-ink:#ece7d2;--alm-muted:#aaa68c;--alm-line:#37382b;--alm-accent:#b7c86b;--alm-accent-2:#e59c57;--alm-gold:#dab65e;--alm-good:#a3cf73;--alm-warn:#e6b85e;--alm-danger:#ee8266;--alm-on-voice:#12130d;--alm-on-accent:#12130d;
+  --v1:#b7c86b;--v2:#e59c57;--v3:#8fc2bd;--alm-shadow:0 20px 36px -26px rgba(0,0,0,.9);--alm-lift:none;
+  --alm-texture:radial-gradient(rgba(236,231,210,.05) .8px,transparent 1.2px) 0 0/5px 5px;--sky:linear-gradient(175deg,#2c3a22,#141a10)}
+[data-skin="botanical"] .chat::before,[data-skin="botanical"] .chat::after{content:"";position:absolute;top:-9px;width:74px;height:20px;background:color-mix(in oklab,var(--alm-gold) 35%,transparent);opacity:.8}
+[data-skin="botanical"] .chat::before{left:22px;transform:rotate(-4deg)}
+[data-skin="botanical"] .chat::after{right:22px;transform:rotate(3deg)}
+[data-skin="botanical"] .title{font-size:28px;font-weight:400}
+[data-skin="botanical"] .title::after{content:" ❦";color:var(--alm-accent);font-size:.7em}
+[data-skin="botanical"] .say .av{border-radius:4px;box-shadow:none;border:1px solid var(--alm-ink);font-family:var(--alm-font-mono);font-weight:400}
+[data-skin="botanical"] .say .bub{border-radius:2px;background:var(--alm-panel);border-color:var(--alm-line);box-shadow:none;border-left:3px solid var(--c)}
+[data-skin="botanical"] .say.user .bub{border-left-width:1px;border-right:3px solid var(--c)}
+[data-skin="botanical"] .say .tag{border-radius:0;background:var(--alm-panel);color:var(--c);border:1px solid var(--c);letter-spacing:.08em}
+[data-skin="botanical"] .say .tag i{border-left-color:var(--alm-line)}
+[data-skin="botanical"] .thk{border-radius:2px;border:0;background:none;padding:0 0 0 4px;font-size:24px;color:color-mix(in oklab,var(--alm-ink) 70%,var(--alm-panel))}
+[data-skin="botanical"] .chapter::before,[data-skin="botanical"] .chapter::after{background:linear-gradient(var(--alm-ink),var(--alm-ink)) center/100% 1px no-repeat}
+[data-skin="botanical"] .chapter b{font-style:normal;font-size:22px}
+[data-skin="botanical"] .chapter small{font-size:12px;letter-spacing:.14em}
+[data-skin="botanical"] .card{border:1px solid var(--alm-ink);box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px var(--alm-line)}
+[data-skin="botanical"] .card h4{color:var(--alm-ink);letter-spacing:.1em;font-size:12px;border-bottom:1px solid var(--alm-line);padding-bottom:7px}
+[data-skin="botanical"] .card h4::before{content:"No. 047 · ";color:var(--alm-muted)}
+[data-skin="botanical"] .who .dot{border-radius:3px}
+[data-skin="botanical"] .meter{border-radius:0}
+[data-skin="botanical"] .btn{border-radius:2px;border-bottom-width:1px;font-family:var(--alm-font-mono)}
+
+/* ── PRISM · holographic ── */
+[data-skin="prism"]{--alm-font-display:"Syne","Segoe UI",system-ui,sans-serif;--alm-font-body:"Space Grotesk","Segoe UI",system-ui,sans-serif;--alm-font-mono:"Space Mono",ui-monospace,monospace;--alm-font-hand:"Space Grotesk",system-ui,sans-serif;--alm-radius:16px;--alm-r-sm:12px}
+[data-skin="prism"][data-mode="light"]{--alm-panel:#fcfcff;--alm-panel-2:#eef0fa;--alm-ink:#15152c;--alm-muted:#5c5f80;--alm-line:#dcdff0;--alm-accent:#6d2fff;--alm-accent-2:#0096ab;--alm-gold:#e0a800;--alm-good:#0f9d6a;--alm-warn:#c98600;--alm-danger:#e0245e;--alm-on-voice:#fff;--alm-on-accent:#fff;
+  --v1:#6d2fff;--v2:#d61f73;--v3:#00869a;--holo:linear-gradient(115deg,#ff7ac6,#ffd86b 25%,#7df3e1 50%,#8fa8ff 75%,#d78bff);
+  --alm-shadow:0 22px 44px -28px rgba(80,60,180,.45);--alm-lift:0 10px 24px -18px rgba(80,60,180,.4);
+  --alm-texture:radial-gradient(40% 50% at 10% 0%,rgba(255,122,198,.14),transparent 70%),radial-gradient(40% 50% at 90% 100%,rgba(125,243,225,.16),transparent 70%);--sky:linear-gradient(135deg,#ffb3dd,#ffe7a0 30%,#a8f5ea 60%,#b3c2ff)}
+[data-skin="prism"][data-mode="dark"]{--alm-panel:#0c0c16;--alm-panel-2:#05050b;--alm-ink:#eef0ff;--alm-muted:#9296b8;--alm-line:#24253c;--alm-accent:#b28cff;--alm-accent-2:#3ef2ff;--alm-gold:#ffe45e;--alm-good:#4be39a;--alm-warn:#ffc15e;--alm-danger:#ff6b9a;--alm-on-voice:#05050b;--alm-on-accent:#05050b;
+  --v1:#b28cff;--v2:#ff66b3;--v3:#3ef2ff;--holo:linear-gradient(115deg,#ff4fae,#ffe45e 25%,#3ef2ff 50%,#7a8cff 75%,#c86bff);
+  --alm-shadow:0 26px 50px -28px rgba(0,0,0,.95),0 0 36px -20px rgba(178,140,255,.5);--alm-lift:0 12px 28px -18px rgba(0,0,0,.95);
+  --alm-texture:radial-gradient(40% 50% at 10% 0%,rgba(255,79,174,.10),transparent 70%),radial-gradient(40% 50% at 90% 100%,rgba(62,242,255,.10),transparent 70%);--sky:radial-gradient(80% 60% at 20% 110%,rgba(62,242,255,.45),transparent 60%),radial-gradient(70% 60% at 90% -10%,rgba(255,79,174,.5),transparent 60%),#07071a}
+[data-skin="prism"] .chat,[data-skin="prism"] .card{border:1.5px solid transparent;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,var(--holo) border-box}
+[data-skin="prism"] .title{font-weight:800;font-size:32px;letter-spacing:-.02em;background:var(--holo);-webkit-background-clip:text;background-clip:text;color:transparent;filter:saturate(1.3) brightness(.85)}
+[data-skin="prism"][data-mode="dark"] .title{filter:none}
+[data-skin="prism"] .say .av{box-shadow:0 0 0 2.5px var(--alm-panel),0 0 0 4.5px transparent;background:var(--c);outline:2px solid transparent;position:relative}
+[data-skin="prism"] .say .av::after{content:"";position:absolute;inset:-5px;border-radius:50%;padding:2px;background:var(--holo);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+[data-skin="prism"] .say .tag{border-radius:99px}
+[data-skin="prism"] .thk{border-style:solid;border-color:color-mix(in oklab,var(--c) 40%,transparent);background:color-mix(in oklab,var(--c) 10%,transparent);backdrop-filter:blur(6px);font-size:16px;font-weight:500;font-style:italic;border-radius:14px}
+[data-skin="prism"] .chapter::before,[data-skin="prism"] .chapter::after{background:var(--holo) center/100% 2px no-repeat}
+[data-skin="prism"] .chapter b{font-style:normal;font-weight:800;font-size:24px}
+[data-skin="prism"] .meter i{background:var(--holo)}
+[data-skin="prism"] .sky .clock{font-weight:800}
+[data-skin="prism"][data-mode="light"] .sky{color:#15152c}
+[data-skin="prism"][data-mode="light"] .sky .chips span{background:rgba(255,255,255,.55);border-color:rgba(21,21,44,.12)}
+[data-skin="prism"][data-mode="light"] .sky .clock,[data-skin="prism"][data-mode="light"] .sky .date{text-shadow:none}
+[data-skin="prism"] .btn{border-radius:99px;border-bottom-width:1px}
+[data-skin="prism"] .btn.primary{background:var(--holo);color:#15152c;border-color:transparent}
+
+/* ── CANDY · sticker pop ── */
+[data-skin="candy"]{--alm-font-display:"Fredoka","Segoe UI Rounded",system-ui,sans-serif;--alm-font-body:"Fredoka","Segoe UI Rounded",system-ui,sans-serif;--alm-font-mono:"Fredoka",system-ui,sans-serif;--alm-font-hand:"Fredoka",system-ui,sans-serif;--alm-radius:22px;--alm-r-sm:16px}
+[data-skin="candy"][data-mode="light"]{--alm-panel:#fffdf4;--alm-panel-2:#fff1c2;--alm-ink:#1d1033;--alm-muted:#6a5e80;--alm-line:#1d1033;--alm-accent:#ff4fa3;--alm-accent-2:#28c994;--alm-gold:#ffc933;--alm-good:#12a978;--alm-warn:#d98a00;--alm-danger:#ff3b5c;--alm-on-voice:#fff;--alm-on-accent:#fff;
+  --v1:#7a5cff;--v2:#ff4fa3;--v3:#12a978;--pop:#1d1033;--alm-shadow:5px 5px 0 var(--pop);--alm-lift:3px 3px 0 var(--pop);
+  --alm-texture:radial-gradient(circle at 25% 25%,#ff9fcf 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#7fe3c1 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#b7a6ff 0 2.5px,transparent 3px) 0 0/60px 60px;--sky:linear-gradient(180deg,#8fd8ff,#c9b6ff 60%,#ffb3d9)}
+[data-skin="candy"][data-mode="dark"]{--alm-panel:#241a40;--alm-panel-2:#160f2b;--alm-ink:#fff4fb;--alm-muted:#c1b3df;--alm-line:#fff4fb;--alm-accent:#ff78bd;--alm-accent-2:#5ef2c0;--alm-gold:#ffd84d;--alm-good:#5ef2c0;--alm-warn:#ffc04d;--alm-danger:#ff6b86;--alm-on-voice:#160f2b;--alm-on-accent:#160f2b;
+  --v1:#a890ff;--v2:#ff78bd;--v3:#5ef2c0;--pop:#ff78bd;--alm-shadow:5px 5px 0 var(--pop);--alm-lift:3px 3px 0 #7a5cff;
+  --alm-texture:radial-gradient(circle at 25% 25%,#ff78bd 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#5ef2c0 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#ffd84d 0 2.5px,transparent 3px) 0 0/60px 60px;--sky:linear-gradient(180deg,#3a2a7a,#6b2f86 60%,#b23c8c)}
+[data-skin="candy"] .chat,[data-skin="candy"] .card{border:2.5px solid var(--alm-line)}
+[data-skin="candy"] .sky{border:2.5px solid var(--alm-line)}
+[data-skin="candy"] .title{font-weight:700;font-size:32px;text-shadow:3px 3px 0 var(--alm-gold)}
+[data-skin="candy"] .say .av{border:2.5px solid var(--alm-line);box-shadow:3px 3px 0 var(--alm-line);transform:rotate(-6deg)}
+[data-skin="candy"] .say.user .av{transform:rotate(6deg)}
+[data-skin="candy"] .say .bub{border:2.5px solid var(--alm-line);background:color-mix(in oklab,var(--c) 16%,var(--alm-panel));box-shadow:4px 4px 0 var(--c)}
+[data-skin="candy"] .say .tag{border:2px solid var(--alm-line);border-radius:99px;transform:rotate(-2deg);font-weight:600;letter-spacing:.06em}
+[data-skin="candy"] .say.user .tag{transform:rotate(2deg)}
+[data-skin="candy"] .say .line{font-size:1.1em}
+[data-skin="candy"] .thk{border:2.5px solid var(--alm-line);border-style:solid;background:var(--alm-panel);font-size:17px;font-weight:500;box-shadow:3px 3px 0 var(--c)}
+[data-skin="candy"] .chapter::before,[data-skin="candy"] .chapter::after{height:12px;background:radial-gradient(circle at 6px -2px,transparent 6px,var(--alm-accent) 6.5px 8.5px,transparent 9px) 0 0/12px 12px repeat-x}
+[data-skin="candy"] .chapter b{font-style:normal;font-weight:700;font-size:24px}
+[data-skin="candy"] .chapter small{font-weight:600}
+[data-skin="candy"] .card h4{font-weight:600;letter-spacing:.08em;font-size:12px}
+[data-skin="candy"] .who .dot{border:2px solid var(--alm-line)}
+[data-skin="candy"] .meter{height:10px;border:2px solid var(--alm-line);background:var(--alm-panel)}
+[data-skin="candy"] .sky .clock{font-weight:700}
+[data-skin="candy"] .sky .chips span{border:2px solid rgba(255,255,255,.7);background:rgba(255,255,255,.22);font-weight:600}
+[data-skin="candy"] .btn{border:2.5px solid var(--alm-line);border-radius:99px;box-shadow:3px 3px 0 var(--alm-line);font-weight:600}
+[data-skin="candy"] .btn.primary{border-color:var(--alm-line)}
+
+/* ═══════════════════ NEW ═══════════════════ */
+
+/* ── DOSSIER · serious ── */
+[data-skin="dossier"]{--alm-font-display:"IBM Plex Serif",Georgia,serif;--alm-font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;--alm-font-mono:"IBM Plex Mono",ui-monospace,monospace;--alm-font-hand:"Reenie Beanie",cursive;--alm-radius:4px;--alm-r-sm:3px}
+[data-skin="dossier"][data-mode="light"]{--alm-panel:#fbfaf7;--alm-panel-2:#ecebe5;--alm-ink:#17191c;--alm-muted:#5a5f67;--alm-line:#d4d1c9;--alm-accent:#8c1d1d;--alm-accent-2:#34506a;--alm-gold:#8a7a5a;--alm-good:#2f6b4a;--alm-warn:#946412;--alm-danger:#a32020;--alm-on-voice:#fff;--alm-on-accent:#fff;
+  --v1:#34506a;--v2:#6b5a2e;--v3:#8c1d1d;--alm-shadow:0 1px 0 rgba(0,0,0,.04),0 12px 26px -22px rgba(0,0,0,.45);--alm-lift:0 1px 2px rgba(0,0,0,.06);
+  --alm-texture:linear-gradient(transparent 31px,rgba(23,25,28,.05) 32px) 0 0/100% 32px;--sky:linear-gradient(160deg,#3a3f47,#1b1d21)}
+[data-skin="dossier"][data-mode="dark"]{--alm-panel:#17191c;--alm-panel-2:#0e0f11;--alm-ink:#e8e6e1;--alm-muted:#9aa0a8;--alm-line:#2d3137;--alm-accent:#e0534f;--alm-accent-2:#90b1cd;--alm-gold:#b9a67e;--alm-good:#7fc3a0;--alm-warn:#dcae57;--alm-danger:#ff6e68;--alm-on-voice:#0e0f11;--alm-on-accent:#0e0f11;
+  --v1:#90b1cd;--v2:#cdb27a;--v3:#e0534f;--alm-shadow:0 14px 30px -22px rgba(0,0,0,.9);--alm-lift:none;
+  --alm-texture:linear-gradient(transparent 31px,rgba(232,230,225,.04) 32px) 0 0/100% 32px;--sky:linear-gradient(160deg,#23272d,#0b0c0e)}
+[data-skin="dossier"] .chapter::before,[data-skin="dossier"] .chapter::after{background:linear-gradient(var(--alm-ink),var(--alm-ink)) center/100% 1px no-repeat}
+[data-skin="dossier"] .chapter b{font-style:normal;font-weight:600;font-size:19px;text-transform:uppercase;letter-spacing:.12em}
+[data-skin="dossier"] .say .av{border-radius:3px;box-shadow:none}
+[data-skin="dossier"] .say .bub{background:var(--alm-panel);border-left:3px solid var(--c);border-radius:2px;box-shadow:none}
+[data-skin="dossier"] .say.user .bub{border-left:1px solid var(--alm-line);border-right:3px solid var(--c)}
+[data-skin="dossier"] .say .tag{position:static;margin:-4px 0 8px;background:none;color:var(--c);padding:0}
+[data-skin="dossier"] .say .tag i{border-left-color:var(--alm-line);color:var(--alm-muted)}
+[data-skin="dossier"] .thk{border-radius:2px;border-style:solid;border-width:0 0 0 2px;background:transparent;padding:4px 0 4px 14px;font-size:25px}
+[data-skin="dossier"] .hdr .stamp{margin-left:auto}
+[data-skin="dossier"] .sky .clock{font-family:var(--alm-font-mono);font-weight:500}
+
+/* ── SCRIPTORIUM · medieval ── */
+[data-skin="scriptorium"]{--alm-font-display:"IM Fell English",Georgia,serif;--alm-font-body:"IM Fell English",Georgia,serif;--alm-font-mono:"IM Fell English SC",Georgia,serif;--alm-font-hand:"IM Fell English",Georgia,serif;--alm-radius:3px;--alm-r-sm:2px}
+[data-skin="scriptorium"][data-mode="light"]{--alm-panel:#f3e7cb;--alm-panel-2:#e3cfa3;--alm-ink:#2a1c10;--alm-muted:#6c573b;--alm-line:#c4a770;--alm-accent:#a8261c;--alm-accent-2:#1f3f86;--alm-gold:#b5892a;--alm-good:#3d6b2e;--alm-warn:#a8741a;--alm-danger:#a8261c;--alm-on-voice:#f7ecd2;--alm-on-accent:#f7ecd2;
+  --v1:#1f3f86;--v2:#3d6b2e;--v3:#a8261c;--alm-shadow:0 2px 0 #c7ab77,0 22px 36px -26px rgba(60,35,10,.7);--alm-lift:none;
+  --alm-texture:radial-gradient(40% 50% at 18% 22%,rgba(150,100,40,.10),transparent 70%),radial-gradient(35% 40% at 82% 70%,rgba(120,80,30,.09),transparent 70%),radial-gradient(rgba(90,60,20,.07) 1px,transparent 1.4px) 0 0/9px 9px;--sky:linear-gradient(170deg,#23479a,#15285a 60%,#0e1a3b)}
+[data-skin="scriptorium"][data-mode="dark"]{--alm-panel:#221810;--alm-panel-2:#150e08;--alm-ink:#efdfbf;--alm-muted:#b19a75;--alm-line:#4c3a24;--alm-accent:#e6614a;--alm-accent-2:#86a3e6;--alm-gold:#e2b34f;--alm-good:#93c46f;--alm-warn:#e2b34f;--alm-danger:#ff735c;--alm-on-voice:#150e08;--alm-on-accent:#150e08;
+  --v1:#86a3e6;--v2:#93c46f;--v3:#e6614a;--alm-shadow:0 2px 0 #3a2a18,0 26px 40px -26px rgba(0,0,0,.9);--alm-lift:none;
+  --alm-texture:radial-gradient(40% 50% at 70% 10%,rgba(255,180,80,.10),transparent 70%),radial-gradient(rgba(239,223,191,.04) 1px,transparent 1.4px) 0 0/9px 9px;--sky:radial-gradient(30% 50% at 12% 100%,rgba(255,170,70,.35),transparent 70%),linear-gradient(170deg,#15285a,#070d20)}
+[data-skin="scriptorium"] .chat{border-color:var(--alm-line);outline:1px solid var(--alm-line);outline-offset:-7px;padding:30px 30px 22px}
+@media (max-width:560px){[data-skin="scriptorium"] .chat{padding:22px 18px 16px}}
+[data-skin="scriptorium"] .hdr,[data-skin="scriptorium"] .place{letter-spacing:.05em;font-size:13px}
+[data-skin="scriptorium"] .title{font-size:30px;font-weight:400;color:var(--alm-accent)}
+[data-skin="scriptorium"] .prose{font-size:17px;line-height:1.55}
+[data-skin="scriptorium"] .prose.first::first-letter{float:left;font:400 64px/.82 "UnifrakturMaguntia",serif;color:var(--alm-accent);padding:6px 10px 0 0;text-shadow:1px 1px 0 var(--alm-gold)}
+[data-skin="scriptorium"] .chapter::before,[data-skin="scriptorium"] .chapter::after{background:linear-gradient(var(--alm-accent),var(--alm-accent)) center 3px/100% 1px no-repeat,linear-gradient(var(--alm-accent),var(--alm-accent)) center 6px/100% 1px no-repeat}
+[data-skin="scriptorium"] .chapter small::before,[data-skin="scriptorium"] .chapter small::after{content:" ❦ ";color:var(--alm-gold)}
+[data-skin="scriptorium"] .chapter b{font-size:26px;font-weight:400}
+[data-skin="scriptorium"] .say .av{border-radius:50% 50% 8px 8px;font:400 24px/1 "UnifrakturMaguntia",serif;box-shadow:0 0 0 2px var(--alm-panel),0 0 0 3.5px var(--alm-gold)}
+[data-skin="scriptorium"] .say .bub{background:color-mix(in oklab,var(--c) 8%,var(--alm-panel));border-color:color-mix(in oklab,var(--c) 40%,var(--alm-line));box-shadow:none}
+[data-skin="scriptorium"] .say .tag{border-radius:0;clip-path:polygon(0 0,100% 0,calc(100% - 7px) 50%,100% 100%,0 100%);padding-right:16px;letter-spacing:.06em;font-size:12px}
+[data-skin="scriptorium"] .say.user .tag{clip-path:polygon(0 0,100% 0,100% 100%,0 100%,7px 50%);padding-left:16px;padding-right:9px}
+[data-skin="scriptorium"] .say .line{font-size:1.14em}
+[data-skin="scriptorium"] .thk{border-radius:2px;border-style:dotted;font-style:italic;font-size:19px;font-weight:400}
+[data-skin="scriptorium"] .card{box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px var(--alm-line)}
+[data-skin="scriptorium"] .card h4{letter-spacing:.08em;font-size:14px;text-transform:none}
+[data-skin="scriptorium"] .sky{border:2px solid var(--alm-gold)}
+[data-skin="scriptorium"] .sky::after{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(1.2px 1.2px at 14% 30%,#f3d98a,transparent),radial-gradient(1.2px 1.2px at 70% 22%,#f3d98a,transparent),radial-gradient(1.6px 1.6px at 52% 60%,#f3d98a,transparent),radial-gradient(1px 1px at 88% 70%,#f3d98a,transparent)}
+[data-skin="scriptorium"] .sky .clock{font-family:"IM Fell English SC",serif;font-weight:400}
+[data-skin="scriptorium"] .btn{border-radius:2px;font-family:"IM Fell English SC",serif;font-size:14px}
+
+/* ── ARCANA · fantasy ── */
+[data-skin="arcana"]{--alm-font-display:"Cinzel",Georgia,serif;--alm-font-body:"Alegreya",Georgia,serif;--alm-font-mono:"Cinzel",Georgia,serif;--alm-font-hand:"Alegreya",Georgia,serif;--alm-radius:16px;--alm-r-sm:10px}
+[data-skin="arcana"][data-mode="light"]{--alm-panel:#f8f5ff;--alm-panel-2:#e9e2fb;--alm-ink:#211848;--alm-muted:#655b8c;--alm-line:#d5cbf0;--alm-accent:#8a5c0a;--alm-accent-2:#0d8578;--alm-gold:#c28f2c;--alm-good:#1f8a58;--alm-warn:#9a6a12;--alm-danger:#c42d52;--alm-on-voice:#fff;--alm-on-accent:#fff;
+  --v1:#0d8578;--v2:#6a45d6;--v3:#8a5c0a;--alm-shadow:0 0 0 1px rgba(194,143,44,.14),0 24px 44px -30px rgba(60,40,140,.5);--alm-lift:0 10px 22px -18px rgba(60,40,140,.4);
+  --alm-texture:radial-gradient(1px 1px at 20% 30%,rgba(194,143,44,.6),transparent),radial-gradient(1px 1px at 70% 80%,rgba(106,69,214,.45),transparent),radial-gradient(60% 50% at 80% 10%,rgba(106,69,214,.10),transparent 70%);--sky:linear-gradient(175deg,#f7c7a1,#c9a3e0 50%,#6f5cc8)}
+[data-skin="arcana"][data-mode="dark"]{--alm-panel:#1a1533;--alm-panel-2:#0f0c22;--alm-ink:#ece6ff;--alm-muted:#a79fcb;--alm-line:#372d62;--alm-accent:#e7b75a;--alm-accent-2:#63d9c6;--alm-gold:#e7b75a;--alm-good:#7fe0a8;--alm-warn:#f0c46a;--alm-danger:#ff7d93;--alm-on-voice:#140f28;--alm-on-accent:#140f28;
+  --v1:#63d9c6;--v2:#b69cff;--v3:#e7b75a;--alm-shadow:0 0 0 1px rgba(231,183,90,.12),0 28px 60px -30px rgba(0,0,0,.95),0 0 40px -18px rgba(123,97,255,.45);--alm-lift:0 10px 26px -16px rgba(0,0,0,.9);
+  --alm-texture:radial-gradient(1px 1px at 20% 30%,rgba(255,240,200,.5),transparent),radial-gradient(1px 1px at 70% 80%,rgba(200,220,255,.45),transparent),radial-gradient(60% 50% at 80% 10%,rgba(123,97,255,.14),transparent 70%);--sky:radial-gradient(120% 90% at 80% 0%,#4b3a9c,transparent 60%),linear-gradient(170deg,#241b52,#0c0920)}
+[data-skin="arcana"] .stage{background-size:140px 140px,190px 190px,100% 100%}
+[data-skin="arcana"] .chat::before{content:"";position:absolute;inset:6px;border:1px solid color-mix(in oklab,var(--alm-gold) 30%,transparent);border-radius:calc(var(--alm-radius) - 4px);pointer-events:none}
+[data-skin="arcana"] .hdr,[data-skin="arcana"] .place{letter-spacing:.12em;font-size:11px}
+[data-skin="arcana"] .title{font-size:26px;letter-spacing:.06em;color:var(--alm-accent);text-shadow:0 0 18px color-mix(in oklab,var(--alm-gold) 35%,transparent)}
+[data-skin="arcana"] .prose{font-size:16.5px}
+[data-skin="arcana"] .chapter small{letter-spacing:.42em}
+[data-skin="arcana"] .chapter b{font-family:"Cinzel Decorative",serif;font-style:normal;font-size:22px;color:var(--alm-accent)}
+[data-skin="arcana"] .chapter::before,[data-skin="arcana"] .chapter::after{background:linear-gradient(90deg,transparent,var(--alm-gold) 40%,transparent) center/100% 1px no-repeat,radial-gradient(circle,var(--alm-gold) 0 2px,transparent 2.5px) center/8px 8px no-repeat}
+[data-skin="arcana"] .say .av{box-shadow:0 0 0 2px var(--alm-panel),0 0 0 3.5px color-mix(in oklab,var(--c) 70%,transparent),0 0 20px -2px var(--c)}
+[data-skin="arcana"] .say .tag{letter-spacing:.2em;font-size:10px;border-radius:99px}
+[data-skin="arcana"] .say .tag i{font-family:"Alegreya",serif}
+[data-skin="arcana"] .thk{font-style:italic;font-weight:400;font-size:18px;border-style:solid;border-color:color-mix(in oklab,var(--c) 40%,transparent);box-shadow:0 0 24px -8px var(--c)}
+[data-skin="arcana"] .card h4{color:var(--alm-accent);letter-spacing:.3em}
+[data-skin="arcana"] .sky .clock{font-weight:500}
+[data-skin="arcana"] .ledger,[data-skin="arcana"] .hdr{font-family:"Alegreya",serif;font-size:13.5px;letter-spacing:.02em}
+@media (prefers-reduced-motion:no-preference){[data-skin="arcana"] .say .av{animation:glow 4s ease-in-out infinite alternate}
+@keyframes glow{to{box-shadow:0 0 0 2px var(--alm-panel),0 0 0 3.5px color-mix(in oklab,var(--c) 90%,transparent),0 0 28px 0 var(--c)}}}
+
+/* ── ORBITAL · futuristic ── */
+[data-skin="orbital"]{--alm-font-display:"Chakra Petch","Segoe UI",system-ui,sans-serif;--alm-font-body:"Inter","Segoe UI",system-ui,sans-serif;--alm-font-mono:"JetBrains Mono",ui-monospace,monospace;--alm-font-hand:"JetBrains Mono",ui-monospace,monospace;--alm-radius:2px;--alm-r-sm:2px}
+[data-skin="orbital"][data-mode="light"]{--alm-panel:#f7f8fa;--alm-panel-2:#e5e8ed;--alm-ink:#0b0f14;--alm-muted:#566170;--alm-line:#cdd3db;--alm-accent:#e8430a;--alm-accent-2:#2742ff;--alm-gold:#e8430a;--alm-good:#00925f;--alm-warn:#c77800;--alm-danger:#d61f35;--alm-on-voice:#fff;--alm-on-accent:#fff;
+  --v1:#2742ff;--v2:#00925f;--v3:#e8430a;--alm-shadow:0 0 0 1px rgba(11,15,20,.04),0 24px 40px -30px rgba(11,15,20,.5);--alm-lift:none;
+  --alm-texture:linear-gradient(90deg,rgba(11,15,20,.05) 1px,transparent 1px) 0 0/48px 100%,linear-gradient(rgba(11,15,20,.05) 1px,transparent 1px) 0 0/100% 48px;--sky:linear-gradient(180deg,#0b0f14,#141c2a)}
+[data-skin="orbital"][data-mode="dark"]{--alm-panel:#11151b;--alm-panel-2:#090c10;--alm-ink:#e8edf3;--alm-muted:#8a96a5;--alm-line:#27303b;--alm-accent:#ff6a2b;--alm-accent-2:#7289ff;--alm-gold:#ff6a2b;--alm-good:#2fd39a;--alm-warn:#ffb13d;--alm-danger:#ff5468;--alm-on-voice:#090c10;--alm-on-accent:#090c10;
+  --v1:#7289ff;--v2:#2fd39a;--v3:#ff6a2b;--alm-shadow:0 0 0 1px rgba(255,255,255,.03),0 24px 40px -30px rgba(0,0,0,.9);--alm-lift:none;
+  --alm-texture:linear-gradient(90deg,rgba(232,237,243,.04) 1px,transparent 1px) 0 0/48px 100%,linear-gradient(rgba(232,237,243,.04) 1px,transparent 1px) 0 0/100% 48px;--sky:linear-gradient(180deg,#05070a,#101722)}
+[data-skin="orbital"] .chat,[data-skin="orbital"] .card{clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
+[data-skin="orbital"] .chat{border-top:3px solid var(--alm-accent)}
+[data-skin="orbital"] .hdr{text-transform:uppercase;font-size:11px;letter-spacing:.12em}
+[data-skin="orbital"] .hdr b{background:var(--alm-accent);color:var(--alm-on-accent);padding:2px 6px}
+[data-skin="orbital"] .title{font-size:30px;font-weight:700;text-transform:uppercase;letter-spacing:.02em}
+[data-skin="orbital"] .title::before{content:"// ";color:var(--alm-accent)}
+[data-skin="orbital"] .chapter::before,[data-skin="orbital"] .chapter::after{background:repeating-linear-gradient(90deg,var(--alm-ink) 0 6px,transparent 6px 10px) center/100% 2px no-repeat}
+[data-skin="orbital"] .chapter b{font-style:normal;font-weight:700;text-transform:uppercase;font-size:20px;letter-spacing:.06em}
+[data-skin="orbital"] .say .av{border-radius:0;clip-path:polygon(0 0,70% 0,100% 30%,100% 100%,30% 100%,0 70%);box-shadow:none;font-family:var(--alm-font-mono);font-weight:500}
+[data-skin="orbital"] .say .bub{border-radius:0;background:var(--alm-panel);border:1px solid var(--alm-line);border-left:3px solid var(--c);box-shadow:none}
+[data-skin="orbital"] .say.user .bub{border-left:1px solid var(--alm-line);border-right:3px solid var(--c)}
+[data-skin="orbital"] .say .tag{border-radius:0;top:-11px;letter-spacing:.14em}
+[data-skin="orbital"] .say .tag i{font-family:var(--alm-font-mono);font-style:normal;font-size:10px;text-transform:uppercase;letter-spacing:.1em}
+[data-skin="orbital"] .thk{border-radius:0;border:1px dashed var(--c);font-size:13.5px;font-weight:400;line-height:1.5;padding:8px 14px}
+[data-skin="orbital"] .thk small::before{content:"> ";letter-spacing:0}
+[data-skin="orbital"] .card h4{color:var(--alm-ink);display:flex;gap:8px;align-items:center}
+[data-skin="orbital"] .card h4::before{content:"";width:8px;height:8px;background:var(--alm-accent)}
+[data-skin="orbital"] .meter{border-radius:0;height:5px;background:repeating-linear-gradient(90deg,color-mix(in oklab,var(--alm-ink) 14%,transparent) 0 3px,transparent 3px 5px)}
+[data-skin="orbital"] .meter i{border-radius:0}
+[data-skin="orbital"] .who .dot{border-radius:0}
+[data-skin="orbital"] .sky{border-radius:0;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%)}
+[data-skin="orbital"] .sky .clock{font-family:var(--alm-font-mono);font-weight:500;font-size:38px}
+[data-skin="orbital"] .sky .clock small{font-size:14px;color:var(--alm-accent);margin-left:4px}
+[data-skin="orbital"] .sky::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px) 0 0/100% 4px}
+[data-skin="orbital"] .sky .moon{background:none;box-shadow:none;border:1.5px solid rgba(255,255,255,.8);position:relative}
+[data-skin="orbital"] .sky .moon::after{content:"";position:absolute;inset:3px;border-radius:50%;background:conic-gradient(#fff 0 62%,transparent 0)}
+[data-skin="orbital"] .sky .chips span{border-radius:0;background:transparent;border-color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.08em;font-size:10px}
+[data-skin="orbital"] .btn{border-radius:0;border-bottom-width:1px;text-transform:uppercase;letter-spacing:.08em;font:600 11px/1 var(--alm-font-display)}
+
+/* ── POSY · florals, green and pink ── */
+[data-skin="posy"]{--alm-font-display:"DM Serif Display",Georgia,serif;--alm-font-body:"Nunito","Segoe UI",system-ui,sans-serif;--alm-font-mono:"DM Mono",ui-monospace,monospace;--alm-font-hand:"Dancing Script",cursive;--alm-radius:24px;--alm-r-sm:16px;
+  --flowers:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg transform='translate(24 26)'%3E%3Cg fill='%23f2a9bf'%3E%3Ccircle cx='0' cy='-6' r='5'/%3E%3Ccircle cx='5.7' cy='-1.9' r='5'/%3E%3Ccircle cx='3.5' cy='4.9' r='5'/%3E%3Ccircle cx='-3.5' cy='4.9' r='5'/%3E%3Ccircle cx='-5.7' cy='-1.9' r='5'/%3E%3C/g%3E%3Ccircle r='2.6' fill='%23e8b25c'/%3E%3C/g%3E%3Cpath d='M66 70c6-10 16-12 22-10-4 8-14 12-22 10z' fill='%2396c4a0'/%3E%3Cpath d='M66 70c-2-9 2-18 8-22 2 8-2 17-8 22z' fill='%23acd3b3'/%3E%3Ccircle cx='78' cy='22' r='2.4' fill='%23f2a9bf'/%3E%3Ccircle cx='14' cy='76' r='2' fill='%23acd3b3'/%3E%3C/svg%3E");
+  --sprig:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cpath d='M20 110C40 80 60 60 100 40' stroke='%234f8a5c' stroke-width='2' fill='none'/%3E%3Cpath d='M45 80c-10-8-12-20-8-26 9 4 13 16 8 26z' fill='%237fb08a'/%3E%3Cpath d='M70 58c2-12 12-20 20-20-1 10-10 18-20 20z' fill='%239cc5a5'/%3E%3Cg transform='translate(96 30)'%3E%3Cg fill='%23f0a3b9'%3E%3Cellipse rx='7' ry='11' transform='translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(72) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(144) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(216) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(288) translate(0 -9)'/%3E%3C/g%3E%3Ccircle r='5' fill='%23e8b25c'/%3E%3C/g%3E%3Cg transform='translate(58 88) scale(.6)'%3E%3Cg fill='%23f7c2d0'%3E%3Cellipse rx='7' ry='11' transform='translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(72) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(144) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(216) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(288) translate(0 -9)'/%3E%3C/g%3E%3Ccircle r='5' fill='%23e8b25c'/%3E%3C/g%3E%3C/svg%3E")}
+[data-skin="posy"][data-mode="light"]{--alm-panel:#fff7f7;--alm-panel-2:#f9e1e6;--alm-ink:#1f3a2b;--alm-muted:#627566;--alm-line:#eec5cf;--alm-accent:#c93d70;--alm-accent-2:#3f7f4d;--alm-gold:#d99a4e;--alm-good:#3a8551;--alm-warn:#b87624;--alm-danger:#c43a5c;--alm-on-voice:#fff;--alm-on-accent:#fff;
+  --v1:#3f7f4d;--v2:#b8741f;--v3:#c93d70;--alm-shadow:0 20px 40px -28px rgba(120,40,70,.45),0 2px 6px -3px rgba(31,58,43,.15);--alm-lift:0 10px 22px -18px rgba(120,40,70,.5);
+  --alm-texture:var(--flowers) 0 0/96px 96px;--tex-o:.5;--sky:linear-gradient(170deg,#f6b3c5,#e57a9c 45%,#5f8f6a 130%)}
+[data-skin="posy"][data-mode="dark"]{--alm-panel:#172a20;--alm-panel-2:#0f1f17;--alm-ink:#fbe9ee;--alm-muted:#b5c8b9;--alm-line:#2f4a3b;--alm-accent:#ff8fb1;--alm-accent-2:#8fd19e;--alm-gold:#f0c07a;--alm-good:#8fd19e;--alm-warn:#f0c07a;--alm-danger:#ff7f98;--alm-on-voice:#0f1f17;--alm-on-accent:#0f1f17;
+  --v1:#8fd19e;--v2:#f0c07a;--v3:#ff8fb1;--alm-shadow:0 22px 44px -28px rgba(0,0,0,.9);--alm-lift:0 10px 22px -18px rgba(0,0,0,.9);
+  --alm-texture:linear-gradient(rgba(15,31,23,.62),rgba(15,31,23,.62)),var(--flowers) 0 0/96px 96px;--sky:radial-gradient(30% 45% at 80% 25%,rgba(255,240,245,.35),transparent 70%),linear-gradient(170deg,#3b2a4a,#1d3a2c 70%)}
+[data-skin="posy"] .chat{overflow:hidden}
+[data-skin="posy"] .chat::after{content:"";position:absolute;right:-18px;top:-18px;width:120px;height:120px;pointer-events:none;background:var(--sprig) center/contain no-repeat}
+[data-skin="posy"][data-mode="dark"] .chat::after{opacity:.85}
+[data-skin="posy"] .title{font-size:31px;font-weight:400;color:var(--alm-accent);padding-right:70px}
+[data-skin="posy"] .title em{font-style:italic;color:var(--alm-accent-2)}
+[data-skin="posy"] .chapter::before,[data-skin="posy"] .chapter::after{background:radial-gradient(circle,var(--alm-accent) 0 3px,transparent 3.5px) center/12px 12px no-repeat,linear-gradient(var(--alm-accent-2),var(--alm-accent-2)) center/100% 1px no-repeat}
+[data-skin="posy"] .chapter b{font-weight:400;font-size:26px}
+[data-skin="posy"] .chapter small{color:var(--alm-accent-2)}
+[data-skin="posy"] .say .av{box-shadow:0 0 0 3px var(--alm-panel),0 0 0 5px color-mix(in oklab,var(--c) 35%,transparent)}
+[data-skin="posy"] .say .tag{border-radius:99px;padding:5px 11px}
+[data-skin="posy"] .thk{font-size:25px;font-weight:600;border-style:dotted;border-width:2px}
+[data-skin="posy"] .thk::after{content:" ✿";color:var(--alm-accent);font-size:.7em}
+[data-skin="posy"] .card h4{color:var(--alm-accent-2)}
+[data-skin="posy"] .card h4::before{content:"❀ ";color:var(--alm-accent)}
+[data-skin="posy"] .sky .clock{font-weight:400}
+[data-skin="posy"] .btn{border-radius:99px;border-bottom-width:1px}
+[data-skin="posy"] .btn.primary{background:var(--alm-accent-2);border-color:color-mix(in oklab,var(--alm-accent-2) 70%,#000)}
+
+footer.notes{border-top:1px solid var(--line);margin-top:36px;padding-top:24px;display:grid;gap:12px;max-width:820px}
+footer.notes h3{margin:0;font:700 18px/1.2 var(--sans)}
+footer.notes table{border-collapse:collapse;width:100%;font-size:14px}
+footer.notes th,footer.notes td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+footer.notes th{font:500 11px/1.2 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.tablewrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">ALMANAC · skins · mockups</span>
+  <h1>Eleven skins, each in light and dark</h1>
+  <p class="lede">The six original skins, rebuilt so no two feel alike, plus five new ones: serious, medieval, fantasy, futuristic and floral. Every skin has its own light and dark palette. Nothing here comes from Lumiverse's theme; each palette is fixed. Everything is drawn with the <code>--alm-*</code> tokens from <code>styles.ts</code>.</p>
+</header>
+<div class="bar">
+  <nav class="jump" aria-label="Skins" id="jump"></nav>
+  <span class="seg-label" id="allLabel">All skins</span>
+  <div class="seg" role="group" aria-labelledby="allLabel" id="allModes"><button type="button" data-all="system" aria-pressed="true">System</button><button type="button" data-all="light" aria-pressed="false">Light</button><button type="button" data-all="dark" aria-pressed="false">Dark</button></div>
+</div>
+<main id="skins"></main>
+
+<footer class="notes">
+  <h3>How they stay apart</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Skin</th><th>Owns</th><th>Signature</th><th>Genres (auto)</th></tr></thead>
+    <tbody>
+      <tr><td>Almanac</td><td>terracotta + ink blue, warm paper</td><td>☉ chapter sun, dotted almanac leaders</td><td>default · mystery · slice of life</td></tr>
+      <tr><td>Solar</td><td>black + sunflower yellow</td><td>highlighter headlines, pull-quote speech</td><td>drama · comedy</td></tr>
+      <tr><td>Nocturne</td><td>crimson + bone / black</td><td>arched portraits, ⸙ whispered thoughts</td><td>horror · tragedy · erotic</td></tr>
+      <tr><td>Botanical</td><td>olive + ochre on kraft</td><td>tape strips, specimen-label cards, typewriter</td><td>survival · cozy outdoors</td></tr>
+      <tr><td>Prism</td><td>holographic spectrum</td><td>iridescent borders and titles</td><td>science fiction (neon)</td></tr>
+      <tr><td>Candy</td><td>multicolour on lemon, black outlines</td><td>stickers, hard offset shadows</td><td>comedy · cozy</td></tr>
+      <tr><td>Dossier</td><td>graphite + oxblood</td><td>transcript speech, red stamps</td><td>noir · thriller · intrigue</td></tr>
+      <tr><td>Scriptorium</td><td>vellum, vermilion, lapis, gold</td><td>blackletter drop caps, ribbon banners</td><td>historical · dark fantasy</td></tr>
+      <tr><td>Arcana</td><td>violet + gold + teal</td><td>glowing voices, several moons</td><td>fantasy · adventure</td></tr>
+      <tr><td>Orbital</td><td>white/graphite + signal orange</td><td>clipped corners, terminal thoughts</td><td>science fiction (clean) · action</td></tr>
+      <tr><td>Posy</td><td>rose pink + fern green</td><td>floral print, corner sprig</td><td>romance · cozy</td></tr>
+    </tbody>
+  </table></div>
+  <p>Building it: each skin becomes two token blocks, <code>:root[data-alm-skin="x"][data-alm-mode="light|dark"]</code> (open "Tokens" under any skin), plus a short list of overrides for its signature details. The mode would follow Lumiverse's light/dark setting unless the player picks one. Two new tokens appear: <code>--alm-on-accent</code> (text on the accent colour, since Solar's accent is yellow) and <code>--v1…--v3</code> (voice colours tuned per mode so speakers stay readable in both).</p>
+  <p>The Almanac skin no longer borrows Lumiverse's colours. If that matters, "Follow Lumiverse" can stay as its own option.</p>
+</footer>
+</div>
+
+<script>
+const SKINS = [
+  { id: "almanac", group: "Redone originals", n: "01", name: "Almanac", dot: "#b8501f", vibe: "field almanac · warm paper, terracotta, ink blue",
+    pitch: "The house style: a well-thumbed almanac of sun, moon and weather. Warm paper and terracotta by day, walnut and an indigo dusk sky by night.",
+    was: "Borrowed Lumiverse's colours, so it looked different on every setup and close to Scriptorium.",
+    points: ["<b>Fraunces italic</b> headings and <b>Newsreader</b> body, like a printed annual.", "<b>☉ sun</b> marks each chapter; card headings trail off into dotted leaders, like an almanac's tables.", "Thoughts in <b>Caveat</b>, pencilled in the margin."],
+    faces: "Fraunces · Newsreader · DM Mono · Caveat",
+    scene: { hdr: ["Day 3", "Tuesday 16 October 1923", "18:40", "🌧 rain, light · 11°C"], place: ["Lowmarket", "The Rusty Flagon › back room"], title: "The Wet Door",
+      prose: "Rain finds the gap under the door and spreads across the flagstones. Mara has taken the seat by the fire, the one that sees the whole room.",
+      s1: ["Mara", "guarded", "\"You're late. And you're dripping on my floor.\"", "She doesn't look up from the locket in her palm.", 1], thk: ["Mara", "He came back. Thieves don't come back.", 1],
+      ch: ["Chapter two", "The Locket"], s2: ["Wren", "warm", "\"I brought it back, didn't I? Call it interest.\"", 3],
+      sky: ["18:40", "Tuesday<br>16 October 1923", ["🌧 rain · 11°C", "back room", "3 present"]],
+      cast: [["Mara", "by the fire", "wary", 1, 58], ["Kael", "at the bar", "curious", 2, 40]], lt: "This turn",
+      ledger: [["🕰", "+12m → 18:40"], ["🎒", "Locket: Wren → Mara <em>· returned</em>"], ["🕸", "Mara › Wren: trust +1"]], btn: ["/skip until morning", "/recap"] } },
+  { id: "solar", group: "Redone originals", n: "02", name: "Solar", dot: "#ffd21f", vibe: "editorial · black type, white space, sunflower yellow",
+    pitch: "A magazine feature. Big heavy headlines with a yellow highlighter swipe, speech set as pull quotes, and nothing rounded anywhere. At night it's black paper with the same yellow.",
+    was: "A cream-and-navy serif page that sat close to Almanac and Dossier.",
+    points: ["<b>Headlines</b> in Playfair Display Black with a highlighter mark behind them.", "<b>Speech</b> becomes a pull quote: a rule in the speaker's colour and big italic type.", "<b>Cards</b> are ruled sections, not boxes; buttons are outlined capitals."],
+    faces: "Playfair Display · Libre Franklin",
+    scene: { hdr: ["Day 5", "Friday 12 September 2025", "10:05", "☀ bright · 24°C"], place: ["Midtown", "The Ledger-Post › newsroom"], title: "Kill the Story, or Run It",
+      prose: "The front page is due at noon. Ines has printed the draft twice and marked it in red both times, and now she's holding it over the shredder.",
+      s1: ["Ines", "cutting", "\"If we run it, the paper survives the week. If we don't, you do.\"", "She lets the page hang there.", 2], thk: ["Theo", "She already knows what I'll say.", 1],
+      ch: ["Section B", "The Source"], s2: ["Wren", "firm", "\"Run it. With my name on it.\"", 3],
+      sky: ["10:05", "Friday<br>12 September 2025", ["☀ 24°C", "newsroom", "deadline 12:00"]],
+      cast: [["Ines", "editor, at the shredder", "tense", 2, 80], ["Theo", "reporter, pacing", "anxious", 1, 65]], lt: "This turn",
+      ledger: [["⌛", "deadline Front page: Day 5 12:00"], ["⚖", "Ines → Wren: cover for the source <u>· open</u>"], ["🕸", "Theo › Wren: respect +1"]], btn: ["Skip 30m", "Audit"] } },
+  { id: "nocturne", group: "Redone originals", n: "03", name: "Nocturne", dot: "#8e1b2e", vibe: "gothic romance · crimson, bone, candlelight",
+    pitch: "Candlelit and dangerous. Bone-white pages with wine-red ink by day; black velvet and crimson by night. Portraits sit in arched frames and thoughts are whispered in the margin.",
+    was: "Dark only, rose and gold, too close to Arcana's night palette.",
+    points: ["<b>Arched portraits</b> for speakers, like a gallery of ancestors.", "<b>Thoughts</b> are italic Cormorant on a thin line marked ⸙, not bubbles.", "<b>Cards</b> have a fine double frame; the night sky glows as if lit by a candle."],
+    faces: "Cormorant Garamond · Crimson Pro",
+    scene: { hdr: ["Day 9", "13 Uktar 1492 DR", "23:50", "🌫 fog"], place: ["Vesper Hall", "the long gallery"], title: "An Invitation at Midnight",
+      prose: "Every portrait in the gallery has been turned to face the wall except one, and its eyes are the colour of the wine in his glass.",
+      s1: ["Aurel", "velvet", "\"You came alone. How very brave. Or how very foolish.\"", "He does not blink; the candles do.", 1], thk: ["Aurel", "She smells of rain and silver. Careful.", 1],
+      ch: ["The third night", "Blood and Lace"], s2: ["Wren", "steady", "\"I came for the letter, my lord. Not the wine.\"", 3],
+      sky: ["23:50", "13 Uktar<br>1492 DR", ["🌫 fog", "the long gallery", "Feast of the Moon soon"]],
+      cast: [["Lord Aurel", "at the one unturned portrait", "hungry", 1, 72], ["Sister Vey", "unseen, listening", "afraid", 2, 50]], lt: "This turn",
+      ledger: [["💞", "Aurel › Wren: tier 3 — she stayed"], ["👁", "Wren: the portraits hide doors <em>· suspects</em>"], ["📈", "Dread: 3/5"]], btn: ["Previously on…", "Bonds"] } },
+  { id: "botanical", group: "Redone originals", n: "04", name: "Botanical", dot: "#5f7222", vibe: "herbarium · kraft paper, olive, ochre, typewriter labels",
+    pitch: "A naturalist's field notebook. Pages taped onto kraft card, specimen labels typed in Courier, olive and ochre inks. By night it's a lamplit study in moss and amber.",
+    was: "A green page with a pink accent, which Posy now owns.",
+    points: ["<b>Tape strips</b> hold each scene to the page.", "<b>Cards</b> are specimen labels: a thin double frame and a catalogue number.", "<b>The header and ledger</b> are typed; thoughts are pencilled."],
+    faces: "Young Serif · Source Serif 4 · Courier Prime · Caveat",
+    scene: { hdr: ["Day 14", "6 Bloom 312 AR", "09:10", "🌫 mist, lifting"], place: ["Greenhollow", "the old glasshouse"], title: "A Specimen Nobody Planted",
+      prose: "It grows through the cracked pane in a spiral, which nothing in the Greenhollow catalogue does, and its leaves turn to follow whoever is speaking.",
+      s1: ["Ines Thorn", "hushed", "\"Don't touch it. Write down that it moved first.\"", "She is already reaching for a jar.", 1], thk: ["Ines Thorn", "Forty years of field work and I've never seen this.", 2],
+      ch: ["Field notes", "The Spiral Fern"], s2: ["Wren", "curious", "\"It's turning toward you. Say something else.\"", 3],
+      sky: ["09:10", "6 Bloom<br>312 AR", ["🌫 mist", "glasshouse", "spring"]],
+      cast: [["Ines Thorn", "botanist, by the bench", "absorbed", 1, 84], ["Pell", "apprentice, at the door", "uneasy", 2, 35]], lt: "This turn",
+      ledger: [["🔎", "clue: leaves track sound | reliable"], ["🎒", "item Specimen jar: +Ines"], ["🌱", "plant: the glasshouse was sealed"]], btn: ["Consult the Codex", "Lore"] } },
+  { id: "prism", group: "Redone originals", n: "05", name: "Prism", dot: "#b28cff", vibe: "holographic · iridescent foil on pearl or black",
+    pitch: "Light through a prism. Borders, titles and meters shimmer across the spectrum. By day it's pearly white with pastel foil; by night it's pure black with a neon aurora.",
+    was: "A dark navy neon grid, now split off to Orbital's clean future.",
+    points: ["<b>Every border</b> is an iridescent gradient; titles are filled with it.", "<b>Avatars</b> wear a holographic ring, and meters fill with the spectrum.", "<b>Thoughts</b> are frosted glass."],
+    faces: "Syne · Space Grotesk · Space Mono",
+    scene: { hdr: ["Day 1", "Monday 3 March 2089", "02:14", "🌧 acid drizzle"], place: ["Kowloon Stack", "level 88 › noodle bar"], title: "Signal in the Rain",
+      prose: "The noodle bar's sign flickers through every colour it has left. Echo's reflection in the window arrives half a second before she does.",
+      s1: ["Echo", "sly", "\"Your ghost is leaking, runner. I can see your whole week from here.\"", "Her pupils cycle cyan, then pink.", 2], thk: ["Echo", "Three corps tracking him. Only one of them is lying.", 2],
+      ch: ["Run 02", "Clean Hands"], s2: ["Wren", "dry", "\"Then patch me and name your price.\"", 1],
+      sky: ["02:14", "Monday<br>3 March 2089", ["🌧 acid drizzle", "level 88", "heat 2/5"]],
+      cast: [["Echo", "fixer, on the next stool", "amused", 2, 70], ["Chef Lo", "behind the counter", "watchful", 3, 45]], lt: "This turn",
+      ledger: [["📈", "Heat: 2/5 — flagged by a drone"], ["⚖", "Wren → Echo: one favour <u>· open</u>"], ["👁", "Echo: Wren's real name <em>· knows</em>"]], btn: ["Skip 30m", "Threads"] } },
+  { id: "candy", group: "Redone originals", n: "06", name: "Candy", dot: "#ff4fa3", vibe: "sticker pop · bubblegum, mint, grape, lemon, black outlines",
+    pitch: "A sticker sheet. Thick outlines, hard offset shadows and a whole bag of colours on lemon paper. At night it turns into a grape-soda arcade.",
+    was: "Pink and purple on white, too close to Posy.",
+    points: ["<b>Outlines and hard shadows</b> on everything; each bubble's shadow is its speaker's colour.", "<b>Tags and avatars</b> tilt like stickers.", "<b>Chapter rules</b> are wavy; meters are chunky candy bars."],
+    faces: "Fredoka",
+    scene: { hdr: ["Day 4", "Saturday 2 August 2025", "15:30", "☀ sunny · 27°C"], place: ["Sprinkle Street", "Juno's Bakery › the counter"], title: "The Great Cupcake Incident",
+      prose: "There is frosting on the ceiling. Nobody is saying how. Pip is holding a piping bag like it's evidence against someone else.",
+      s1: ["Pip", "innocent", "\"In my defence, it said 'high speed' on the mixer.\"", "A sprinkle falls from the ceiling onto his head.", 1], thk: ["Juno", "Deep breaths. The competition is in two hours.", 2],
+      ch: ["Episode 3", "Frosting Emergency"], s2: ["Wren", "delighted", "\"I think it looks festive. Very ceiling-forward.\"", 3],
+      sky: ["15:30", "Saturday<br>2 August 2025", ["☀ 27°C", "the bakery", "bake-off 17:30"]],
+      cast: [["Pip", "on a stool, sticky", "sheepish", 1, 90], ["Juno", "hands on hips", "frazzled", 2, 75]], lt: "This turn",
+      ledger: [["⌛", "deadline Bake-off: Day 4 17:30"], ["🌱", "plant: frosting on the ceiling"], ["🕸", "Juno › Pip: fondness +1 (despite it all)"]], btn: ["Skip 1h", "Recap"] } },
+
+  { id: "dossier", group: "New", n: "07", name: "Dossier", dot: "#8c1d1d", vibe: "case file · graphite, ruled paper, oxblood",
+    pitch: "Reads like a report on the case. Nothing decorative: square corners, ruled paper and one red for what matters. At night it's a desk lamp over a dark file.",
+    points: ["<b>Speech</b> loses its bubble: a coloured rule and the name in capitals, like a transcript.", "<b>Thoughts</b> are pencil notes in the margin.", "<b>A red stamp</b> marks open debts and deadlines."],
+    faces: "IBM Plex Serif · IBM Plex Sans · IBM Plex Mono · Reenie Beanie",
+    scene: { hdr: ["Day 3", "Wednesday 9 January 1974", "23:12", "🌧 rain, steady · 6°C"], stamp: "Open", place: ["Precinct 9", "interview room"], title: "What the Harbourmaster Knew",
+      prose: "The lamp hums. Vance has not touched the coffee, and the ring it leaves on the file has spread into the typed name of the dead man.",
+      s1: ["Vance", "flat", "\"I signed for the crates. I didn't open them. That isn't a crime, detective.\"", "He squares the file to the table's edge.", 1], thk: ["Vance", "Ten minutes. Hold for ten minutes.", 1],
+      ch: ["Chapter four", "The Ledger Page"], s2: ["Wren", "cold", "\"Then tell me why your signature is on the night they sank.\"", 3],
+      sky: ["23:12", "Wednesday<br>9 January 1974", ["🌧 rain · 6°C", "interview room", "2 present"]],
+      cast: [["Vance", "harbourmaster · lying by omission", "guarded", 1, 28], ["Officer Hale", "by the door", "bored", 2, 55]], lt: "This turn",
+      ledger: [["👁", "Vance knows the file names him <em>· true</em>"], ["⚖", "Vance → Wren: the manifest <u>· due Day 4</u>"], ["🕸", "Vance › Wren: fear +1"]], btn: ["/skip until morning", "/audit"] } },
+  { id: "scriptorium", group: "New", n: "08", name: "Scriptorium", dot: "#a8261c", vibe: "illuminated manuscript · vellum, vermilion, lapis, gold",
+    pitch: "A chronicle copied by a monk: vellum, a ruled double border, red headings and a blackletter initial. At night it's the same book read by candlelight.",
+    points: ["<b>The first paragraph</b> opens with a red blackletter drop cap edged in gold.", "<b>Speakers</b> get shield-shaped seals and ribbon banners with notched ends.", "<b>Small caps</b> replace monospace; nothing looks machine-set."],
+    faces: "IM Fell English · IM Fell English SC · UnifrakturMaguntia",
+    scene: { hdr: ["Day 12", "3rd day of the Eighth Moon, 299 AC", "dusk", "🌫 river mist"], place: ["The Riverlands", "Harrenhal › the Wailing Tower"], title: "Of the Ravens and the Rain", first: true,
+      prose: "Upon the eve the ravens came in from the west, three of them and wet to the bone, and the maester would not say what their letters bore.",
+      s1: ["Maester Tothmure", "hushed", "\"Winter is not yet come, my lady. But the Citadel bids us count the stores.\"", "He folds the letter twice, wax outward.", 1], thk: ["Tothmure", "White ravens, and none dare say it aloud.", 1],
+      ch: ["Here beginneth", "The Second Book"], s2: ["Arya", "sharp", "\"Then count them twice. And tell no one but me.\"", 3],
+      sky: ["Dusk", "3rd day of the<br>Eighth Moon, 299 AC", ["autumn", "🌫 river mist", "the Wailing Tower"]],
+      cast: [["Maester Tothmure", "at the rookery window", "afraid", 1, 70], ["Gendry", "below, at the forge", "wary", 2, 40]], lt: "Entered in the book",
+      ledger: [["🍂", "season: summer → autumn"], ["✉", "A letter sealed in white wax — Tothmure"], ["👁", "Arya: the stores are short <em>· overheard</em>"]], btn: ["Previously on…", "Report of bonds"] } },
+  { id: "arcana", group: "New", n: "09", name: "Arcana", dot: "#e7b75a", vibe: "spellbook · violet, starlight, gold leaf",
+    pitch: "High fantasy: gold for anything that matters and speakers who glow in their own colour. Dark is a violet midnight full of stars; light is a lavender dawn over the same spellbook.",
+    points: ["<b>Voices glow</b> in their speaker's colour and slowly pulse (not with reduced motion).", "<b>Several moons</b> in the sky, each in its own phase: Roshar's Salas, Nomon and Mishim.", "<b>Chapter titles</b> in Cinzel Decorative; a gold page frame is inset in every card."],
+    faces: "Cinzel · Cinzel Decorative · Alegreya",
+    scene: { hdr: ["Day 7", "23 Tanat 1174", "21:40", "⛈ highstorm, passing"], place: ["The Shattered Plains", "Warcamp › Dalinar's gallery"], title: "Stormlight in the Gemhearts",
+      prose: "The spheres on the table flare as the storm wall passes overhead, and for a heartbeat every shadow in the gallery points the wrong way.",
+      s1: ["Shallan", "breathless", "\"Did you see that? The light went <em>toward</em> the storm.\"", "She is already sketching, charcoal on her safehand sleeve.", 1], thk: ["Pattern", "Mmm. A lie, but a very good one.", 2],
+      ch: ["Part two", "The Weeping"], s2: ["Kaladin", "low", "\"Then we follow it. Before the next one comes.\"", 3], moons: true,
+      sky: ["21:40", "23 Tanat<br>1174", ["⛈ highstorm, passing", "spring (irregular)", "3 present"]],
+      cast: [["Shallan", "at the table, sketching", "thrilled", 1, 82], ["Pattern", "on her coat, humming", "curious", 2, 64]], lt: "This turn",
+      ledger: [["🌦", "highstorm → passing"], ["📈", "Stormlight: 3/5 — drawn from the spheres"], ["🌱", "plant: shadows point the wrong way"]], btn: ["Consult the Codex", "Chronicle"] } },
+  { id: "orbital", group: "New", n: "10", name: "Orbital", dot: "#e8430a", vibe: "station interface · white ceramic or graphite, signal orange",
+    pitch: "The clean kind of future: clipped corners, blueprint grids and one safety orange. Light is the daytime station; dark is the night shift on the same deck.",
+    points: ["<b>Clipped corners</b> on every panel and an orange line along the top of the scene.", "<b>Thoughts</b> print as terminal lines behind a <code>&gt;</code> prompt.", "<b>Segmented meters</b>, and the moon drawn as a ring gauge."],
+    faces: "Chakra Petch · Inter · JetBrains Mono",
+    scene: { hdr: ["Day 41", "Cycle 3, Orbit 212 PL", "06:02", "☀ hab lights, full"], place: ["Ceres Ring", "Dock 7 › pressure lock"], title: "Seal Integrity", clockSuffix: "PL",
+      prose: "The lock cycles twice and stops. Somewhere behind the bulkhead, a pump that should be silent is running.",
+      s1: ["IRIS", "flat", "\"Outer seal at ninety-one percent. I recommend you do not open this door.\"", "The status light holds amber.", 1], thk: ["Okafor", "she said the same thing on Dock 3.", 2],
+      ch: ["Log 04", "Hard Vacuum"], s2: ["Wren", "urgent", "\"Override. My authority. Open it.\"", 3],
+      sky: ["06:02", "Cycle 3<br>Orbit 212", ["hab lights full", "Dock 7", "O₂ 20.9%"]],
+      cast: [["IRIS", "station intelligence", "calm", 1, 91], ["Okafor", "at the manual release", "tense", 2, 47]], lt: "Delta",
+      ledger: [["⌛", "deadline Seal failure: Day 41 06:30"], ["📈", "Integrity: 91% <u>▼ 3</u>"], ["🕸", "IRIS › Wren: trust −1"]], btn: ["Skip 30m", "Audit"] } },
+  { id: "posy", group: "New", n: "11", name: "Posy", dot: "#c93d70", vibe: "pressed flowers · blush, rose, fern and sage",
+    pitch: "A garden party on paper: blush pages printed with tiny blossoms, a sprig of roses in the corner, handwriting for thoughts. Dark is the same garden by moonlight, deep green with pink blooms.",
+    points: ["<b>A small floral print</b> behind everything, drawn in inline SVG (no image files).", "<b>A corner sprig</b> of two roses on a fern stem tops each scene.", "<b>Buttons</b> are round pills; the main one is fern green so the pink never overwhelms."],
+    faces: "DM Serif Display · Nunito · Dancing Script · DM Mono",
+    scene: { hdr: ["Day 2", "Sterday 2 Lithe 1418 S.R.", "16:15", "☀ fair, warm · 22°C"], place: ["Hobbiton", "Bagshot Row › the rose garden"], title: "Roses, and <em>Other Business</em>",
+      prose: "The bees are loud in the hedge. Someone has left a basket of cut blooms on the bench, and a note beneath it that was plainly not meant for you.",
+      s1: ["Sam", "shy", "\"They're for Rosie. Well — they're for the table. Which Rosie will be at.\"", "His ears go the colour of the roses.", 1], thk: ["Sam", "Please don't read the note, please don't", 3],
+      ch: ["Chapter three", "Midsummer Letters"], s2: ["Frodo", "teasing", "\"I'd never dream of it, Sam. Though it does say 'dearest'.\"", 3],
+      sky: ["16:15", "Sterday<br>2 Lithe 1418 S.R.", ["☀ fair · 22°C", "early summer", "the rose garden"]],
+      cast: [["Sam", "by the bench, flustered", "flustered", 1, 76], ["Rosie Cotton", "coming up the lane", "cheerful", 2, 60]], lt: "This turn",
+      ledger: [["💞", "ladder Sam › Rosie: tier 2 — the flowers"], ["🎒", "item Note: bench → Frodo — picked up"], ["🌱", "plant: “dearest”"]], btn: ["Previously on…", "Bonds"] } },
+];
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const initial = (n) => n.replace(/^(Maester|Lord|Sister|Officer|Chef)\s+/, "")[0];
+
+function stage(s) {
+  const c = s.scene;
+  const v = (i) => `--c:var(--v${i})`;
+  // [who, tone, line, beat?, voice]
+  const say = (a, user) => { const [who, tone, line] = a; const vi = a[a.length - 1]; const beat = a.length === 5 ? a[3] : ""; return `<div class="say${user ? " user" : ""}" style="${v(vi)}"><span class="av">${esc(initial(who))}</span><div class="bub"><span class="tag">${esc(who)} <i>${esc(tone)}</i></span><span class="line">${line}</span>${beat ? `<span class="beat">${esc(beat)}</span>` : ""}</div></div>`; };
+  const moons = c.moons
+    ? `<span class="moons" aria-label="Salas waxing crescent, Nomon full, Mishim first quarter"><i style="width:16px;height:16px;background:radial-gradient(circle at 60% 40%,#d9b8ff 0 45%,#9a7ad6 80%);box-shadow:inset 6px 0 0 #120d26,0 0 10px #b69cff"></i><i style="width:30px;height:30px;background:radial-gradient(circle at 55% 40%,#eaf4ff 0 50%,#9fb8d8 85%);box-shadow:0 0 18px rgba(200,225,255,.7)"></i><i style="width:12px;height:12px;background:radial-gradient(circle at 60% 40%,#b9f5c9 0 45%,#6fbf85 80%);box-shadow:inset 6px 0 0 #120d26,0 0 8px #8ce0a6"></i></span>`
+    : `<span class="moon" aria-label="moon"></span>`;
+  return `<div class="stage">
+  <article class="chat">
+    <div class="hdr"><span>🗓 <b>${c.hdr[0]}</b> · ${esc(c.hdr[1])}</span><span>🕰 ${esc(c.hdr[2])}</span><span>${esc(c.hdr[3])}</span>${c.stamp ? `<span class="stamp">${esc(c.stamp)}</span>` : ""}</div>
+    <div class="place">📍 ${esc(c.place[0])} › <em>${esc(c.place[1])}</em></div>
+    <h4 class="title"><span>${c.title}</span></h4>
+    <p class="prose${c.first ? " first" : ""}">${esc(c.prose)}</p>
+    ${say(c.s1)}
+    <span class="thk" style="${v(c.thk[2])}"><small>${esc(c.thk[0])} · unspoken</small>${esc(c.thk[1])}</span>
+    <div class="chapter"><div><small>${esc(c.ch[0])}</small><b>${esc(c.ch[1])}</b></div></div>
+    ${say(c.s2, true)}
+  </article>
+  <aside class="drawer">
+    <div class="sky"><div class="row"><div class="clock">${esc(c.sky[0])}${c.clockSuffix ? `<small>${c.clockSuffix}</small>` : ""}</div><div class="date">${c.sky[1]}</div>${moons}</div>
+      <div class="chips">${c.sky[2].map((x) => `<span>${esc(x)}</span>`).join("")}</div></div>
+    <div class="card"><h4>Present</h4>${c.cast.map(([n, sub, mood, vi, pct]) => `<div class="who" style="${v(vi)}"><span class="dot">${esc(initial(n))}</span><div><b>${esc(n)}</b><small>${esc(sub)}</small></div><span class="mood">${esc(mood)}</span><div class="meter"><i style="--v:${pct}%"></i></div></div>`).join("")}</div>
+    <div class="card"><h4>${esc(c.lt)}</h4><ul class="ledger">${c.ledger.map(([i, t]) => `<li>${i}<span>${t}</span></li>`).join("")}</ul>
+      <div class="btns"><span class="btn primary">${esc(c.btn[0])}</span><span class="btn">${esc(c.btn[1])}</span></div></div>
+  </aside>
+</div>`;
+}
+
+const systemMode = () => (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+const main = document.getElementById("skins");
+let lastGroup = "";
+for (const s of SKINS) {
+  if (s.group !== lastGroup) { main.insertAdjacentHTML("beforeend", `<h2 class="group">${esc(s.group)}</h2>`); lastGroup = s.group; }
+  main.insertAdjacentHTML("beforeend", `<section class="skin" id="${s.id}" data-skin="${s.id}" data-mode="${systemMode()}" aria-labelledby="h-${s.id}">
+  <div class="intro">
+    <div>
+      <span class="num">${s.n} · ${esc(s.group === "New" ? "new" : "redone")}</span>
+      <h3 id="h-${s.id}">${esc(s.name)}</h3>
+      <p class="vibe">${esc(s.vibe)}</p>
+      <p class="pitch">${esc(s.pitch)}</p>
+      ${s.was ? `<p class="was"><b>Was:</b> ${esc(s.was)}</p>` : ""}
+      <div class="sw" data-sw></div>
+      <div class="faces">${esc(s.faces)}</div>
+    </div>
+    <div style="display:grid;gap:14px">
+      <ul>${s.points.map((p) => `<li>${p}</li>`).join("")}</ul>
+      <div class="row2"><div class="seg" role="group" aria-label="${esc(s.name)} mode"><button type="button" data-mode="light">Light</button><button type="button" data-mode="dark">Dark</button></div>
+      <details class="tok"><summary>Tokens for styles.ts</summary><pre data-tok></pre></details></div>
+    </div>
+  </div>
+  ${stage(s)}
+</section>`);
+}
+document.getElementById("jump").innerHTML = SKINS.map((s) => `<a href="#${s.id}"><i style="background:${s.dot}"></i>${esc(s.name)}</a>`).join("");
+
+// Swatches and token blocks for both modes, read from the live CSS.
+const SW = ["--alm-panel", "--alm-panel-2", "--alm-ink", "--alm-accent", "--alm-accent-2", "--alm-gold", "--v1", "--v2", "--v3"];
+const MODE_KEYS = ["--alm-panel", "--alm-panel-2", "--alm-ink", "--alm-muted", "--alm-line", "--alm-accent", "--alm-accent-2", "--alm-gold", "--alm-good", "--alm-warn", "--alm-danger", "--alm-on-voice", "--alm-on-accent", "--v1", "--v2", "--v3", "--alm-shadow", "--alm-lift", "--alm-texture"];
+const SHARED_KEYS = ["--alm-font-display", "--alm-font-body", "--alm-font-mono", "--alm-font-hand", "--alm-radius", "--alm-r-sm"];
+const probe = document.createElement("div");
+probe.style.display = "none";
+document.body.append(probe);
+for (const sec of document.querySelectorAll("section.skin")) {
+  const id = sec.dataset.skin;
+  const read = (mode) => { probe.dataset.skin = id; probe.dataset.mode = mode; return getComputedStyle(probe); };
+  const rows = [];
+  const blocks = [];
+  for (const mode of ["light", "dark"]) {
+    const cs = read(mode);
+    rows.push(`<small>${mode}</small><div>${SW.map((k) => `<i title="${k}" style="background:${cs.getPropertyValue(k).trim()}"></i>`).join("")}</div>`);
+    blocks.push(`:root[data-alm-skin="${id}"][data-alm-mode="${mode}"]{\n${MODE_KEYS.map((k) => `  ${k}:${cs.getPropertyValue(k).trim()};`).join("\n")}\n}`);
+  }
+  const cs = read("light");
+  blocks.unshift(`:root[data-alm-skin="${id}"]{\n${SHARED_KEYS.map((k) => `  ${k}:${cs.getPropertyValue(k).trim()};`).join("\n")}\n}`);
+  sec.querySelector("[data-sw]").innerHTML = rows.join("");
+  sec.querySelector("[data-tok]").textContent = blocks.join("\n");
+}
+
+// Light / dark switches.
+const sync = (sec) => sec.querySelectorAll(".seg button[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === sec.dataset.mode)));
+document.querySelectorAll("section.skin").forEach(sync);
+main.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-mode]");
+  if (!b) return;
+  const sec = b.closest("section.skin");
+  sec.dataset.mode = b.dataset.mode;
+  sync(sec);
+});
+let allMode = "system";
+function setAll(mode) {
+  allMode = mode;
+  const m = mode === "system" ? systemMode() : mode;
+  if (mode === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = mode;
+  document.querySelectorAll("section.skin").forEach((sec) => { sec.dataset.mode = m; sync(sec); });
+  document.querySelectorAll("#allModes button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.all === mode)));
+}
+document.getElementById("allModes").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-all]"); if (b) setAll(b.dataset.all); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (allMode === "system") setAll("system"); });
+</script>
+</body>
+</html>

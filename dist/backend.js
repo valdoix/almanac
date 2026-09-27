@@ -1318,7 +1318,7 @@ function parseMessage(text) {
 }
 
 // src/core/version.ts
-var VERSION = "1.3.0";
+var VERSION = "1.4.0";
 
 // src/core/types.ts
 var BIPOLAR_AXES = ["trust", "affection", "respect", "comfort"];
@@ -1361,6 +1361,7 @@ var DEFAULT_SETTINGS = {
   mirrorVectorize: false,
   hud: true,
   theme: "preset",
+  skinMode: "auto",
   fonts: true,
   narratorOnlyToTools: false,
   telemetry: true,
@@ -6154,29 +6155,29 @@ function registerTools() {
 // src/backend/view.ts
 var AUTO_THEME = {
   horror: "nocturne",
-  "dark fantasy": "nocturne",
-  dark_fantasy: "nocturne",
   tragedy: "nocturne",
+  erotic: "nocturne",
+  "erotic romance": "nocturne",
+  "dark fantasy": "scriptorium",
+  dark_fantasy: "scriptorium",
+  fantasy: "arcana",
+  adventure: "arcana",
   "science fiction": "prism",
   sci_fi: "prism",
   scifi: "prism",
-  thriller: "prism",
-  action: "prism",
-  fantasy: "botanical",
-  adventure: "botanical",
-  cozy: "candy",
-  comedy: "candy",
-  "slice of life": "candy",
-  slice_of_life: "candy",
-  survival: "prism",
-  erotic: "almanac",
-  romance: "almanac",
-  "erotic romance": "almanac",
-  mystery: "solar",
-  noir: "solar",
+  action: "orbital",
+  survival: "botanical",
+  noir: "dossier",
+  thriller: "dossier",
+  "political intrigue": "dossier",
+  intrigue: "dossier",
   drama: "solar",
-  "political intrigue": "solar",
-  intrigue: "solar"
+  comedy: "candy",
+  cozy: "posy",
+  romance: "posy",
+  mystery: "almanac",
+  "slice of life": "almanac",
+  slice_of_life: "almanac"
 };
 function themeFor(settingsTheme, detectedTheme, lead, configTheme) {
   if (settingsTheme && settingsTheme !== "preset")

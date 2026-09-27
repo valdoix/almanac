@@ -38,10 +38,11 @@ export interface UIView {
 }
 
 const AUTO_THEME: Record<string, string> = {
-  horror: "nocturne", "dark fantasy": "nocturne", dark_fantasy: "nocturne", tragedy: "nocturne",
-  "science fiction": "prism", sci_fi: "prism", scifi: "prism", thriller: "prism", action: "prism",
-  fantasy: "botanical", adventure: "botanical", cozy: "candy", comedy: "candy", "slice of life": "candy", slice_of_life: "candy", survival: "prism", erotic: "almanac",
-  romance: "almanac", "erotic romance": "almanac", mystery: "solar", noir: "solar", drama: "solar", "political intrigue": "solar", intrigue: "solar",
+  horror: "nocturne", tragedy: "nocturne", erotic: "nocturne", "erotic romance": "nocturne",
+  "dark fantasy": "scriptorium", dark_fantasy: "scriptorium", fantasy: "arcana", adventure: "arcana",
+  "science fiction": "prism", sci_fi: "prism", scifi: "prism", action: "orbital", survival: "botanical",
+  noir: "dossier", thriller: "dossier", "political intrigue": "dossier", intrigue: "dossier", drama: "solar",
+  comedy: "candy", cozy: "posy", romance: "posy", mystery: "almanac", "slice of life": "almanac", slice_of_life: "almanac",
 };
 
 export function themeFor(settingsTheme: string, detectedTheme?: string, lead?: string, configTheme?: string): string {
