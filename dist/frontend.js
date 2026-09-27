@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.4.0";
+var VERSION = "1.4.1";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -1009,8 +1009,10 @@ function summary(p, v) {
       return n((v.bonds ?? []).length, "bond");
     case "knowledge":
       return n((v.knowledge ?? []).length, "fact");
-    case "chronicle":
-      return `${n(v.counts?.chapters ?? 0, "chapter")} · ${v.chronicle?.coverage?.raw ?? 100}% raw`;
+    case "chronicle": {
+      const c = v.chronicle?.counts ?? { chapter: v.counts?.chapters ?? 0 };
+      return `${n(c.volume ?? 0, "volume")} · ${n(c.arc ?? 0, "arc")} · ${n(c.chapter ?? 0, "chapter")} · ${v.chronicle?.coverage?.raw ?? 100}% raw`;
+    }
     case "timeline":
       return n((v.timeline ?? []).length, "milestone");
     case "world": {
@@ -1106,6 +1108,9 @@ function emptySky(status) {
 
 // src/frontend/app.ts
 var TABS = PAGES;
+var RANK = { chapter: 1, arc: 2, volume: 3 };
+var LEVEL_COLOR = { volume: "#7b5bd6", arc: "var(--alm-accent-2)", chapter: "var(--alm-accent)" };
+var cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 class AlmanacApp {
   ctx;
@@ -1115,6 +1120,8 @@ class AlmanacApp {
   asOf = Infinity;
   graphAxis = "";
   npcOnly = false;
+  chronFilter = "all";
+  chronOpen = new Set;
   codexFilter = "";
   codexKind = "";
   editing = null;
@@ -1285,15 +1292,40 @@ ${r.kind === "place" ? `<label class="f">Hours (e.g. open 20:00 to 02:00)<input 
 <div class="row"><button class="btn primary" data-act="saveRecord" data-id="${escapeHtml(r.id)}">Save &amp; lock</button><button class="btn" data-act="unlock" data-id="${escapeHtml(r.id)}">Unlock</button><button class="btn" data-act="cancelEdit">Cancel</button>${r.source !== "story" ? `<button class="btn danger" data-act="deleteRecord" data-id="${escapeHtml(r.id)}">Delete</button>` : ""}</div></div>`;
   }
   tab_chronicle(v) {
-    const cov = v.chronicle.coverage;
-    const units = [...v.chronicle.units].sort((a, b) => b.startIdx - a.startIdx);
-    return `<div class="card flat"><h4>Coverage</h4><div class="bar"><i style="width:${cov.volume}%;background:#7b5bd6"></i><i style="width:${cov.arc}%;background:var(--alm-accent-2)"></i><i style="width:${cov.chapter}%;background:var(--alm-accent)"></i><i style="width:${cov.raw}%;background:var(--alm-line)"></i></div>
-<div class="row muted"><small>volumes ${cov.volume}% · arcs ${cov.arc}% · chapters ${cov.chapter}% · raw ${cov.raw}%</small></div>
-<p class="muted">Old turns are summarised at scene boundaries, hidden, and replaced in the prompt by their chapter. The last ${v.settings.rawTail} messages always stay raw.</p>
-<div class="row"><span class="muted grow"><small>Detail: <b>${escapeHtml(v.settings.summaryDetail ?? "detailed")}</b> (change it in Settings)</small></span><button class="btn" data-act="chronicleRewrite" title="Redo every unlocked chapter, arc and volume at the current detail">Rewrite all</button><button class="btn primary" data-act="chronicleRun">Summarise now</button></div></div>
-<div class="list">${units.map((u) => `<div class="rec"><div class="hd"><span class="kind">${escapeHtml(u.level)} ${u.no}</span><b class="grow">${escapeHtml(u.title)}</b>${u.locked ? `<span class="pill">\uD83D\uDD12</span>` : ""}${u.ghost ? `<span class="pill">ghost</span>` : ""}${u.stale ? `<span class="pill">stale</span>` : ""}${u.detail ? `<span class="pill">${escapeHtml(u.detail)}</span>` : ""}</div>
+    const ch = v.chronicle;
+    const cov = ch.coverage;
+    const tok = ch.tokens ?? {};
+    const cnt = ch.counts ?? {};
+    const all = ch.units;
+    const byId = new Map(all.map((u) => [u.id, u]));
+    const newest = (a, b) => b.startIdx - a.startIdx || RANK[b.level] - RANK[a.level];
+    const t = (n) => `~${Math.round(n || 0).toLocaleString()}`;
+    const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+    const label = (u) => `${cap(u.level)} ${u.no}`;
+    const block = (u, depth) => {
+      const kids = u.children.map((id) => byId.get(id)).filter(Boolean).sort(newest);
+      const parent = u.parent ? byId.get(u.parent) : null;
+      const open = this.chronOpen.has(u.id);
+      const status = u.stale ? `<span class="pill">stale</span>` : u.ghost ? `<span class="pill">ghost</span>` : u.folded ? `<span class="pill" title="The prompt uses ${escapeHtml(parent ? label(parent) : "a coarser summary")} for these turns instead">folded${parent ? ` into ${escapeHtml(label(parent))}` : ""}</span>` : `<span class="pill on-prompt" title="This summary is in the prompt">in prompt</span>`;
+      const nested = this.chronFilter === "all" && kids.length ? `<button class="chron-kids-t" data-act="chronToggle" data-id="${escapeHtml(u.id)}" aria-expanded="${open}">${open ? "▾" : "▸"} ${plural(kids.length, kids[0].level)} folded in</button>${open ? `<div class="chron-kids">${kids.map((k) => block(k, depth + 1)).join("")}</div>` : ""}` : "";
+      return `<div class="rec chron chron--${u.level}${u.folded || u.stale || u.ghost ? " chron--folded" : ""}" style="--lv:${LEVEL_COLOR[u.level]}"><div class="hd"><span class="kind">${escapeHtml(label(u))}</span><b class="grow">${escapeHtml(u.title)}</b>${u.locked ? `<span class="pill" title="Locked">\uD83D\uDD12</span>` : ""}</div>
 <div class="muted"><small>messages ${u.startIdx + 1}–${u.endIdx + 1}${u.storyStart ? ` · ${escapeHtml(u.storyStart)}${u.storyEnd && u.storyEnd !== u.storyStart ? ` – ${escapeHtml(u.storyEnd)}` : ""}` : ""}</small></div>
-<details><summary class="muted">read / edit</summary><textarea data-unit="${escapeHtml(u.id)}" style="min-height:140px">${escapeHtml(u.text)}</textarea><div class="row"><button class="btn" data-act="unitSave" data-id="${escapeHtml(u.id)}">Save</button><button class="btn" data-act="unitLock" data-id="${escapeHtml(u.id)}">${u.locked ? "Unlock" : "Lock"}</button><button class="btn" data-act="unitGhost" data-id="${escapeHtml(u.id)}">${u.ghost ? "Unghost" : "Ghost"}</button><button class="btn" data-act="unitRegen" data-id="${escapeHtml(u.id)}">Regenerate</button><button class="btn danger" data-act="unitUnhide" data-id="${escapeHtml(u.id)}">Unhide span</button></div></details></div>`).join("") || `<div class="empty">No chapters yet. They appear once enough scenes have scrolled past the raw tail.</div>`}</div>`;
+<div class="chron-tags">${status}<span class="pill tok" title="Estimated tokens in this summary">${t(u.tokens)} tokens</span>${u.detail ? `<span class="pill">${escapeHtml(u.detail)}</span>` : ""}</div>
+<details><summary class="muted">read / edit</summary><textarea data-unit="${escapeHtml(u.id)}" style="min-height:140px">${escapeHtml(u.text)}</textarea><div class="row"><button class="btn" data-act="unitSave" data-id="${escapeHtml(u.id)}">Save</button><button class="btn" data-act="unitLock" data-id="${escapeHtml(u.id)}">${u.locked ? "Unlock" : "Lock"}</button><button class="btn" data-act="unitGhost" data-id="${escapeHtml(u.id)}">${u.ghost ? "Unghost" : "Ghost"}</button><button class="btn" data-act="unitRegen" data-id="${escapeHtml(u.id)}">Regenerate</button><button class="btn danger" data-act="unitUnhide" data-id="${escapeHtml(u.id)}">Unhide span</button></div></details>${nested}</div>`;
+    };
+    const f = this.chronFilter;
+    const shown = f === "all" ? all.filter((u) => !u.parent || !byId.has(u.parent)).sort(newest) : all.filter((u) => u.level === f).sort(newest);
+    const prompt = (tok.chapter ?? 0) + (tok.arc ?? 0) + (tok.volume ?? 0);
+    const saved = (tok.replaced ?? 0) - prompt;
+    const seg = (k, lab, n) => `<button class="pill${f === k ? " on" : ""}" data-act="chronFilter" data-id="${k}" aria-pressed="${f === k}">${lab}${n != null ? ` <b>${n}</b>` : ""}</button>`;
+    const legend = (lv, lab, n) => `<div class="chron-lg"><i style="background:${lv === "raw" ? "var(--alm-line)" : LEVEL_COLOR[lv]}"></i><span class="grow">${lab}</span><span>${cov[lv] ?? 0}%</span><span class="muted">${t(tok[lv])} tok</span>${lv === "raw" ? "<span></span>" : `<span class="muted">${n}</span>`}</div>`;
+    return `<div class="card flat"><h4>Coverage</h4><div class="bar"><i style="width:${cov.volume}%;background:${LEVEL_COLOR.volume}"></i><i style="width:${cov.arc}%;background:${LEVEL_COLOR.arc}"></i><i style="width:${cov.chapter}%;background:${LEVEL_COLOR.chapter}"></i><i style="width:${cov.raw}%;background:var(--alm-line)"></i></div>
+<div class="chron-legend">${legend("volume", "Volumes", cnt.volume ?? 0)}${legend("arc", "Arcs", cnt.arc ?? 0)}${legend("chapter", "Chapters", cnt.chapter ?? 0)}${legend("raw", "Raw turns", 0)}</div>
+<p class="muted" style="margin:8px 0"><small>In the prompt: <b>${t(prompt)}</b> tokens of summaries and <b>${t(tok.raw)}</b> of raw turns.${tok.replaced ? ` The summaries stand in for ${t(tok.replaced)} tokens of old turns${saved > 0 ? `, saving ${t(saved)}` : ""}.` : ""}</small></p>
+<p class="muted">Old turns are summarised at scene boundaries, hidden, and replaced in the prompt by their chapter. Chapters fold into arcs and arcs into volumes as the story grows. The last ${v.settings.rawTail} messages always stay raw.</p>
+<div class="row"><span class="muted grow"><small>Detail: <b>${escapeHtml(v.settings.summaryDetail ?? "detailed")}</b> (change it in Settings)</small></span><button class="btn" data-act="chronicleRewrite" title="Redo every unlocked chapter, arc and volume at the current detail">Rewrite all</button><button class="btn primary" data-act="chronicleRun">Summarise now</button></div></div>
+<div class="row chron-filter" role="group" aria-label="Show">${seg("all", "All")}${seg("volume", "Volumes", cnt.volume ?? 0)}${seg("arc", "Arcs", cnt.arc ?? 0)}${seg("chapter", "Chapters", cnt.chapter ?? 0)}</div>
+<div class="list">${shown.map((u) => block(u, 0)).join("") || `<div class="empty">${all.length ? `No ${f}s yet.` : "No chapters yet. They appear once enough scenes have scrolled past the raw tail."}</div>`}</div>`;
   }
   tab_timeline(v) {
     const ev = [...v.timeline].reverse();
@@ -1420,6 +1452,19 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
         break;
       case "cancelEdit":
         this.editing = null;
+        this.render();
+        break;
+      case "chronFilter":
+        this.chronFilter = id || "all";
+        this.render();
+        break;
+      case "chronToggle":
+        if (!id)
+          break;
+        if (this.chronOpen.has(id))
+          this.chronOpen.delete(id);
+        else
+          this.chronOpen.add(id);
         this.render();
         break;
       case "saveRecord": {
@@ -1917,6 +1962,29 @@ var PANEL_CSS = `
 .almp .kind{font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;padding:3px 6px;border-radius:5px;background:color-mix(in oklab,var(--alm-accent) 14%,var(--alm-panel));color:var(--alm-accent)}
 .almp .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--alm-panel-2)}
 .almp .bar i{display:block;height:100%}
+/* chronicle: volumes › arcs › chapters */
+.almp .chron-legend{display:grid;gap:4px;margin-top:8px;font:500 11px/1.3 var(--alm-font-mono)}
+.almp .chron-lg{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto 2ch;gap:10px;align-items:center;font-variant-numeric:tabular-nums}
+.almp .chron-lg i{width:10px;height:10px;border-radius:3px}
+.almp .chron-lg span:last-child{text-align:right}
+.almp .chron-filter{margin:12px 0 8px}
+.almp button.pill{cursor:pointer;min-height:28px}
+.almp button.pill b{font-weight:600;margin-left:2px}
+.almp .rec.chron{border-left:4px solid var(--lv);min-width:0}
+.almp .chron-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.almp .chron>.hd{flex-wrap:wrap}
+.almp .chron>.hd b{min-width:0;overflow-wrap:anywhere}
+.almp .chron .kind{background:color-mix(in oklab,var(--lv) 16%,var(--alm-panel));color:var(--lv)}
+.almp .chron--volume{background:color-mix(in oklab,var(--lv) 7%,var(--alm-panel-2));padding:12px}
+.almp .chron--volume>.hd b{font-size:16px}
+.almp .chron--arc>.hd b{font-size:15px}
+.almp .chron .pill.tok{font-variant-numeric:tabular-nums}
+.almp .chron .pill.on-prompt{color:var(--alm-good);border-color:color-mix(in oklab,var(--alm-good) 40%,var(--alm-line))}
+.almp .rec.chron.chron--folded{background:color-mix(in oklab,var(--alm-muted) 9%,var(--alm-panel-2));border-left-color:color-mix(in oklab,var(--lv) 30%,var(--alm-line));border-style:dashed}
+.almp .chron--folded>.hd,.almp .chron--folded>.muted,.almp .chron--folded>.chron-tags,.almp .chron--folded>details>summary{opacity:.62;filter:grayscale(.75)}
+.almp .chron-kids-t{all:unset;cursor:pointer;display:inline-flex;gap:6px;align-items:center;margin-top:8px;padding:4px 0;font:500 11px/1 var(--alm-font-mono);color:var(--lv)}
+.almp .chron-kids-t:focus-visible{outline:2px solid var(--lv);outline-offset:2px}
+.almp .chron-kids{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin:8px 0 0 4px;padding-left:12px;border-left:2px dashed color-mix(in oklab,var(--lv) 40%,var(--alm-line))}
 .almp .graph{width:100%;height:auto;border-radius:var(--alm-r-sm);background:radial-gradient(circle,color-mix(in oklab,var(--alm-muted) 22%,transparent) 1px,transparent 1.4px) 0 0/18px 18px,var(--alm-panel-2)}
 .almp .graph .nm{font:700 12px var(--alm-font-display);fill:var(--alm-ink)}
 .almp .graph .ini{font:700 15px var(--alm-font-display);fill:var(--alm-on-voice)}

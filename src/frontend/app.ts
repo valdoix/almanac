@@ -12,6 +12,10 @@ import { PAGES, dock, emptySky, pageTitle, skyHeader, type Page } from "./orrery
 
 type Tab = Page;
 const TABS = PAGES;
+const RANK: Record<string, number> = { chapter: 1, arc: 2, volume: 3 };
+// Chronicle levels, matching the coverage bar.
+const LEVEL_COLOR: Record<string, string> = { volume: "#7b5bd6", arc: "var(--alm-accent-2)", chapter: "var(--alm-accent)" };
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export class AlmanacApp {
   ctx: SpindleFrontendContext;
@@ -21,6 +25,9 @@ export class AlmanacApp {
   asOf = Infinity;
   graphAxis = "";
   npcOnly = false;
+  /** Chronicle page: which level to list, and which units show their folded children. */
+  chronFilter: "all" | "volume" | "arc" | "chapter" = "all";
+  chronOpen = new Set<string>();
   codexFilter = "";
   codexKind = "";
   editing: string | null = null;
@@ -215,15 +222,43 @@ ${r.kind === "place" ? `<label class="f">Hours (e.g. open 20:00 to 02:00)<input 
   }
 
   tab_chronicle(v: any): string {
-    const cov = v.chronicle.coverage;
-    const units = [...v.chronicle.units].sort((a: any, b: any) => b.startIdx - a.startIdx);
-    return `<div class="card flat"><h4>Coverage</h4><div class="bar"><i style="width:${cov.volume}%;background:#7b5bd6"></i><i style="width:${cov.arc}%;background:var(--alm-accent-2)"></i><i style="width:${cov.chapter}%;background:var(--alm-accent)"></i><i style="width:${cov.raw}%;background:var(--alm-line)"></i></div>
-<div class="row muted"><small>volumes ${cov.volume}% · arcs ${cov.arc}% · chapters ${cov.chapter}% · raw ${cov.raw}%</small></div>
-<p class="muted">Old turns are summarised at scene boundaries, hidden, and replaced in the prompt by their chapter. The last ${v.settings.rawTail} messages always stay raw.</p>
-<div class="row"><span class="muted grow"><small>Detail: <b>${e(v.settings.summaryDetail ?? "detailed")}</b> (change it in Settings)</small></span><button class="btn" data-act="chronicleRewrite" title="Redo every unlocked chapter, arc and volume at the current detail">Rewrite all</button><button class="btn primary" data-act="chronicleRun">Summarise now</button></div></div>
-<div class="list">${units.map((u: any) => `<div class="rec"><div class="hd"><span class="kind">${e(u.level)} ${u.no}</span><b class="grow">${e(u.title)}</b>${u.locked ? `<span class="pill">🔒</span>` : ""}${u.ghost ? `<span class="pill">ghost</span>` : ""}${u.stale ? `<span class="pill">stale</span>` : ""}${u.detail ? `<span class="pill">${e(u.detail)}</span>` : ""}</div>
+    const ch = v.chronicle;
+    const cov = ch.coverage;
+    const tok = ch.tokens ?? {};
+    const cnt = ch.counts ?? {};
+    const all: any[] = ch.units;
+    const byId = new Map(all.map((u: any) => [u.id, u]));
+    const newest = (a: any, b: any) => b.startIdx - a.startIdx || RANK[b.level] - RANK[a.level];
+    const t = (n: number) => `~${Math.round(n || 0).toLocaleString()}`;
+    const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+    const label = (u: any) => `${cap(u.level)} ${u.no}`;
+    const block = (u: any, depth: number): string => {
+      const kids = u.children.map((id: string) => byId.get(id)).filter(Boolean).sort(newest);
+      const parent = u.parent ? byId.get(u.parent) : null;
+      const open = this.chronOpen.has(u.id);
+      const status = u.stale ? `<span class="pill">stale</span>` : u.ghost ? `<span class="pill">ghost</span>` : u.folded ? `<span class="pill" title="The prompt uses ${e(parent ? label(parent) : "a coarser summary")} for these turns instead">folded${parent ? ` into ${e(label(parent))}` : ""}</span>` : `<span class="pill on-prompt" title="This summary is in the prompt">in prompt</span>`;
+      const nested = this.chronFilter === "all" && kids.length
+        ? `<button class="chron-kids-t" data-act="chronToggle" data-id="${e(u.id)}" aria-expanded="${open}">${open ? "▾" : "▸"} ${plural(kids.length, kids[0].level)} folded in</button>${open ? `<div class="chron-kids">${kids.map((k: any) => block(k, depth + 1)).join("")}</div>` : ""}`
+        : "";
+      return `<div class="rec chron chron--${u.level}${u.folded || u.stale || u.ghost ? " chron--folded" : ""}" style="--lv:${LEVEL_COLOR[u.level]}"><div class="hd"><span class="kind">${e(label(u))}</span><b class="grow">${e(u.title)}</b>${u.locked ? `<span class="pill" title="Locked">🔒</span>` : ""}</div>
 <div class="muted"><small>messages ${u.startIdx + 1}–${u.endIdx + 1}${u.storyStart ? ` · ${e(u.storyStart)}${u.storyEnd && u.storyEnd !== u.storyStart ? ` – ${e(u.storyEnd)}` : ""}` : ""}</small></div>
-<details><summary class="muted">read / edit</summary><textarea data-unit="${e(u.id)}" style="min-height:140px">${e(u.text)}</textarea><div class="row"><button class="btn" data-act="unitSave" data-id="${e(u.id)}">Save</button><button class="btn" data-act="unitLock" data-id="${e(u.id)}">${u.locked ? "Unlock" : "Lock"}</button><button class="btn" data-act="unitGhost" data-id="${e(u.id)}">${u.ghost ? "Unghost" : "Ghost"}</button><button class="btn" data-act="unitRegen" data-id="${e(u.id)}">Regenerate</button><button class="btn danger" data-act="unitUnhide" data-id="${e(u.id)}">Unhide span</button></div></details></div>`).join("") || `<div class="empty">No chapters yet. They appear once enough scenes have scrolled past the raw tail.</div>`}</div>`;
+<div class="chron-tags">${status}<span class="pill tok" title="Estimated tokens in this summary">${t(u.tokens)} tokens</span>${u.detail ? `<span class="pill">${e(u.detail)}</span>` : ""}</div>
+<details><summary class="muted">read / edit</summary><textarea data-unit="${e(u.id)}" style="min-height:140px">${e(u.text)}</textarea><div class="row"><button class="btn" data-act="unitSave" data-id="${e(u.id)}">Save</button><button class="btn" data-act="unitLock" data-id="${e(u.id)}">${u.locked ? "Unlock" : "Lock"}</button><button class="btn" data-act="unitGhost" data-id="${e(u.id)}">${u.ghost ? "Unghost" : "Ghost"}</button><button class="btn" data-act="unitRegen" data-id="${e(u.id)}">Regenerate</button><button class="btn danger" data-act="unitUnhide" data-id="${e(u.id)}">Unhide span</button></div></details>${nested}</div>`;
+    };
+    const f = this.chronFilter;
+    // All: the hierarchy, with each unit's children folded inside it. One level: a flat list of that level.
+    const shown = f === "all" ? all.filter((u: any) => !u.parent || !byId.has(u.parent)).sort(newest) : all.filter((u: any) => u.level === f).sort(newest);
+    const prompt = (tok.chapter ?? 0) + (tok.arc ?? 0) + (tok.volume ?? 0);
+    const saved = (tok.replaced ?? 0) - prompt;
+    const seg = (k: string, lab: string, n?: number) => `<button class="pill${f === k ? " on" : ""}" data-act="chronFilter" data-id="${k}" aria-pressed="${f === k}">${lab}${n != null ? ` <b>${n}</b>` : ""}</button>`;
+    const legend = (lv: string, lab: string, n: number) => `<div class="chron-lg"><i style="background:${lv === "raw" ? "var(--alm-line)" : LEVEL_COLOR[lv]}"></i><span class="grow">${lab}</span><span>${cov[lv] ?? 0}%</span><span class="muted">${t(tok[lv])} tok</span>${lv === "raw" ? "<span></span>" : `<span class="muted">${n}</span>`}</div>`;
+    return `<div class="card flat"><h4>Coverage</h4><div class="bar"><i style="width:${cov.volume}%;background:${LEVEL_COLOR.volume}"></i><i style="width:${cov.arc}%;background:${LEVEL_COLOR.arc}"></i><i style="width:${cov.chapter}%;background:${LEVEL_COLOR.chapter}"></i><i style="width:${cov.raw}%;background:var(--alm-line)"></i></div>
+<div class="chron-legend">${legend("volume", "Volumes", cnt.volume ?? 0)}${legend("arc", "Arcs", cnt.arc ?? 0)}${legend("chapter", "Chapters", cnt.chapter ?? 0)}${legend("raw", "Raw turns", 0)}</div>
+<p class="muted" style="margin:8px 0"><small>In the prompt: <b>${t(prompt)}</b> tokens of summaries and <b>${t(tok.raw)}</b> of raw turns.${tok.replaced ? ` The summaries stand in for ${t(tok.replaced)} tokens of old turns${saved > 0 ? `, saving ${t(saved)}` : ""}.` : ""}</small></p>
+<p class="muted">Old turns are summarised at scene boundaries, hidden, and replaced in the prompt by their chapter. Chapters fold into arcs and arcs into volumes as the story grows. The last ${v.settings.rawTail} messages always stay raw.</p>
+<div class="row"><span class="muted grow"><small>Detail: <b>${e(v.settings.summaryDetail ?? "detailed")}</b> (change it in Settings)</small></span><button class="btn" data-act="chronicleRewrite" title="Redo every unlocked chapter, arc and volume at the current detail">Rewrite all</button><button class="btn primary" data-act="chronicleRun">Summarise now</button></div></div>
+<div class="row chron-filter" role="group" aria-label="Show">${seg("all", "All")}${seg("volume", "Volumes", cnt.volume ?? 0)}${seg("arc", "Arcs", cnt.arc ?? 0)}${seg("chapter", "Chapters", cnt.chapter ?? 0)}</div>
+<div class="list">${shown.map((u: any) => block(u, 0)).join("") || `<div class="empty">${all.length ? `No ${f}s yet.` : "No chapters yet. They appear once enough scenes have scrolled past the raw tail."}</div>`}</div>`;
   }
 
   tab_timeline(v: any): string {
@@ -339,6 +374,8 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
       case "grantPanels": this.ctx.events.emit("almanac:grantPanels", {}); break;
       case "edit": this.editing = id ?? null; this.render(); break;
       case "cancelEdit": this.editing = null; this.render(); break;
+      case "chronFilter": this.chronFilter = (id as any) || "all"; this.render(); break;
+      case "chronToggle": if (!id) break; if (this.chronOpen.has(id)) this.chronOpen.delete(id); else this.chronOpen.add(id); this.render(); break;
       case "saveRecord": {
         const body: Record<string, string> = {};
         if (this.root.querySelector("#almEdRoutine")) body.routine = val("#almEdRoutine");

@@ -351,6 +351,29 @@ export const PANEL_CSS = `
 .almp .kind{font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;padding:3px 6px;border-radius:5px;background:color-mix(in oklab,var(--alm-accent) 14%,var(--alm-panel));color:var(--alm-accent)}
 .almp .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--alm-panel-2)}
 .almp .bar i{display:block;height:100%}
+/* chronicle: volumes › arcs › chapters */
+.almp .chron-legend{display:grid;gap:4px;margin-top:8px;font:500 11px/1.3 var(--alm-font-mono)}
+.almp .chron-lg{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto 2ch;gap:10px;align-items:center;font-variant-numeric:tabular-nums}
+.almp .chron-lg i{width:10px;height:10px;border-radius:3px}
+.almp .chron-lg span:last-child{text-align:right}
+.almp .chron-filter{margin:12px 0 8px}
+.almp button.pill{cursor:pointer;min-height:28px}
+.almp button.pill b{font-weight:600;margin-left:2px}
+.almp .rec.chron{border-left:4px solid var(--lv);min-width:0}
+.almp .chron-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.almp .chron>.hd{flex-wrap:wrap}
+.almp .chron>.hd b{min-width:0;overflow-wrap:anywhere}
+.almp .chron .kind{background:color-mix(in oklab,var(--lv) 16%,var(--alm-panel));color:var(--lv)}
+.almp .chron--volume{background:color-mix(in oklab,var(--lv) 7%,var(--alm-panel-2));padding:12px}
+.almp .chron--volume>.hd b{font-size:16px}
+.almp .chron--arc>.hd b{font-size:15px}
+.almp .chron .pill.tok{font-variant-numeric:tabular-nums}
+.almp .chron .pill.on-prompt{color:var(--alm-good);border-color:color-mix(in oklab,var(--alm-good) 40%,var(--alm-line))}
+.almp .rec.chron.chron--folded{background:color-mix(in oklab,var(--alm-muted) 9%,var(--alm-panel-2));border-left-color:color-mix(in oklab,var(--lv) 30%,var(--alm-line));border-style:dashed}
+.almp .chron--folded>.hd,.almp .chron--folded>.muted,.almp .chron--folded>.chron-tags,.almp .chron--folded>details>summary{opacity:.62;filter:grayscale(.75)}
+.almp .chron-kids-t{all:unset;cursor:pointer;display:inline-flex;gap:6px;align-items:center;margin-top:8px;padding:4px 0;font:500 11px/1 var(--alm-font-mono);color:var(--lv)}
+.almp .chron-kids-t:focus-visible{outline:2px solid var(--lv);outline-offset:2px}
+.almp .chron-kids{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin:8px 0 0 4px;padding-left:12px;border-left:2px dashed color-mix(in oklab,var(--lv) 40%,var(--alm-line))}
 .almp .graph{width:100%;height:auto;border-radius:var(--alm-r-sm);background:radial-gradient(circle,color-mix(in oklab,var(--alm-muted) 22%,transparent) 1px,transparent 1.4px) 0 0/18px 18px,var(--alm-panel-2)}
 .almp .graph .nm{font:700 12px var(--alm-font-display);fill:var(--alm-ink)}
 .almp .graph .ini{font:700 15px var(--alm-font-display);fill:var(--alm-on-voice)}

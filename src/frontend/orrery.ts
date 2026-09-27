@@ -66,7 +66,10 @@ export function summary(p: Page, v: any): string {
     case "cast": return `${n((v.cast ?? []).length, "person", "people")} · ${present} present`;
     case "bonds": return n((v.bonds ?? []).length, "bond");
     case "knowledge": return n((v.knowledge ?? []).length, "fact");
-    case "chronicle": return `${n(v.counts?.chapters ?? 0, "chapter")} · ${v.chronicle?.coverage?.raw ?? 100}% raw`;
+    case "chronicle": {
+      const c = v.chronicle?.counts ?? { chapter: v.counts?.chapters ?? 0 };
+      return `${n(c.volume ?? 0, "volume")} · ${n(c.arc ?? 0, "arc")} · ${n(c.chapter ?? 0, "chapter")} · ${v.chronicle?.coverage?.raw ?? 100}% raw`;
+    }
     case "timeline": return n((v.timeline ?? []).length, "milestone");
     case "world": {
       const due = dueCount(v);

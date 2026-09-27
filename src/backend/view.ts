@@ -2,7 +2,8 @@
 
 import { VERSION } from "../core/version";
 import { voiceColor, speakerCss } from "../core/render";
-import { absMinutes, fmtSpan, fmtTime, hhmm } from "../core/util";
+import { absMinutes, estTokens, fmtSpan, fmtTime, hhmm } from "../core/util";
+import { coverageMap } from "../core/chronicle";
 import { normFact } from "../core/state";
 import { debounce, describe, host, warn } from "./host";
 import { ledgerFor } from "./ledger";
@@ -26,7 +27,7 @@ export interface UIView {
   bonds: any[];
   knowledge: any[];
   codex: any[];
-  chronicle: { units: any[]; coverage: Record<string, number> };
+  chronicle: { units: any[]; coverage: Record<string, number>; tokens: Record<string, number>; counts: Record<string, number> };
   timeline: any[];
   world: any;
   lore: any;
@@ -75,16 +76,32 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     f.holders = f.holders.filter((h) => h.id !== k.holder);
     f.holders.push({ id: k.holder, name: nm(k.holder), status: k.status, source: k.source });
   }
-  const units = files.chronicle.units.map((u) => ({ id: u.id, level: u.level, no: u.no, title: u.title, startIdx: u.startIdx, endIdx: u.endIdx, storyStart: u.storyStart, storyEnd: u.storyEnd, text: u.text, locked: !!u.locked, ghost: !!u.ghost, stale: !!u.stale, count: u.msgIds.length }));
+  // Which unit stands in for each message in the prompt; a unit none of them uses has been folded into a coarser one.
+  const cover = coverageMap(files.chronicle);
+  const inPrompt = new Set([...cover.values()].map((u) => u.id));
+  const live = files.chronicle.units.filter((u) => !u.stale && !u.ghost);
+  const units = files.chronicle.units.map((u) => {
+    const parent = live.find((p) => p.id !== u.id && p.children?.includes(u.id));
+    return {
+      id: u.id, level: u.level, no: u.no, title: u.title, startIdx: u.startIdx, endIdx: u.endIdx, storyStart: u.storyStart, storyEnd: u.storyEnd, text: u.text,
+      locked: !!u.locked, ghost: !!u.ghost, stale: !!u.stale, count: u.msgIds.length, detail: u.detail, children: u.children ?? [],
+      parent: parent?.id, tokens: estTokens(u.text), folded: !u.stale && !u.ghost && !inPrompt.has(u.id),
+    };
+  });
   const total = Math.max(1, L.path.length);
   const coverage: Record<string, number> = { raw: 0, chapter: 0, arc: 0, volume: 0 };
-  const rank: Record<string, number> = { chapter: 1, arc: 2, volume: 3 };
+  // Prompt tokens by layer, and what the summarised turns would cost raw.
+  const tokens: Record<string, number> = { raw: 0, chapter: 0, arc: 0, volume: 0, replaced: 0 };
   for (const m of L.path) {
-    let best = "raw";
-    for (const u of files.chronicle.units) if (!u.stale && !u.ghost && m.index >= u.startIdx && m.index <= u.endIdx && (best === "raw" || rank[u.level] > rank[best])) best = u.level;
-    coverage[best]++;
+    const u = cover.get(m.index);
+    coverage[u ? u.level : "raw"]++;
+    if (u) tokens.replaced += estTokens(m.content);
+    else tokens.raw += estTokens(m.content);
   }
+  for (const u of files.chronicle.units) if (inPrompt.has(u.id)) tokens[u.level] += estTokens(u.text);
   for (const k of Object.keys(coverage)) coverage[k] = Math.round((coverage[k] / total) * 100);
+  const levelCounts: Record<string, number> = { chapter: 0, arc: 0, volume: 0 };
+  for (const u of files.chronicle.units) if (!u.stale) levelCounts[u.level]++;
 
   return {
     version: VERSION,
@@ -115,7 +132,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     bonds: Object.values(st.bonds).map((b) => ({ from: b.from, to: b.to, fromName: nm(b.from), toName: nm(b.to), axes: b.axes, label: b.label, tags: b.tags, history: b.history.slice(-6), ladder: st.ladders[`${b.from}>${b.to}`] ?? null, lastMsg: b.history.at(-1)?.msgIndex ?? 0 })),
     knowledge: facts,
     codex: L.records.map((r) => ({ id: r.id, kind: r.kind, name: r.name, summary: r.summary, keys: r.keys, locked: !!r.locked, status: r.status, source: r.provenance.source, narratorOnly: !!r.scope.narratorOnly, salience: Math.round(r.salience * 100) / 100, body: pickBody(r.body), aliases: r.aliases })),
-    chronicle: { units, coverage },
+    chronicle: { units, coverage, tokens, counts: levelCounts },
     timeline: st.milestones.slice(-120).map((m) => ({ at: m.at ? fmtTime(m.at) : "", day: m.at?.day ?? null, kind: m.kind, text: m.text, msgIndex: m.msgIndex })),
     world: {
       factions: Object.values(st.factions).map((f) => ({ name: f.name, clocks: Object.values(f.clocks) })),
