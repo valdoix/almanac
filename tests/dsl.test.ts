@@ -167,3 +167,14 @@ describe("knowledge table in the tracker drawer", () => {
     expect(JSON.parse(await Bun.file("package.json").text()).version).toBe(VERSION);
   });
 });
+
+describe("header with a clock face", () => {
+  test("🕛 instead of 🕰 still gives the time, date and weather", () => {
+    const { header } = parseHeader("🗓️ Day 2 · Wednesday 10 October 2001 🕛 11:48 🌤️ fair, 13°C · wind N\n📍 Sunnydale › Winters Residence › guest bedroom");
+    expect(header?.day).toBe(2);
+    expect(header?.time).toBe(11 * 60 + 48);
+    expect(header?.dateLabel).toBe("Wednesday 10 October 2001");
+    expect(header?.condition).toBe("fair");
+    expect(header?.tempC).toBe(13);
+  });
+});

@@ -77,6 +77,15 @@ describe("preset build", () => {
     expect(linked?.slice(2, 4)).toEqual(["7", "05"]);
     expect(linked?.slice(6, 11)).toEqual(["06", "42", "18", "10", "🌖 waning gibbous"]);
   });
+  test("the plate regex reads a header whose clock is a clock face, not 🕰", async () => {
+    const { PLATE_FIND } = await import("../preset/src/plate");
+    const re = new RegExp(PLATE_FIND);
+    const m = re.exec("🗓️ Day 2 · Wednesday 10 October 2001 🕛 11:48 🌤️ fair, 13°C · wind N ⟪06:26|17:34|🌕 full moon⟫\n📍 Sunnydale › Winters Residence › guest bedroom\n\n# Logistics");
+    expect(m?.slice(1, 6)).toEqual(["Day 2 · Wednesday 10 October 2001", "11", "48", "🌤", "fair, 13°C · wind N"]);
+    expect(m?.slice(6, 11)).toEqual(["06", "26", "17", "34", "🌕 full moon"]);
+    expect(m?.[11]).toBe("Sunnydale › Winters Residence › guest bedroom");
+    for (const clock of ["⏰", "🕐", "🕧", "⌚"]) expect(re.exec(`🗓️ Day 1 · Monday ${clock} 07:05 ☀️ clear`)?.slice(1, 4)).toEqual(["Day 1 · Monday", "7", "05"]);
+  });
 });
 
 describe("speaker labels", () => {

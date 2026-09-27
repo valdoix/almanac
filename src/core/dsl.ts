@@ -634,20 +634,23 @@ export function parseHeader(text: string): { header: SceneHeader | null; title: 
   return { header, title };
 }
 
+// The time's glyph: 🕰, or the clock faces and watches models drift to.
+const CLOCK = "(?:🕰|[\\u{1F550}-\\u{1F567}]|⏰|⌚|⏱|⏲)\\uFE0F?";
+
 function parseHeaderLine(l: string): SceneHeader {
   const h: SceneHeader = {};
   const day = /Day\s*(\d+)/i.exec(l);
   if (day) h.day = parseInt(day[1], 10);
-  const time = /🕰️?\s*(\d{1,2})[:.](\d{2})\s*(AM|PM)?/iu.exec(l) || /\b(\d{1,2}):(\d{2})\s*(AM|PM)?\b/i.exec(l);
+  const time = new RegExp(`${CLOCK}\\s*(\\d{1,2})[:.](\\d{2})\\s*(AM|PM)?`, "iu").exec(l) || /\b(\d{1,2}):(\d{2})\s*(AM|PM)?\b/i.exec(l);
   if (time) {
     let hh = parseInt(time[1], 10);
     if (time[3]?.toUpperCase() === "PM" && hh < 12) hh += 12;
     if (time[3]?.toUpperCase() === "AM" && hh === 12) hh = 0;
     h.time = (hh % 24) * 60 + parseInt(time[2], 10);
   }
-  const dl = /🗓️?\s*([^🕰]*)/u.exec(l)?.[1]?.replace(/Day\s*\d+\s*·?\s*/i, "").trim();
+  const dl = new RegExp(`🗓️?\\s*((?:(?!${CLOCK}).)*)`, "u").exec(l)?.[1]?.replace(/Day\s*\d+\s*·?\s*/i, "").trim();
   if (dl) h.dateLabel = dl.replace(/\s*·\s*$/, "");
-  const g = new RegExp(`(${GLYPHS})\\s*([^\\n]*)$`, "u").exec(l.replace(/🕰️?\s*\d{1,2}[:.]\d{2}(\s*[AP]M)?/iu, ""));
+  const g = new RegExp(`(${GLYPHS})\\s*([^\\n]*)$`, "u").exec(l.replace(new RegExp(`${CLOCK}\\s*\\d{1,2}[:.]\\d{2}(\\s*[AP]M)?`, "iu"), ""));
   if (g) {
     h.glyph = g[1];
     const w = parseWeatherText(g[2]);

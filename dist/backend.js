@@ -1714,12 +1714,13 @@ function parseHeader(text) {
   }
   return { header, title };
 }
+var CLOCK = "(?:\uD83D\uDD70|[\\u{1F550}-\\u{1F567}]|\u23F0|\u231A|\u23F1|\u23F2)\\uFE0F?";
 function parseHeaderLine(l) {
   const h = {};
   const day = /Day\s*(\d+)/i.exec(l);
   if (day)
     h.day = parseInt(day[1], 10);
-  const time = /\uD83D\uDD70\uFE0F?\s*(\d{1,2})[:.](\d{2})\s*(AM|PM)?/iu.exec(l) || /\b(\d{1,2}):(\d{2})\s*(AM|PM)?\b/i.exec(l);
+  const time = new RegExp(`${CLOCK}\\s*(\\d{1,2})[:.](\\d{2})\\s*(AM|PM)?`, "iu").exec(l) || /\b(\d{1,2}):(\d{2})\s*(AM|PM)?\b/i.exec(l);
   if (time) {
     let hh = parseInt(time[1], 10);
     if (time[3]?.toUpperCase() === "PM" && hh < 12)
@@ -1728,10 +1729,10 @@ function parseHeaderLine(l) {
       hh = 0;
     h.time = hh % 24 * 60 + parseInt(time[2], 10);
   }
-  const dl = /\uD83D\uDDD3\uFE0F?\s*([^\uD83D\uDD70]*)/u.exec(l)?.[1]?.replace(/Day\s*\d+\s*\u00B7?\s*/i, "").trim();
+  const dl = new RegExp(`\uD83D\uDDD3\uFE0F?\\s*((?:(?!${CLOCK}).)*)`, "u").exec(l)?.[1]?.replace(/Day\s*\d+\s*\u00B7?\s*/i, "").trim();
   if (dl)
     h.dateLabel = dl.replace(/\s*\u00B7\s*$/, "");
-  const g = new RegExp(`(${GLYPHS})\\s*([^\\n]*)$`, "u").exec(l.replace(/\uD83D\uDD70\uFE0F?\s*\d{1,2}[:.]\d{2}(\s*[AP]M)?/iu, ""));
+  const g = new RegExp(`(${GLYPHS})\\s*([^\\n]*)$`, "u").exec(l.replace(new RegExp(`${CLOCK}\\s*\\d{1,2}[:.]\\d{2}(\\s*[AP]M)?`, "iu"), ""));
   if (g) {
     h.glyph = g[1];
     const w = parseWeatherText(g[2]);
@@ -1920,7 +1921,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.8.1";
+var VERSION = "1.8.2";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];

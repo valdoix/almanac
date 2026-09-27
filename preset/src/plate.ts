@@ -179,7 +179,10 @@ export const PLATE_CSS = css`
 // Header grammar (no "u" flag: emoji are matched as literal code-unit sequences).
 // Groups: 1 date · 2 hour · 3 minute · 4 glyph · 5 condition text · 6/7 sunrise ·
 // 8/9 sunset · 10 moon · 11 place path · 12 title
-export const PLATE_FIND = R`(?:^|\n)[ \t]*(?:\*\*)?🗓️?[ \t]*([^\n🕰]*?)[ \t]*🕰️?[ \t]*0?(\d|1\d|2[0-3]):([0-5]\d)[ \t]*(?:(☀|🌙|✨|🌤|⛅|🌥|☁|🌦|🌧|⛈|🌩|🌨|❄|🧊|🌫|🌬|🌪|🔥|🌡)️?)?[ \t]*([^\n⟪]*?)[ \t]*(?:\*\*)?[ \t]*(?:⟪(\d{1,2}):(\d\d)\|(\d{1,2}):(\d\d)\|([^⟫\n]*)⟫)?[ \t]*(?:\n[ \t]*(?:\*\*)?📍️?[ \t]*([^\n]*?)(?:\*\*)?)?[ \t]*(?:\n[ \t]*#{1,3}[ \t]+([^\n]+))?(?=\n|$)`;
+// Any clock glyph opens the time: models drift from 🕰 to the hour faces
+// 🕐–🕧 (written as surrogates, since there is no "u" flag), ⏰, ⌚, ⏱ or ⏲.
+const CLOCK = R`(?:🕰|\uD83D[\uDD50-\uDD67]|⏰|⌚|⏱|⏲)`;
+export const PLATE_FIND = R`(?:^|\n)[ \t]*(?:\*\*)?🗓️?[ \t]*((?:(?!${CLOCK})[^\n])*?)[ \t]*(?:${CLOCK}️?)?[ \t]*0?(\d|1\d|2[0-3]):([0-5]\d)[ \t]*(?:(☀|🌙|✨|🌤|⛅|🌥|☁|🌦|🌧|⛈|🌩|🌨|❄|🧊|🌫|🌬|🌪|🔥|🌡)️?)?[ \t]*([^\n⟪]*?)[ \t]*(?:\*\*)?[ \t]*(?:⟪(\d{1,2}):(\d\d)\|(\d{1,2}):(\d\d)\|([^⟫\n]*)⟫)?[ \t]*(?:\n[ \t]*(?:\*\*)?📍️?[ \t]*([^\n]*?)(?:\*\*)?)?[ \t]*(?:\n[ \t]*#{1,3}[ \t]+([^\n]+))?(?=\n|$)`;
 
 const BAND = R`{{switch::$2::0::night::1::night::2::small::3::small::4::predawn::5::dawn::6::sunrise::7::morning::8::morning::9::morning::10::morning::11::midday::12::midday::13::midday::14::afternoon::15::afternoon::16::afternoon::17::golden::18::sunset::19::dusk::20::evening::21::evening::night}}`;
 const WX = R`{{switch::$4::☀::clear::🌙::clear::✨::clear::🌤::fair::⛅::broken::🌥::broken::☁::overcast::🌦::showers::🌧::rain::⛈::storm::🌩::storm::🌨::snow::❄::snow::🧊::sleet::🌫::fog::🌬::wind::🌪::storm::🔥::heat::🌡::heat::{{if::{{matches::$5::storm|thunder::i}}}}storm{{else}}{{if::{{matches::$5::snow|blizzard::i}}}}snow{{else}}{{if::{{matches::$5::rain|drizzle|shower::i}}}}rain{{else}}{{if::{{matches::$5::fog|mist::i}}}}fog{{else}}{{if::{{matches::$5::overcast|cloud::i}}}}overcast{{else}}clear{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}}}`;
