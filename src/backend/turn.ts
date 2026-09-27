@@ -14,7 +14,7 @@ import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels } from "../core/dsl
 import { debug, describe, has, host, warn, within } from "./host";
 import { ledgerFor, type ChatLedger } from "./ledger";
 import { waitForClerk } from "./clerk";
-import type { ChatMeta } from "./store";
+import { loadChat, save, type ChatMeta } from "./store";
 import type { Settings } from "../core/types";
 
 export interface TurnPlan {
@@ -113,8 +113,8 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   const loreManagedBooks = new Set<string>();
   for (const [bookId, b] of Object.entries(meta.lore.books)) if (b.mode === "managed") loreManagedBooks.add(bookId);
   for (const it of rc.items) {
-    const le = it.record.provenance.loreEntryId;
-    const lb = it.record.provenance.loreBookId;
+    const le = it.record.provenance?.loreEntryId;
+    const lb = it.record.provenance?.loreBookId;
     if (le && lb && meta.lore.books[lb] && meta.lore.books[lb].mode !== "native") lorePicks.add(le);
   }
   const divergence: Record<string, string> = {};
@@ -189,11 +189,43 @@ function scaleBudgets(total: number, tier: string) {
 
 export async function safePlan(chatId: string, genType: string, userId?: string, opts: { dryRun?: boolean } = {}): Promise<TurnPlan | null> {
   try {
-    return await planTurn(chatId, genType, userId, opts);
+    const plan = await planTurn(chatId, genType, userId, opts);
+    if (plan) await notePlanError(chatId, userId, null);
+    return plan;
   } catch (err) {
     warn(`plan failed: ${describe(err)}`);
+    await notePlanError(chatId, userId, err, "planning the turn", genType);
     return null;
   }
+}
+
+/**
+ * Record (or, with `err` null, clear) why the last turn reached the model without
+ * the note. The prompt still goes out untouched, so without this the only trace is
+ * a line in the server console.
+ */
+export async function notePlanError(chatId: string, userId: string | undefined, err: unknown, where = "", genType = "normal") {
+  try {
+    const files = await loadChat(chatId, userId);
+    const meta = files.meta;
+    if (!err) {
+      if (!meta.planError) return;
+      meta.planError = null;
+    } else {
+      const stack = err instanceof Error && err.stack ? err.stack.split("\n").slice(1, 4).map((l) => l.trim()).join("\n") : "";
+      meta.planError = { at: Date.now(), where, genType, message: describe(err), stack };
+    }
+    save(chatId, "meta", userId);
+    changed?.(chatId, userId);
+  } catch (e) {
+    warn(`note plan error: ${describe(e)}`);
+  }
+}
+
+/** Set by the view module (which imports this one) so a new or cleared error reaches the drawer. */
+let changed: ((chatId: string, userId?: string) => void) | undefined;
+export function onPlanErrorChange(fn: (chatId: string, userId?: string) => void) {
+  changed = fn;
 }
 
 export type { ChatLedger };

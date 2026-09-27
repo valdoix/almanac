@@ -20,7 +20,7 @@ export function hudPill(v: any, note?: string): string {
   const place = (n.place ?? []) as string[];
   const present = presentOf(v).slice(0, 4);
   return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" aria-expanded="false" title="Open the Now window">
-<span class="alm-hudw__orb" style="background:${skyOf(v)}"><i class="${/night|hours|pre-dawn|evening|dusk/.test(n.band ?? "evening") ? "moon" : "sun"}"></i></span><b class="alm-hudw__t">${e(n.time ?? "--:--")}</b>${n.weather ? `<span>${e(n.weather.glyph)} ${e(n.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${e(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-stack">${present.map(mini).join("")}</span>` : ""}</div>`;
+<span class="alm-hudw__orb" style="background:${skyOf(v)}"><i class="${/night|hours|pre-dawn|evening|dusk/.test(n.band ?? "evening") ? "moon" : "sun"}"></i></span><b class="alm-hudw__t">${e(n.time ?? "--:--")}</b>${n.weather ? `<span>${e(n.weather.glyph)} ${e(n.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${e(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-stack">${present.map(mini).join("")}</span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}</div>`;
 }
 
 /** The open window. */
@@ -40,6 +40,7 @@ export function hudCard(v: any): string {
   <div class="alm-hudc__chips">${n.weather ? `<span>${e(n.weather.glyph)} ${e(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${e(place.slice(-2).join(" › "))}</span>` : ""}${n.mode ? `<span>${e(n.mode)}</span>` : ""}</div>
 </div>
 <div class="alm-hudc__bd">
+  ${v.planError ? `<p class="alm-hudc__err"><b>The last turn went out without the Almanac.</b> ${e(v.planError.message)}</p>` : ""}
   <h5>Present</h5>
   ${who ? `<ul class="alm-hudc__who">${who}</ul>` : `<p class="alm-hudc__muted">No one else is here.</p>`}
   ${owed.length ? `<h5>Owed and due</h5><ul class="alm-hudc__owed">${owed.map((c: any) => `<li class="${c.status === "due" ? "due" : ""}">${e(c.whoName)}${c.whomName ? ` → ${e(c.whomName)}` : ""}: ${e(c.what ?? "")}${c.dueText ? ` <small>due ${e(c.dueText)}</small>` : ""}</li>`).join("")}</ul>` : ""}

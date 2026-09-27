@@ -34,6 +34,16 @@ export interface Detected {
   at?: number;
 }
 
+export interface PlanError {
+  at: number;
+  /** "planning the turn" or "building the prompt". */
+  where: string;
+  genType: string;
+  message: string;
+  /** The first lines of the stack, for a bug report. */
+  stack: string;
+}
+
 export interface Arrival {
   id: string;
   msgId: string;
@@ -71,6 +81,8 @@ export interface ChatMeta {
   repaired: Record<string, "repair" | "extractor" | "failed">;
   /** Replies the knowledge clerk has read (msgId:swipe → the text's hash and the outcome). */
   clerked?: Record<string, { hash: string; result: "ok" | "none" | "failed" | "clean" }>;
+  /** The last time a turn went to the model without the note (cleared by the next good plan). */
+  planError?: PlanError | null;
   telemetry?: CraftReport | null;
   greetedReturn?: number;
 }

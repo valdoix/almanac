@@ -151,6 +151,20 @@ describe("extension hooks with the preset", () => {
     const hist = out.find((m: any) => m.role === "assistant");
     expect(hist.content).toBe(`[spk=Buffy#1|flat]"Great. Another one."[/spk]`);
   });
+
+  test("a turn that went out without the note shows in the drawer until a plan works again", async () => {
+    const { notePlanError } = await import("../src/backend/turn");
+    const { buildView } = await import("../src/backend/view");
+    await notePlanError(CHAT, USER, new TypeError("undefined is not an object"), "planning the turn", "normal");
+    const v = await buildView(CHAT, USER);
+    expect(v?.planError?.message).toBe("undefined is not an object");
+    expect(v?.planError?.where).toBe("planning the turn");
+    const { hudPill, hudCard } = await import("../src/frontend/hud");
+    expect(hudPill(v)).toContain("alm-hudw__err");
+    expect(hudCard(v)).toContain("undefined is not an object");
+    await hooks.context({ chatId: CHAT, userId: USER, generationType: "normal" });
+    expect((await buildView(CHAT, USER))?.planError).toBeNull();
+  });
 });
 
 test("tidying a whole chat reads only what the clerk hasn't read in its current text", async () => {

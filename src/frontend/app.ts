@@ -106,11 +106,15 @@ export class AlmanacApp {
     const stale = this.versionWarning
       ? `<div class="card flat alm-warnbox"><b>The Ledger's background process is running ${e(this.versionWarning)}, but this page loaded ${VERSION}.</b><p class="muted">In Extensions, turn ALMANAC Ledger off and on again (or press Update), then reload the page. If this stays, check Extensions for a second copy of ALMANAC Ledger and remove the older one.</p></div>`
       : "";
+    const pe = v.enabled ? v.planError : null;
+    const planErr = pe
+      ? `<div class="card flat alm-warnbox"><b>The last ${pe.genType === "normal" ? "turn" : e(pe.genType)} went to the model without the Almanac.</b><p class="muted">At ${e(new Date(pe.at).toLocaleString())}, ${e(pe.where)} failed, so the reply was written without the ledger note, recall or mirror entries. This clears itself on the next turn that works. If it keeps coming back, update the extension, and report the error below if an update doesn't fix it.</p><p><code>${e(pe.message)}</code></p>${pe.stack ? `<details><summary class="muted">Details for a bug report</summary><pre>ALMANAC Ledger ${e(v.version)}\n${e(pe.stack)}</pre></details>` : ""}</div>`
+      : "";
     const banner = !v.enabled
       ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block). You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button></div>`
       : "";
     const scroll = this.root.scrollTop;
-    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
+    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${planErr}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
     this.root.scrollTop = scroll;
   }
 

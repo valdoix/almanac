@@ -434,6 +434,8 @@ export const PANEL_CSS = `
 .alm-hudc__muted{margin:0;color:var(--alm-muted);font-size:12px}
 .alm-hudc__go{display:block;width:100%;margin-top:12px!important;padding:9px 12px!important;border-radius:12px;text-align:center;background:var(--alm-accent)!important;color:var(--alm-on-accent)!important;font-weight:600!important;font-size:12.5px!important}
 .alm-hudc__go:hover{filter:brightness(1.08)}
+.alm-hudw__err{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#ffc46b;color:#2a1d00;font-weight:700;font-size:12px}
+.alm-hudc__err{margin:0 0 10px;padding:8px 10px;border-radius:10px;font-size:12px;line-height:1.4;border:1px solid color-mix(in oklab,var(--alm-warn) 55%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 12%,transparent);overflow-wrap:anywhere}
 .alm-sz{font-size:14px}
 .alm-sz .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
 @media (max-width:560px){.alm-sz .grid{grid-template-columns:1fr}}

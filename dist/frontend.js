@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.7.1";
+var VERSION = "1.7.2";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -1228,9 +1228,12 @@ class AlmanacApp {
       body = `<div class="empty">Could not draw this page: ${escapeHtml(String(err))}</div>`;
     }
     const stale = this.versionWarning ? `<div class="card flat alm-warnbox"><b>The Ledger's background process is running ${escapeHtml(this.versionWarning)}, but this page loaded ${VERSION}.</b><p class="muted">In Extensions, turn ALMANAC Ledger off and on again (or press Update), then reload the page. If this stays, check Extensions for a second copy of ALMANAC Ledger and remove the older one.</p></div>` : "";
+    const pe = v.enabled ? v.planError : null;
+    const planErr = pe ? `<div class="card flat alm-warnbox"><b>The last ${pe.genType === "normal" ? "turn" : escapeHtml(pe.genType)} went to the model without the Almanac.</b><p class="muted">At ${escapeHtml(new Date(pe.at).toLocaleString())}, ${escapeHtml(pe.where)} failed, so the reply was written without the ledger note, recall or mirror entries. This clears itself on the next turn that works. If it keeps coming back, update the extension, and report the error below if an update doesn't fix it.</p><p><code>${escapeHtml(pe.message)}</code></p>${pe.stack ? `<details><summary class="muted">Details for a bug report</summary><pre>ALMANAC Ledger ${escapeHtml(v.version)}
+${escapeHtml(pe.stack)}</pre></details>` : ""}</div>` : "";
     const banner = !v.enabled ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block). You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button></div>` : "";
     const scroll = this.root.scrollTop;
-    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
+    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${planErr}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
     this.root.scrollTop = scroll;
   }
   go(page) {
@@ -2368,6 +2371,8 @@ var PANEL_CSS = `
 .alm-hudc__muted{margin:0;color:var(--alm-muted);font-size:12px}
 .alm-hudc__go{display:block;width:100%;margin-top:12px!important;padding:9px 12px!important;border-radius:12px;text-align:center;background:var(--alm-accent)!important;color:var(--alm-on-accent)!important;font-weight:600!important;font-size:12.5px!important}
 .alm-hudc__go:hover{filter:brightness(1.08)}
+.alm-hudw__err{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#ffc46b;color:#2a1d00;font-weight:700;font-size:12px}
+.alm-hudc__err{margin:0 0 10px;padding:8px 10px;border-radius:10px;font-size:12px;line-height:1.4;border:1px solid color-mix(in oklab,var(--alm-warn) 55%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 12%,transparent);overflow-wrap:anywhere}
 .alm-sz{font-size:14px}
 .alm-sz .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
 @media (max-width:560px){.alm-sz .grid{grid-template-columns:1fr}}
@@ -3142,7 +3147,7 @@ function hudPill(v, note) {
   const place = n.place ?? [];
   const present = presentOf(v).slice(0, 4);
   return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" aria-expanded="false" title="Open the Now window">
-<span class="alm-hudw__orb" style="background:${skyOf(v)}"><i class="${/night|hours|pre-dawn|evening|dusk/.test(n.band ?? "evening") ? "moon" : "sun"}"></i></span><b class="alm-hudw__t">${escapeHtml(n.time ?? "--:--")}</b>${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${escapeHtml(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-stack">${present.map(mini).join("")}</span>` : ""}</div>`;
+<span class="alm-hudw__orb" style="background:${skyOf(v)}"><i class="${/night|hours|pre-dawn|evening|dusk/.test(n.band ?? "evening") ? "moon" : "sun"}"></i></span><b class="alm-hudw__t">${escapeHtml(n.time ?? "--:--")}</b>${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${escapeHtml(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-stack">${present.map(mini).join("")}</span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}</div>`;
 }
 function hudCard(v) {
   const n = v.now ?? {};
@@ -3160,6 +3165,7 @@ function hudCard(v) {
   <div class="alm-hudc__chips">${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${escapeHtml(place.slice(-2).join(" › "))}</span>` : ""}${n.mode ? `<span>${escapeHtml(n.mode)}</span>` : ""}</div>
 </div>
 <div class="alm-hudc__bd">
+  ${v.planError ? `<p class="alm-hudc__err"><b>The last turn went out without the Almanac.</b> ${escapeHtml(v.planError.message)}</p>` : ""}
   <h5>Present</h5>
   ${who ? `<ul class="alm-hudc__who">${who}</ul>` : `<p class="alm-hudc__muted">No one else is here.</p>`}
   ${owed.length ? `<h5>Owed and due</h5><ul class="alm-hudc__owed">${owed.map((c) => `<li class="${c.status === "due" ? "due" : ""}">${escapeHtml(c.whoName)}${c.whomName ? ` → ${escapeHtml(c.whomName)}` : ""}: ${escapeHtml(c.what ?? "")}${c.dueText ? ` <small>due ${escapeHtml(c.dueText)}</small>` : ""}</li>`).join("")}</ul>` : ""}

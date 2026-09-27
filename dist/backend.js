@@ -1796,7 +1796,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.7.1";
+var VERSION = "1.7.2";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -6566,7 +6566,23 @@ function recall(input) {
     if (used >= budget)
       break;
     const t = `[Earlier \u2014 ${z.title}] ${z.text}`;
-    addItem({ record: { id: z.id, kind: "history", name: z.title, summary: z.text }, score: z.score, reasons: ["zoom-in"], lane: "zoom" }, [t, truncateTokens(t, 160)]);
+    const record = {
+      id: z.id,
+      kind: "history",
+      tense: "past",
+      name: z.title,
+      aliases: [],
+      keys: [],
+      summary: z.text,
+      body: {},
+      links: [],
+      scope: {},
+      provenance: { source: "story" },
+      salience: z.score,
+      lastSeen: 0,
+      status: "active"
+    };
+    addItem({ record, score: z.score, reasons: ["zoom-in"], lane: "zoom" }, [t, truncateTokens(t, 160)]);
   }
   const text = items.length ? `<recall>
 ${items.map((i) => i.text).join(`
@@ -7219,8 +7235,8 @@ ${recallItems.join(`
     if (b.mode === "managed")
       loreManagedBooks.add(bookId);
   for (const it of rc.items) {
-    const le = it.record.provenance.loreEntryId;
-    const lb = it.record.provenance.loreBookId;
+    const le = it.record.provenance?.loreEntryId;
+    const lb = it.record.provenance?.loreBookId;
     if (le && lb && meta.lore.books[lb] && meta.lore.books[lb].mode !== "native")
       lorePicks.add(le);
   }
@@ -7324,11 +7340,39 @@ function scaleBudgets(total, tier) {
 }
 async function safePlan(chatId, genType, userId, opts = {}) {
   try {
-    return await planTurn(chatId, genType, userId, opts);
+    const plan = await planTurn(chatId, genType, userId, opts);
+    if (plan)
+      await notePlanError(chatId, userId, null);
+    return plan;
   } catch (err) {
     warn(`plan failed: ${describe(err)}`);
+    await notePlanError(chatId, userId, err, "planning the turn", genType);
     return null;
   }
+}
+async function notePlanError(chatId, userId, err, where = "", genType = "normal") {
+  try {
+    const files = await loadChat(chatId, userId);
+    const meta = files.meta;
+    if (!err) {
+      if (!meta.planError)
+        return;
+      meta.planError = null;
+    } else {
+      const stack = err instanceof Error && err.stack ? err.stack.split(`
+`).slice(1, 4).map((l) => l.trim()).join(`
+`) : "";
+      meta.planError = { at: Date.now(), where, genType, message: describe(err), stack };
+    }
+    save(chatId, "meta", userId);
+    changed?.(chatId, userId);
+  } catch (e) {
+    warn(`note plan error: ${describe(e)}`);
+  }
+}
+var changed;
+function onPlanErrorChange(fn) {
+  changed = fn;
 }
 
 // src/backend/macros.ts
@@ -7738,6 +7782,7 @@ Follow this plan. Do not repeat it; write the reply.` }, name: "ALMANAC \xB7 Dir
       return result;
     } catch (err) {
       warn(`prompt interceptor: ${describe(err)}`);
+      await notePlanError(chatId, context.userId ?? userFor(chatId), err, "building the prompt", context.generationType ?? "normal");
       return messages;
     }
   }, 80);
@@ -8092,6 +8137,7 @@ async function buildView(chatId, userId) {
     knowGaps: gaps,
     knowers,
     clerk: { mode: settings.knowledgeClerk, running: clerkRunning(chatId), repair: (st.knowRepair ?? []).length, unread: unreadReplies(L.path, meta).length, replies: L.path.filter((m) => !m.isUser && /<ledger\b/i.test(m.content)).length },
+    planError: meta.planError ?? null,
     hiddenFacts,
     codex: L.records.map((r) => ({ id: r.id, kind: r.kind, name: r.name, summary: r.summary, keys: r.keys, locked: !!r.locked, status: r.status, source: r.provenance.source, narratorOnly: !!r.scope.narratorOnly, salience: Math.round(r.salience * 100) / 100, body: pickBody(r.body), aliases: r.aliases })),
     chronicle: { units, coverage, tokens, counts: levelCounts },
@@ -8159,6 +8205,7 @@ function loreAge(records, name, aliases) {
   const n = (TENS[a] ?? (NUM_WORDS.indexOf(a) + 1 || 0)) + (b ? NUM_WORDS.indexOf(b) + 1 : 0);
   return n > 0 ? String(n) : undefined;
 }
+onPlanErrorChange(pushState);
 
 // src/core/extractor.ts
 var NUM = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, ten: 10, fifteen: 15, twenty: 20, thirty: 30, forty: 40, several: 3, few: 3 };

@@ -8,7 +8,7 @@ import { factKind, factsInPlay, isHere, isKnower, lackOf, lackText, stanceVerb, 
 import { debounce, describe, host, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings } from "./store";
-import { isEnabled, lastPlan } from "./turn";
+import { isEnabled, lastPlan, onPlanErrorChange } from "./turn";
 import { clerkRunning, unreadReplies } from "./clerk";
 
 export interface UIView {
@@ -31,6 +31,7 @@ export interface UIView {
   knowGaps: { id: string; name: string; gaps: { text: string; stale: boolean }[] }[];
   knowers: { id: string; name: string; here: boolean }[];
   clerk: { mode: string; running: boolean; repair: number; unread: number; replies: number };
+  planError: { at: number; where: string; genType: string; message: string; stack: string } | null;
   codex: any[];
   chronicle: { units: any[]; coverage: Record<string, number>; tokens: Record<string, number>; counts: Record<string, number> };
   timeline: any[];
@@ -149,6 +150,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     knowGaps: gaps,
     knowers,
     clerk: { mode: settings.knowledgeClerk, running: clerkRunning(chatId), repair: (st.knowRepair ?? []).length, unread: unreadReplies(L.path, meta).length, replies: L.path.filter((m) => !m.isUser && /<ledger\b/i.test(m.content)).length },
+    planError: meta.planError ?? null,
     hiddenFacts,
     codex: L.records.map((r) => ({ id: r.id, kind: r.kind, name: r.name, summary: r.summary, keys: r.keys, locked: !!r.locked, status: r.status, source: r.provenance.source, narratorOnly: !!r.scope.narratorOnly, salience: Math.round(r.salience * 100) / 100, body: pickBody(r.body), aliases: r.aliases })),
     chronicle: { units, coverage, tokens, counts: levelCounts },
@@ -208,3 +210,5 @@ export function loreAge(records: { kind: string; name: string; aliases: string[]
   const n = (TENS[a] ?? (NUM_WORDS.indexOf(a) + 1 || 0)) + (b ? NUM_WORDS.indexOf(b) + 1 : 0);
   return n > 0 ? String(n) : undefined;
 }
+
+onPlanErrorChange(pushState);

@@ -11,7 +11,7 @@ import { hash, plainProse } from "../core/util";
 import { debug, describe, has, host, rememberUser, userFor, warn, within } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings, save, type Detected } from "./store";
-import { isEnabled, lastPlan, safePlan } from "./turn";
+import { isEnabled, lastPlan, notePlanError, safePlan } from "./turn";
 import { pushMacros } from "./macros";
 import { quiet, sys } from "./llm";
 
@@ -253,6 +253,7 @@ export function registerPromptInterceptor() {
       return result;
     } catch (err) {
       warn(`prompt interceptor: ${describe(err)}`);
+      await notePlanError(chatId, context.userId ?? userFor(chatId), err, "building the prompt", context.generationType ?? "normal");
       return messages;
     }
   }, 80);

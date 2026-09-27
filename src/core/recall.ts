@@ -201,7 +201,12 @@ export function recall(input: RecallInput): RecallResult {
   for (const z of input.zoom ?? []) {
     if (used >= budget) break;
     const t = `[Earlier — ${z.title}] ${z.text}`;
-    addItem({ record: { id: z.id, kind: "history", name: z.title, summary: z.text } as CodexRecord, score: z.score, reasons: ["zoom-in"], lane: "zoom" }, [t, truncateTokens(t, 160)]);
+    // A whole record, not a partial cast: callers read provenance and scope on every item.
+    const record: CodexRecord = {
+      id: z.id, kind: "history", tense: "past", name: z.title, aliases: [], keys: [], summary: z.text, body: {}, links: [], scope: {},
+      provenance: { source: "story" }, salience: z.score, lastSeen: 0, status: "active",
+    };
+    addItem({ record, score: z.score, reasons: ["zoom-in"], lane: "zoom" }, [t, truncateTokens(t, 160)]);
   }
 
   const text = items.length ? `<recall>\n${items.map((i) => i.text).join("\n")}\n</recall>` : "";
