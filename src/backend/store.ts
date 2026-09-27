@@ -69,6 +69,8 @@ export interface ChatMeta {
   arrivals: Arrival[];
   lastSimAbs?: number;
   repaired: Record<string, "repair" | "extractor" | "failed">;
+  /** Replies the knowledge clerk has read (msgId:swipe → the text's hash and the outcome). */
+  clerked?: Record<string, { hash: string; result: "ok" | "none" | "failed" | "clean" }>;
   telemetry?: CraftReport | null;
   greetedReturn?: number;
 }

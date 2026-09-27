@@ -161,7 +161,7 @@ export function coverageGaps(summary: string, events: LedgerEvent[], state: Worl
     const op = e.op;
     const important =
       (op.op === "bond" && (op.args.changes ?? []).some((c: any) => Math.abs(c.delta) >= 2)) ||
-      op.op === "know" || op.op === "thread" || op.op === "owe" || op.op === "cons" || op.op === "ladder" ||
+      op.op === "know" || op.op === "reveal" || op.op === "secret" || op.op === "thread" || op.op === "owe" || op.op === "cons" || op.op === "ladder" ||
       (op.op === "item" && op.args.from) || (op.op === "body" && ((op.args.injuries ?? []).length || (op.args.flags ?? []).includes("dead"))) ||
       op.op === "artifact" || op.op === "clue";
     if (!important) continue;

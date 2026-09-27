@@ -2,9 +2,9 @@
 // register and filed artifacts. Tolerant by design: models fence, escape,
 // bullet and misspell; we normalise first and keep what we can't read.
 
-import type { OpName, ParsedLedger, ParsedOp, SceneHeader } from "./types";
+import type { OpName, ParsedLedger, ParsedOp, SceneHeader, SpokenLine } from "./types";
 import { unescapeHtml } from "./util";
-import { splitFact } from "./facts";
+import { parseKnowRest, parseRevealRest, parseSecretRest, parseUnawareRest } from "./knowparse";
 
 const OP_ALIASES: Record<string, OpName> = {
   clock: "clock", time: "clock", elapsed: "clock",
@@ -17,6 +17,9 @@ const OP_ALIASES: Record<string, OpName> = {
   bond: "bond", rel: "bond", relationship: "bond", regard: "bond",
   ladder: "ladder", romance: "ladder",
   know: "know", knows: "know", knowledge: "know", belief: "know",
+  reveal: "reveal", reveals: "reveal", revealed: "reveal", tell: "reveal", told: "reveal", disclose: "reveal",
+  secret: "secret", secrets: "secret", hidden: "secret",
+  unaware: "unaware", lacks: "unaware", ignorant: "unaware",
   item: "item", inv: "item", inventory: "item", object: "item",
   thread: "thread", plot: "thread",
   owe: "owe", debt: "owe", promise: "owe", favour: "owe", favor: "owe",
@@ -41,7 +44,7 @@ const OP_ALIASES: Record<string, OpName> = {
 
 /** Ops whose name sits before the colon: `mood Mara: …`. */
 const SUBJECT_OPS = new Set<OpName>([
-  "mood", "body", "look", "bond", "ladder", "know", "item", "thread", "owe", "cons",
+  "mood", "body", "look", "bond", "ladder", "know", "unaware", "item", "thread", "owe", "cons",
   "clockf", "rep", "journal", "keys", "artifact", "status", "gauge", "deadline",
 ]);
 
@@ -376,35 +379,34 @@ const PARSERS: Record<OpName, LineParser> = {
   know(p, s, rest) {
     if (!s) return null;
     p.subject = s;
-    const [fact, meta = ""] = rest.split(/\s*\|\s*/);
-    if (!fact) return null;
-    const bits = meta.split(/\s*[·,;]\s*/).map((x) => x.trim()).filter(Boolean);
-    let status = "knows";
-    let truth = "unknown";
-    let source: string | undefined;
-    const norm = (w: string) => {
-      const st = w.replace(/s$/, "").replace(/^know$/, "knows").replace(/^believe$/, "believes").replace(/^suspect$/, "suspects").replace(/^doubt$/, "doubts").replace(/^denie$/, "doubts");
-      return ["knows", "believes", "suspects", "wrong", "unaware", "doubts"].includes(st) ? st : "believes";
-    };
-    const note = (x: string) => (source = source ? `${source}, ${x}` : x);
-    for (const raw of bits) {
-      const b = raw.toLowerCase();
-      const lead = /^(knows?|believes?|suspects?|doubts?)\s+(?:that\s+)?(.+)$/i.exec(raw);
-      if (/^(knows?|believes?|suspects?|wrong|unaware|doubts?|denies)$/.test(b)) status = norm(b);
-      else if (/^(true|false|partial|unknown|half-true|mixed)$/.test(b)) truth = b === "half-true" || b === "mixed" ? "partial" : b;
-      else if (lead) {
-        // "suspects it was Kael" → status suspects, note "it was Kael"
-        status = norm(lead[1].toLowerCase());
-        note(lead[2]);
-      } else note(raw); // free text is a note (keeps its case)
-    }
-    if (status === "wrong" && truth === "unknown") truth = "false";
-    // "#heaven Buffy was in Heaven — her silence (direct observation). DOES NOT KNOW: …"
-    // → key, statement, and the rest as a note for the fact's history.
-    const f = splitFact(fact);
-    if (!f.statement && !f.key) return null;
-    p.args = { fact: f.statement, key: f.key, note: f.note, unawareOf: f.unawareOf, status, truth, source };
-    p.cause = source;
+    // One fact per item: bundles split, routes lifted, "does not know …" pulled out (knowparse).
+    const k = parseKnowRest(rest);
+    if (!k) return null;
+    p.args = k;
+    p.cause = k.source;
+    return p;
+  },
+  reveal(p, s, rest) {
+    const r = parseRevealRest(s, rest);
+    if (!r || (!r.statement && !r.key)) return null;
+    p.subject = r.source;
+    p.args = r;
+    p.cause = r.how ?? r.channel;
+    return p;
+  },
+  secret(p, s, rest) {
+    const r = parseSecretRest(s, rest);
+    if (!r || (!r.statement && !r.key)) return null;
+    p.args = r;
+    p.cause = r.keepers.length ? `kept by ${r.keepers.join(", ")}` : undefined;
+    return p;
+  },
+  unaware(p, s, rest) {
+    if (!s) return null;
+    p.subject = s;
+    const things = parseUnawareRest(rest);
+    if (!things.length) return null;
+    p.args = { things };
     return p;
   },
   item(p, s, rest) {
@@ -708,6 +710,40 @@ export function hasSpeakerLabels(text: string): boolean {
   return hit;
 }
 
+const QUIET_TONE = /whisper|murmur|breath|hush|sotto|mouth|under/i;
+
+/**
+ * Everything said aloud in a message: [spk] lines with their speaker, then
+ * plain quotes (the player's messages) with the narration just before each,
+ * so the engine can tell who spoke. Out-of-character asides, plans, thoughts,
+ * ledgers and filed documents are not speech.
+ */
+export function parseSpeech(text: string): SpokenLine[] {
+  let t = fixSpeakerLabels(text ?? "")
+    .replace(/<(ledger|unspoken|plan|think|thinking|ooc|folio)\b[^>]*>[\s\S]*?(<\/\1>|$)/gi, " ")
+    .replace(/\[vtk=[^\]]*\][\s\S]*?\[\/vtk\]/gi, " ")
+    .replace(/\(\([\s\S]*?\)\)|\[OOC[^\]]*\]|^\s*OOC:.*$/gim, " ");
+  const out: SpokenLine[] = [];
+  t = t.replace(/\[spk=([^\]#|\n]{1,60}?)\s*(?:#\d{1,2})?\s*(?:\|([^\]]*))?\]([\s\S]*?)\[\/spk\]/g, (_, who: string, tone: string | undefined, body: string) => {
+    const words = body.replace(/^\s*["“]|["”]\s*$/g, "").replace(/[*_]/g, "").trim();
+    if (words) out.push({ who: who.trim(), text: words, ...(tone && QUIET_TONE.test(tone) ? { quiet: true } : {}) });
+    return " ";
+  });
+  const re = /["“]([^"“”\n]{1,600})["”]/g;
+  let m: RegExpExecArray | null;
+  let last = 0;
+  while ((m = re.exec(t))) {
+    const lead = t.slice(Math.max(last, m.index - 160), m.index);
+    const tail = t.slice(m.index + m[0].length, m.index + m[0].length + 60);
+    const words = m[1].replace(/[*_]/g, "").trim();
+    last = m.index + m[0].length;
+    if (!words) continue;
+    const quiet = QUIET_TONE.test(`${lead.slice(-40)} ${tail.slice(0, 40)}`);
+    out.push({ text: words, lead: lead.split(/\n\s*\n/).pop()!.trim().slice(-120), ...(quiet ? { quiet: true } : {}) });
+  }
+  return out;
+}
+
 export function parseSpeakers(text: string): { name: string; slot?: number }[] {
   text = fixSpeakerLabels(text);
   const seen = new Map<string, { name: string; slot?: number }>();
@@ -773,6 +809,7 @@ export function parseMessage(text: string): ParsedLedger {
     thoughts: parseThoughts(text ?? ""),
     vtks: parseVtks(text ?? ""),
     speakers: parseSpeakers(text ?? ""),
+    speech: parseSpeech(text ?? ""),
   };
   if (!block) return result;
   if (block.format === "json") {
@@ -788,6 +825,28 @@ export function parseMessage(text: string): ParsedLedger {
     }
   }
   return result;
+}
+
+const KNOW_LINE = /^[ \t]*(?:[-*•]\s+)?(?:know|knows|knowledge|belief|reveal|reveals|revealed|tell|told|disclose|secret|secrets|hidden|unaware|lacks|ignorant)\b[^:\n]*:[^\n]*\n?/gim;
+
+/**
+ * Replace the knowledge lines of a reply's ledger with the lines as the Almanac
+ * filed them. The model copies the last ledger it sees, so a diary-style `know`
+ * line left in the history teaches the next reply to write another one.
+ */
+export function rewriteKnowledgeLines(text: string, filed: string[] | undefined): string {
+  const block = /<ledger>([\s\S]*?)<\/ledger>/i.exec(text);
+  if (!block) return text;
+  const body = block[1];
+  KNOW_LINE.lastIndex = 0;
+  const first = KNOW_LINE.exec(body);
+  if (!first) return text;
+  KNOW_LINE.lastIndex = 0;
+  const rest = body.replace(KNOW_LINE, "");
+  const insert = (filed ?? []).map((l) => `${l}\n`).join("");
+  const at = first.index;
+  const next = `${rest.slice(0, at)}${insert}${rest.slice(at)}`;
+  return text.slice(0, block.index) + `<ledger>${next}</ledger>` + text.slice(block.index + block[0].length);
 }
 
 /** Serialise ops back into DSL (used for repair output, examples and exports). */

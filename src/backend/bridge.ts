@@ -12,6 +12,7 @@ import { bookHealth, creatorExport, creatorGenerate, creatorPlan, creatorReport,
 import { pushMacros } from "./macros";
 import type { ChatConfig } from "../core/types";
 import { clearRenderCache } from "./hooks";
+import { clerkWholeChat, stopClerk } from "./clerk";
 
 type Msg = { type: string; [k: string]: any };
 
@@ -243,6 +244,25 @@ export function registerBridge() {
           }
           return;
         }
+        case "clerkTidy": {
+          // Every reply the clerk hasn't read, oldest first: one quiet call each; the page shows progress and can stop it.
+          const chatId = m.chatId as string;
+          clerkWholeChat(chatId, userId, (done, total) => {
+            host.sendToFrontend({ type: "clerkProgress", chatId, done, total }, userId);
+            if (done) pushState(chatId, userId);
+          })
+            .then((r) => {
+              onMutation(chatId, userId);
+              if (r.error) toast(userId, "error", `Knowledge clerk stopped after ${r.done} of ${r.total}: ${r.error}`);
+              else if (r.stopped) toast(userId, "info", `Knowledge clerk paused after ${r.done} of ${r.total} replies. Tidy again to carry on.`);
+              else toast(userId, "success", r.total ? `The knowledge clerk read all ${r.total} replies.` : "Every reply has already been read.");
+            })
+            .catch((err) => toast(userId, "error", `Knowledge clerk: ${describe(err)}`));
+          return;
+        }
+        case "clerkStop":
+          stopClerk(m.chatId);
+          return;
         case "userOps": {
           const n = await addUserOps(m.chatId, (m.lines ?? []) as string[], userId);
           toast(userId, n ? "success" : "warning", n ? `Recorded ${n} correction(s).` : "No valid ledger lines.");

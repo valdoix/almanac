@@ -95,16 +95,23 @@ describe("recall and note", () => {
     const recs = buildCodex(state, emptyCodexStore());
     const r = recall({ state, records: recs, index: new KeyIndex(recs), playerMsg: "What happened to the cargo?", lastReply: "", recent: [], tier: "charged", budget: 1200, allowNarratorOnly: true, userName: "Wren" });
     const facts = r.items.filter((i) => i.record.kind === "fact").map((i) => i.text).join("\n");
-    expect(facts).toContain("Present: Mara (knows");
+    expect(facts).toContain("Present: Mara (saw it)");
     expect(facts).toMatch(/Do not let Kael act on the truth/);
+    // No record is not ignorance: nothing claims Kael lacks Mara's fact.
+    expect(facts).not.toMatch(/Unaware|Lacking it: Kael/);
   });
 
-  test("knowledge brief: one line per fact in play, with who knows it and who it is news to", () => {
+  test("knowledge brief: who here has each fact and how, who lacks it and why — never a guess", () => {
     const state = world();
-    const kb = knowledgeBrief(state, "the cargo Vance sold", "Wren").join("\n");
-    expect(kb).toMatch(/#cargo-never-vance "the cargo was never Vance's to sell" \(true\) — Mara knows \(saw it\); news to Kael\./);
-    expect(kb).toMatch(/"bandits took the cargo" \(false\) — Kael believes/);
-    expect(kb).toMatch(/Reuse a fact's #key/);
+    // Only a secret line gives evidence that Kael lacks it.
+    expect(knowledgeBrief(state, "the cargo Vance sold", "Wren").join("\n")).not.toMatch(/Kael (doesn't know|lacks)/);
+    const rt = new LedgerRuntime();
+    const kept = rt.fold(toPath([m(0, R1), m(1, "Prose.\n<ledger>\nsecret #cargo: the cargo was never Vance's to sell | kept by Mara · from Kael\nmode: social\n</ledger>")]), OPTS).state;
+    const kb = knowledgeBrief(kept, "the cargo Vance sold", "Wren", 5, "the cargo Vance sold").join("\n");
+    expect(kb).toMatch(/#cargo "the cargo was never Vance's to sell" \(true\) — Mara saw it; Kael doesn't know \(kept from them\)\./);
+    expect(kb).toMatch(/"bandits took the cargo" \(false\) — Kael believes it/);
+    expect(kb).toMatch(/unrecorded, not ignorant/);
+    expect(kb).toMatch(/Reuse the #key/);
   });
 
   test("ledger note lanes", () => {
@@ -172,13 +179,13 @@ mode: social
 
   test("people in the room when it was said aloud heard it", () => {
     const st = fold([open, scene("know Buffy: #line the slayer line ends with her | said it aloud to everyone · knows · true")]);
-    expect(st.facts!.line.stances.giles).toMatchObject({ status: "knows", derived: true });
-    expect(knowledgeBrief(st, "the slayer line", "Wren").join("\n")).toMatch(/Giles knows \(heard it said\)/);
+    expect(st.facts!.line.stances.giles).toMatchObject({ status: "knows", derived: "witness", route: "heard" });
+    expect(knowledgeBrief(st, "the slayer line", "Wren").join("\n")).toMatch(/Buffy, Giles and Willow all have it: don't explain it again/);
   });
-  test("arriving later, or a private source, is still news", () => {
+  test("walking in afterwards, or a private source, leaves them without it", () => {
     const late = fold([scene("cast: Buffy@spot · Giles@peri"), scene("know Buffy: #line the slayer line ends with her | told Giles · knows · true"), scene("cast: Willow@arrive(← the hall)")]);
     expect(late.facts!.line.stances.willow).toBeUndefined();
-    expect(knowledgeBrief(late, "the slayer line", "Wren").join("\n")).toMatch(/news to Willow/);
+    expect(knowledgeBrief(late, "the slayer line", "Wren").join("\n")).toMatch(/Willow wasn't there when it came out/);
     const whisper = fold([open, scene("know Buffy: #line the slayer line ends with her | whispered it to herself · knows · true")]);
     expect(whisper.facts!.line.stances.giles).toBeUndefined();
   });

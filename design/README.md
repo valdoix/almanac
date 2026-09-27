@@ -29,6 +29,7 @@ The set has two parts that work together:
 | 04 | [Recommendations](04-recommendations.md) | Additions beyond the brief, ranked, plus what *not* to do |
 | 05 | [ALMANAC Ledger extension](05-extension-ledger.md) | Architecture, branch-correct event model, chronicle, Codex, retrieval keys, Recall, Lore Bridge, Lorebook Creator, engines, telemetry, UI, performance, roadmap |
 | 06 | [Storage decision](06-storage-decision.md) | Lorebooks vs extension storage, scored against recall accuracy and continuity, with the recommended hybrid |
+| 07 | [Knowledge](07-knowledge.md) | Who has what information and how it reached them: facts, witnesses, secrets, gaps, the knowledge clerk, and what the model is told |
 | — | [Visual mockup](mockups/almanac-visuals.html) | Static HTML with a skin switcher (6 themes) and light/dark toggle: animated scene plates for five genres, voice cards and ten tones, sealed-envelope thoughts, call-sheet Director's notes, trading-card trackers, HUD strip, VTKs, relationship graph. Open it in a browser |
 
 ---
@@ -46,7 +47,7 @@ The set has two parts that work together:
 | Persona / player agency | 02 §5 |
 | Dialogue colouriser as blocks | 03 §3 (mockup §2–3) |
 | Weather and time continuity | 02 §11, 05 §11.2 |
-| Knowledge firewall | 02 §9, 05 §8.3 |
+| Knowledge firewall | 02 §9, 05 §8.3, 07 |
 | Meaningful, impactful genres | 02 §12 |
 | NSFW enhancer (consenting adults only) | 02 §4, §17 |
 | Trackers (relationships, thoughts, inventory, mood, condition…) | 02 §20, 03 §7 |

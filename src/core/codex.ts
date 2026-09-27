@@ -6,6 +6,7 @@
 import type { WorldState } from "./types";
 import { fmtTime, slug, uniq } from "./util";
 import { LADDER_NAMES, normFact, overlap } from "./state";
+import { factKind } from "./facts";
 
 export type CodexKind =
   | "person" | "place" | "object" | "group" | "law" | "history" | "situation" | "belief" | "texture"
@@ -180,13 +181,18 @@ export function buildCodex(state: WorldState, store: CodexStore): CodexRecord[] 
   // Facts: one record per fact, with where each person stands on it.
   for (const f of Object.values(state.facts ?? {})) {
     if (f.hidden) continue;
+    // Holders are the people with a stance; "unaware" stances carry their evidence (kept from them, said so).
     const stances = Object.values(f.stances);
     put({
       id: `fact:${f.key}`, kind: "fact", tense: "now", name: f.statement, aliases: [], keys: [],
       summary: `Fact${f.truth !== "unknown" ? ` (${f.truth})` : ""}: ${f.statement}.`,
-      body: { key: f.key, truth: f.truth, holders: stances.map((s) => ({ id: s.holder, status: s.status, source: s.how, version: s.version, at: s.at })) },
+      body: {
+        key: f.key, truth: f.truth, kind: factKind(f),
+        holders: stances.map((s) => ({ id: s.holder, status: s.status, source: s.how, route: s.route, version: s.version, at: s.at })),
+        keepers: f.keepers ?? [], keptFrom: f.keptFrom ?? [],
+      },
       links: stances.map((s) => ({ rel: s.status, to: `char:${s.holder}` })),
-      scope: { knownBy: stances.filter((s) => s.status === "knows").map((s) => s.holder) },
+      scope: { knownBy: stances.filter((s) => s.status === "knows").map((s) => s.holder), hiddenFrom: f.keptFrom?.length ? f.keptFrom : undefined },
       provenance: { msgIndex: f.history.map((h) => h.msgIndex), source: "story" },
       salience: 0.55 * recency(f.lastMsg), lastSeen: f.lastMsg, status: "active",
     });

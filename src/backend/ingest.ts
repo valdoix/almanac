@@ -22,6 +22,7 @@ import { appendEvents, copyChat, loadChat, loadSettings, save } from "./store";
 import { isEnabled } from "./turn";
 import { pushState } from "./view";
 import { clearRenderCache } from "./hooks";
+import { scheduleClerk } from "./clerk";
 
 const busy = new Set<string>();
 
@@ -35,10 +36,12 @@ export async function onReply(chatId: string, messageId: string | undefined, con
     save(chatId, "meta", userId);
   }
   if (!isEnabled(meta, settings) || genType === "impersonate") return;
+  let replyId: string | undefined;
   await serial(`chat:${chatId}`, async () => {
     const L = ledgerFor(chatId, userId);
     await L.refresh({ reloadNames: !L.names.char });
     const msg = messageId ? L.path.find((m) => m.id === messageId) : L.lastAssistant();
+    if (msg && !msg.isUser) replyId = msg.id;
     if (msg && !msg.isUser && !extractLedgerBlock(msg.content) && settings.autoRepair && meta.detected.ledger !== "off") {
       await repair(chatId, msg.id, msg.swipe, msg.content, userId).catch((err) => warn(`repair: ${describe(err)}`));
       await L.refresh();
@@ -54,6 +57,8 @@ export async function onReply(chatId: string, messageId: string | undefined, con
     if (settings.telemetry) meta.telemetry = craftReport(L.recentAssistant(6), { userName: L.names.user, sealed: L.foldOptions(meta, settings).sealed, dialogue: meta.detected.dialogue });
     save(chatId, "meta", userId);
   });
+  // The knowledge clerk reads the reply in the background; the next plan waits for it briefly.
+  if (replyId && settings.knowledgeClerk !== "off") scheduleClerk(chatId, replyId, userId, () => afterChange(chatId, userId, { background: false }));
   afterChange(chatId, userId, { background: true });
 }
 

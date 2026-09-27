@@ -92,7 +92,7 @@ Tier: {{switch::{{var::cot}}::lean::routine — ${LABELS_ROUTINE}.::standard::ch
 ROUTE — {{getvar::alm_route}}; tier and why.
 ANCHOR — T0 from the {{if::{{getvar::alm_linked}}}}<ledger-note>{{else}}last header and recent chat{{/if}}: day, time, weather, place, who is present (spotlight / periphery). Minutes this beat costs → T1. Does the weather turn? Any meter at 4+ that must show?
 SEAL — The player's verbs only: SAID / DID / ATTEMPTED / INTENDS / ASKED-OOC. Only SAID and DID are facts; ATTEMPTED gets an outcome; INTENDS is not yet an action. The boundary for {{user}}. Where this reply stops.
-GNOSIS — Each fact this beat touches → who holds it and how, or UNKNOWN. The single most tempting leak right now, and how to avoid it.
+GNOSIS — Each fact this beat touches → who holds it and how, or UNKNOWN. What comes out this beat, and who is in earshot. The single most tempting leak right now, and how to avoid it.
 MINDS — Spotlight: want · fear · tactic · named emotion (VAD) · mask vs feeling · least-used facet · what they misread · what they'd do without {{user}}. Periphery: one line each.
 WEB — An exchange between others that changes information, leverage, a bond or a plan — or none. Bond deltas (who → whom, axis, ±, cause).
 WORLD — Ambient pressure or none · consequence due · off-screen arrival and its route{{if::{{getvar::alm_linked}}}} (only what [ARRIVED] says){{/if}} · faction clock tick?

@@ -152,3 +152,25 @@ describe("extension hooks with the preset", () => {
     expect(hist.content).toBe(`[spk=Buffy#1|flat]"Great. Another one."[/spk]`);
   });
 });
+
+test("tidying a whole chat reads only what the clerk hasn't read in its current text", async () => {
+  const { unreadReplies } = await import("../src/backend/clerk");
+  const { hash } = await import("../src/core/util");
+  const led = (s: string) => `${s}\n<ledger>\nmode: social\n</ledger>`;
+  const path = [
+    { id: "a", index: 0, isUser: false, content: led("one"), swipe: 0 },
+    { id: "b", index: 1, isUser: true, content: "player", swipe: 0 },
+    { id: "c", index: 2, isUser: false, content: led("two"), swipe: 0 },
+    { id: "d", index: 3, isUser: false, content: led("three"), swipe: 1 },
+    { id: "e", index: 4, isUser: false, content: led("four"), swipe: 0 },
+    { id: "f", index: 5, isUser: false, content: "no ledger", swipe: 0 },
+  ];
+  const meta: any = { clerked: {
+    "a:0": { hash: hash(led("one")), result: "ok" },
+    "c:0": { hash: hash(led("two, before an edit")), result: "ok" },
+    "d:0": { hash: hash(led("three")), result: "clean" }, // another swipe
+    "e:0": { hash: hash(led("four")), result: "failed" },
+  } };
+  expect(unreadReplies(path, meta).map((m) => m.id)).toEqual(["c", "d", "e"]);
+  expect(unreadReplies(path, { clerked: {} } as any).map((m) => m.id)).toEqual(["a", "c", "d", "e"]);
+});

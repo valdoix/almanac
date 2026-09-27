@@ -7,6 +7,7 @@ import type { KeyHeat, KeyHit, KeyIndex } from "./keys";
 import type { WorldState } from "./types";
 import { absMinutes, estTokens, fmtSpan, fmtTime, slug, truncateTokens } from "./util";
 import { normFact, overlap } from "./state";
+import { lackOf, lackText, stanceVerb } from "./facts";
 import { isOpen, parseHours, parseRoutine, routineAt } from "./engines/almanac";
 
 export interface RecallInput {
@@ -142,12 +143,14 @@ export function recall(input: RecallInput): RecallResult {
   for (const [id, s] of scores) {
     const r = byId.get(id)!;
     s.score += 4 * r.salience;
-    if (r.kind === "fact" && presentNpc.some((p) => (r.body.holders ?? []).some((h: any) => h.id === p))) {
-      const involved = (r.body.holders ?? []) as { id: string; status: string }[];
-      const knowers = involved.filter((h) => h.status === "knows").map((h) => h.id);
-      if (knowers.some((k) => presentNpc.includes(k)) && presentNpc.some((p) => !knowers.includes(p))) {
+    if (r.kind === "fact") {
+      // Someone here has it and someone here lacks it (with evidence): a slip would cost.
+      const f = state.facts?.[r.body.key];
+      const has = presentNpc.filter((p) => f?.stances[p] && f.stances[p].status !== "unaware");
+      const lacks = f ? [...presentNpc, "user"].filter((p) => lackOf(state, f, p)) : [];
+      if (has.length && lacks.length) {
         s.score += 3;
-        s.reasons.push("a present NPC holds a secret about it");
+        s.reasons.push("someone here holds it that someone here lacks");
       }
     }
     if (input.leadGenre && (GENRE_KINDS[input.leadGenre] ?? []).includes(r.kind)) s.score += 2;
@@ -223,19 +226,22 @@ export function renderRecord(r: CodexRecord, state: WorldState, present: string[
   const diverged = r.body.divergedNote ? ` [History — ${r.body.divergedNote}]` : "";
   switch (r.kind) {
     case "fact": {
-      const holders = (r.body.holders ?? []) as { id: string; status: string; source?: string; truth?: string; version?: string }[];
+      // Who here has it and how; who here lacks it, only with evidence (no record is not ignorance).
+      const f = state.facts?.[r.body.key];
+      const nm = (id: string) => nameOf(state, id, userName);
+      const holders = ((r.body.holders ?? []) as { id: string; status: string; source?: string; truth?: string; version?: string }[]).filter((h) => h.status !== "unaware");
       const pres = holders.filter((h) => present.includes(h.id));
       const abs = holders.filter((h) => !present.includes(h.id));
       const lines = [`${tag}Fact${r.body.truth && r.body.truth !== "unknown" ? ` (${r.body.truth})` : ""}: ${r.name}.`];
-      if (pres.length) lines.push(`  Present: ${pres.map((h) => `${nameOf(state, h.id, userName)} (${h.status}${h.source ? " · " + h.source : ""})`).join(", ")}.`);
-      if (full && abs.length) lines.push(`  Absent holders: ${abs.map((h) => `${nameOf(state, h.id, userName)} (${h.status})`).join(", ")}.`);
-      const presentNpc = present.filter((p) => p !== "user");
-      const unaware = presentNpc.filter((p) => !holders.some((h) => h.id === p));
-      if (unaware.length) lines.push(`  Unaware: ${unaware.map((p) => nameOf(state, p, userName)).join(", ")}.`);
+      const verb = (h: (typeof holders)[number]) => (f?.stances[h.id] ? stanceVerb(f.stances[h.id], nm) : h.status);
+      if (pres.length) lines.push(`  Present: ${pres.map((h) => `${nm(h.id)} (${verb(h)})`).join(", ")}.`);
+      if (full && abs.length) lines.push(`  Absent holders: ${abs.map((h) => `${nm(h.id)} (${verb(h)})`).join(", ")}.`);
+      const lacks = f ? present.map((p) => ({ p, r: lackOf(state, f, p) })).filter((x) => x.r) : [];
+      if (lacks.length) lines.push(`  Lacking it: ${lacks.map((x) => `${nm(x.p)} (${lackText(x.r!)})`).join(", ")}.`);
       const wrong = pres.filter((h: any) => h.status === "wrong" || h.version || (h.status !== "knows" && (h.truth ?? r.body.truth) === "false"));
       const knowers = pres.filter((h) => h.status === "knows");
-      if (wrong.length) lines.push(`  → Do not let ${wrong.map((h) => nameOf(state, h.id, userName)).join(" or ")} act on the truth.`);
-      else if (knowers.length && unaware.length) lines.push(`  → ${knowers.map((h) => nameOf(state, h.id, userName)).join(", ")} may hint; ${unaware.map((p) => nameOf(state, p, userName)).join(", ")} cannot know it yet.`);
+      if (wrong.length) lines.push(`  → Do not let ${wrong.map((h) => nm(h.id)).join(" or ")} act on the truth.`);
+      else if (knowers.length && lacks.length) lines.push(`  → ${knowers.map((h) => nm(h.id)).join(", ")} may hint; ${lacks.map((x) => nm(x.p)).join(", ")} cannot act on it.`);
       return lines.join("\n");
     }
     case "document": {

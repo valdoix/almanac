@@ -261,6 +261,7 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 .alm-kp.sus{color:var(--alm-warn);background:color-mix(in oklab,var(--alm-warn) 14%,var(--alm-panel))}
 .alm-kp.wrong{color:var(--alm-danger);background:color-mix(in oklab,var(--alm-danger) 13%,var(--alm-panel));box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-danger) 40%,transparent)}
 .alm-kp.un{color:var(--alm-muted);border:1px dashed var(--alm-line)}
+.alm-kp.none{color:var(--alm-muted);opacity:.5;padding:4px 6px}
 .alm-kp__n{display:block;margin-top:4px;font-size:11px;line-height:1.35;color:var(--alm-muted);white-space:normal;overflow-wrap:break-word;max-width:22em}
 .alm-irony{display:flex;gap:12px;align-items:center;margin-top:10px;padding:10px 14px;border-radius:var(--alm-r-sm);font-size:14px;
   background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,linear-gradient(120deg,#7b5bd6,var(--alm-danger),var(--alm-gold)) border-box;border:1.5px solid transparent}
@@ -454,6 +455,22 @@ export const PANEL_CSS = `
 .almk-hist time{display:block;font:500 10.5px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
 .almk-note{display:block;color:var(--alm-muted);font-size:11.5px;margin-top:2px}
 .almk--edit{border-color:var(--alm-accent)}
+.almk-top{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.almk-top .almk-key{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.almk-top .btn{flex:none;padding:4px 9px}
+.almk-stmt{display:block;font-weight:650;font-size:15px;line-height:1.35;overflow-wrap:anywhere}
+.almk-kind{font:500 10px/1.5 var(--alm-font-mono);text-transform:uppercase;letter-spacing:.06em}
+.almk--secret{box-shadow:inset 3px 0 0 var(--alm-danger)}
+.almk--belief{box-shadow:inset 3px 0 0 var(--alm-warn)}
+.almk--noted{opacity:.85}
+.almk-filters{flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.almk-filters select{max-width:48%}
+.almk-clerk{margin-bottom:10px;font-size:13px}
+.almk-clerk .row{flex-wrap:wrap;gap:8px;align-items:center}
+.almk-person{margin-bottom:10px}
+.almk-person h4{margin:0 0 6px}
+.almk-person summary{cursor:pointer;font:500 11.5px/1.6 var(--alm-font-mono);color:var(--alm-muted)}
+.almk-person ul{margin:6px 0 8px;padding-left:18px;display:grid;gap:4px;font-size:13px;line-height:1.4}
 .almp .alm-warnbox{border-color:color-mix(in oklab,var(--alm-warn) 55%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 10%,var(--alm-panel))}
 /* ── Orrery navigation ── */
 .almo{position:relative;display:flex;flex-direction:column;min-height:100%;background:color-mix(in oklab,var(--alm-panel-2) 55%,var(--alm-panel));background-image:var(--alm-texture);--almo-font:"Syne",var(--alm-font-display)}

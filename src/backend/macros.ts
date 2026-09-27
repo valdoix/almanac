@@ -4,6 +4,7 @@
 
 import { absMinutes, fmtSpan, hhmm } from "../core/util";
 import { LADDER_NAMES, normFact, overlap } from "../core/state";
+import { factKind, lackOf, stanceVerb } from "../core/facts";
 import { describe, host, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings } from "./store";
@@ -61,7 +62,12 @@ export function registerMacros() {
     if (!L?.state) return "";
     const c = Object.values(L.state.chars).find((x) => x.name.toLowerCase() === name.toLowerCase() || x.aliases.some((a) => a.toLowerCase() === name.toLowerCase()));
     if (!c) return "";
-    return L.state.knowledge.filter((k) => k.holder === c.id && !k.supersededBy).slice(-8).map((k) => `${k.status}: ${k.fact}`).join("; ");
+    // What they have (and how), what they're wrong about, and what they lack with evidence; passing observations left out.
+    const nm = (id: string) => (id === "user" ? L.names.user : L.state.chars[id]?.name ?? id);
+    const facts = Object.values(L.state.facts ?? {}).filter((f) => !f.hidden && factKind(f) !== "noted").sort((a, b) => b.lastMsg - a.lastMsg);
+    const has = facts.filter((f) => f.stances[c.id] && f.stances[c.id].status !== "unaware").slice(0, 8).map((f) => `${stanceVerb(f.stances[c.id], nm)}: ${f.statement}`);
+    const lacks = facts.filter((f) => lackOf(L.state, f, c.id)).slice(0, 4).map((f) => `doesn't know: ${f.statement}`);
+    return [...has, ...lacks].join("; ");
   });
   pull("almBond", "Directed bond A → B (Ledger)", [{ name: "from", description: "From" }, { name: "to", description: "To" }], async (ctx, [a, b]) => {
     const L = ctx?.chatId ? ledgerFor(ctx.chatId) : null;

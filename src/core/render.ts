@@ -8,6 +8,7 @@ import type { AlmanacReport } from "./engines/almanac";
 import type { CharacterState, MessageDelta, WorldState } from "./types";
 import { absMinutes, escapeHtml as e, fmtSpan, fmtTime, hhmm, initials, kpNote } from "./util";
 import { LADDER_NAMES } from "./state";
+import { factKind, factsInPlay, isKnower, lackOf, lackText, stanceVerb } from "./facts";
 
 /** Voice-slot palette (slot 0 = the player). Tuned for contrast on both paper and night skins. */
 export const SLOT_COLORS = ["#9b6a0e", "#c02f52", "#6b45c6", "#0a7d6d", "#1f6fb2", "#b0521c", "#8a3f9e", "#2f7d4f", "#b3871a", "#4f5fbf", "#a8406f", "#51741a", "#1b7e93"];
@@ -50,8 +51,9 @@ function card(c: CharacterState, state: WorldState, colors: Record<string, strin
     ...c.injuries.map((i) => `<span class="alm-tag${i.severity >= 3 || !i.treated ? " warn" : ""}">${e(i.where)} · ${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? "" : " · untreated"}</span>`),
     ...held.slice(0, 3).map((h) => `<span class="alm-tag">holds: ${e(h)}</span>`),
   ];
-  const wrong = state.knowledge.filter((k) => k.holder === c.id && !k.supersededBy && (k.status === "wrong" || k.truth === "false")).slice(0, 1);
-  for (const w of wrong) tags.push(`<span class="alm-tag warn">believes: ${e(w.fact)} (false)</span>`);
+  // One thing they're wrong about: their own version if they have one.
+  const wrong = Object.values(state.facts ?? {}).filter((f) => !f.hidden && (f.stances[c.id]?.status === "wrong" || (f.truth === "false" && ["knows", "believes"].includes(f.stances[c.id]?.status ?? "")))).slice(0, 1);
+  for (const f of wrong) tags.push(`<span class="alm-tag warn">believes: ${e(f.stances[c.id].version ?? f.statement)} (false)</span>`);
   return `<article class="alm-cc alm-v" data-spk="${e(c.name)}" style="--c:${voiceColor(c, colors)}">
 <div class="alm-cc__band"><span class="alm-cc__tier">${tier}</span></div><span class="alm-say__medal alm-cc__medal">${e(initials(c.name))}</span>
 <div class="alm-cc__bd"><div class="alm-cc__nm">${e(c.name)}${c.dead ? " ✝" : ""}</div>${inner && c.mood?.name ? `<div class="alm-cc__em">${e(c.mood.name)}${c.mood.prev ? ` <small>(was ${e(c.mood.prev)})</small>` : ""}</div>` : ""}
@@ -80,26 +82,39 @@ ${h.cause ? `<div class="alm-bond__why">“${e(h.cause)}”${b.from !== "user" &
   return { html: rows.join(""), changed: rows.length };
 }
 
+/**
+ * Who has what, among the people here: the facts the note picked (ranked by what a
+ * slip would cost), then recent secrets and beliefs. ✓ has it · ? suspects/believes ·
+ * ✗ wrong · — lacks it (only with evidence; the reason on hover) · blank: no record.
+ */
 function knowledgeTable(state: WorldState, colors: Record<string, string>, userName: string): string {
-  const present = Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead).slice(0, 5);
+  const present = Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead && isKnower(c)).slice(0, 5);
   if (!present.length) return "";
-  const facts = Object.values(state.facts ?? {}).filter((f) => !f.hidden && state.msgCount - f.lastMsg <= 30).sort((a, b) => a.lastMsg - b.lastMsg);
+  const picked = factsInPlay(state, "", 8);
+  // Then what this reply filed (even one person's note), then recent secrets and beliefs.
+  const latest = state.msgCount - 1;
+  const more = Object.values(state.facts ?? {})
+    .filter((f) => !f.hidden && !picked.includes(f) && present.some((c) => f.stances[c.id]) && (f.lastMsg === latest || (state.msgCount - f.lastMsg <= 30 && factKind(f) !== "noted")))
+    .sort((a, b) => (b.lastMsg === latest ? 1 : 0) - (a.lastMsg === latest ? 1 : 0) || b.lastMsg - a.lastMsg);
+  const facts = [...picked, ...more].slice(0, 8);
   if (!facts.length) return "";
   let irony = "";
   // Rows of divs on a shared grid rather than a <table>: the host's message
   // styles restyle tables (collapsed borders, header tint, padding) and win.
   const head = `<div class="alm-km__r alm-km__h" role="row"><span role="columnheader">Fact</span>${present.map((c) => `<span role="columnheader">${mini(c, colors)}</span>`).join("")}</div>`;
-  const body = facts.slice(-8).map((f) => {
+  const nm = (id: string) => (id === "user" ? userName : state.chars[id]?.name ?? id);
+  const body = facts.map((f) => {
     const cells = present.map((c) => {
       const s = f.stances[c.id];
-      let pill = `<span class="alm-kp un">— unaware</span>`;
-      if (s) {
-        if (s.status === "wrong" || (s.status !== "knows" && s.status !== "unaware" && f.truth === "false")) {
+      const lack = lackOf(state, f, c.id);
+      let pill = `<span class="alm-kp none" title="No record either way">·</span>`;
+      if (lack) pill = `<span class="alm-kp un">— lacks it</span>${kpNote(lackText(lack))}`;
+      else if (s) {
+        if (s.status === "wrong" || (s.status !== "knows" && f.truth === "false")) {
           pill = `<span class="alm-kp wrong">✗ ${e(s.status === "wrong" ? "wrong" : s.status)}</span>`;
           if (s.version) pill += kpNote(`thinks “${s.version}”`);
           if (!irony) irony = `${e(c.name)} is certain of something false.`;
-        } else if (s.status === "knows") pill = `<span class="alm-kp knows">✓ ${s.derived ? "heard it" : "knows"}</span>`;
-        else if (s.status === "unaware") pill = `<span class="alm-kp un">— unaware</span>`;
+        } else if (s.status === "knows") pill = `<span class="alm-kp knows">✓ ${e(stanceVerb(s, nm).replace(/ it$/, ""))}</span>`;
         else pill = `<span class="alm-kp sus">? ${e(s.status)}</span>`;
         if (s.how && !s.derived && s.status !== "wrong") pill += kpNote(s.how);
       }

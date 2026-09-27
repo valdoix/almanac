@@ -13,6 +13,7 @@ import { NOT_A_PERSON } from "../core/state";
 import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels } from "../core/dsl";
 import { debug, describe, has, host, warn, within } from "./host";
 import { ledgerFor, type ChatLedger } from "./ledger";
+import { waitForClerk } from "./clerk";
 import type { ChatMeta } from "./store";
 import type { Settings } from "../core/types";
 
@@ -68,6 +69,8 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   const settings = await L.settings();
   const meta = files.meta;
   if (!isEnabled(meta, settings)) return null;
+  // A knowledge clerk still reading the last reply: give it a moment, so the note is built from clean lines.
+  if (!opts.dryRun && genType !== "impersonate") await waitForClerk(chatId, 8000);
   const exclude = genType === "regenerate" || genType === "swipe";
   await L.refresh({ excludeTrailingAssistant: exclude });
   const st = L.state;
@@ -138,7 +141,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   const lastDelta = exclude ? null : st.lastDelta;
   const noteRes = buildLedgerNote({
     state: st, almanac: al, records: L.records, userName: L.names.user, sealed: L.foldOptions(meta, settings).sealed,
-    query: `${player} ${lastReply}`, craft: settings.telemetry ? meta.telemetry : null, genreNudge: genreNudge(st, leadGenre(meta), assistantIdx),
+    query: `${player} ${lastReply}`, player, craft: settings.telemetry ? meta.telemetry : null, genreNudge: genreNudge(st, leadGenre(meta), assistantIdx),
     plants: settings.chekhov ? chekhovNudges(st, genres) : [], arrivals: arrivals.map((a) => `${a.text}${a.route ? ` (via ${a.route})` : ""}`),
     returning, lastDelta, pressures: settings.pressures ? meta.pressures : {}, nsfw: !!meta.detected.nsfw && meta.detected.nsfw !== "off",
     budgets: scaleBudgets(settings.recallBudget, tier),

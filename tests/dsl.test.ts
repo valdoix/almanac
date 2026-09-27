@@ -128,10 +128,11 @@ describe("ledger parser", () => {
 });
 
 describe("know lines with free-text notes", () => {
-  test("a long note stays a note (with its case) and doesn't become the status", () => {
+  test("a 'does not know' tail becomes what they don't know, not how they came to it", () => {
     const p = parseLine("know Bea: a stranger pulled her out of the river | does not know his name, that he is a slayer, or that 5 months passed")!;
     expect(p.args.status).toBe("knows");
-    expect(p.args.source).toBe("does not know his name, that he is a slayer, or that 5 months passed");
+    expect(p.args.source).toBeUndefined();
+    expect(p.args.negations).toEqual(["his name", "he is a slayer", "5 months passed"]);
     expect(parseLine("know Kael: the ledger was burned | Overheard from Mara · suspects")!.args.source).toBe("Overheard from Mara");
   });
   test("a leading status word sets the status and keeps the rest as the note", () => {
@@ -151,7 +152,9 @@ describe("knowledge table in the tracker drawer", () => {
     const html = renderDrawer({ state, colors: {}, userName: "Wren", view: "drawer", trackers: ["knowledge"], latest: false } as any);
     expect(html).toContain('class="alm-km-wrap"');
     expect(html).toContain("✓ knows</span>");
-    expect(html).toMatch(/<small class="alm-kp__n" title="does not know his name[^"]*">does not know his name/);
+    // Gale has no record either way: a blank, never "unaware".
+    expect(html).toContain('<span class="alm-kp none" title="No record either way">·</span>');
+    expect(html).not.toContain("unaware");
     expect(html).not.toMatch(/alm-kp knows">✓ does not know/);
     // No <table>: the host's message styles restyle tables and win.
     expect(html).not.toContain("<table");

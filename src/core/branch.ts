@@ -7,7 +7,7 @@
 
 import { parseMessage } from "./dsl";
 import { Folder, type FoldOptions } from "./state";
-import type { EventSource, LedgerEvent, ParsedLedger, ParsedOp, WorldState } from "./types";
+import type { EventSource, LedgerEvent, OpName, ParsedLedger, ParsedOp, WorldState } from "./types";
 import { deepClone, hash } from "./util";
 
 export interface PathMessage {
@@ -26,6 +26,10 @@ export interface SideEvents {
   ops: ParsedOp[];
   /** When set, these ops replace the message's own ledger (repair of a missing/broken block). */
   replaces?: boolean;
+  /** When set, these ops replace only the message's own lines of these kinds (the knowledge clerk). */
+  replacesOps?: OpName[];
+  /** The message text they were written for; after an edit they no longer apply. */
+  hash?: string;
 }
 
 export type SideEventStore = Record<string, SideEvents[]>; // key: `${msgId}:${swipe}`
@@ -129,16 +133,26 @@ export class LedgerRuntime {
       if (!m.isUser) {
         const replacing = sides.find((s) => s.replaces);
         const parsed = this.parse(m.content);
-        const base: ParsedLedger = replacing ? { ...parsed, ops: replacing.ops, format: "dsl" } : parsed;
-        const extras = sides.filter((s) => !s.replaces);
+        let base: ParsedLedger = replacing ? { ...parsed, ops: replacing.ops, format: "dsl" } : parsed;
+        // The knowledge clerk's lines stand in for the reply's own lines of those kinds, in their place.
+        const clerk = sides.filter((s) => s.replacesOps?.length && (!s.hash || s.hash === hash(m.content))).at(-1);
+        if (clerk) {
+          const kinds = new Set(clerk.replacesOps);
+          const kept = base.ops.filter((o) => !kinds.has(o.op));
+          const at = base.ops.findIndex((o) => kinds.has(o.op));
+          const pos = at < 0 ? kept.findIndex((o) => o.op === "mode") : base.ops.slice(0, at).filter((o) => !kinds.has(o.op)).length;
+          const cut = pos < 0 ? kept.length : pos;
+          base = { ...base, ops: [...kept.slice(0, cut), ...clerk.ops, ...kept.slice(cut)] };
+        }
+        const extras = sides.filter((s) => !s.replaces && !s.replacesOps?.length);
         const extraOps = extras.flatMap((s) => s.ops);
         const src: EventSource = replacing ? replacing.source : "model";
         events.push(...folder.applyMessage(m.index, m.id, m.swipe, base, src, extraOps, extras[0]?.source ?? "user"));
       } else {
         const extraOps = sides.flatMap((s) => s.ops);
         const parsed = this.parse(m.content);
-        // Player messages only contribute speaker marks and extension-authored ops.
-        events.push(...folder.applyMessage(m.index, m.id, m.swipe, { ops: [], unknown: [], format: "none", truncated: false, speakers: parsed.speakers }, "user", extraOps, sides[0]?.source ?? "user"));
+        // Player messages only contribute speaker marks, what was said aloud, and extension-authored ops.
+        events.push(...folder.applyMessage(m.index, m.id, m.swipe, { ops: [], unknown: [], format: "none", truncated: false, speakers: parsed.speakers, speech: parsed.speech, fromUser: true }, "user", extraOps, sides[0]?.source ?? "user"));
       }
       const pos = i + 1;
       if (pos % LedgerRuntime.SNAP_EVERY === 0) {

@@ -4,7 +4,7 @@
 
 import type { InterceptorResultDTO, LlmMessageDTO } from "lumiverse-spindle-types";
 import { splice, validateUnits } from "../core/chronicle";
-import { extractLedgerBlock, fixSpeakerLabels } from "../core/dsl";
+import { extractLedgerBlock, fixSpeakerLabels, rewriteKnowledgeLines } from "../core/dsl";
 import { renderDrawer, plateSuffix } from "../core/render";
 import { sidecarPrompt } from "../core/prompts";
 import { hash, plainProse } from "../core/util";
@@ -179,6 +179,20 @@ export function registerPromptInterceptor() {
       if (!plan || plan.genType !== genType) plan = (await safePlan(chatId, genType, userId, { dryRun: context.isDryRun })) ?? undefined;
       if (!plan) return msgs;
       const L = ledgerFor(chatId, userId);
+
+      // Knowledge lines in earlier replies, as the Almanac filed them (one fact a line, #keys, no diary):
+      // the model writes its next ledger in the shape of the last one it sees.
+      const canon = L.state?.knowCanon ?? {};
+      const idToIdx = new Map(L.path.map((m) => [m.id, m.index]));
+      for (let i = 0; i < msgs.length; i++) {
+        const m = msgs[i] as any;
+        if (m.role !== "assistant" || !m.__isChatHistory) continue;
+        const idx: number | undefined = m.sourceIndexInChat ?? (m.sourceMessageId ? idToIdx.get(m.sourceMessageId) : undefined);
+        if (idx == null || !(idx in canon)) continue;
+        const t = textOf(msgs[i]);
+        const f = rewriteKnowledgeLines(t, canon[idx]);
+        if (f !== t) msgs[i] = setText(msgs[i], f);
+      }
 
       // 2. Chronicle: drop covered turns and splice summaries in place.
       const breakdown: { messageIndex: number; name: string }[] = [];

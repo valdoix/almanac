@@ -4,11 +4,14 @@ export type OpName =
   | "clock" | "wx" | "at" | "cast" | "mood" | "body" | "look" | "bond" | "ladder" | "know"
   | "item" | "thread" | "owe" | "cons" | "clockf" | "rumor" | "rep" | "journal" | "keys"
   | "canon" | "artifact" | "mode" | "status" | "gauge" | "clue" | "plant" | "payoff"
-  | "deadline" | "title" | "season"
+  | "deadline" | "title" | "season" | "reveal" | "secret" | "unaware"
   // extension-only ops (never written by the model)
   | "forecast" | "pressure" | "diverge" | "entity" | "lock";
 
-export type EventSource = "model" | "repair" | "extractor" | "archivist" | "user" | "lore" | "engine" | "sim";
+/** The ops that carry knowledge (the clerk replaces these for a message). */
+export const KNOW_OPS: OpName[] = ["know", "reveal", "secret", "unaware"];
+
+export type EventSource = "model" | "repair" | "extractor" | "archivist" | "user" | "lore" | "engine" | "sim" | "clerk";
 
 /** One parsed ledger line, before validation. */
 export interface ParsedOp {
@@ -38,6 +41,19 @@ export interface ParsedLedger {
   vtks?: { kind: string; title: string; meta: string; body: string }[];
   /** Speakers named in [spk=Name#N] marks, first occurrence each. */
   speakers?: { name: string; slot?: number }[];
+  /** Everything said aloud in the message: [spk] lines and plain quotes (whispers marked). */
+  speech?: SpokenLine[];
+  /** The player's message (it carries speech and speaker marks, never ledger ops). */
+  fromUser?: boolean;
+}
+
+export interface SpokenLine {
+  who?: string;
+  text: string;
+  /** For a plain quote: the narration just before it ("Valeria sighs."), to tell who spoke. */
+  lead?: string;
+  /** Said under the breath: it reaches only whoever is close. */
+  quiet?: boolean;
 }
 
 export interface SceneHeader {
@@ -105,6 +121,12 @@ export interface CharacterState {
   status?: string;
   journal: { text: string; at: StoryTime | null; msgIndex: number }[];
   dead?: boolean;
+  /** Has spoken, thought, or been named on a knowledge line: a person who can know things. */
+  voiced?: boolean;
+  /** The message they arrived in (an arrival hears nothing said before it). */
+  arrivedMsg?: number;
+  /** Replies whose cast line had them present (four or more without a word: not a person). */
+  castSeen?: number;
   lastDriftAbs?: number;
   pressure?: string; // hidden pressure (narrator-only)
 }
@@ -165,16 +187,29 @@ export interface KnowRow {
   factKey?: string;
 }
 
+/**
+ * How someone came to stand where they do on a fact.
+ * Having it: said (they said, wrote or did it) · lived · heard · told · overheard · read · saw · deduced · sensed · rumour · kept (a secret's keeper).
+ * Lacking it: hidden (kept from them) · missed (not there when it came out) · stated (the story said they don't know).
+ */
+export type KnowRoute =
+  | "said" | "lived" | "heard" | "told" | "overheard" | "read" | "saw" | "deduced" | "sensed" | "rumour" | "kept"
+  | "hidden" | "missed" | "stated";
+
 /** Where one person stands on a fact. */
 export interface FactStance {
   holder: string;
   status: KnowStatus;
   /** How they came to it, as written: "deduced from her unfinished sentence". */
   how?: string;
+  /** The route, normalised. */
+  route?: KnowRoute;
+  /** Who they had it from (a character id, or a thing: "the letter"). */
+  from?: string;
   /** Their own (different, usually wrong) version of it. */
   version?: string;
-  /** Not written by the model: they were in the room when it was said aloud. */
-  derived?: boolean;
+  /** Not written for this person; the engine worked it out: the source, a witness, or a secret's keeping. */
+  derived?: "source" | "witness" | "secret";
   msgIndex: number;
   at: StoryTime | null;
 }
@@ -184,12 +219,23 @@ export interface FactEntry {
   holder: string;
   status: KnowStatus;
   how?: string;
+  route?: KnowRoute;
+  from?: string;
   version?: string;
-  /** Anything else the line carried: the evidence, what they still don't know. */
+  /** Anything else the line carried: the evidence. */
   note?: string;
-  derived?: boolean;
+  derived?: FactStance["derived"];
   msgIndex: number;
   at: StoryTime | null;
+}
+
+/** A moment a fact came out in the open, and who was there to take it in. */
+export interface FactOut {
+  msgIndex: number;
+  at: StoryTime | null;
+  by?: string;
+  channel: string;
+  present: string[];
 }
 
 /** A fact the story tracks: one statement, who stands where on it, and how it came out. */
@@ -208,7 +254,19 @@ export interface FactState {
   autoKey?: boolean;
   stances: Record<string, FactStance>;
   history: FactEntry[];
+  /** Each time it came out in the open (said aloud, shown). */
+  out?: FactOut[];
+  /** A secret: who keeps it, and from whom (those still without it). */
+  keepers?: string[];
+  keptFrom?: string[];
   firstMsg: number;
+  lastMsg: number;
+}
+
+/** Something a person doesn't know, in words ("who raised her"); closes when they learn it. */
+export interface KnowGap {
+  text: string;
+  since: number;
   lastMsg: number;
 }
 
@@ -361,6 +419,18 @@ export interface WorldState {
   knowledge: KnowRow[];
   /** Knowledge compiled into facts (key → fact). */
   facts?: Record<string, FactState>;
+  /** What each person doesn't know, in words (holder id → gaps). */
+  gaps?: Record<string, KnowGap[]>;
+  /** Speech from the latest messages, to tell what was said aloud, with who was there to hear it. */
+  speech?: { msgIndex: number; lines: SpokenLine[]; present: string[]; fromUser?: boolean }[];
+  /** The first message whose speech counts for the reply being filed (the one after the previous reply). */
+  speechSince?: number;
+  /** The last reply filed. */
+  lastReply?: number;
+  /** Knowledge lines as the Almanac filed them, per message (for the model's own history). */
+  knowCanon?: Record<number, string[]>;
+  /** Messages whose knowledge lines needed repair (bundled, untagged, diary-like). */
+  knowRepair?: number[];
   items: Record<string, ItemState>;
   threads: Record<string, ThreadState>;
   cons: Record<string, ConsState>;
@@ -422,6 +492,9 @@ export interface Settings {
   sidecar: boolean;
   sidecarConnection: string;
   sidecarTimeout: number;
+  /** The knowledge clerk: a quiet pass that rewrites a reply's knowledge lines cleanly. */
+  knowledgeClerk: "off" | "auto" | "always";
+  clerkConnection: string;
   mirror: "off" | "summaries" | "full";
   mirrorVectorize: boolean;
   hud: boolean;
@@ -471,6 +544,8 @@ export const DEFAULT_SETTINGS: Settings = {
   sidecar: false,
   sidecarConnection: "",
   sidecarTimeout: 20,
+  knowledgeClerk: "auto",
+  clerkConnection: "",
   mirror: "summaries",
   mirrorVectorize: false,
   hud: true,

@@ -8,7 +8,7 @@ import type { CraftReport } from "./telemetry";
 import type { CharacterState, MessageDelta, WorldState } from "./types";
 import { absMinutes, estTokens, fmtSpan, fmtTime, truncateTokens } from "./util";
 import { LADDER_NAMES, normFact, overlap } from "./state";
-import { factsInPlay, howVerb, unawareOf } from "./facts";
+import { factsInPlay, gapsOf, lackOf, lackText, peopleHere, standsOn, stanceVerb } from "./facts";
 import { isOpen, parseHours } from "./engines/almanac";
 
 export interface NoteInput {
@@ -18,6 +18,8 @@ export interface NoteInput {
   userName: string;
   sealed: boolean;
   query: string; // player's message + last reply, for topics in play
+  /** The player's message alone: what is being talked about now. */
+  player?: string;
   craft?: CraftReport | null;
   genreNudge?: string | null;
   plants?: string[];
@@ -82,31 +84,50 @@ export function capsule(c: CharacterState, state: WorldState, opts: { sealed: bo
 }
 
 /**
- * One line per fact in play: its #key and statement, where the people here stand
- * on it (and how they came to it), and who here doesn't know it yet.
+ * The facts in play, ranked by what a slip would cost: for each, who here has it
+ * and how, who here lacks it and why (only with evidence), and who keeps it from
+ * whom. Then the gaps of the people here. A person not named on a fact is
+ * unrecorded, never "doesn't know" — that guess, sent as fact, caused the leaks
+ * and the re-telling it was meant to stop.
  */
-export function knowledgeBrief(state: WorldState, query: string, userName: string, maxFacts = 4): string[] {
+export function knowledgeBrief(state: WorldState, query: string, userName: string, maxFacts = 5, player = ""): string[] {
   const nm = (id: string) => (id === "user" ? userName : state.chars[id]?.name ?? id);
-  const here = new Set(Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.dead).map((c) => c.id));
-  if (![...here].some((id) => id !== "user")) return [];
+  const here = peopleHere(state);
+  if (!here.some((id) => id !== "user")) return [];
+  const list = (ids: string[]) => (ids.length <= 2 ? ids.join(" and ") : `${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]}`);
   const lines: string[] = [];
-  for (const f of factsInPlay(state, query, maxFacts)) {
-    const truth = f.truth !== "unknown" ? ` (${f.truth})` : "";
-    const stances = Object.values(f.stances)
-      .filter((s) => here.has(s.holder) || s.holder === "user")
-      .sort((a, b) => b.msgIndex - a.msgIndex)
-      .slice(0, 5)
-      .map((s) => {
-        if (s.status === "wrong") return `${nm(s.holder)} wrongly believes ${s.version ? `"${s.version}"` : "otherwise"}`;
-        if (s.status === "unaware") return `${nm(s.holder)} doesn't know`;
-        const how = s.derived ? "heard it said" : s.how ? howVerb(s.status, s.how).replace(/^(was |believes it \()/, "").replace(/\)$/, "") : "";
-        return `${nm(s.holder)} ${s.status === "knows" ? "knows" : s.status}${how ? ` (${how})` : ""}`;
-      });
-    const unaware = unawareOf(state, f).filter((id) => here.has(id)).map(nm);
-    const parts = [...stances, ...(unaware.length ? [`news to ${unaware.slice(0, 4).join(", ")}`] : [])];
-    lines.push(`#${f.key} "${f.statement}"${truth} — ${parts.join("; ") || "no one here knows it"}.`);
+  // Without the player's message on its own, the whole query stands in for it.
+  const focus = player || query;
+  for (const f of factsInPlay(state, query, maxFacts, focus)) {
+    const truth = f.truth !== "unknown" ? ` (${f.truth === "partial" ? "partly true" : f.truth})` : "";
+    const has = here.filter((id) => standsOn(f.stances[id]));
+    const lacks = here.map((id) => ({ id, r: lackOf(state, f, id) })).filter((x) => x.r);
+    const parts: string[] = [];
+    const allKnow = has.length >= 2 && !lacks.length && has.every((id) => f.stances[id].status === "knows") && here.every((id) => has.includes(id));
+    if (allKnow) parts.push(`${list(has.map(nm))} ${has.length === 2 ? "both" : "all"} have it: don't explain it again`);
+    else {
+      // Group plain "knows" by how they came to it; beliefs and wrong beliefs one by one.
+      const groups = new Map<string, string[]>();
+      for (const id of has) {
+        const s = f.stances[id];
+        const verb = stanceVerb(s, nm);
+        const how = s.status !== "knows" && s.how && !s.derived ? ` (${s.how.slice(0, 48)})` : "";
+        const k = `${verb}${how}`;
+        groups.set(k, [...(groups.get(k) ?? []), nm(id)]);
+      }
+      for (const [verb, who] of groups) parts.push(`${list(who)} ${verb}`);
+      for (const { id, r } of lacks) parts.push(`${nm(id)} ${lackText(r!)}`);
+    }
+    const keepers = (f.keepers ?? []).filter((k) => !here.includes(k));
+    if (keepers.length) parts.push(`kept by ${list(keepers.map(nm))}`);
+    lines.push(`#${f.key} "${f.statement}"${truth} — ${parts.join("; ") || "no one here has it"}.`);
   }
-  if (lines.length) lines.push(`(Reuse a fact's #key in know lines about it; write the fact itself, not how it came out.)`);
+  const gaps = here.map((id) => ({ id, g: gapsOf(state, id, focus) })).filter((x) => x.g.length);
+  if (gaps.length) lines.push(`Gaps — ${gaps.map((x) => `${nm(x.id)} doesn't know ${x.g.map((g) => g.text).join("; ")}`).join(" · ")}.`);
+  if (lines.length) {
+    lines.unshift("Only what the story recorded: a person not named on a fact is unrecorded, not ignorant. Never let anyone act on a fact they lack.");
+    lines.push("(Something comes out: reveal #key. A guess or wrong belief: know. A hidden fact: secret. Reuse the #key.)");
+  }
   return lines;
 }
 
@@ -196,7 +217,7 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
   if (rejected.length) cons.unshift(`Last reply's ledger was corrected: ${rejected.slice(0, 2).map((r) => `“${r.raw.slice(0, 60)}” (${r.reason})`).join("; ")}. The verified state here stands.`);
   if (cons.length) lanes.constraints = truncateTokens(`[CONSTRAINTS] ${cons.join(" · ")}`, B.constraints);
 
-  const kb = knowledgeBrief(state, input.query, input.userName);
+  const kb = knowledgeBrief(state, input.query, input.userName, 5, input.player ?? "");
   if (kb.length) lanes.knowledge = truncateTokens(`[KNOWLEDGE] ${kb.join("\n  ")}`, B.knowledge);
 
   lanes.arrived = `[ARRIVED] ${input.arrivals?.length ? input.arrivals.join(" · ") + " — render these arrivals and invent no others." : "(none from off-screen this turn)"}`;

@@ -3,6 +3,7 @@
 import { KeyIndex } from "../core/keys";
 import { recall, renderRecord } from "../core/recall";
 import { normFact, overlap } from "../core/state";
+import { lackOf, lackText, stanceVerb } from "../core/facts";
 import { describe, has, host, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings } from "./store";
@@ -60,11 +61,17 @@ export function registerTools() {
           return fuzzy.length ? fuzzy.map((x) => renderRecord(x.r, L.state, present, false, L.names.user)).join("\n") : "Nothing recorded about that.";
         }
         case "ledger_who_knows": {
-          const f = normFact(String(args.fact ?? ""));
-          const rows = L.state.knowledge.filter((k) => !k.supersededBy && overlap(normFact(k.fact), f) > 0.4);
-          if (!rows.length) return "No one is recorded as knowing about that.";
+          const q = String(args.fact ?? "").trim();
+          const facts = Object.values(L.state.facts ?? {}).filter((x) => !x.hidden);
+          const byKey = facts.find((x) => x.key === q.replace(/^#/, "").toLowerCase() || x.altKeys?.includes(q.replace(/^#/, "").toLowerCase()));
+          const found = byKey ? [byKey] : facts.map((x) => ({ x, s: Math.max(overlap(normFact(x.statement), normFact(q)), ...x.aliases.map((a) => overlap(a, normFact(q)))) })).filter((y) => y.s > 0.4).sort((a, b) => b.s - a.s).slice(0, 3).map((y) => y.x);
+          if (!found.length) return "No fact like that is recorded.";
           const nm = (id: string) => (id === "user" ? L.names.user : L.state.chars[id]?.name ?? id);
-          return rows.map((k) => `${nm(k.holder)}: ${k.status} — ${k.fact}${k.source ? ` (${k.source})` : ""}${k.truth !== "unknown" ? ` [${k.truth}]` : ""}`).join("\n");
+          return found.map((f) => {
+            const has = Object.values(f.stances).filter((s) => s.status !== "unaware").map((s) => `${nm(s.holder)} ${stanceVerb(s, nm)}`);
+            const lacks = Object.keys(L.state.chars).map((id) => ({ id, r: lackOf(L.state, f, id) })).filter((x) => x.r).map((x) => `${nm(x.id)} ${lackText(x.r!)}`);
+            return `#${f.key} "${f.statement}"${f.truth !== "unknown" ? ` [${f.truth}]` : ""}: ${[...has, ...lacks].join("; ") || "no one recorded"}. Anyone not named is unrecorded, not ignorant.`;
+          }).join("\n");
         }
         case "ledger_lookup": {
           const n = String(args.name ?? "").toLowerCase();

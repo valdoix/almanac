@@ -17,6 +17,12 @@ const RANK: Record<string, number> = { chapter: 1, arc: 2, volume: 3 };
 // Chronicle levels, matching the coverage bar.
 const LEVEL_COLOR: Record<string, string> = { volume: "#7b5bd6", arc: "var(--alm-accent-2)", chapter: "var(--alm-accent)" };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const KIND_HELP: Record<string, string> = {
+  secret: "Someone keeps it, or someone lacks it while someone else has it",
+  belief: "Someone suspects, believes, doubts or is wrong about it",
+  shared: "Two or more people have it",
+  noted: "One person noticed it; no one is known to lack it (never sent to the model)",
+};
 
 export class AlmanacApp {
   ctx: SpindleFrontendContext;
@@ -26,10 +32,13 @@ export class AlmanacApp {
   asOf = Infinity;
   graphAxis = "";
   npcOnly = false;
-  /** Knowledge page: search text, the fact being edited, and facts whose history is open. */
+  /** Knowledge page: search text, which facts to list, one person, the fact being edited, open histories, clerk progress. */
   factQuery = "";
+  factKind: "play" | "shared" | "noted" | "all" = "play";
+  factPerson = "";
   editingFact: string | null = null;
   openFacts = new Set<string>();
+  clerkProgress = "";
   /** Chronicle page: which level to list, and which units show their folded children. */
   chronFilter: "all" | "volume" | "arc" | "chapter" = "all";
   chronOpen = new Set<string>();
@@ -195,33 +204,79 @@ ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8
 
   tab_knowledge(v: any): string {
     const hidden = v.hiddenFacts ?? [];
-    if (!v.knowledge.length && !hidden.length) return `<div class="empty">No facts yet. The model records them with <code>know</code> lines, and each fact collects who knows it and how.</div>`;
+    const clerk = this.clerkBar(v);
+    if (!v.knowledge.length && !hidden.length) return `${clerk}<div class="empty">No facts yet. The model records them with <code>reveal</code>, <code>know</code> and <code>secret</code> lines; each fact collects who has it, how it reached them, and who it's kept from.</div>`;
     const people = new Map<string, any>(v.cast.map((c: any) => [c.id, c]));
     const q = this.factQuery.trim().toLowerCase();
-    const shown = v.knowledge.filter((f: any) => !q || `${f.key} ${f.statement} ${f.stances.map((s: any) => s.name).join(" ")}`.toLowerCase().includes(q));
-    const chip = (s: any) => {
-      const c = people.get(s.id);
-      const cls = s.status === "wrong" ? "wrong" : s.status === "knows" ? "knows" : s.status === "unaware" ? "un" : "sus";
-      const icon = s.status === "wrong" ? "✗" : s.status === "knows" ? "✓" : s.status === "unaware" ? "—" : "?";
-      const label = s.status === "wrong" ? "wrong" : s.status === "knows" ? (s.derived ? "heard it" : "knows") : s.status;
-      return `<div class="almk-h"><span class="alm-mini" style="--c:${e(c?.color ?? "#888")}">${e(initials(s.name))}</span><div class="almk-h__b"><b>${e(s.name)}</b><span class="alm-kp ${cls}">${icon} ${e(label)}</span>${s.version ? `<small class="almk-ver">thinks “${e(s.version)}”</small>` : ""}${s.how && !s.derived ? kpNote(s.how) : ""}</div></div>`;
+    const who = this.factPerson;
+    const kinds: Record<string, (f: any) => boolean> = {
+      play: (f) => f.kind === "secret" || f.kind === "belief" || f.inPlay,
+      shared: (f) => f.kind === "shared",
+      noted: (f) => f.kind === "noted",
+      all: () => true,
     };
+    const counts = Object.fromEntries(Object.entries(kinds).map(([k, fn]) => [k, v.knowledge.filter(fn).length]));
+    const touches = (f: any) => !who || f.stances.some((s: any) => s.id === who) || f.lacks.some((l: any) => l.id === who) || f.keepers.some((k: any) => k.id === who);
+    const shown = v.knowledge.filter((f: any) => kinds[this.factKind](f) && touches(f) && (!q || `${f.key} ${f.statement} ${f.stances.map((s: any) => s.name).join(" ")}`.toLowerCase().includes(q)));
+    const mini = (id: string, name: string) => `<span class="alm-mini" style="--c:${e(people.get(id)?.color ?? "#888")}">${e(initials(name))}</span>`;
+    const chip = (s: any) => {
+      const cls = s.status === "wrong" ? "wrong" : s.status === "knows" ? "knows" : "sus";
+      const icon = s.status === "wrong" ? "✗" : s.status === "knows" ? "✓" : "?";
+      const label = s.status === "wrong" ? "wrong" : s.verb;
+      const worked = s.derived === "witness" ? "was there when it came out" : s.derived === "source" ? "their own words or deed" : s.derived === "secret" ? "keeps it" : "";
+      return `<div class="almk-h">${mini(s.id, s.name)}<div class="almk-h__b"><b>${e(s.name)}</b><span class="alm-kp ${cls}"${worked ? ` title="Worked out by the Almanac: ${e(worked)}"` : ""}>${icon} ${e(label)}</span>${s.version ? `<small class="almk-ver">thinks “${e(s.version)}”</small>` : ""}${s.how && !s.derived && !s.verb.includes(s.how) ? kpNote(s.how) : ""}</div></div>`;
+    };
+    const lackChip = (l: any) => `<div class="almk-h">${mini(l.id, l.name)}<div class="almk-h__b"><b>${e(l.name)}</b><span class="alm-kp un">— ${e(l.text)}</span></div></div>`;
+    const KIND: Record<string, string> = { secret: "secret", belief: "belief", shared: "shared", noted: "noted" };
     const cards = shown.map((f: any) => {
       if (this.editingFact === f.key) return this.factEditor(v, f);
       const truth = f.truth !== "unknown" ? `<span class="pill${f.truth === "false" ? " warn" : ""}" title="Whether the fact is true">${f.truth === "true" ? "true" : f.truth === "false" ? "false" : "partly true"}</span>` : "";
-      const unaware = f.unaware.map((u: any) => u.name);
       const hist = f.history.map((h: any) => `<li><time>${e(h.when)}</time> <b>${e(h.name)}</b> ${e(h.verb)}${h.version ? `: “${e(h.version)}”` : ""}${h.how && !h.derived && !h.verb.toLowerCase().includes(h.how.toLowerCase()) ? ` <span class="muted">— ${e(h.how)}</span>` : ""}${h.note ? `<small class="almk-note">${e(h.note)}</small>` : ""}</li>`).join("");
-      return `<div class="card flat almk"><div class="almk-q"><span class="almk-key" title="The model refers to this fact as #${e(f.key)}">#${e(f.key)}</span><b class="grow">${e(f.statement)}</b>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}<button class="btn" data-act="factEdit" data-id="${e(f.key)}" title="Rename, set the truth, merge or hide">edit</button></div>
-<div class="almk-st">${f.stances.filter((s: any) => s.status !== "unaware").map(chip).join("") || `<div class="muted">No one knows this yet.</div>`}</div>
-${unaware.length ? `<div class="almk-un">Doesn't know yet: ${e(unaware.slice(0, 6).join(", "))}${unaware.length > 6 ? ` +${unaware.length - 6}` : ""}</div>` : ""}
+      const kept = f.keepers.length ? `<div class="almk-un">🤫 Kept by ${e(f.keepers.map((k: any) => k.name).join(", "))}${f.keptFrom.length ? ` from ${e(f.keptFrom.map((k: any) => k.name).join(", "))}` : ""}</div>` : "";
+      return `<div class="card flat almk almk--${e(f.kind)}"><div class="almk-top"><span class="almk-key" title="The model refers to this fact as #${e(f.key)}">#${e(f.key)}</span><span class="pill almk-kind" title="${e(KIND_HELP[f.kind] ?? "")}">${e(KIND[f.kind] ?? f.kind)}</span>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}<span class="grow"></span><button class="btn" data-act="factEdit" data-id="${e(f.key)}" title="Rename, set the truth, merge or hide">edit</button></div>
+<b class="almk-stmt">${e(f.statement)}</b>
+<div class="almk-st">${f.stances.map(chip).join("") || `<div class="muted">No one has it yet.</div>`}${f.lacks.map(lackChip).join("")}</div>
+${kept}
 <details class="almk-hist"${this.openFacts.has(f.key) ? " open" : ""} data-fact="${e(f.key)}"><summary>How it came out · ${f.history.length}</summary><ol>${hist}</ol></details></div>`;
     }).join("");
     // Dramatic irony: someone certain of the wrong version.
     const irony = v.knowledge.flatMap((f: any) => f.stances.filter((s: any) => s.status === "wrong" || (s.status !== "unaware" && f.truth === "false")).map((s: any) => ({ f, s }))).slice(0, 3);
     const ironyHtml = irony.map(({ f, s }: any) => `<div class="alm-irony"><span class="i">🎭</span><span><b>Dramatic irony:</b> ${e(s.name)} ${s.version ? `thinks “${e(s.version)}”, but ${e(f.statement)}` : `is certain that “${e(f.statement)}”, which isn't true`}.</span></div>`).join("");
+    const seg = (k: string, lab: string) => `<button class="pill${this.factKind === k ? " on" : ""}" data-act="factKind" data-id="${k}" aria-pressed="${this.factKind === k}">${lab} <b>${counts[k]}</b></button>`;
+    const filters = `<div class="row almk-filters">${seg("play", "In play")}${seg("shared", "Shared")}${seg("noted", "Noted")}${seg("all", "All")}<span class="grow"></span><select data-set="factPerson" aria-label="Show one person"><option value="">everyone</option>${(v.knowers ?? []).map((p: any) => `<option value="${e(p.id)}"${p.id === who ? " selected" : ""}>${e(p.name)}${p.here ? " · here" : ""}</option>`).join("")}</select></div>`;
     const search = `<div class="row" style="margin-bottom:8px"><input type="text" data-set="factQuery" value="${e(this.factQuery)}" placeholder="Find a fact or a person…" aria-label="Find a fact or a person" class="grow"><span class="muted"><small>${shown.length} of ${v.knowledge.length}</small></span></div>`;
+    const person = who ? this.personKnowledge(v, who) : "";
     const hiddenHtml = hidden.length ? `<h4>Hidden facts</h4><div class="row">${hidden.map((h: any) => `<span class="pill">${e(h.statement)} <button class="btn" data-act="factRestore" data-id="${e(h.key)}" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div>` : "";
-    return `${ironyHtml}${search}<div class="list">${cards || `<div class="empty">Nothing matches.</div>`}</div>${hiddenHtml}`;
+    const empty = this.factKind === "play" ? "No secrets or beliefs in play. <b>Shared</b> and <b>Noted</b> hold the rest." : "Nothing matches.";
+    return `${clerk}${ironyHtml}${filters}${search}${person}<div class="list">${cards || `<div class="empty">${empty}</div>`}</div>${hiddenHtml}`;
+  }
+
+  /** One person: what they have, what they lack and why, and the gaps in their own words. */
+  personKnowledge(v: any, id: string): string {
+    const p = (v.knowers ?? []).find((x: any) => x.id === id);
+    if (!p) return "";
+    const has = v.knowledge.flatMap((f: any) => f.stances.filter((s: any) => s.id === id).map((s: any) => `<li><b>${e(f.statement)}</b> <span class="muted">— ${e(s.status === "wrong" && s.version ? `thinks “${s.version}”` : s.verb)}</span></li>`));
+    const lacks = v.knowledge.flatMap((f: any) => f.lacks.filter((l: any) => l.id === id).map((l: any) => `<li><b>${e(f.statement)}</b> <span class="muted">— ${e(l.text)}</span></li>`));
+    const gaps = (v.knowGaps ?? []).find((g: any) => g.id === id)?.gaps ?? [];
+    return `<div class="card flat almk-person"><h4>${e(p.name)}</h4>
+<details open><summary>Has · ${has.length}</summary><ul>${has.slice(0, 40).join("") || "<li class=\"muted\">Nothing recorded.</li>"}</ul></details>
+<details${lacks.length ? " open" : ""}><summary>Lacks · ${lacks.length}</summary><ul>${lacks.join("") || "<li class=\"muted\">Nothing recorded as kept from them or missed.</li>"}</ul></details>
+<details${gaps.length ? " open" : ""}><summary>Doesn't know, in the story's words · ${gaps.length}</summary><ul>${gaps.map((g: any) => `<li${g.stale ? ' class="muted" title="Not restated in the last 40 messages"' : ""}>${e(g.text)}</li>`).join("") || "<li class=\"muted\">No gaps recorded.</li>"}</ul></details></div>`;
+  }
+
+  /** The knowledge clerk: what it does, how much of the chat it has read, and one button to tidy the rest. */
+  clerkBar(v: any): string {
+    const c = v.clerk ?? {};
+    const mode = c.mode === "off" ? "off for new replies" : c.mode === "always" ? "reads every new reply" : "reads new replies whose lines need it";
+    const unread = Number(c.unread ?? 0);
+    const read = Math.max(0, Number(c.replies ?? 0) - unread);
+    const status = c.replies ? ` ${read} of ${c.replies} replies read.` : "";
+    const button = c.running
+      ? `<span class="pill on">reading…${this.clerkProgress ? ` ${e(this.clerkProgress)}` : ""}</span><button class="btn" data-act="clerkStop" title="Stop after the reply it's reading; tidying again carries on from there">Stop</button>`
+      : unread
+        ? `<button class="btn" data-act="clerkTidy" title="Read every reply the clerk hasn't read yet, oldest first, and rewrite its knowledge lines cleanly: one quiet generation each. You can stop and carry on later.">Tidy the whole chat · ${unread} to read</button>`
+        : c.replies ? `<span class="pill">every reply read</span>` : "";
+    return `<div class="card flat almk-clerk"><div class="row"><span class="grow"><b>Knowledge clerk</b> <span class="muted">— ${e(mode)}.${e(status)}</span></span>${button}</div></div>`;
   }
 
   /** Rename a fact, say whether it's true, fold it into another, or hide it. */
@@ -363,6 +418,7 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
 <h3>Core</h3><div class="card flat"><label class="f">Enable<select data-setting="enabled"><option value="auto"${s.enabled === "auto" ? " selected" : ""}>automatic (ALMANAC chats)</option><option value="on"${s.enabled === "on" ? " selected" : ""}>every chat</option><option value="off"${s.enabled === "off" ? " selected" : ""}>off</option></select></label>
 <label class="f">Validation${sel("strictness", [["strict", "strict — reject impossible changes"], ["lenient", "lenient — warn only"]])}</label>${chk("autoRepair", "Repair missing ledgers automatically")}${chk("formatAid", "Show the model last turn's ledger as a format example")}${chk("debug", "Debug logging")}</div>
 <h3>Chronicle</h3><div class="card flat">${chk("chronicle", "Summarise old turns into chapters, arcs and volumes")}${chk("hideCovered", "Hide covered turns")}<label class="f">Raw tail (messages)${num("rawTail", 6, 400)}</label><label class="f">Raw tail cap (tokens)${num("rawTailTokens", 1000)}</label><label class="f">Chapter size (tokens)${num("chapterThresholdTokens", 1000)}</label><label class="f">Fan-in (chapters per arc, arcs per volume)${num("fanIn", 2, 12)}</label><label class="f">Summary detail${sel("summaryDetail", [["brief", "brief — the essentials (≈100–200 words a chapter)"], ["standard", "standard — facts and changes (≈150–350)"], ["detailed", "detailed — scene by scene, where things stand (≈350–650)"], ["exhaustive", "exhaustive — beats, texture, voices (≈700–1200)"]])}</label><label class="f">Always keep in summaries (optional)${txt("summaryFocus", "outfits, injuries, Buffy's lies, pet names…")}</label><p class="muted">More detail keeps more of the story in memory, at the cost of prompt tokens. New chapters use the new setting; <b>Rewrite all</b> on the Chronicle page redoes the old ones.</p><label class="f">Summariser connection id (empty = your default)${txt("summarizerConnection")}</label></div>
+<h3>Knowledge</h3><div class="card flat"><label class="f">Knowledge clerk${sel("knowledgeClerk", [["auto", "when a reply's lines need it (bundled, untagged, diary-like)"], ["always", "every reply"], ["off", "off"]])}</label><p class="muted">After a reply, a quiet call rewrites its knowledge lines cleanly: one fact a line, the #keys in play, information rather than what someone noticed. It runs in the background; the next turn waits for it up to 8 seconds.</p><label class="f">Clerk connection id (empty = the summariser's)${txt("clerkConnection")}</label></div>
 <h3>Recall</h3><div class="card flat"><label class="f">Injection budget (tokens)${num("recallBudget", 400, 20000)}</label><label class="f">Recall placement${sel("recallPlacement", [["before_history", "before chat history"], ["depth4", "4 messages from the end"]])}</label>${chk("keyHeat", "Demote keys that fire without being used")}<label class="f">Max keys per record${num("maxKeys", 4, 24)}</label></div>
 <h3>Storage (hybrid)</h3><div class="card flat"><p class="muted">The extension's storage is the source of truth (branch-safe, rebuildable). The mirror lorebook is a readable, editable projection attached to this chat only.</p><label class="f">Mirror lorebook${sel("mirror", [["off", "off"], ["summaries", "summaries"], ["full", "full records"]])}</label>${chk("mirrorVectorize", "Vectorise mirror entries (semantic recall; needs an embedding provider)")}</div>
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
@@ -417,6 +473,9 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
       case "edit": this.editing = id ?? null; this.render(); break;
       case "cancelEdit": this.editing = null; this.render(); break;
       case "chronFilter": this.chronFilter = (id as any) || "all"; this.render(); break;
+      case "factKind": this.factKind = (id as any) || "play"; this.render(); break;
+      case "clerkTidy": this.clerkProgress = ""; this.send({ type: "clerkTidy" }); if (this.view) this.view.clerk = { ...this.view.clerk, running: true }; this.render(); break;
+      case "clerkStop": this.send({ type: "clerkStop" }); this.clerkProgress = "stopping…"; this.render(); break;
       case "chronToggle": if (!id) break; if (this.chronOpen.has(id)) this.chronOpen.delete(id); else this.chronOpen.add(id); this.render(); break;
       case "saveRecord": {
         const body: Record<string, string> = {};

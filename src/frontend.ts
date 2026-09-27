@@ -277,6 +277,11 @@ export function setup(ctx: SpindleFrontendContext) {
         case "toast":
           console.info(`[ALMANAC] ${m.text}`);
           break;
+        case "clerkProgress":
+          if (app.view?.chatId !== m.chatId) return;
+          app.clerkProgress = m.done >= m.total ? "" : `${m.done}/${m.total}`;
+          app.render();
+          break;
       }
     }),
   );

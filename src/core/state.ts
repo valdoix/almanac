@@ -7,7 +7,10 @@ import type {
   BondAxis, BondState, CharacterState, EventSource, FactEdit, KnowRow, LedgerEvent, MessageDelta,
   ParsedLedger, ParsedOp, WorldState,
 } from "./types";
-import { fileKnow } from "./facts";
+import { KNOW_OPS } from "./types";
+import { canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
+import { parseLine } from "./dsl";
+import type { KnowArgs } from "./knowparse";
 import { ALL_AXES, BIPOLAR_AXES } from "./types";
 import { absMinutes, addMinutes, clamp, fmtSpan, fromAbs, MIN_PER_DAY, slug, type StoryTime } from "./util";
 
@@ -65,7 +68,7 @@ export function isTypoOf(n: string, known: string): boolean {
 }
 
 export const CONFIDENCE: Record<EventSource, number> = {
-  user: 1, model: 0.9, lore: 0.85, archivist: 0.8, repair: 0.75, engine: 0.95, sim: 0.7, extractor: 0.6,
+  user: 1, model: 0.9, lore: 0.85, archivist: 0.8, clerk: 0.85, repair: 0.75, engine: 0.95, sim: 0.7, extractor: 0.6,
 };
 
 const PIVOTAL = /betray|rescu|saved|save[sd]? (her|his|their|my) life|kill|murder|unforgiv|sacrific|confess|abandon|attack|lied about|revealed|died|death|oath|marri|propos/i;
@@ -244,8 +247,13 @@ export class Folder {
       }
       if (this.isUser(s.name) || this.notAPerson(s.name)) continue;
       const existing = this.charId(s.name, msgIndex, false);
-      if (existing) continue;
+      // Whoever speaks is a person who can know things.
+      if (existing) {
+        this.state.chars[existing].voiced = true;
+        continue;
+      }
       const id = this.charId(s.name, msgIndex, true)!;
+      this.state.chars[id].voiced = true;
       if (s.slot && s.slot >= 1 && s.slot <= 12) {
         this.state.voices[id] = s.slot;
         this.state.chars[id].slot = s.slot;
@@ -289,6 +297,15 @@ export class Folder {
     if (parsed.ops.length) st.ledgerCount++;
 
     const castOp = ops.some((o) => o.op === "cast");
+    // Knowledge: what was said aloud since the last reply. (Thoughts don't make someone
+    // a person who can know things — models give the cat thoughts too; speech does.)
+    const fromUser = !!parsed.fromUser;
+    if (!fromUser) st.speechSince = (st.lastReply ?? -1) + 1;
+    if (parsed.speech?.length) {
+      const present = Object.values(st.chars).filter(canHear).map((c) => c.id);
+      st.speech = [...(st.speech ?? []).filter((e) => e.msgIndex !== msgIndex), { msgIndex, lines: parsed.speech.slice(0, 60), present, ...(fromUser ? { fromUser } : {}) }].slice(-4);
+    }
+    this.kctx = this.knowCtx(msgIndex);
     let seq = 0;
     const run = (op: ParsedOp, src: EventSource) => {
       const ev: LedgerEvent = {
@@ -348,8 +365,65 @@ export class Folder {
     } else if (parsed.title && st.sceneLog.length) st.sceneLog[st.sceneLog.length - 1].title ??= parsed.title;
 
     if (source !== "model" && parsed.ops.length) st.unverified.push(msgIndex);
+    // Knowledge lines as filed (the model reads its own last ledger in this shape), and whether they needed repair.
+    const kc = this.kctx!;
+    const canon = (st.knowCanon ??= {});
+    delete canon[msgIndex];
+    if (kc.canon.length) canon[msgIndex] = kc.canon.slice(0, 16);
+    for (const k of Object.keys(canon)) if (+k < msgIndex - 40) delete canon[+k];
+    st.knowRepair = (st.knowRepair ?? []).filter((i) => i !== msgIndex && i >= msgIndex - 200);
+    if (kc.repaired && ops.some((o) => KNOW_OPS.includes(o.op))) st.knowRepair.push(msgIndex);
+    closeMetGaps(st);
+    if (!fromUser) st.lastReply = msgIndex;
+    this.kctx = null;
     st.lastDelta = delta;
     return events;
+  }
+
+  private kctx: KnowCtx | null = null;
+
+  /** The knowledge engine's view of this message: names, listeners, edits, and what it files. */
+  private knowCtx(mi: number): KnowCtx {
+    const st = this.state;
+    return {
+      st, mi, edits: this.opts.factEdits ?? {}, canon: [], repaired: false,
+      // The clock may move earlier in the same ledger: read it when a line is filed.
+      get at() { return st.time ? { ...st.time } : null; },
+      who: (name: string, create: boolean) => this.whoFor(name, mi, create),
+      nm: (id: string) => this.nm(id),
+      listeners: () => Object.values(st.chars).filter((c) => canHear(c) && c.arrivedMsg !== mi).map((c) => c.id),
+    };
+  }
+
+  /**
+   * A person named on a knowledge line. Things ("the letter", "the stone"),
+   * phrases ("Buffy suspects Willow") and names removed from the cast are not
+   * people. Looking up never renames anyone; only a holder named on a line may
+   * enter the story.
+   */
+  private whoFor(name: string, mi: number, create: boolean): string | null {
+    const n = name.replace(/^["“]|["”]$/g, "").replace(/#\d+$/, "").trim();
+    if (!n || this.notAPerson(n)) return null;
+    const known = this.lookup(n);
+    if (known) return known;
+    if (!/^(?:\{\{user\}\}|[A-ZÀ-Þ][\p{L}'’.-]*(?:\s+(?:(?:of|the|de|van|von|da|del|al|bin|ibn)\s+)?[A-ZÀ-Þ][\p{L}'’.-]*){0,3})$/u.test(n)) return null;
+    return create ? this.charId(n, mi, true) : null;
+  }
+
+  /** A character by name, alias or unique first name, without changing anyone. */
+  lookup(name: string): string | null {
+    const n = bareName(name);
+    if (!n) return null;
+    if (this.isUser(name)) return this.state.chars.user ? "user" : null;
+    const chars = Object.values(this.state.chars);
+    const exact = chars.find((c) => c.name.toLowerCase() === n || c.aliases.some((a) => a.toLowerCase() === n));
+    if (exact) return exact.id;
+    const first = n.split(/\s+/)[0];
+    if (first.length < 3) return null;
+    // "Mara" for "Mara Voss", or "Mara Voss" for "Mara" — the other words must be a surname, not a phrase.
+    if (n.includes(" ") && !/^[A-Z][^\s]*(?:\s+[A-Z][^\s]*)+$/.test(name.trim())) return null;
+    const byFirst = chars.filter((c) => c.name.toLowerCase().split(/\s+/)[0] === first);
+    return byFirst.length === 1 ? byFirst[0].id : null;
   }
 
   private applyHeader(parsed: ParsedLedger, ops: ParsedOp[], _msgIndex: number) {
@@ -487,6 +561,9 @@ export class Folder {
           } else if (e.tier === "off") {
             c.tier = "off";
           } else {
+            // An arrival hears nothing said before it came in.
+            if (e.tier === "arrive" || before === "off") c.arrivedMsg = mi;
+            c.castSeen = (c.castSeen ?? 0) + 1;
             c.tier = e.tier === "arrive" ? "peri" : (e.tier as "spot" | "peri");
             c.place = here;
             if (e.activity) c.activity = e.activity.replace(/^←\s*/, "");
@@ -627,23 +704,46 @@ export class Folder {
         return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
       }
       case "know": {
-        const holder = this.charId(op.subject!, mi)!;
-        const row: KnowRow = {
-          id: `k${mi}_${st.knowledge.length}`, holder, fact: a.fact ?? "", status: a.status, source: a.source, truth: a.truth,
-          at: st.time ? { ...st.time } : null, msgIndex: mi,
-        };
-        // File it under its fact (by #key, else by wording); a holder's newer line on the same fact replaces the older one.
-        const key = fileKnow(st, row, a, this.opts.factEdits);
-        row.factKey = key;
-        const fact = st.facts![key];
-        if (!row.fact) row.fact = fact.statement;
-        for (const old of st.knowledge) {
-          if (old.holder === holder && !old.supersededBy && old.factKey === key) old.supersededBy = row.id;
-        }
-        st.knowledge.push(row);
-        const line = `🧠 ${this.nm(holder)} ${a.status}: ${fact.statement}${a.truth === "false" ? " (false)" : ""}`;
-        if (strict && !a.source) return { verdict: "warned", reason: "knowledge without a source", line };
+        const holder = this.charId(op.subject!, mi);
+        if (!holder) return reject(`${op.subject} is not a person`);
+        st.chars[holder].voiced = true;
+        // Lines stored by older versions (side events) carry a single fact: read them again.
+        const k = a.items ? a : parseLine(op.raw)?.args ?? { items: [{ statement: a.fact ?? "", key: a.key, status: a.status ?? "knows", truth: a.truth ?? "unknown", how: a.source }], negations: [] };
+        // Each item filed under its fact (by #key, else by wording); a holder's newer line on a fact replaces the older one.
+        const keys = fileKnow(this.kctx!, holder, k as KnowArgs);
+        keys.forEach((key, i) => {
+          const it = k.items[i];
+          const row: KnowRow = {
+            id: `k${mi}_${st.knowledge.length}`, holder, fact: st.facts![key].statement, status: it.status, source: it.how, truth: it.truth,
+            at: st.time ? { ...st.time } : null, msgIndex: mi, factKey: key,
+          };
+          for (const old of st.knowledge) if (old.holder === holder && !old.supersededBy && old.factKey === key) old.supersededBy = row.id;
+          st.knowledge.push(row);
+        });
+        if (st.knowledge.length > 800) st.knowledge.splice(0, st.knowledge.length - 800);
+        const first = keys[0] ? st.facts![keys[0]] : undefined;
+        const more = keys.length > 1 ? ` (+${keys.length - 1})` : "";
+        const gaps = k.negations?.length ? `${first ? "; " : ""}doesn't know: ${k.negations.slice(0, 3).join(", ")}` : "";
+        const line = `🧠 ${this.nm(holder)}${first ? ` ${k.items[0].status}: ${first.statement}${k.items[0].truth === "false" ? " (false)" : ""}${more}` : ""}${gaps}`;
         return { verdict: "accepted", line };
+      }
+      case "reveal": {
+        const key = fileReveal(this.kctx!, a as any);
+        const f = st.facts![key];
+        const by = a.source ? `${a.source}: ` : "";
+        return { verdict: "accepted", line: `🗣 ${by}${f.statement} (${a.channel})` };
+      }
+      case "secret": {
+        const key = fileSecret(this.kctx!, a as any);
+        const f = st.facts![key];
+        return { verdict: "accepted", line: `🤫 ${f.statement}${f.keptFrom?.length ? ` — kept from ${f.keptFrom.map((x) => this.nm(x)).join(", ")}` : ""}` };
+      }
+      case "unaware": {
+        const holder = this.charId(op.subject!, mi);
+        if (!holder) return reject(`${op.subject} is not a person`);
+        st.chars[holder].voiced = true;
+        fileUnaware(this.kctx!, holder, a.things);
+        return { verdict: "accepted", line: `🧠 ${this.nm(holder)} doesn't know: ${a.things.slice(0, 3).join(", ")}` };
       }
       case "item": {
         const iid = `item:${slug(op.subject!)}`;
@@ -1012,7 +1112,7 @@ export function fmtClock(minute: number): string {
 /** The merge target that marks a name as not a person (removed from the cast). */
 export const NOT_A_PERSON = "-";
 /** Ops whose subject or object must be a person. */
-const CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "status", "journal"]);
+const CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "unaware", "status", "journal"]);
 
 export function normFact(s: string): string {
   return s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();

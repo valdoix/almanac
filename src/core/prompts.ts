@@ -67,7 +67,10 @@ cast: Mara@spot(by the fire) · Kael@peri(at the bar) · Joss@left(→ street)
 mood Name: old → new | V-1 A2 D0 body Name: soaked; fatigue 3; injury: arm, wound, bandaged
 look Name: …                     bond A>B: trust +1 — cause      ladder A>B: tier 3 — evidence
 (ladder: the rung reached, or +1; a lower rung only for betrayal, neglect, a lie or cruelty, named in the cause)
-know Holder: #key the fact in a few words | how they came to it · knows/believes/suspects/wrong · true/false
+reveal #key: the fact in a few words | Source → listeners, how (aloud reaches everyone present; name listeners only for whispers, letters, private talk)
+know Holder: #key the fact | how they came to it · knows/believes/suspects/doubts/wrong · true/false   (a deduction, guess or wrong belief)
+secret #key: the fact | kept by A · from B, C          unaware Name: what they don't know
+(knowledge lines: information only — secrets, reveals, deductions, lies — never what someone noticed or felt)
 item Name: A → B — how           thread Title: new/advance/complicate/stall(blocker)/resolve — detail
 owe A → B: what | open [due Day 5 18:00]     clockf Faction: project +1 (3/6)
 rumor text | from → to | truth   rep Name @ Group: ±1 — deed     journal Name: "their own words"
@@ -81,7 +84,7 @@ export function repairPrompt(opts: { prose: string; verified: string; userName: 
     system: `You extract a story ledger from one roleplay reply. ${SAFETY_DATA}
 Write ONLY a <ledger>…</ledger> block using this language:
 ${DSL_SPEC}
-Record only what the reply makes true. Every bond, know, item and thread line needs a cause.${opts.sealed ? ` Never record ${opts.userName}'s mood, thoughts or journal.` : ""}`,
+Record only what the reply makes true. Every bond, item and thread line needs a cause.${opts.sealed ? ` Never record ${opts.userName}'s mood, thoughts or journal.` : ""}`,
     user: `Verified state before the reply:\n${opts.verified}\n\n<story>\n${opts.prose}\n</story>`,
   };
 }
