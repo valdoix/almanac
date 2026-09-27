@@ -167,3 +167,31 @@ describe("the player's character", () => {
     expect(state.chars.theodora.mood?.name).toBe("wary");
   });
 });
+
+describe("romance ladder falls", () => {
+  const FAST: FoldOptions = { userName: "Gabriel", strictness: "strict", sealed: true, romance: "fast" };
+  const turn = (i: number, lines: string) => msg(i, `Prose.\n<ledger>\n${lines}\nmode: social\n</ledger>`);
+  const climb = [turn(0, "cast: Buffy@spot\nladder Buffy>Gabriel: tier 2 — she noticed him"), turn(1, "ladder Buffy>Gabriel: tier 3 — his hand stayed")];
+  const tierAfter = (line: string, extra: RawChatMessage[] = []) => {
+    const { state, events } = new LedgerRuntime().fold(toPath([...climb, turn(2, line), ...extra]), FAST);
+    const l = Object.values(state.ladders)[0];
+    return { tier: l.tier, state, events };
+  };
+
+  test("a low rung written after a warm beat is read as a step up", () => {
+    expect(tierAfter("ladder Buffy>Gabriel: tier 1 — he held her through the break; she didn't let go").tier).toBe(4);
+  });
+  test("a fall with no hurt in its cause is held", () => {
+    expect(tierAfter("ladder Buffy>Gabriel: tier 1").tier).toBe(3);
+    expect(tierAfter("ladder Buffy>Gabriel: tier 1 — they talked about the weather").tier).toBe(3);
+  });
+  test("real regressions still fall: one rung, or more for betrayal", () => {
+    expect(tierAfter("ladder Buffy>Gabriel: tier 1 — he lied about the prophecy").tier).toBe(2);
+    expect(tierAfter("ladder Buffy>Gabriel: tier 0 — he betrayed her to the Council").tier).toBe(0);
+    expect(tierAfter("ladder Buffy>Gabriel: tier 2 — he broke her trust").tier).toBe(2);
+  });
+  test("restating the same rung is not a new milestone", () => {
+    const { state } = tierAfter("ladder Buffy>Gabriel: tier 3 — still charged", [turn(3, "ladder Buffy>Gabriel: tier 3 — still charged")]);
+    expect(state.milestones.filter((m) => m.kind === "ladder").map((m) => m.text)).toEqual(["Buffy → Gabriel: Interested", "Buffy → Gabriel: Charged"]);
+  });
+});

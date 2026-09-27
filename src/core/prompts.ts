@@ -66,6 +66,7 @@ clock: +12m | Day 3 14:20        wx: rain → heavy rain           at: Town › 
 cast: Mara@spot(by the fire) · Kael@peri(at the bar) · Joss@left(→ street)
 mood Name: old → new | V-1 A2 D0 body Name: soaked; fatigue 3; injury: arm, wound, bandaged
 look Name: …                     bond A>B: trust +1 — cause      ladder A>B: tier 3 — evidence
+(ladder: the rung reached, or +1; a lower rung only for betrayal, neglect, a lie or cruelty, named in the cause)
 know Holder: fact | source · knows/believes/suspects/wrong · true/false
 item Name: A → B — how           thread Title: new/advance/complicate/stall(blocker)/resolve — detail
 owe A → B: what | open [due Day 5 18:00]     clockf Faction: project +1 (3/6)

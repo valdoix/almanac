@@ -1318,7 +1318,7 @@ function parseMessage(text) {
 }
 
 // src/core/version.ts
-var VERSION = "1.4.1";
+var VERSION = "1.4.2";
 
 // src/core/types.ts
 var BIPOLAR_AXES = ["trust", "affection", "respect", "comfort"];
@@ -1954,16 +1954,32 @@ class Folder {
         const key = `${from}>${to}`;
         const cur = st.ladders[key]?.tier ?? (this.opts.romance === "established" ? 7 : 0);
         let tier = clamp(a.rel ? cur + a.tier : a.tier, 0, 7);
-        if (this.opts.romance === "off" && tier > cur)
-          return reject("romance pace is off");
         const maxStep = this.opts.romance === "fast" ? 2 : 1;
         let warned;
+        if (tier < cur && src !== "user") {
+          const why = op.cause ?? "";
+          if (!LADDER_FALL.test(why)) {
+            if (!a.rel && a.tier > 0 && LADDER_WARM.test(why)) {
+              warned = `"tier ${a.tier}" after a warm beat read as a step up (+${a.tier}), not a fall from ${LADDER_NAMES[cur]}`;
+              tier = clamp(cur + a.tier, 0, 7);
+            } else {
+              return reject(`a fall from ${LADDER_NAMES[cur]} to ${LADDER_NAMES[tier]} needs a cause (betrayal, a lie, neglect, cruelty); write the rung it reaches, or +1`);
+            }
+          } else if (cur - tier > 1 && !LADDER_FALL_HARD.test(why)) {
+            warned = `fell ${cur - tier} rungs at once; only betrayal or the unforgivable drops more than one`;
+            tier = cur - 1;
+          }
+        }
+        if (this.opts.romance === "off" && tier > cur)
+          return reject("romance pace is off");
         if (tier - cur > maxStep && src !== "user") {
-          warned = `skipped ${tier - cur} rungs at once; the pace allows ${maxStep}`;
+          const skipped = tier - cur;
+          warned = `${warned ? `${warned}; ` : ""}skipped ${skipped} rungs at once; the pace allows ${maxStep}`;
           tier = cur + maxStep;
           if (strict && this.opts.romance !== "measured")
             warned += " (clamped)";
         }
+        const changed = !st.ladders[key] || st.ladders[key].tier !== tier;
         const l = st.ladders[key] ?? { from, to, tier: cur, at: null, msgIndex: mi, history: [] };
         l.tier = tier;
         l.evidence = op.cause;
@@ -1972,8 +1988,9 @@ class Folder {
         l.history.push({ tier, evidence: op.cause, msgIndex: mi });
         st.ladders[key] = l;
         st.genreHits.romance = mi;
-        this.milestone(mi, "ladder", `${this.nm(from)} \u2192 ${this.nm(to)}: ${LADDER_NAMES[tier]}`);
-        const line = `\u2661 ${this.nm(from)} \u2192 ${this.nm(to)}: ${LADDER_NAMES[tier]}`;
+        if (changed)
+          this.milestone(mi, "ladder", `${this.nm(from)} \u2192 ${this.nm(to)}: ${LADDER_NAMES[tier]}`);
+        const line = changed ? `\u2661 ${this.nm(from)} \u2192 ${this.nm(to)}: ${LADDER_NAMES[tier]}` : undefined;
         return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
       }
       case "know": {
@@ -2375,6 +2392,9 @@ class Folder {
     }
   }
 }
+var LADDER_FALL = /betray|\blie[sd]?\b|\blying\b|decei|neglect|abandon|cruel|cheat|reject|humiliat|contempt|disgust|resent|jealous|furious|\bangry\b|\banger\b|\bfight\b|argument|insult|threat|hurt (him|her|them)|\bhit\b|struck|walked (away|out)|left (him|her|them)|\bbroke\b|lost (her |his |their )?trust|distrust|suspicio|went cold|pulled away|shut (him|her|them) out|\bgrudge\b|regress|drops? a rung/i;
+var LADDER_FALL_HARD = /betray|cheat|abandon|\bhit\b|struck|violen|unforgivable|\bmurder|\bkill/i;
+var LADDER_WARM = /\bheld\b|\bhold|hug|embrac|kiss|smil|laugh|comfort|warm|tender|gentle|\bsafe\b|protect|saved|rescued|confess|\bstayed\b|didn't (pull|let) (away|go)|leaned|touch|\bhand\b|close|trust|open(ed)? up|let (him|her|them) (in|hold)|blush|flirt|charm|spark|linger/i;
 var LADDER_NAMES = ["Strangers", "Aware", "Interested", "Charged", "Tested", "Spoken", "Together", "Established"];
 function fmtClock(minute) {
   const m = (minute % MIN_PER_DAY + MIN_PER_DAY) % MIN_PER_DAY;
@@ -2743,6 +2763,7 @@ clock: +12m | Day 3 14:20        wx: rain \u2192 heavy rain           at: Town \
 cast: Mara@spot(by the fire) \xB7 Kael@peri(at the bar) \xB7 Joss@left(\u2192 street)
 mood Name: old \u2192 new | V-1 A2 D0 body Name: soaked; fatigue 3; injury: arm, wound, bandaged
 look Name: \u2026                     bond A>B: trust +1 \u2014 cause      ladder A>B: tier 3 \u2014 evidence
+(ladder: the rung reached, or +1; a lower rung only for betrayal, neglect, a lie or cruelty, named in the cause)
 know Holder: fact | source \xB7 knows/believes/suspects/wrong \xB7 true/false
 item Name: A \u2192 B \u2014 how           thread Title: new/advance/complicate/stall(blocker)/resolve \u2014 detail
 owe A \u2192 B: what | open [due Day 5 18:00]     clockf Faction: project +1 (3/6)
