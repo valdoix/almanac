@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.7.0";
+var VERSION = "1.7.1";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -2143,7 +2143,7 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 .alm-tag{font:500 10.5px/1 var(--alm-font-mono);padding:5px 8px;border-radius:999px;background:var(--alm-panel-2);border:1px solid var(--alm-line);color:var(--alm-muted)}
 .alm-tag.warn{color:var(--alm-danger);border-color:color-mix(in oklab,var(--alm-danger) 40%,var(--alm-line));background:color-mix(in oklab,var(--alm-danger) 8%,var(--alm-panel))}
 .alm-cc__row{display:flex;gap:8px;font-size:13.5px;line-height:1.4;margin-top:8px}
-.alm-cc__row b{flex:none;width:44px;font:500 9.5px/1.9 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--alm-muted)}
+.alm-cc__row b{flex:none;min-width:44px;font:500 9.5px/1.9 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--alm-muted)}
 .alm-bond{padding:12px 0;border-bottom:1px dashed var(--alm-line)}
 .alm-bond:last-child{border-bottom:0}
 .alm-bond__pair,.alm-ladder{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
