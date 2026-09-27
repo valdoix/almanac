@@ -75,6 +75,7 @@ export function emptyState(): WorldState {
   return {
     time: null,
     weather: null,
+    season: null,
     place: [],
     mode: "social",
     title: undefined,
@@ -806,6 +807,11 @@ export class Folder {
       case "title": {
         st.title = a.text;
         return { verdict: "accepted" };
+      }
+      case "season": {
+        const prev = st.season?.name;
+        st.season = { name: a.name, setAt: st.time ? { ...st.time } : null };
+        return prev === a.name ? { verdict: "accepted" } : { verdict: "accepted", line: `🍂 ${prev ? prev + " → " : ""}${a.name}` };
       }
       case "pressure": {
         const id = this.charId(op.subject!, mi, false);

@@ -19,6 +19,7 @@ const PUSH: { name: string; description: string }[] = [
   { name: "almSun", description: "Sunrise and sunset" },
   { name: "almMoon", description: "Moon phase" },
   { name: "almSeason", description: "Season" },
+  { name: "almCalendar", description: "One line about a fantasy or custom calendar (empty for Gregorian)" },
   { name: "almPlace", description: "Place path" },
   { name: "almVoices", description: "Voice-slot roster for [spk] marks" },
   { name: "almCast", description: "Present characters, one line each" },
@@ -111,6 +112,7 @@ export async function pushMacros(chatId: string, userId?: string) {
     push("almSun", al?.sun.text ?? "");
     push("almMoon", al?.moon.name ?? "");
     push("almSeason", al?.season ?? "");
+    push("almCalendar", al?.calendarNote ?? "");
     push("almPlace", st.place.join(" › "));
     push("almMode", st.mode);
     const present = Object.values(st.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.dead);

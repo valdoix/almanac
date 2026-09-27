@@ -185,7 +185,7 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
   // NOW
   if (state.time) {
     const parts = [`Day ${state.time.day}`];
-    if (al) parts.push(al.clock);
+    if (al) parts.push(al.calendar.seasons === "story" ? `${al.clock} · ${al.season}` : al.clock);
     else parts.push(fmtTime(state.time).replace(/^Day \d+ /, ""));
     if (al) parts.push(`${al.weather.text}${al.forecast ? ` (${al.forecast})` : ""}`);
     else if (state.weather) parts.push(state.weather.condition);

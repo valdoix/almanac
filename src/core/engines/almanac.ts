@@ -3,7 +3,7 @@
 
 import type { WorldState } from "../types";
 import { absMinutes, hhmm } from "../util";
-import { buildCalendar, dateFor, fmtDate, yearLength, type CalendarConfig } from "./calendar";
+import { buildCalendar, dateFor, describeCalendar, fmtDate, yearLength, type CalendarConfig } from "./calendar";
 import { latitudeFrom, moonFor, moonOffset, skyBand, sunFor } from "./astro";
 import { climateFrom, forecastText, levelOf, seedFor, simulate, weatherText, type Scheduled, type WeatherHour } from "./weather";
 
@@ -32,11 +32,16 @@ export interface AlmanacReport {
   forecast: string;
   forecastHours: WeatherHour[];
   sun: { rise: string; set: string; text: string; daylight: boolean };
+  /** The first moon; with several moons, name lists each one's phase. */
   moon: { name: string; glyph: string; illumination: number };
+  moons: { name: string; phase: string; glyph: string; illumination: number }[];
   calendar: CalendarConfig;
+  /** One line about a non-Gregorian calendar for the model; empty for Gregorian. */
+  calendarNote: string;
 }
 
 const calCache = new Map<string, CalendarConfig>();
+const STORY_SEASON_DOY = { spring: 80, summer: 172, autumn: 266, winter: 355 } as const;
 
 export function calendarFor(cfg: AlmanacConfig): CalendarConfig {
   const k = JSON.stringify([cfg.calendar, cfg.startPoint, cfg.climate, cfg.headerDate, cfg.anchorDay, cfg.latitude]);
@@ -53,10 +58,21 @@ export function almanacFor(state: WorldState, cfg: AlmanacConfig): AlmanacReport
   const t = state.time;
   if (!t) return null;
   const cal = calendarFor(cfg);
-  const d = dateFor(cal, t.day);
+  const d = dateFor(cal, t.day, state.season?.name);
   const lat = latitudeFrom(cfg.latitude || cfg.climate);
-  const sun = sunFor(d.doy, cal.hemisphere === "south" && lat > 0 ? -lat : lat, yearLength(cal));
-  const moon = moonFor(t.day, t.minute, moonOffset(cfg.chatId, cfg.moonAnchor));
+  // Seasons the story sets have no place in the year: take the day length from the season itself.
+  const sun = cal.seasons === "story"
+    ? sunFor(STORY_SEASON_DOY[d.season], Math.abs(lat))
+    : sunFor(d.doy, cal.hemisphere === "south" && lat > 0 ? -lat : lat, yearLength(cal));
+  const moons = cal.moons?.length
+    ? cal.moons.map((m, i) => {
+        const x = moonFor(t.day, t.minute, moonOffset(`${cfg.chatId}:${m.name}`, i === 0 ? cfg.moonAnchor : undefined, m.period), m.period);
+        return { name: m.name, phase: x.name, glyph: x.glyph, illumination: x.illumination };
+      })
+    : null;
+  const moon = moons
+    ? { name: moons.map((m) => `${m.name} ${m.phase}`).join(" · "), glyph: moons[0].glyph, illumination: moons[0].illumination }
+    : moonFor(t.day, t.minute, moonOffset(cfg.chatId, cfg.moonAnchor));
   const now = absMinutes(t);
   const climate = climateFrom(cfg.climate);
   const w = state.weather;
@@ -94,7 +110,9 @@ export function almanacFor(state: WorldState, cfg: AlmanacConfig): AlmanacReport
       daylight: sun.sunrise != null && sun.sunset != null ? t.minute >= sun.sunrise && t.minute < sun.sunset : sun.polar === "day",
     },
     moon: { name: moon.name, glyph: moon.glyph, illumination: moon.illumination },
+    moons: moons ?? [{ name: "moon", phase: moon.name, glyph: moon.glyph, illumination: moon.illumination }],
     calendar: cal,
+    calendarNote: describeCalendar(cal),
   };
 }
 

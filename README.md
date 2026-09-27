@@ -49,6 +49,28 @@ The two find each other on their own: with the extension installed, the preset s
 - The **Almanac** drawer tab (extension) opens under a live sky: clock, date, moon, weather and place. The dock at the bottom holds everything. The sun goes to **Now**, and each planet opens its pages on an orbit: **People** (Cast · Bonds with a relationship graph and time scrubber · Knowledge), **Story** (Chronicle · Timeline · World), **Library** (Codex · Lore · Creator) and **Engine** (Recall · Craft · Settings). Under the sky, a switcher moves between the current group's pages, and a planet glows with a count when something needs a look (debts due, lorebook entries to review, unverified turns).
 - **Summaries** (Settings › Chronicle): choose how much each chapter keeps: *brief*, *standard*, *detailed* (the default: scene by scene, plus where everyone stands at the end) or *exhaustive* (adds sensory texture, tells and voices). "Always keep in summaries" lists anything that must never be dropped. **Rewrite all** on the Chronicle page redoes the unlocked summaries at the current level.
 
+## Calendars
+
+The calendar setting (Session Zero, Settings › World engines, or the preset's variables) takes Gregorian by default, a named calendar, or your own world's.
+
+- **Named calendars**: `Westeros` (A Song of Ice and Fire: months counted as moons, years AC, seasons that last years), `Roshar` (The Stormlight Archive: ten months of fifty days, the Weeping at the turn of the year, three moons), `Harptos` (Forgotten Realms: festival days and Shieldmeet) and `Shire Reckoning` (Middle-earth: every year starts on Sterday). Add clauses after the name to change one piece: `Westeros; year: 130 AC`.
+- **Your own world's calendar**, with clauses separated by `;`:
+
+  ```
+  months: Thaw (30), Bloom (30), [Greenfest], Highsun (31), Mid-year's Day (festival, weekless), Harvest (30)
+  weekdays: Firstday, Seconday, Midday, Fourthday, Restday      (or: weekdays: none)
+  year: 312 AR          leap: Starfall after Harvest every 5 years
+  seasons: solar        (or: seasons: story — the story turns them)
+  moons: Ilse (18), Varo (41)
+  holidays: Lanterns (14 Harvest), the Thaw Fair (1 Thaw, 3 days)
+  format: {weekday}, the {ord} of {month}, {year} {era}
+  ```
+
+  `[Name]` is a festival day between months, shown without a day number. A `weekless` day belongs to no week, so the weekdays skip it.
+- **Story seasons**: with `seasons: story` (built into Westeros and Roshar) the season isn't tied to the date. The model turns it with a `season: winter` ledger line, and the weather and day length follow.
+- Session Zero shows what Day 1 will be as you type.
+- The clock still runs on 24-hour days, whatever the calendar.
+
 ## Storage (hybrid)
 
 The extension's own storage is the source of truth: an event log keyed to message and swipe, so any branch can be rebuilt from the transcript. A **mirror lorebook** named "ALMANAC · ‹chat›" is attached to the chat as a readable, editable projection (summaries or full records, your choice). Edits you make in the mirror are imported back as locked corrections, and the extension never writes to your other lorebooks unless you give a book write permission in the Lore tab. See [design/06](design/06-storage-decision.md).

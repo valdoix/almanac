@@ -4,6 +4,8 @@
 
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { escapeHtml as e } from "../core/util";
+import { buildCalendar, dateFor, fmtDate } from "../core/engines/calendar";
+import { CALENDAR_PRESETS, presetFor } from "../core/engines/calendars";
 
 export const GENRES: [string, string][] = [
   ["slice_of_life", "Slice of life"], ["romance", "Romance"], ["drama", "Drama"], ["comedy", "Comedy"], ["mystery", "Mystery"],
@@ -17,6 +19,25 @@ const NSFW: [string, string][] = [["", "(preset setting)"], ["off", "Off"], ["fa
 const ROMANCE: [string, string][] = [["", "(preset setting)"], ["off", "Off"], ["slow", "Slow burn"], ["measured", "Measured"], ["fast", "Fast"], ["established", "Established couple"]];
 const DIFFICULTY: [string, string][] = [["", "(preset setting)"], ["gentle", "Gentle"], ["grounded", "Grounded"], ["hard", "Hard"], ["brutal", "Brutal"]];
 const THEMES: [string, string][] = [["", "Auto (by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]];
+const ORIGINAL_CALENDAR = "months: Thaw (30), Bloom (30), [Greenfest], Highsun (30), Harvest (30), Fade (30), Deepwinter (30); weekdays: Firstday, Seconday, Midday, Fourthday, Restday; year: 1 AR; seasons: solar";
+const CAL_START_DEFAULT = "Day 1 · 14 October 1923 · 18:40";
+
+/** Which calendar picker entry a setting belongs to. */
+function calendarKind(text: string | undefined): string {
+  if (!text?.trim() || /^gregorian\b/i.test(text.trim())) return "";
+  return presetFor(text)?.id ?? "original";
+}
+
+/** "Day 1 is Sterday 22 Halimath 1418 S.R. · early autumn" */
+export function calendarPreview(calendar: string, startPoint: string, climate: string, latitude: string): string {
+  try {
+    const cal = buildCalendar({ calendar, startPoint, climate, latitude });
+    return `Day 1 is ${fmtDate(cal, 1)} · ${dateFor(cal, 1).seasonDetail}`;
+  } catch {
+    return "";
+  }
+}
+
 const TRACKERS: [string, string][] = [["scene", "Scene"], ["cast", "Cast"], ["bonds", "Bonds"], ["thoughts", "Thoughts"], ["inventory", "Inventory"], ["threads", "Threads & clocks"], ["knowledge", "Knowledge"], ["consequences", "Consequences"], ["world", "World"]];
 
 export function openSessionZero(ctx: SpindleFrontendContext, chatId: string, current: any) {
@@ -45,14 +66,34 @@ export function openSessionZero(ctx: SpindleFrontendContext, chatId: string, cur
 <h4>World</h4><div class="grid">
 <label class="f">Climate and season<input type="text" id="szClimate" value="${e(cfg.climate ?? "")}" placeholder="temperate maritime, late autumn"></label>
 <label class="f">Latitude<input type="text" id="szLatitude" value="${e(cfg.latitude ?? "")}" placeholder="temperate · 51 N · southern subpolar"></label>
-<label class="f">Calendar<input type="text" id="szCalendar" value="${e(cfg.calendar ?? "")}" placeholder="Gregorian, or weekdays: …; months: …"></label>
-<label class="f">Start point<input type="text" id="szStart" value="${e(cfg.startPoint ?? "")}" placeholder="Day 1 · 14 October 1923 · 18:40"></label>
+<label class="f">Calendar${sel("szCalKind", [["", "Gregorian"], ...CALENDAR_PRESETS.map((p): [string, string] => [p.id, p.label]), ["original", "An original world's calendar"]], calendarKind(cfg.calendar))}</label>
+<label class="f">Start point<input type="text" id="szStart" value="${e(cfg.startPoint ?? "")}" placeholder="${e(presetFor(cfg.calendar)?.start ?? CAL_START_DEFAULT)}"></label>
 </div>
+<label class="f">Calendar details<input type="text" id="szCalendar" value="${e(cfg.calendar ?? "")}" placeholder="months: Name (30), [Festival], …; weekdays: … or none; year: 1 AR; seasons: solar or story; moons: Name (days)"></label>
+<p class="muted" id="szCalPreview"></p>
 <h4>Trackers under each reply</h4><div id="almSzTrackers">${TRACKERS.map(([k, l]) => `<button type="button" class="pill${trackers.has(k) ? " on" : ""}" data-t="${k}">${e(l)}</button>`).join("")}</div>
 <label class="chk" style="margin-top:10px"><input type="checkbox" id="szSaveChar"> Use these as defaults for new chats with this character</label>
 <div class="row" style="margin-top:12px"><button class="btn primary" id="szSave">Begin the story</button><button class="btn" id="szSkip">Skip</button></div>
 </div>`;
   const order: string[] = [...(cfg.genres ?? [])];
+  const field = (id: string) => modal.root.querySelector(`#${id}`) as HTMLInputElement | HTMLSelectElement | null;
+  const preview = () => {
+    const out = field("szCalPreview") as unknown as HTMLElement | null;
+    if (out) out.textContent = calendarPreview(field("szCalendar")?.value ?? "", field("szStart")?.value || (field("szStart") as HTMLInputElement | null)?.placeholder || "", field("szClimate")?.value ?? "", field("szLatitude")?.value ?? "");
+  };
+  modal.root.addEventListener("input", (ev) => {
+    if (/^sz(Calendar|Start|Climate|Latitude)$/.test((ev.target as HTMLElement).id)) preview();
+  });
+  modal.root.addEventListener("change", (ev) => {
+    if ((ev.target as HTMLElement).id !== "szCalKind") return;
+    const kind = (ev.target as HTMLSelectElement).value;
+    const p = CALENDAR_PRESETS.find((x) => x.id === kind);
+    const cal = field("szCalendar") as HTMLInputElement;
+    cal.value = p ? p.name : kind === "original" ? ORIGINAL_CALENDAR : "";
+    (field("szStart") as HTMLInputElement).placeholder = p?.start ?? (kind === "original" ? "Day 1 · 14 Harvest 312 AR · 18:40" : CAL_START_DEFAULT);
+    preview();
+  });
+  preview();
   modal.root.addEventListener("click", (ev) => {
     const t = ev.target as HTMLElement;
     const g = t.closest("[data-g]") as HTMLElement | null;

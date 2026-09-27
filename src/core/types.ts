@@ -4,7 +4,7 @@ export type OpName =
   | "clock" | "wx" | "at" | "cast" | "mood" | "body" | "look" | "bond" | "ladder" | "know"
   | "item" | "thread" | "owe" | "cons" | "clockf" | "rumor" | "rep" | "journal" | "keys"
   | "canon" | "artifact" | "mode" | "status" | "gauge" | "clue" | "plant" | "payoff"
-  | "deadline" | "title"
+  | "deadline" | "title" | "season"
   // extension-only ops (never written by the model)
   | "forecast" | "pressure" | "diverge" | "entity" | "lock";
 
@@ -297,6 +297,8 @@ export interface MessageDelta {
 export interface WorldState {
   time: StoryTime | null;
   weather: WeatherState | null;
+  /** The season as the story last set it, for calendars whose seasons the story keeps (Westeros, Roshar). */
+  season?: { name: string; setAt: StoryTime | null } | null;
   place: string[];
   mode: string;
   title?: string;

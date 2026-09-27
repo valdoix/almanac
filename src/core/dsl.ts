@@ -35,6 +35,7 @@ const OP_ALIASES: Record<string, OpName> = {
   payoff: "payoff", callback: "payoff",
   deadline: "deadline", countdown: "deadline",
   title: "title",
+  season: "season",
 };
 
 /** Ops whose name sits before the colon: `mood Mara: …`. */
@@ -558,6 +559,13 @@ const PARSERS: Record<OpName, LineParser> = {
   title(p, _s, rest) {
     if (!rest) return null;
     p.args = { text: rest.trim() };
+    return p;
+  },
+  season(p, _s, rest) {
+    const arrow = splitArrow(rest);
+    const now = splitCause(arrow ? arrow[1] : rest).main.replace(/[.!]+$/, "").trim();
+    if (!/spring|summer|autumn|fall|winter/i.test(now)) return null;
+    p.args = { name: now.toLowerCase() };
     return p;
   },
   forecast: () => null,

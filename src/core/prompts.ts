@@ -72,6 +72,7 @@ owe A → B: what | open [due Day 5 18:00]     clockf Faction: project +1 (3/6)
 rumor text | from → to | truth   rep Name @ Group: ±1 — deed     journal Name: "their own words"
 keys Record: k1, k2              canon: new world fact           artifact Title: kind — holder
 gauge Name: 3/5 — cause          clue: text | points to X | reliability   deadline Title: Day 5 18:00
+season: winter                   (only when the story says the season turned)
 mode: social|intimacy|conflict|investigation|travel|stealth|downtime|crisis   (always last)`;
 
 export function repairPrompt(opts: { prose: string; verified: string; userName: string; sealed: boolean }): { system: string; user: string } {

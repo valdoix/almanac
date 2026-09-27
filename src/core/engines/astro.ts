@@ -67,18 +67,20 @@ export const MOON_PHASES = [
 
 const SYNODIC = 29.530588;
 
-export function moonOffset(seed: string, anchor?: { day: number; phase: string }): number {
+/** period: days from new moon to new moon (fantasy moons have their own). */
+export function moonOffset(seed: string, anchor?: { day: number; phase: string }, period = SYNODIC): number {
   if (anchor) {
     const idx = MOON_PHASES.findIndex((p) => anchor.phase.toLowerCase().includes(p.name.split(" ")[0]) && anchor.phase.toLowerCase().includes(p.name.split(" ").slice(-1)[0]));
-    if (idx >= 0) return ((idx / 8) * SYNODIC - (anchor.day - 1) + SYNODIC * 10) % SYNODIC;
+    if (idx >= 0) return ((idx / 8) * period - (anchor.day - 1) + period * 10) % period;
   }
-  return (parseInt(hash(seed + ":moon"), 16) % 2953) / 100;
+  const h = parseInt(hash(seed + ":moon"), 16);
+  return period === SYNODIC ? (h % 2953) / 100 : ((h % 10000) / 10000) * period;
 }
 
-export function moonFor(day: number, minute: number, offset: number): { name: string; glyph: string; illumination: number; age: number } {
-  const age = (((day - 1 + minute / 1440 + offset) % SYNODIC) + SYNODIC) % SYNODIC;
-  const idx = Math.floor(((age / SYNODIC) * 8 + 0.5)) % 8;
-  const illumination = Math.round(((1 - Math.cos((2 * Math.PI * age) / SYNODIC)) / 2) * 100);
+export function moonFor(day: number, minute: number, offset: number, period = SYNODIC): { name: string; glyph: string; illumination: number; age: number } {
+  const age = (((day - 1 + minute / 1440 + offset) % period) + period) % period;
+  const idx = Math.floor(((age / period) * 8 + 0.5)) % 8;
+  const illumination = Math.round(((1 - Math.cos((2 * Math.PI * age) / period)) / 2) * 100);
   return { ...MOON_PHASES[idx], illumination, age };
 }
 

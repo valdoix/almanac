@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.2.1";
+var VERSION = "1.3.0";
 
 // src/frontend/orrery.ts
 var GROUPS = [
@@ -620,18 +620,18 @@ class AlmanacApp {
       this.root.scrollTop = 0;
   }
   tab_now(v) {
-    const n2 = v.now;
+    const n = v.now;
     const present = v.cast.filter((c) => c.tier === "spot" || c.tier === "peri");
-    const fc = (n2.forecastHours ?? []).filter((_, i) => i % 2 === 0).slice(0, 6);
+    const fc = (n.forecastHours ?? []).filter((_, i) => i % 2 === 0).slice(0, 6);
     const facts = [
-      n2.place.length ? `<b>Where</b><span>${escapeHtml(n2.place.join(" › "))}</span>` : "",
-      n2.sun ? `<b>Sun</b><span>${escapeHtml(n2.sun.text)}</span>` : "",
-      n2.moon ? `<b>Moon</b><span>${escapeHtml(n2.moon.glyph)} ${escapeHtml(n2.moon.name)}</span>` : "",
-      n2.season ? `<b>Season</b><span>${escapeHtml(n2.season)}</span>` : "",
-      `<b>Scene</b><span>${n2.scene} · ${escapeHtml(n2.mode)}</span>`
+      n.place.length ? `<b>Where</b><span>${escapeHtml(n.place.join(" › "))}</span>` : "",
+      n.sun ? `<b>Sun</b><span>${escapeHtml(n.sun.text)}</span>` : "",
+      n.moon ? `<b>Moon</b><span>${escapeHtml(n.moon.glyph)} ${escapeHtml(n.moon.name)}</span>` : "",
+      n.season ? `<b>Season</b><span>${escapeHtml(n.season)}</span>` : "",
+      `<b>Scene</b><span>${n.scene} · ${escapeHtml(n.mode)}</span>`
     ].join("");
     return `<div class="card flat almo-facts"><div class="kv">${facts}</div></div>
-${fc.length ? `<div class="card flat"><h4>Next hours</h4><div class="alm-fc" style="grid-template-columns:repeat(${fc.length},1fr)">${fc.map((h) => `<div><small>${escapeHtml(h.t)}</small><span>${escapeHtml(h.glyph)}</span><b>${h.temp}°</b></div>`).join("")}</div><div class="muted">${escapeHtml(n2.forecast)}</div></div>` : ""}
+${fc.length ? `<div class="card flat"><h4>Next hours</h4><div class="alm-fc" style="grid-template-columns:repeat(${fc.length},1fr)">${fc.map((h) => `<div><small>${escapeHtml(h.t)}</small><span>${escapeHtml(h.glyph)}</span><b>${h.temp}°</b></div>`).join("")}</div><div class="muted">${escapeHtml(n.forecast)}</div></div>` : ""}
 <h4>Present</h4>
 ${present.length ? `<div class="alm-cast">${present.map((c) => this.castCard(c, true)).join("")}</div>` : `<div class="empty">No one else is here.</div>`}
 ${v.world.cons.filter((c) => c.status === "open" || c.status === "due").length ? `<h4>Owed and due</h4><div class="card flat"><ul class="alm-list">${v.world.cons.filter((c) => c.status === "open" || c.status === "due").slice(-8).map((c) => `<li>${escapeHtml(c.whoName)}${c.whomName ? ` → ${escapeHtml(c.whomName)}` : ""}: ${escapeHtml(c.what)}${c.dueText ? ` <small class="muted">due ${escapeHtml(c.dueText)}</small>` : ""}</li>`).join("")}</ul></div>` : ""}
@@ -664,7 +664,7 @@ ${this.mergeRow(v, c)}
   mergeRow(v, c) {
     const merges = v.config?.merges ?? {};
     const mine = Object.entries(merges).filter(([, to]) => c.isUser ? to === "user" : to.toLowerCase() === c.name.toLowerCase()).map(([from]) => from);
-    const chips = mine.map((n2) => `<span class="pill">${escapeHtml(n2)} <button class="btn" data-act="unmerge" data-name="${escapeHtml(n2)}" title="Split this name off again" style="padding:0 6px;margin-left:4px">✕</button></span>`).join("");
+    const chips = mine.map((n) => `<span class="pill">${escapeHtml(n)} <button class="btn" data-act="unmerge" data-name="${escapeHtml(n)}" title="Split this name off again" style="padding:0 6px;margin-left:4px">✕</button></span>`).join("");
     const pick = c.isUser ? "" : `<label class="f">Same person as…<select data-merge="${escapeHtml(c.name)}"><option value="">— no, a different person —</option><option value="user">${escapeHtml(v.names?.user || "You")} (you)</option>${v.cast.filter((o) => !o.isUser && o.id !== c.id).map((o) => `<option value="${escapeHtml(o.name)}">${escapeHtml(o.name)}</option>`).join("")}</select></label>`;
     return pick || chips ? `<div class="alm-merge">${chips ? `<div class="row"><small class="muted">Also written as:</small>${chips}</div>` : ""}${pick}</div>` : "";
   }
@@ -737,7 +737,7 @@ ${r.kind === "place" ? `<label class="f">Hours (e.g. open 20:00 to 02:00)<input 
   }
   tab_world(v) {
     const w = v.world;
-    const ring = (n2, of, c) => `<div class="alm-clock__face"><div class="alm-ring" style="--n:${n2};--of:${Math.max(1, of)};--rc:${c}"></div><b>${n2}/${of}</b></div>`;
+    const ring = (n, of, c) => `<div class="alm-clock__face"><div class="alm-ring" style="--n:${n};--of:${Math.max(1, of)};--rc:${c}"></div><b>${n}/${of}</b></div>`;
     return `<div class="card flat"><div class="kv"><b>Calendar</b><span>${escapeHtml(w.calendar ? `${w.calendar.date} · ${w.calendar.season}` : "not started")}</span><b>Climate</b><span>${escapeHtml(w.climate)}</span></div>
 <details><summary class="muted">Schedule weather</summary><div class="row"><input type="number" id="almWxDay" placeholder="day" style="width:70px"><input type="number" id="almWxHour" placeholder="hour" style="width:70px"><input type="number" id="almWxLen" placeholder="hours" style="width:70px"><input type="text" id="almWxCond" placeholder="thunderstorm" class="grow"><button class="btn" data-act="scheduleWx">Schedule</button></div></details></div>
 ${w.factions.length ? `<h4>Factions</h4><div class="alm-clocks">${w.factions.flatMap((f) => f.clocks.map((c) => `<div class="alm-clock">${ring(c.cur, c.max, "var(--alm-danger)")}<div><strong>${escapeHtml(f.name)}: ${escapeHtml(c.name)}</strong></div></div>`)).join("")}</div>` : ""}
@@ -793,7 +793,7 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
 <h3>Recall</h3><div class="card flat"><label class="f">Injection budget (tokens)${num("recallBudget", 400, 20000)}</label><label class="f">Recall placement${sel("recallPlacement", [["before_history", "before chat history"], ["depth4", "4 messages from the end"]])}</label>${chk("keyHeat", "Demote keys that fire without being used")}<label class="f">Max keys per record${num("maxKeys", 4, 24)}</label></div>
 <h3>Storage (hybrid)</h3><div class="card flat"><p class="muted">The extension's storage is the source of truth (branch-safe, rebuildable). The mirror lorebook is a readable, editable projection attached to this chat only.</p><label class="f">Mirror lorebook${sel("mirror", [["off", "off"], ["summaries", "summaries"], ["full", "full records"]])}</label>${chk("mirrorVectorize", "Vectorise mirror entries (semantic recall; needs an embedding provider)")}</div>
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
-<h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "weekdays: …; months: Name (30), …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 1e4)}</label><label class="f">Simulator connection id${txt("simConnection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
+<h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "Westeros · Roshar · Harptos · Shire Reckoning · or months: Name (30), …; weekdays: …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 1e4)}</label><label class="f">Simulator connection id${txt("simConnection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
 <h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection id${txt("sidecarConnection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label></div>
 <p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${escapeHtml(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]])}</label>${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${escapeHtml(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
   }
@@ -989,8 +989,8 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
     if (d.merge != null && t.value) {
       const c = this.view?.cast.find((x) => x.name === d.merge);
       const merges = { ...this.view?.config?.merges ?? {} };
-      for (const n2 of [d.merge, ...c?.aliases ?? []])
-        merges[String(n2).toLowerCase()] = t.value;
+      for (const n of [d.merge, ...c?.aliases ?? []])
+        merges[String(n).toLowerCase()] = t.value;
       this.send({ type: "config", patch: { merges } });
       return;
     }
@@ -1525,6 +1525,506 @@ var PANEL_CSS = `
 @media (prefers-reduced-motion:reduce){.almo-moonb,.almo-dial.spin::after{animation:none}.almo.orbiting .almo-body,.almo.orbiting .almo-sky{transition:none}}
 `;
 
+// src/core/engines/calendars.ts
+var m = (name, days) => ({ name, days });
+var fest = (name, weekless = false) => ({ name, days: 1, festival: true, ...weekless ? { weekless } : {} });
+var ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth", "Eleventh", "Twelfth"];
+var MOON_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+var VORIN = ["Jes", "Nan", "Chach", "Vev", "Palah", "Shash", "Betab", "Kak", "Tanat", "Ishi"];
+var CALENDAR_PRESETS = [
+  {
+    id: "westeros",
+    label: "Westeros (A Song of Ice and Fire)",
+    name: "Westeros",
+    start: "Day 1 · 14th day of the Fifth Moon, 299 AC · 18:40",
+    match: /\bwesteros|song of ice and fire|\basoiaf\b|game of thrones|after (the )?conquest|\bseven kingdoms\b/i,
+    build: () => ({
+      months: ORDINALS.map((o, i) => m(`${o} Moon`, MOON_DAYS[i])),
+      weekdays: [],
+      yearLabel: "AC",
+      format: "{ord} day of the {month}, {year} {era}",
+      seasons: "story",
+      note: "Westerosi reckoning: years After the Conquest (AC), months counted as moons. Seasons last years, not months, and turn only when the Citadel sends its white ravens."
+    })
+  },
+  {
+    id: "roshar",
+    label: "Roshar (The Stormlight Archive)",
+    name: "Roshar",
+    start: "Day 1 · 23 Tanat 1174 · 18:40",
+    match: /\broshar|stormlight|\bvorin\b|\balethkar\b|\burithiru\b/i,
+    build: () => ({
+      months: VORIN.map((n) => m(n, 50)),
+      weekdays: [],
+      format: "{day} {month} {year}",
+      seasons: "story",
+      named: [{ name: "the Weeping", month: 9, day: 31, days: 40 }],
+      moons: [{ name: "Salas", period: 19 }, { name: "Nomon", period: 31 }, { name: "Mishim", period: 43 }],
+      note: "Rosharan reckoning: ten months of fifty days (five weeks of ten), five hundred days a year. Seasons are irregular and last weeks, not months. The Weeping, four weeks of unbroken rain, straddles the new year; highstorms sweep in from the east every few days, and people plan around them."
+    })
+  },
+  {
+    id: "harptos",
+    label: "Calendar of Harptos (Forgotten Realms)",
+    name: "Harptos",
+    start: "Day 1 · 14 Marpenoth 1492 DR · 18:40",
+    match: /\bharptos|forgotten realms|faer[uû]n|\bdalereckoning\b|\bD\.?R\.?\s*$/i,
+    build: () => ({
+      months: [
+        m("Hammer", 30),
+        fest("Midwinter"),
+        m("Alturiak", 30),
+        m("Ches", 30),
+        m("Tarsakh", 30),
+        fest("Greengrass"),
+        m("Mirtul", 30),
+        m("Kythorn", 30),
+        m("Flamerule", 30),
+        fest("Midsummer"),
+        m("Eleasis", 30),
+        m("Eleint", 30),
+        fest("Highharvestide"),
+        m("Marpenoth", 30),
+        m("Uktar", 30),
+        fest("Feast of the Moon"),
+        m("Nightal", 30)
+      ],
+      weekdays: [],
+      yearLabel: "DR",
+      leap: { after: 9, name: "Shieldmeet", every: 4 },
+      note: "Calendar of Harptos: twelve months of thirty days in three tendays each, with five festival days between months and Shieldmeet after Midsummer every fourth year. Years are Dalereckoning (DR)."
+    })
+  },
+  {
+    id: "shire",
+    label: "Shire Reckoning (Middle-earth)",
+    name: "Shire Reckoning",
+    start: "Day 1 · 22 Halimath 1418 S.R. · 18:40",
+    match: /\bshire reckoning|\bshire\b|middle[- ]earth|\bS\.?R\.?\s*$/i,
+    build: () => ({
+      months: [
+        fest("2 Yule"),
+        m("Afteryule", 30),
+        m("Solmath", 30),
+        m("Rethe", 30),
+        m("Astron", 30),
+        m("Thrimidge", 30),
+        m("Forelithe", 30),
+        fest("1 Lithe"),
+        fest("Mid-year's Day", true),
+        fest("2 Lithe"),
+        m("Afterlithe", 30),
+        m("Wedmath", 30),
+        m("Halimath", 30),
+        m("Winterfilth", 30),
+        m("Blotmath", 30),
+        m("Foreyule", 30),
+        fest("1 Yule")
+      ],
+      weekdays: ["Sterday", "Sunday", "Monday", "Trewsday", "Hevensday", "Mersday", "Highday"],
+      yearStartWeekday: 0,
+      yearLabel: "S.R.",
+      leap: { after: 8, name: "Overlithe", every: 4, skipCentury: true, weekless: true },
+      note: "Shire Reckoning: twelve months of thirty days with the Yule and Lithe days between them. Every year begins on a Sterday, because Mid-year's Day and Overlithe belong to no week."
+    })
+  }
+];
+function presetFor(text) {
+  const t = (text ?? "").split(/[;\n]/)[0];
+  return t.trim() ? CALENDAR_PRESETS.find((p) => p.match.test(t)) : undefined;
+}
+
+// src/core/engines/calendar.ts
+var GREG_MONTHS = [
+  ["January", 31],
+  ["February", 28],
+  ["March", 31],
+  ["April", 30],
+  ["May", 31],
+  ["June", 30],
+  ["July", 31],
+  ["August", 31],
+  ["September", 30],
+  ["October", 31],
+  ["November", 30],
+  ["December", 31]
+];
+var GREG_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+function defaultCalendar() {
+  return {
+    months: GREG_MONTHS.map(([name, days]) => ({ name, days })),
+    weekdays: [...GREG_DAYS],
+    startDoy: 284,
+    startWeekday: 0,
+    hemisphere: "north",
+    custom: false,
+    named: [],
+    seasons: "solar"
+  };
+}
+function yearLength(cal) {
+  return cal.months.reduce((s, m) => s + m.days, 0) || 365;
+}
+function isLeap(y) {
+  return y % 4 === 0 && y % 100 !== 0 || y % 400 === 0;
+}
+function monthsFor(cal, year) {
+  if (year == null)
+    return cal.months;
+  if (!cal.custom) {
+    if (!isLeap(year))
+      return cal.months;
+    return cal.months.map((m, i) => i === 1 ? { ...m, days: m.days + 1 } : m);
+  }
+  const lp = cal.leap;
+  if (!lp || year % lp.every !== 0 || lp.skipCentury && year % 100 === 0 && year % 400 !== 0)
+    return cal.months;
+  const out = cal.months.slice();
+  out.splice(lp.after + 1, 0, { name: lp.name, days: 1, festival: true, ...lp.weekless ? { weekless: true } : {} });
+  return out;
+}
+var sumDays = (months) => months.reduce((s, m) => s + m.days, 0) || 365;
+function weekedDays(months, from, to) {
+  let n = 0;
+  let at = 0;
+  for (const m of months) {
+    const a = Math.max(from, at);
+    const b = Math.min(to, at + m.days);
+    if (b > a && !m.weekless)
+      n += b - a;
+    at += m.days;
+  }
+  return n;
+}
+function gregWeekday(y, m, d) {
+  const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+  let yy = y;
+  if (m < 3)
+    yy -= 1;
+  const sun0 = (yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) + t[m - 1] + d) % 7;
+  return (sun0 + 6) % 7;
+}
+var SEASON_DOY = [
+  [/\bearly spring\b/i, 75],
+  [/\blate spring\b/i, 150],
+  [/\bspring\b/i, 110],
+  [/\bearly summer\b/i, 165],
+  [/\blate summer\b/i, 225],
+  [/\bmidsummer\b/i, 172],
+  [/\bsummer\b/i, 195],
+  [/\bearly autumn\b|\bearly fall\b/i, 258],
+  [/\blate autumn\b|\blate fall\b/i, 318],
+  [/\bautumn\b|\bfall\b/i, 288],
+  [/\bearly winter\b/i, 345],
+  [/\blate winter\b/i, 50],
+  [/\bmidwinter\b/i, 355],
+  [/\bwinter\b/i, 20]
+];
+function seasonOf(text) {
+  const m = /(spring|summer|autumn|fall|winter)/i.exec(text ?? "");
+  if (!m)
+    return;
+  const s = m[1].toLowerCase();
+  return s === "fall" ? "autumn" : s;
+}
+var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+function findDate(cal, text) {
+  let best = null;
+  const yearTail = `(?:,?\\s+(\\d{1,5})(?![:.]?\\d))?`;
+  const consider = (re, month, dayGroup, yearGroup) => {
+    const r = re.exec(text);
+    if (!r || best && best.at <= r.index)
+      return;
+    const day = dayGroup ? parseInt(r[dayGroup], 10) : 1;
+    if (day < 1 || day > cal.months[month].days)
+      return;
+    best = { at: r.index, month, day, year: r[yearGroup] ? parseInt(r[yearGroup], 10) : undefined };
+  };
+  cal.months.forEach((mo, i) => {
+    const n = esc(mo.name);
+    if (mo.festival && mo.days === 1) {
+      consider(new RegExp(`(?<![\\w'])${n}(?![\\w'])${yearTail}`, "i"), i, null, 1);
+      return;
+    }
+    consider(new RegExp(`(?<![\\w:])(\\d{1,3})(?:st|nd|rd|th)?\\s+(?:day\\s+)?(?:of\\s+)?(?:the\\s+)?${n}(?![\\w'])${yearTail}`, "i"), i, 1, 2);
+    consider(new RegExp(`(?<![\\w'])${n}\\s+(\\d{1,3})(?:st|nd|rd|th)?(?![:.]?\\d)${yearTail}`, "i"), i, 1, 2);
+  });
+  return best;
+}
+function parseMonth(raw) {
+  let s = raw.trim();
+  let festival = false;
+  let weekless = false;
+  let days;
+  const br = /^\[(.+)\]$/.exec(s);
+  if (br) {
+    festival = true;
+    s = br[1].trim();
+  }
+  const pm = /^(.+?)\s*\(([^)]*)\)$/.exec(s);
+  if (pm) {
+    s = pm[1].trim();
+    for (const f of pm[2].split(/\s*,\s*/)) {
+      if (/^\d+$/.test(f))
+        days = parseInt(f, 10);
+      else if (/festival|holiday|intercalary/i.test(f))
+        festival = true;
+      else if (/weekless|no week/i.test(f))
+        weekless = true;
+    }
+  }
+  if (!s)
+    return null;
+  return { name: s, days: days ?? (festival ? 1 : 30), ...festival ? { festival } : {}, ...weekless ? { weekless } : {} };
+}
+var splitList = (s) => s.split(/\s*,\s*(?![^()[\]]*[)\]])/).map((x) => x.trim()).filter(Boolean);
+function buildCalendar(opts) {
+  let cal = defaultCalendar();
+  let text = opts.calendar ?? "";
+  const preset = presetFor(text);
+  if (preset) {
+    cal = { ...cal, startDoy: 0, ...preset.build(), custom: true, preset: preset.id };
+    cal.named = cal.named.map((h) => ({ ...h }));
+  }
+  if (/\bsouth(ern)?\b|-\d/.test(opts.latitude ?? ""))
+    cal.hemisphere = "south";
+  const fm = /\bformat\s*[:=]\s*([^;\n]+)/i.exec(text);
+  if (fm) {
+    cal.format = fm[1].trim();
+    text = text.replace(fm[0], "");
+  }
+  const wd = /weekdays?\s*[:=]?\s*([^;\n]+)/i.exec(text);
+  if (wd) {
+    const list = wd[1].split(/\s*[,/·]\s*/).filter(Boolean);
+    if (/^(none|no names?|unnamed|nameless)\b/i.test(wd[1].trim())) {
+      cal.weekdays = [];
+      cal.custom = true;
+    } else if (list.length >= 3) {
+      cal.weekdays = list.map((s) => s.trim());
+      cal.custom = true;
+    } else {
+      const range = /([A-Z][a-z]+)\s*[–-]\s*([A-Z][a-z]+)/.exec(wd[1]);
+      if (range && !GREG_DAYS.includes(range[1])) {
+        cal.weekdays = [range[1], ...GREG_DAYS.slice(1, 6), range[2]];
+        cal.custom = true;
+      }
+    }
+  }
+  const mo = /months?\s*[:=]?\s*([^;\n]+)/i.exec(text);
+  let monthsSet = false;
+  if (mo) {
+    const list = splitList(mo[1]).map(parseMonth).filter((x) => !!x);
+    if (list.length >= 2) {
+      cal.months = list;
+      cal.custom = true;
+      monthsSet = true;
+      if (cal.leap && cal.leap.after >= list.length)
+        cal.leap = undefined;
+      cal.named = [];
+    }
+  }
+  const yl = /(?:^|[;\n,])\s*(?:year(?:\s*label)?|era)\b\s*[:=]?\s*([^;\n]+)/i.exec(text);
+  if (yl) {
+    const v = yl[1].trim();
+    const num = /^(\d{1,5})\b\s*(.*)$/.exec(v);
+    if (num) {
+      cal.startYear = parseInt(num[1], 10);
+      if (num[2].trim())
+        cal.yearLabel = num[2].trim();
+    } else
+      cal.yearLabel = v;
+  }
+  const lp = /\bleap(?:\s*day)?\s*[:=]?\s*(.+?)\s+after\s+(.+?)\s+every\s+(\d+)/i.exec(text);
+  if (lp) {
+    const after = cal.months.findIndex((x) => x.name.toLowerCase() === lp[2].trim().toLowerCase());
+    if (after >= 0)
+      cal.leap = { after, name: lp[1].trim(), every: parseInt(lp[3], 10), weekless: /weekless|no week/i.test(/[^;\n]*/.exec(text.slice(lp.index))[0]) };
+  }
+  const se = /\bseasons?\s*[:=]\s*([^;\n]+)/i.exec(text);
+  if (se)
+    cal.seasons = /story|irregular|declared|set|years?\b/i.test(se[1]) ? "story" : "solar";
+  const mn = /\bmoons?\s*[:=]\s*([^;\n]+)/i.exec(text);
+  if (mn) {
+    const moons = splitList(mn[1]).map((s) => {
+      const x = /^(.+?)\s*\(\s*(\d+(?:\.\d+)?)[^)]*\)$/.exec(s);
+      return x ? { name: x[1].trim(), period: parseFloat(x[2]) } : { name: s, period: 29.530588 };
+    }).filter((x) => x.name && x.period > 0);
+    if (moons.length)
+      cal.moons = moons;
+  }
+  const named = /holidays?\s*[:=]\s*([^;\n]+)/i.exec(text);
+  const namedMonths = !!preset || monthsSet;
+  const sp = `${opts.startPoint ?? ""} ${opts.headerDate ?? ""}`;
+  let placed = false;
+  if (namedMonths) {
+    const f = findDate(cal, sp);
+    if (f) {
+      if (f.year != null)
+        cal.startYear = f.year;
+      const months = monthsFor(cal, cal.startYear);
+      const mi = months.findIndex((x) => x.name === cal.months[f.month].name);
+      cal.startDoy = months.slice(0, mi).reduce((s, x) => s + x.days, 0) + f.day - 1;
+      placed = true;
+    }
+  } else {
+    const dm = /(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Z][a-zA-Z]+)(?:,?\s+(\d{1,5}))?/.exec(sp) || /([A-Z][a-zA-Z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{1,5}))?/.exec(sp);
+    if (dm) {
+      const [dStr, mStr] = /^\d/.test(dm[1]) ? [dm[1], dm[2]] : [dm[2], dm[1]];
+      const mi = cal.months.findIndex((m) => m.name.toLowerCase().startsWith(mStr.toLowerCase().slice(0, 3)));
+      if (mi >= 0) {
+        const day = parseInt(dStr, 10);
+        if (dm[3])
+          cal.startYear = parseInt(dm[3], 10);
+        cal.startDoy = monthsFor(cal, cal.startYear).slice(0, mi).reduce((s, m) => s + m.days, 0) + day - 1;
+        placed = true;
+        if (!cal.custom && cal.startYear)
+          cal.startWeekday = gregWeekday(cal.startYear, mi + 1, day);
+      } else if (!GREG_DAYS.some((d) => d.toLowerCase() === mStr.toLowerCase())) {
+        cal.custom = true;
+        cal.months = Array.from({ length: 12 }, (_, i) => ({ name: i === 0 ? mStr : `Month ${i + 1}`, days: 30 }));
+        cal.startDoy = parseInt(dStr, 10) - 1;
+        placed = true;
+      }
+    }
+  }
+  if (!placed && namedMonths)
+    cal.startDoy = 0;
+  if (!placed && cal.seasons === "solar") {
+    const txt = `${opts.climate ?? ""} ${opts.startPoint ?? ""}`;
+    for (const [re, doy] of SEASON_DOY)
+      if (re.test(txt)) {
+        cal.startDoy = Math.round(doy / 365 * yearLength(cal));
+        break;
+      }
+  }
+  if (cal.seasons === "story")
+    cal.season0 = seasonOf(`${opts.startPoint ?? ""} ${opts.climate ?? ""}`) ?? "summer";
+  const wname = cal.weekdays.findIndex((w) => new RegExp(`\\b${w}\\b`, "i").test(sp));
+  if (wname >= 0)
+    cal.startWeekday = wname;
+  const fromHeader = !!opts.headerDate && !/(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?[A-Z][a-zA-Z]+|[A-Z][a-zA-Z]+\s+\d{1,2}\b|day\s*\d+/i.test(opts.startPoint ?? "");
+  const shift = fromHeader && opts.anchorDay && opts.anchorDay > 1 ? opts.anchorDay - 1 : 0;
+  if (shift && cal.weekdays.length)
+    cal.startWeekday = ((cal.startWeekday - shift) % cal.weekdays.length + cal.weekdays.length) % cal.weekdays.length;
+  if (shift) {
+    cal.startDoy -= shift;
+    while (cal.startDoy < 0) {
+      if (cal.startYear != null)
+        cal.startYear--;
+      cal.startDoy += sumDays(monthsFor(cal, cal.startYear));
+    }
+  }
+  if (named) {
+    for (const h of splitList(named[1])) {
+      const paren = /^(.+?)\s*\((.+)\)$/.exec(h);
+      const name = paren ? paren[1] : /^(.+?)\s+(?=\d)/.exec(h)?.[1];
+      const when = paren ? paren[2] : h.slice(name?.length ?? 0);
+      if (!name)
+        continue;
+      const f = findDate(cal, when) ?? (() => {
+        const x = /(\d{1,2})\s+([A-Za-z]+)/.exec(when);
+        const mi = x ? cal.months.findIndex((m) => m.name.toLowerCase().startsWith(x[2].toLowerCase().slice(0, 3))) : -1;
+        return x && mi >= 0 ? { month: mi, day: parseInt(x[1], 10) } : null;
+      })();
+      const span = /(\d+)\s*days?\b/i.exec(when);
+      if (f)
+        cal.named.push({ name: name.trim(), month: f.month, day: f.day, ...span ? { days: parseInt(span[1], 10) } : {} });
+    }
+  }
+  return cal;
+}
+function dateFor(cal, day, storySeason) {
+  const offset = day - 1;
+  let year = cal.startYear;
+  let months = monthsFor(cal, year);
+  let yl = sumDays(months);
+  let doy = cal.startDoy + offset;
+  let from = cal.startDoy;
+  let weeked = 0;
+  while (doy >= yl) {
+    weeked += weekedDays(months, from, yl);
+    doy -= yl;
+    from = 0;
+    if (year != null)
+      year++;
+    months = monthsFor(cal, year);
+    yl = sumDays(months);
+  }
+  weeked += weekedDays(months, from, doy);
+  let rem = doy;
+  let mi = 0;
+  for (;mi < months.length; mi++) {
+    if (rem < months[mi].days)
+      break;
+    rem -= months[mi].days;
+  }
+  if (mi >= months.length)
+    mi = months.length - 1;
+  const month = months[mi];
+  const n = cal.weekdays.length;
+  const wIdx = cal.yearStartWeekday != null ? cal.yearStartWeekday + weekedDays(months, 0, doy) : cal.startWeekday + weeked;
+  const weekday = n && !month.weekless ? cal.weekdays[(wIdx % n + n) % n] : "";
+  let season;
+  let seasonDetail;
+  if (cal.seasons === "story") {
+    season = seasonOf(storySeason) ?? cal.season0 ?? "summer";
+    seasonDetail = storySeason?.trim().toLowerCase() || season;
+  } else {
+    const frac = doy / yl;
+    const northSeason = frac < 0.214 || frac >= 0.97 ? "winter" : frac < 0.47 ? "spring" : frac < 0.72 ? "summer" : "autumn";
+    const flip = { winter: "summer", summer: "winter", spring: "autumn", autumn: "spring" };
+    season = cal.hemisphere === "south" ? flip[northSeason] : northSeason;
+    seasonDetail = `${seasonPhase(frac)} ${season}`;
+  }
+  const holiday = cal.named.find((h) => {
+    const hm = months.findIndex((x) => x.name === cal.months[h.month]?.name);
+    if (hm < 0)
+      return false;
+    const start = months.slice(0, hm).reduce((s, x) => s + x.days, 0) + h.day - 1;
+    return ((doy - start) % yl + yl) % yl < (h.days ?? 1);
+  })?.name;
+  return {
+    day,
+    weekday,
+    dayOfMonth: rem + 1,
+    month: month.name,
+    monthIndex: mi,
+    ...month.festival ? { festival: true } : {},
+    year,
+    doy,
+    season,
+    seasonDetail,
+    holiday
+  };
+}
+function seasonPhase(frac) {
+  const windows = [[-0.03, 0.214], [0.214, 0.47], [0.47, 0.72], [0.72, 0.97]];
+  const f = frac >= 0.97 ? frac - 1 : frac;
+  const w = windows.find(([s, e]) => f >= s && f < e) ?? windows[0];
+  const p = (f - w[0]) / (w[1] - w[0]);
+  return p < 0.33 ? "early" : p < 0.67 ? "mid" : "late";
+}
+function ordinal(n) {
+  const t = n % 100;
+  const s = t >= 11 && t <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";
+  return `${n}${s}`;
+}
+var DEFAULT_FORMAT = "{weekday} {day} {month} {year} {era}";
+function fmtDate(cal, day) {
+  const d = dateFor(cal, day);
+  const f = d.festival ? "{weekday} {month} {year} {era}" : cal.format ?? DEFAULT_FORMAT;
+  const tokens = {
+    weekday: d.weekday,
+    day: String(d.dayOfMonth),
+    ord: ordinal(d.dayOfMonth),
+    month: d.month,
+    year: d.year != null ? String(d.year) : "",
+    era: d.year != null ? cal.yearLabel ?? "" : ""
+  };
+  const out = f.replace(/\{(\w+)\}/g, (_, k) => tokens[k] ?? "").replace(/\s+,/g, ",").replace(/,(\s*,)+/g, ",").replace(/\s{2,}/g, " ").replace(/^[\s,]+|[\s,]+$/g, "");
+  return `${out}${d.holiday ? ` (${d.holiday})` : ""}`;
+}
+
 // src/frontend/sessionzero.ts
 var GENRES = [
   ["slice_of_life", "Slice of life"],
@@ -1552,6 +2052,21 @@ var NSFW = [["", "(preset setting)"], ["off", "Off"], ["fade", "Fade to black"],
 var ROMANCE = [["", "(preset setting)"], ["off", "Off"], ["slow", "Slow burn"], ["measured", "Measured"], ["fast", "Fast"], ["established", "Established couple"]];
 var DIFFICULTY = [["", "(preset setting)"], ["gentle", "Gentle"], ["grounded", "Grounded"], ["hard", "Hard"], ["brutal", "Brutal"]];
 var THEMES = [["", "Auto (by genre)"], ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"]];
+var ORIGINAL_CALENDAR = "months: Thaw (30), Bloom (30), [Greenfest], Highsun (30), Harvest (30), Fade (30), Deepwinter (30); weekdays: Firstday, Seconday, Midday, Fourthday, Restday; year: 1 AR; seasons: solar";
+var CAL_START_DEFAULT = "Day 1 · 14 October 1923 · 18:40";
+function calendarKind(text) {
+  if (!text?.trim() || /^gregorian\b/i.test(text.trim()))
+    return "";
+  return presetFor(text)?.id ?? "original";
+}
+function calendarPreview(calendar, startPoint, climate, latitude) {
+  try {
+    const cal = buildCalendar({ calendar, startPoint, climate, latitude });
+    return `Day 1 is ${fmtDate(cal, 1)} · ${dateFor(cal, 1).seasonDetail}`;
+  } catch {
+    return "";
+  }
+}
 var TRACKERS = [["scene", "Scene"], ["cast", "Cast"], ["bonds", "Bonds"], ["thoughts", "Thoughts"], ["inventory", "Inventory"], ["threads", "Threads & clocks"], ["knowledge", "Knowledge"], ["consequences", "Consequences"], ["world", "World"]];
 function openSessionZero(ctx, chatId, current) {
   let modal;
@@ -1579,14 +2094,37 @@ function openSessionZero(ctx, chatId, current) {
 <h4>World</h4><div class="grid">
 <label class="f">Climate and season<input type="text" id="szClimate" value="${escapeHtml(cfg.climate ?? "")}" placeholder="temperate maritime, late autumn"></label>
 <label class="f">Latitude<input type="text" id="szLatitude" value="${escapeHtml(cfg.latitude ?? "")}" placeholder="temperate · 51 N · southern subpolar"></label>
-<label class="f">Calendar<input type="text" id="szCalendar" value="${escapeHtml(cfg.calendar ?? "")}" placeholder="Gregorian, or weekdays: …; months: …"></label>
-<label class="f">Start point<input type="text" id="szStart" value="${escapeHtml(cfg.startPoint ?? "")}" placeholder="Day 1 · 14 October 1923 · 18:40"></label>
+<label class="f">Calendar${sel("szCalKind", [["", "Gregorian"], ...CALENDAR_PRESETS.map((p) => [p.id, p.label]), ["original", "An original world's calendar"]], calendarKind(cfg.calendar))}</label>
+<label class="f">Start point<input type="text" id="szStart" value="${escapeHtml(cfg.startPoint ?? "")}" placeholder="${escapeHtml(presetFor(cfg.calendar)?.start ?? CAL_START_DEFAULT)}"></label>
 </div>
+<label class="f">Calendar details<input type="text" id="szCalendar" value="${escapeHtml(cfg.calendar ?? "")}" placeholder="months: Name (30), [Festival], …; weekdays: … or none; year: 1 AR; seasons: solar or story; moons: Name (days)"></label>
+<p class="muted" id="szCalPreview"></p>
 <h4>Trackers under each reply</h4><div id="almSzTrackers">${TRACKERS.map(([k, l]) => `<button type="button" class="pill${trackers.has(k) ? " on" : ""}" data-t="${k}">${escapeHtml(l)}</button>`).join("")}</div>
 <label class="chk" style="margin-top:10px"><input type="checkbox" id="szSaveChar"> Use these as defaults for new chats with this character</label>
 <div class="row" style="margin-top:12px"><button class="btn primary" id="szSave">Begin the story</button><button class="btn" id="szSkip">Skip</button></div>
 </div>`;
   const order = [...cfg.genres ?? []];
+  const field = (id) => modal.root.querySelector(`#${id}`);
+  const preview = () => {
+    const out = field("szCalPreview");
+    if (out)
+      out.textContent = calendarPreview(field("szCalendar")?.value ?? "", field("szStart")?.value || field("szStart")?.placeholder || "", field("szClimate")?.value ?? "", field("szLatitude")?.value ?? "");
+  };
+  modal.root.addEventListener("input", (ev) => {
+    if (/^sz(Calendar|Start|Climate|Latitude)$/.test(ev.target.id))
+      preview();
+  });
+  modal.root.addEventListener("change", (ev) => {
+    if (ev.target.id !== "szCalKind")
+      return;
+    const kind = ev.target.value;
+    const p = CALENDAR_PRESETS.find((x) => x.id === kind);
+    const cal = field("szCalendar");
+    cal.value = p ? p.name : kind === "original" ? ORIGINAL_CALENDAR : "";
+    field("szStart").placeholder = p?.start ?? (kind === "original" ? "Day 1 · 14 Harvest 312 AR · 18:40" : CAL_START_DEFAULT);
+    preview();
+  });
+  preview();
   modal.root.addEventListener("click", (ev) => {
     const t = ev.target;
     const g = t.closest("[data-g]");
@@ -1649,32 +2187,32 @@ function hudPill(v, note) {
   if (note || !v) {
     return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" title="Open the Almanac"><span class="alm-hudw__orb" style="background:${BAND_SKY.evening}"></span><b>ALMANAC</b><span class="alm-hudw__dim">${escapeHtml(note ?? "connecting…")}</span></div>`;
   }
-  const n2 = v.now ?? {};
-  const place = n2.place ?? [];
+  const n = v.now ?? {};
+  const place = n.place ?? [];
   const present = presentOf(v).slice(0, 4);
   return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" aria-expanded="false" title="Open the Now window">
-<span class="alm-hudw__orb" style="background:${skyOf(v)}"><i class="${/night|hours|pre-dawn|evening|dusk/.test(n2.band ?? "evening") ? "moon" : "sun"}"></i></span><b class="alm-hudw__t">${escapeHtml(n2.time ?? "--:--")}</b>${n2.weather ? `<span>${escapeHtml(n2.weather.glyph)} ${escapeHtml(n2.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${escapeHtml(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-stack">${present.map(mini).join("")}</span>` : ""}</div>`;
+<span class="alm-hudw__orb" style="background:${skyOf(v)}"><i class="${/night|hours|pre-dawn|evening|dusk/.test(n.band ?? "evening") ? "moon" : "sun"}"></i></span><b class="alm-hudw__t">${escapeHtml(n.time ?? "--:--")}</b>${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${escapeHtml(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-stack">${present.map(mini).join("")}</span>` : ""}</div>`;
 }
 function hudCard(v) {
-  const n2 = v.now ?? {};
-  const place = n2.place ?? [];
-  const clock = String(n2.clock ?? "");
+  const n = v.now ?? {};
+  const place = n.place ?? [];
+  const clock = String(n.clock ?? "");
   const cut = clock.lastIndexOf(", ");
-  const date = n2.time && cut > 0 ? clock.slice(0, cut) : "";
+  const date = n.time && cut > 0 ? clock.slice(0, cut) : "";
   const present = presentOf(v).slice(0, 5);
   const owed = (v.world?.cons ?? []).filter((c) => c.status === "due" || c.status === "open").slice(-2);
   const who = present.map((c) => `<li>${mini(c)}<div><b>${escapeHtml(c.name)}</b>${c.mood?.name ? ` <span class="alm-hudc__mood">${escapeHtml(c.mood.name)}</span>` : ""}${c.activity ? `<small>${escapeHtml(c.activity)}</small>` : ""}</div></li>`).join("");
   return `<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now">
 <div class="alm-hudc__sky" style="background:${skyOf(v)}">
-  <div class="alm-hudc__row"><b class="alm-hudc__clock">${escapeHtml(n2.time ?? "--:--")}</b><span class="alm-hudc__date">${escapeHtml(date)}</span><button class="alm-hudc__x" data-hud="toggle" aria-label="Close the Now window">✕</button></div>
-  ${n2.title ? `<div class="alm-hudc__title">${escapeHtml(n2.title)}</div>` : ""}
-  <div class="alm-hudc__chips">${n2.weather ? `<span>${escapeHtml(n2.weather.glyph)} ${escapeHtml(n2.weather.text ?? n2.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${escapeHtml(place.slice(-2).join(" › "))}</span>` : ""}${n2.mode ? `<span>${escapeHtml(n2.mode)}</span>` : ""}</div>
+  <div class="alm-hudc__row"><b class="alm-hudc__clock">${escapeHtml(n.time ?? "--:--")}</b><span class="alm-hudc__date">${escapeHtml(date)}</span><button class="alm-hudc__x" data-hud="toggle" aria-label="Close the Now window">✕</button></div>
+  ${n.title ? `<div class="alm-hudc__title">${escapeHtml(n.title)}</div>` : ""}
+  <div class="alm-hudc__chips">${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${escapeHtml(place.slice(-2).join(" › "))}</span>` : ""}${n.mode ? `<span>${escapeHtml(n.mode)}</span>` : ""}</div>
 </div>
 <div class="alm-hudc__bd">
   <h5>Present</h5>
   ${who ? `<ul class="alm-hudc__who">${who}</ul>` : `<p class="alm-hudc__muted">No one else is here.</p>`}
   ${owed.length ? `<h5>Owed and due</h5><ul class="alm-hudc__owed">${owed.map((c) => `<li class="${c.status === "due" ? "due" : ""}">${escapeHtml(c.whoName)}${c.whomName ? ` → ${escapeHtml(c.whomName)}` : ""}: ${escapeHtml(c.what ?? "")}${c.dueText ? ` <small>due ${escapeHtml(c.dueText)}</small>` : ""}</li>`).join("")}</ul>` : ""}
-  ${n2.forecast ? `<h5>Ahead</h5><p class="alm-hudc__muted">${escapeHtml(n2.forecast)}</p>` : ""}
+  ${n.forecast ? `<h5>Ahead</h5><p class="alm-hudc__muted">${escapeHtml(n.forecast)}</p>` : ""}
   <button class="alm-hudc__go" data-hud="open">Open the Almanac →</button>
 </div></div>`;
 }
@@ -1922,7 +2460,7 @@ function setup(ctx) {
     const action = ctx.ui.registerInputBarAction({ id: "almanac-command", label: "Almanac command…", iconSvg: ICON.replace(/20/g, "14") });
     removers.push(action.onClick(async () => {
       try {
-        const res = await ctx.ui.showContextMenu({ items: COMMANDS.map(([key2, label]) => ({ key: key2, label })), position: { x: Math.round(window.innerWidth / 2), y: window.innerHeight - 120 } });
+        const res = await ctx.ui.showContextMenu({ items: COMMANDS.map(([key, label]) => ({ key, label })), position: { x: Math.round(window.innerWidth / 2), y: window.innerHeight - 120 } });
         const key = res?.selectedKey;
         if (key)
           insertIntoComposer(key);

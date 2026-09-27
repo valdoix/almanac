@@ -460,7 +460,8 @@ var OP_ALIASES = {
   callback: "payoff",
   deadline: "deadline",
   countdown: "deadline",
-  title: "title"
+  title: "title",
+  season: "season"
 };
 var SUBJECT_OPS = new Set([
   "mood",
@@ -1094,6 +1095,14 @@ var PARSERS = {
     p.args = { text: rest.trim() };
     return p;
   },
+  season(p, _s, rest) {
+    const arrow = splitArrow(rest);
+    const now = splitCause(arrow ? arrow[1] : rest).main.replace(/[.!]+$/, "").trim();
+    if (!/spring|summer|autumn|fall|winter/i.test(now))
+      return null;
+    p.args = { name: now.toLowerCase() };
+    return p;
+  },
   forecast: () => null,
   pressure: () => null,
   diverge: () => null,
@@ -1309,7 +1318,7 @@ function parseMessage(text) {
 }
 
 // src/core/version.ts
-var VERSION = "1.2.1";
+var VERSION = "1.3.0";
 
 // src/core/types.ts
 var BIPOLAR_AXES = ["trust", "affection", "respect", "comfort"];
@@ -1417,6 +1426,7 @@ function emptyState() {
   return {
     time: null,
     weather: null,
+    season: null,
     place: [],
     mode: "social",
     title: undefined,
@@ -1689,18 +1699,18 @@ class Folder {
   }
   applyHeader(parsed, ops, _msgIndex) {
     const h = parsed.header;
-    const has2 = (o) => ops.some((x) => x.op === o);
-    if (!has2("clock") && h.time != null) {
+    const has = (o) => ops.some((x) => x.op === o);
+    if (!has("clock") && h.time != null) {
       ops.unshift({ op: "clock", args: { kind: "abs", day: h.day, minute: h.time, fromHeader: true }, raw: "(header) time" });
     }
-    if (!has2("wx") && h.condition) {
+    if (!has("wx") && h.condition) {
       ops.push({ op: "wx", args: { condition: h.condition, intensity: h.intensity, tempC: h.tempC, wind: h.wind, glyph: h.glyph, fromHeader: true }, raw: "(header) weather" });
     } else if (h.glyph) {
       const wx = ops.find((x) => x.op === "wx");
       if (wx)
         wx.args.glyph = h.glyph;
     }
-    if (!has2("at") && h.place?.length) {
+    if (!has("at") && h.place?.length) {
       ops.push({ op: "at", args: { path: h.place, fromHeader: true }, raw: "(header) place" });
     }
   }
@@ -2073,7 +2083,7 @@ class Folder {
         const who = this.partyId(op.subject, mi);
         const whom = op.object ? this.partyId(op.object, mi) : undefined;
         const cid = `cons:${slug(`${who}_${whom ?? ""}_${a.what}`)}`;
-        const existing = st.cons[cid] ?? Object.values(st.cons).find((c2) => c2.who === who && c2.whom === whom && overlap(normFact(c2.what), normFact(a.what)) > 0.6);
+        const existing = st.cons[cid] ?? Object.values(st.cons).find((c) => c.who === who && c.whom === whom && overlap(normFact(c.what), normFact(a.what)) > 0.6);
         const c = existing ?? { id: cid, kind: a.kind, who, whom, what: a.what, status: "open", since: st.time ? { ...st.time } : null, msgIndex: mi };
         c.status = a.status;
         if (a.due)
@@ -2213,6 +2223,11 @@ class Folder {
       case "title": {
         st.title = a.text;
         return { verdict: "accepted" };
+      }
+      case "season": {
+        const prev = st.season?.name;
+        st.season = { name: a.name, setAt: st.time ? { ...st.time } : null };
+        return prev === a.name ? { verdict: "accepted" } : { verdict: "accepted", line: `\uD83C\uDF42 ${prev ? prev + " \u2192 " : ""}${a.name}` };
       }
       case "pressure": {
         const id = this.charId(op.subject, mi, false);
@@ -2583,12 +2598,12 @@ function renderDrawer(inp) {
     for (const f of Object.values(state.factions))
       for (const c of Object.values(f.clocks))
         clocks.push(ring(c.cur, c.max, "var(--alm-danger)", `${f.name}: ${c.name}`, c.cur >= c.max ? "complete" : `${c.max - c.cur} to go`));
-    for (const t of Object.values(state.threads).filter((t2) => t2.status !== "resolved").slice(-6)) {
+    for (const t of Object.values(state.threads).filter((t) => t.status !== "resolved").slice(-6)) {
       const n = Math.min(4, t.history.length);
       clocks.push(ring(n, 4, t.status === "stalled" ? "var(--alm-warn)" : "var(--alm-good)", t.title, t.status === "stalled" ? `stalled: ${t.blocker ?? "?"}` : t.latest ?? ""));
     }
     const now = state.time ? absMinutes(state.time) : null;
-    for (const d of Object.values(state.deadlines).filter((d2) => !d2.done)) {
+    for (const d of Object.values(state.deadlines).filter((d) => !d.done)) {
       const left = now != null ? absMinutes(d.at) - now : 0;
       clocks.push(ring(Math.max(0, 8 - Math.ceil(left / 180)), 8, "var(--alm-accent-2)", d.title, left > 0 ? `${fmtSpan(left)} left` : "passed"));
     }
@@ -2733,6 +2748,7 @@ owe A \u2192 B: what | open [due Day 5 18:00]     clockf Faction: project +1 (3/
 rumor text | from \u2192 to | truth   rep Name @ Group: \xB11 \u2014 deed     journal Name: "their own words"
 keys Record: k1, k2              canon: new world fact           artifact Title: kind \u2014 holder
 gauge Name: 3/5 \u2014 cause          clue: text | points to X | reliability   deadline Title: Day 5 18:00
+season: winter                   (only when the story says the season turned)
 mode: social|intimacy|conflict|investigation|travel|stealth|downtime|crisis   (always last)`;
 function repairPrompt(opts) {
   return {
@@ -3259,6 +3275,115 @@ function detectDivergence(state, records) {
   return out;
 }
 
+// src/core/engines/calendars.ts
+var m = (name, days) => ({ name, days });
+var fest = (name, weekless = false) => ({ name, days: 1, festival: true, ...weekless ? { weekless } : {} });
+var ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth", "Eleventh", "Twelfth"];
+var MOON_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+var VORIN = ["Jes", "Nan", "Chach", "Vev", "Palah", "Shash", "Betab", "Kak", "Tanat", "Ishi"];
+var CALENDAR_PRESETS = [
+  {
+    id: "westeros",
+    label: "Westeros (A Song of Ice and Fire)",
+    name: "Westeros",
+    start: "Day 1 \xB7 14th day of the Fifth Moon, 299 AC \xB7 18:40",
+    match: /\bwesteros|song of ice and fire|\basoiaf\b|game of thrones|after (the )?conquest|\bseven kingdoms\b/i,
+    build: () => ({
+      months: ORDINALS.map((o, i) => m(`${o} Moon`, MOON_DAYS[i])),
+      weekdays: [],
+      yearLabel: "AC",
+      format: "{ord} day of the {month}, {year} {era}",
+      seasons: "story",
+      note: "Westerosi reckoning: years After the Conquest (AC), months counted as moons. Seasons last years, not months, and turn only when the Citadel sends its white ravens."
+    })
+  },
+  {
+    id: "roshar",
+    label: "Roshar (The Stormlight Archive)",
+    name: "Roshar",
+    start: "Day 1 \xB7 23 Tanat 1174 \xB7 18:40",
+    match: /\broshar|stormlight|\bvorin\b|\balethkar\b|\burithiru\b/i,
+    build: () => ({
+      months: VORIN.map((n) => m(n, 50)),
+      weekdays: [],
+      format: "{day} {month} {year}",
+      seasons: "story",
+      named: [{ name: "the Weeping", month: 9, day: 31, days: 40 }],
+      moons: [{ name: "Salas", period: 19 }, { name: "Nomon", period: 31 }, { name: "Mishim", period: 43 }],
+      note: "Rosharan reckoning: ten months of fifty days (five weeks of ten), five hundred days a year. Seasons are irregular and last weeks, not months. The Weeping, four weeks of unbroken rain, straddles the new year; highstorms sweep in from the east every few days, and people plan around them."
+    })
+  },
+  {
+    id: "harptos",
+    label: "Calendar of Harptos (Forgotten Realms)",
+    name: "Harptos",
+    start: "Day 1 \xB7 14 Marpenoth 1492 DR \xB7 18:40",
+    match: /\bharptos|forgotten realms|faer[u\u00FB]n|\bdalereckoning\b|\bD\.?R\.?\s*$/i,
+    build: () => ({
+      months: [
+        m("Hammer", 30),
+        fest("Midwinter"),
+        m("Alturiak", 30),
+        m("Ches", 30),
+        m("Tarsakh", 30),
+        fest("Greengrass"),
+        m("Mirtul", 30),
+        m("Kythorn", 30),
+        m("Flamerule", 30),
+        fest("Midsummer"),
+        m("Eleasis", 30),
+        m("Eleint", 30),
+        fest("Highharvestide"),
+        m("Marpenoth", 30),
+        m("Uktar", 30),
+        fest("Feast of the Moon"),
+        m("Nightal", 30)
+      ],
+      weekdays: [],
+      yearLabel: "DR",
+      leap: { after: 9, name: "Shieldmeet", every: 4 },
+      note: "Calendar of Harptos: twelve months of thirty days in three tendays each, with five festival days between months and Shieldmeet after Midsummer every fourth year. Years are Dalereckoning (DR)."
+    })
+  },
+  {
+    id: "shire",
+    label: "Shire Reckoning (Middle-earth)",
+    name: "Shire Reckoning",
+    start: "Day 1 \xB7 22 Halimath 1418 S.R. \xB7 18:40",
+    match: /\bshire reckoning|\bshire\b|middle[- ]earth|\bS\.?R\.?\s*$/i,
+    build: () => ({
+      months: [
+        fest("2 Yule"),
+        m("Afteryule", 30),
+        m("Solmath", 30),
+        m("Rethe", 30),
+        m("Astron", 30),
+        m("Thrimidge", 30),
+        m("Forelithe", 30),
+        fest("1 Lithe"),
+        fest("Mid-year's Day", true),
+        fest("2 Lithe"),
+        m("Afterlithe", 30),
+        m("Wedmath", 30),
+        m("Halimath", 30),
+        m("Winterfilth", 30),
+        m("Blotmath", 30),
+        m("Foreyule", 30),
+        fest("1 Yule")
+      ],
+      weekdays: ["Sterday", "Sunday", "Monday", "Trewsday", "Hevensday", "Mersday", "Highday"],
+      yearStartWeekday: 0,
+      yearLabel: "S.R.",
+      leap: { after: 8, name: "Overlithe", every: 4, skipCentury: true, weekless: true },
+      note: "Shire Reckoning: twelve months of thirty days with the Yule and Lithe days between them. Every year begins on a Sterday, because Mid-year's Day and Overlithe belong to no week."
+    })
+  }
+];
+function presetFor(text) {
+  const t = (text ?? "").split(/[;\n]/)[0];
+  return t.trim() ? CALENDAR_PRESETS.find((p) => p.match.test(t)) : undefined;
+}
+
 // src/core/engines/calendar.ts
 var GREG_MONTHS = [
   ["January", 31],
@@ -3283,7 +3408,8 @@ function defaultCalendar() {
     startWeekday: 0,
     hemisphere: "north",
     custom: false,
-    named: []
+    named: [],
+    seasons: "solar"
   };
 }
 function yearLength(cal) {
@@ -3291,6 +3417,34 @@ function yearLength(cal) {
 }
 function isLeap(y) {
   return y % 4 === 0 && y % 100 !== 0 || y % 400 === 0;
+}
+function monthsFor(cal, year) {
+  if (year == null)
+    return cal.months;
+  if (!cal.custom) {
+    if (!isLeap(year))
+      return cal.months;
+    return cal.months.map((m, i) => i === 1 ? { ...m, days: m.days + 1 } : m);
+  }
+  const lp = cal.leap;
+  if (!lp || year % lp.every !== 0 || lp.skipCentury && year % 100 === 0 && year % 400 !== 0)
+    return cal.months;
+  const out = cal.months.slice();
+  out.splice(lp.after + 1, 0, { name: lp.name, days: 1, festival: true, ...lp.weekless ? { weekless: true } : {} });
+  return out;
+}
+var sumDays = (months) => months.reduce((s, m) => s + m.days, 0) || 365;
+function weekedDays(months, from, to) {
+  let n = 0;
+  let at = 0;
+  for (const m of months) {
+    const a = Math.max(from, at);
+    const b = Math.min(to, at + m.days);
+    if (b > a && !m.weekless)
+      n += b - a;
+    at += m.days;
+  }
+  return n;
 }
 function gregWeekday(y, m, d) {
   const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
@@ -3316,15 +3470,86 @@ var SEASON_DOY = [
   [/\bmidwinter\b/i, 355],
   [/\bwinter\b/i, 20]
 ];
+function seasonOf(text) {
+  const m = /(spring|summer|autumn|fall|winter)/i.exec(text ?? "");
+  if (!m)
+    return;
+  const s = m[1].toLowerCase();
+  return s === "fall" ? "autumn" : s;
+}
+var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+function findDate(cal, text) {
+  let best = null;
+  const yearTail = `(?:,?\\s+(\\d{1,5})(?![:.]?\\d))?`;
+  const consider = (re, month, dayGroup, yearGroup) => {
+    const r = re.exec(text);
+    if (!r || best && best.at <= r.index)
+      return;
+    const day = dayGroup ? parseInt(r[dayGroup], 10) : 1;
+    if (day < 1 || day > cal.months[month].days)
+      return;
+    best = { at: r.index, month, day, year: r[yearGroup] ? parseInt(r[yearGroup], 10) : undefined };
+  };
+  cal.months.forEach((mo, i) => {
+    const n = esc(mo.name);
+    if (mo.festival && mo.days === 1) {
+      consider(new RegExp(`(?<![\\w'])${n}(?![\\w'])${yearTail}`, "i"), i, null, 1);
+      return;
+    }
+    consider(new RegExp(`(?<![\\w:])(\\d{1,3})(?:st|nd|rd|th)?\\s+(?:day\\s+)?(?:of\\s+)?(?:the\\s+)?${n}(?![\\w'])${yearTail}`, "i"), i, 1, 2);
+    consider(new RegExp(`(?<![\\w'])${n}\\s+(\\d{1,3})(?:st|nd|rd|th)?(?![:.]?\\d)${yearTail}`, "i"), i, 1, 2);
+  });
+  return best;
+}
+function parseMonth(raw) {
+  let s = raw.trim();
+  let festival = false;
+  let weekless = false;
+  let days;
+  const br = /^\[(.+)\]$/.exec(s);
+  if (br) {
+    festival = true;
+    s = br[1].trim();
+  }
+  const pm = /^(.+?)\s*\(([^)]*)\)$/.exec(s);
+  if (pm) {
+    s = pm[1].trim();
+    for (const f of pm[2].split(/\s*,\s*/)) {
+      if (/^\d+$/.test(f))
+        days = parseInt(f, 10);
+      else if (/festival|holiday|intercalary/i.test(f))
+        festival = true;
+      else if (/weekless|no week/i.test(f))
+        weekless = true;
+    }
+  }
+  if (!s)
+    return null;
+  return { name: s, days: days ?? (festival ? 1 : 30), ...festival ? { festival } : {}, ...weekless ? { weekless } : {} };
+}
+var splitList = (s) => s.split(/\s*,\s*(?![^()[\]]*[)\]])/).map((x) => x.trim()).filter(Boolean);
 function buildCalendar(opts) {
-  const cal = defaultCalendar();
+  let cal = defaultCalendar();
+  let text = opts.calendar ?? "";
+  const preset = presetFor(text);
+  if (preset) {
+    cal = { ...cal, startDoy: 0, ...preset.build(), custom: true, preset: preset.id };
+    cal.named = cal.named.map((h) => ({ ...h }));
+  }
   if (/\bsouth(ern)?\b|-\d/.test(opts.latitude ?? ""))
     cal.hemisphere = "south";
-  const text = opts.calendar ?? "";
+  const fm = /\bformat\s*[:=]\s*([^;\n]+)/i.exec(text);
+  if (fm) {
+    cal.format = fm[1].trim();
+    text = text.replace(fm[0], "");
+  }
   const wd = /weekdays?\s*[:=]?\s*([^;\n]+)/i.exec(text);
   if (wd) {
     const list = wd[1].split(/\s*[,/\u00B7]\s*/).filter(Boolean);
-    if (list.length >= 3) {
+    if (/^(none|no names?|unnamed|nameless)\b/i.test(wd[1].trim())) {
+      cal.weekdays = [];
+      cal.custom = true;
+    } else if (list.length >= 3) {
       cal.weekdays = list.map((s) => s.trim());
       cal.custom = true;
     } else {
@@ -3336,117 +3561,189 @@ function buildCalendar(opts) {
     }
   }
   const mo = /months?\s*[:=]?\s*([^;\n]+)/i.exec(text);
+  let monthsSet = false;
   if (mo) {
-    const list = mo[1].split(/\s*,\s*/).map((s) => {
-      const m = /^(.+?)\s*\((\d+)\)$/.exec(s.trim());
-      return m ? { name: m[1], days: parseInt(m[2], 10) } : { name: s.trim(), days: 30 };
-    }).filter((m) => m.name);
+    const list = splitList(mo[1]).map(parseMonth).filter((x) => !!x);
     if (list.length >= 2) {
       cal.months = list;
       cal.custom = true;
+      monthsSet = true;
+      if (cal.leap && cal.leap.after >= list.length)
+        cal.leap = undefined;
+      cal.named = [];
     }
   }
-  const yl = /year\s*(?:label)?\s*[:=]?\s*([^;\n]+)/i.exec(text);
-  if (yl)
-    cal.yearLabel = yl[1].trim();
+  const yl = /(?:^|[;\n,])\s*(?:year(?:\s*label)?|era)\b\s*[:=]?\s*([^;\n]+)/i.exec(text);
+  if (yl) {
+    const v = yl[1].trim();
+    const num = /^(\d{1,5})\b\s*(.*)$/.exec(v);
+    if (num) {
+      cal.startYear = parseInt(num[1], 10);
+      if (num[2].trim())
+        cal.yearLabel = num[2].trim();
+    } else
+      cal.yearLabel = v;
+  }
+  const lp = /\bleap(?:\s*day)?\s*[:=]?\s*(.+?)\s+after\s+(.+?)\s+every\s+(\d+)/i.exec(text);
+  if (lp) {
+    const after = cal.months.findIndex((x) => x.name.toLowerCase() === lp[2].trim().toLowerCase());
+    if (after >= 0)
+      cal.leap = { after, name: lp[1].trim(), every: parseInt(lp[3], 10), weekless: /weekless|no week/i.test(/[^;\n]*/.exec(text.slice(lp.index))[0]) };
+  }
+  const se = /\bseasons?\s*[:=]\s*([^;\n]+)/i.exec(text);
+  if (se)
+    cal.seasons = /story|irregular|declared|set|years?\b/i.test(se[1]) ? "story" : "solar";
+  const mn = /\bmoons?\s*[:=]\s*([^;\n]+)/i.exec(text);
+  if (mn) {
+    const moons = splitList(mn[1]).map((s) => {
+      const x = /^(.+?)\s*\(\s*(\d+(?:\.\d+)?)[^)]*\)$/.exec(s);
+      return x ? { name: x[1].trim(), period: parseFloat(x[2]) } : { name: s, period: 29.530588 };
+    }).filter((x) => x.name && x.period > 0);
+    if (moons.length)
+      cal.moons = moons;
+  }
+  const named = /holidays?\s*[:=]\s*([^;\n]+)/i.exec(text);
+  const namedMonths = !!preset || monthsSet;
   const sp = `${opts.startPoint ?? ""} ${opts.headerDate ?? ""}`;
-  const dm = /(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Z][a-zA-Z]+)(?:,?\s+(\d{1,5}))?/.exec(sp) || /([A-Z][a-zA-Z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{1,5}))?/.exec(sp);
   let placed = false;
-  if (dm) {
-    const [dStr, mStr] = /^\d/.test(dm[1]) ? [dm[1], dm[2]] : [dm[2], dm[1]];
-    const mi = cal.months.findIndex((m) => m.name.toLowerCase().startsWith(mStr.toLowerCase().slice(0, 3)));
-    if (mi >= 0) {
-      const day = parseInt(dStr, 10);
-      cal.startDoy = cal.months.slice(0, mi).reduce((s, m) => s + m.days, 0) + day - 1;
-      if (dm[3])
-        cal.startYear = parseInt(dm[3], 10);
-      placed = true;
-      if (!cal.custom && cal.startYear)
-        cal.startWeekday = gregWeekday(cal.startYear, mi + 1, day);
-    } else if (!GREG_DAYS.some((d) => d.toLowerCase() === mStr.toLowerCase())) {
-      cal.custom = true;
-      cal.months = Array.from({ length: 12 }, (_, i) => ({ name: i === 0 ? mStr : `Month ${i + 1}`, days: 30 }));
-      cal.startDoy = parseInt(dStr, 10) - 1;
+  if (namedMonths) {
+    const f = findDate(cal, sp);
+    if (f) {
+      if (f.year != null)
+        cal.startYear = f.year;
+      const months = monthsFor(cal, cal.startYear);
+      const mi = months.findIndex((x) => x.name === cal.months[f.month].name);
+      cal.startDoy = months.slice(0, mi).reduce((s, x) => s + x.days, 0) + f.day - 1;
       placed = true;
     }
+  } else {
+    const dm = /(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Z][a-zA-Z]+)(?:,?\s+(\d{1,5}))?/.exec(sp) || /([A-Z][a-zA-Z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{1,5}))?/.exec(sp);
+    if (dm) {
+      const [dStr, mStr] = /^\d/.test(dm[1]) ? [dm[1], dm[2]] : [dm[2], dm[1]];
+      const mi = cal.months.findIndex((m) => m.name.toLowerCase().startsWith(mStr.toLowerCase().slice(0, 3)));
+      if (mi >= 0) {
+        const day = parseInt(dStr, 10);
+        if (dm[3])
+          cal.startYear = parseInt(dm[3], 10);
+        cal.startDoy = monthsFor(cal, cal.startYear).slice(0, mi).reduce((s, m) => s + m.days, 0) + day - 1;
+        placed = true;
+        if (!cal.custom && cal.startYear)
+          cal.startWeekday = gregWeekday(cal.startYear, mi + 1, day);
+      } else if (!GREG_DAYS.some((d) => d.toLowerCase() === mStr.toLowerCase())) {
+        cal.custom = true;
+        cal.months = Array.from({ length: 12 }, (_, i) => ({ name: i === 0 ? mStr : `Month ${i + 1}`, days: 30 }));
+        cal.startDoy = parseInt(dStr, 10) - 1;
+        placed = true;
+      }
+    }
   }
-  if (!placed && cal.custom && mo)
+  if (!placed && namedMonths)
     cal.startDoy = 0;
-  if (!placed) {
+  if (!placed && cal.seasons === "solar") {
     const txt = `${opts.climate ?? ""} ${opts.startPoint ?? ""}`;
     for (const [re, doy] of SEASON_DOY)
       if (re.test(txt)) {
-        cal.startDoy = doy;
+        cal.startDoy = Math.round(doy / 365 * yearLength(cal));
         break;
       }
   }
+  if (cal.seasons === "story")
+    cal.season0 = seasonOf(`${opts.startPoint ?? ""} ${opts.climate ?? ""}`) ?? "summer";
   const wname = cal.weekdays.findIndex((w) => new RegExp(`\\b${w}\\b`, "i").test(sp));
   if (wname >= 0)
     cal.startWeekday = wname;
   const fromHeader = !!opts.headerDate && !/(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?[A-Z][a-zA-Z]+|[A-Z][a-zA-Z]+\s+\d{1,2}\b|day\s*\d+/i.test(opts.startPoint ?? "");
   const shift = fromHeader && opts.anchorDay && opts.anchorDay > 1 ? opts.anchorDay - 1 : 0;
-  if (shift) {
+  if (shift && cal.weekdays.length)
     cal.startWeekday = ((cal.startWeekday - shift) % cal.weekdays.length + cal.weekdays.length) % cal.weekdays.length;
+  if (shift) {
     cal.startDoy -= shift;
     while (cal.startDoy < 0) {
       if (cal.startYear != null)
         cal.startYear--;
-      cal.startDoy += !cal.custom && cal.startYear != null && isLeap(cal.startYear) ? 366 : yearLength(cal);
+      cal.startDoy += sumDays(monthsFor(cal, cal.startYear));
     }
   }
-  const named = /holidays?\s*[:=]\s*([^;\n]+)/i.exec(text);
   if (named) {
-    for (const h of named[1].split(/\s*,\s*/)) {
-      const m = /^(.+?)\s*\(?\s*(\d{1,2})\s+([A-Za-z]+)\s*\)?$/.exec(h.trim());
-      if (m) {
-        const mi = cal.months.findIndex((x) => x.name.toLowerCase().startsWith(m[3].toLowerCase().slice(0, 3)));
-        if (mi >= 0)
-          cal.named.push({ name: m[1].trim(), month: mi, day: parseInt(m[2], 10) });
-      }
+    for (const h of splitList(named[1])) {
+      const paren = /^(.+?)\s*\((.+)\)$/.exec(h);
+      const name = paren ? paren[1] : /^(.+?)\s+(?=\d)/.exec(h)?.[1];
+      const when = paren ? paren[2] : h.slice(name?.length ?? 0);
+      if (!name)
+        continue;
+      const f = findDate(cal, when) ?? (() => {
+        const x = /(\d{1,2})\s+([A-Za-z]+)/.exec(when);
+        const mi = x ? cal.months.findIndex((m) => m.name.toLowerCase().startsWith(x[2].toLowerCase().slice(0, 3))) : -1;
+        return x && mi >= 0 ? { month: mi, day: parseInt(x[1], 10) } : null;
+      })();
+      const span = /(\d+)\s*days?\b/i.exec(when);
+      if (f)
+        cal.named.push({ name: name.trim(), month: f.month, day: f.day, ...span ? { days: parseInt(span[1], 10) } : {} });
     }
   }
   return cal;
 }
-function dateFor(cal, day) {
+function dateFor(cal, day, storySeason) {
   const offset = day - 1;
-  let yl = yearLength(cal);
-  let doy = cal.startDoy + offset;
   let year = cal.startYear;
-  const leapAware = !cal.custom && year != null;
-  while (true) {
-    yl = leapAware && isLeap(year) ? 366 : yearLength(cal);
-    if (doy < yl)
-      break;
+  let months = monthsFor(cal, year);
+  let yl = sumDays(months);
+  let doy = cal.startDoy + offset;
+  let from = cal.startDoy;
+  let weeked = 0;
+  while (doy >= yl) {
+    weeked += weekedDays(months, from, yl);
     doy -= yl;
+    from = 0;
     if (year != null)
       year++;
+    months = monthsFor(cal, year);
+    yl = sumDays(months);
   }
+  weeked += weekedDays(months, from, doy);
   let rem = doy;
   let mi = 0;
-  for (;mi < cal.months.length; mi++) {
-    const days = cal.months[mi].days + (leapAware && mi === 1 && isLeap(year) ? 1 : 0);
-    if (rem < days)
+  for (;mi < months.length; mi++) {
+    if (rem < months[mi].days)
       break;
-    rem -= days;
+    rem -= months[mi].days;
   }
-  if (mi >= cal.months.length)
-    mi = cal.months.length - 1;
-  const frac = doy / yearLength(cal);
-  const northSeason = frac < 0.214 || frac >= 0.97 ? "winter" : frac < 0.47 ? "spring" : frac < 0.72 ? "summer" : "autumn";
-  const flip = { winter: "summer", summer: "winter", spring: "autumn", autumn: "spring" };
-  const season = cal.hemisphere === "south" ? flip[northSeason] : northSeason;
-  const phase = seasonPhase(frac);
-  const holiday = cal.named.find((h) => h.month === mi && h.day === rem + 1)?.name;
+  if (mi >= months.length)
+    mi = months.length - 1;
+  const month = months[mi];
+  const n = cal.weekdays.length;
+  const wIdx = cal.yearStartWeekday != null ? cal.yearStartWeekday + weekedDays(months, 0, doy) : cal.startWeekday + weeked;
+  const weekday = n && !month.weekless ? cal.weekdays[(wIdx % n + n) % n] : "";
+  let season;
+  let seasonDetail;
+  if (cal.seasons === "story") {
+    season = seasonOf(storySeason) ?? cal.season0 ?? "summer";
+    seasonDetail = storySeason?.trim().toLowerCase() || season;
+  } else {
+    const frac = doy / yl;
+    const northSeason = frac < 0.214 || frac >= 0.97 ? "winter" : frac < 0.47 ? "spring" : frac < 0.72 ? "summer" : "autumn";
+    const flip = { winter: "summer", summer: "winter", spring: "autumn", autumn: "spring" };
+    season = cal.hemisphere === "south" ? flip[northSeason] : northSeason;
+    seasonDetail = `${seasonPhase(frac)} ${season}`;
+  }
+  const holiday = cal.named.find((h) => {
+    const hm = months.findIndex((x) => x.name === cal.months[h.month]?.name);
+    if (hm < 0)
+      return false;
+    const start = months.slice(0, hm).reduce((s, x) => s + x.days, 0) + h.day - 1;
+    return ((doy - start) % yl + yl) % yl < (h.days ?? 1);
+  })?.name;
   return {
     day,
-    weekday: cal.weekdays[((cal.startWeekday + offset) % cal.weekdays.length + cal.weekdays.length) % cal.weekdays.length],
+    weekday,
     dayOfMonth: rem + 1,
-    month: cal.months[mi].name,
+    month: month.name,
     monthIndex: mi,
+    ...month.festival ? { festival: true } : {},
     year,
     doy,
     season,
-    seasonDetail: `${phase} ${season}`,
+    seasonDetail,
     holiday
   };
 }
@@ -3457,10 +3754,45 @@ function seasonPhase(frac) {
   const p = (f - w[0]) / (w[1] - w[0]);
   return p < 0.33 ? "early" : p < 0.67 ? "mid" : "late";
 }
+function ordinal(n) {
+  const t = n % 100;
+  const s = t >= 11 && t <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";
+  return `${n}${s}`;
+}
+var DEFAULT_FORMAT = "{weekday} {day} {month} {year} {era}";
 function fmtDate(cal, day) {
   const d = dateFor(cal, day);
-  const y = d.year != null ? ` ${d.year}${cal.yearLabel ? " " + cal.yearLabel : ""}` : "";
-  return `${d.weekday} ${d.dayOfMonth} ${d.month}${y}${d.holiday ? ` (${d.holiday})` : ""}`;
+  const f = d.festival ? "{weekday} {month} {year} {era}" : cal.format ?? DEFAULT_FORMAT;
+  const tokens = {
+    weekday: d.weekday,
+    day: String(d.dayOfMonth),
+    ord: ordinal(d.dayOfMonth),
+    month: d.month,
+    year: d.year != null ? String(d.year) : "",
+    era: d.year != null ? cal.yearLabel ?? "" : ""
+  };
+  const out = f.replace(/\{(\w+)\}/g, (_, k) => tokens[k] ?? "").replace(/\s+,/g, ",").replace(/,(\s*,)+/g, ",").replace(/\s{2,}/g, " ").replace(/^[\s,]+|[\s,]+$/g, "");
+  return `${out}${d.holiday ? ` (${d.holiday})` : ""}`;
+}
+function describeCalendar(cal) {
+  if (!cal.custom && cal.seasons === "solar" && !cal.moons)
+    return "";
+  const parts = [];
+  if (cal.note)
+    parts.push(cal.note);
+  else {
+    const regular = cal.months.filter((m) => !m.festival);
+    const fests = cal.months.filter((m) => m.festival).map((m) => m.name);
+    parts.push(`Calendar: ${regular.length} months (${regular.map((m) => m.name).join(", ")}), ${yearLength(cal)} days a year${fests.length ? `; festival days ${fests.join(", ")}` : ""}.`);
+    parts.push(cal.weekdays.length ? `Weekdays: ${cal.weekdays.join(", ")}.` : "No named weekdays.");
+    if (cal.leap)
+      parts.push(`${cal.leap.name} follows ${cal.months[cal.leap.after]?.name} every ${cal.leap.every} years.`);
+  }
+  if (cal.moons?.length && !cal.note)
+    parts.push(`Moons: ${cal.moons.map((m) => m.name).join(", ")}.`);
+  if (cal.seasons === "story")
+    parts.push(`The story sets the season: when it turns, write "season: winter" (or spring, summer, autumn) in the ledger.`);
+  return parts.join(" ");
 }
 
 // src/core/engines/astro.ts
@@ -3524,18 +3856,19 @@ var MOON_PHASES = [
   { name: "waning crescent", glyph: "\uD83C\uDF18" }
 ];
 var SYNODIC = 29.530588;
-function moonOffset(seed, anchor) {
+function moonOffset(seed, anchor, period = SYNODIC) {
   if (anchor) {
     const idx = MOON_PHASES.findIndex((p) => anchor.phase.toLowerCase().includes(p.name.split(" ")[0]) && anchor.phase.toLowerCase().includes(p.name.split(" ").slice(-1)[0]));
     if (idx >= 0)
-      return (idx / 8 * SYNODIC - (anchor.day - 1) + SYNODIC * 10) % SYNODIC;
+      return (idx / 8 * period - (anchor.day - 1) + period * 10) % period;
   }
-  return parseInt(hash(seed + ":moon"), 16) % 2953 / 100;
+  const h = parseInt(hash(seed + ":moon"), 16);
+  return period === SYNODIC ? h % 2953 / 100 : h % 1e4 / 1e4 * period;
 }
-function moonFor(day, minute, offset) {
-  const age = ((day - 1 + minute / 1440 + offset) % SYNODIC + SYNODIC) % SYNODIC;
-  const idx = Math.floor(age / SYNODIC * 8 + 0.5) % 8;
-  const illumination = Math.round((1 - Math.cos(2 * Math.PI * age / SYNODIC)) / 2 * 100);
+function moonFor(day, minute, offset, period = SYNODIC) {
+  const age = ((day - 1 + minute / 1440 + offset) % period + period) % period;
+  const idx = Math.floor(age / period * 8 + 0.5) % 8;
+  const illumination = Math.round((1 - Math.cos(2 * Math.PI * age / period)) / 2 * 100);
   return { ...MOON_PHASES[idx], illumination, age };
 }
 function skyBand(minute, sun) {
@@ -3723,8 +4056,8 @@ function simulate(input, fromAbsMin, toAbsMin) {
         level = Math.max(0, Math.min(7, level + (r() < 0.5 ? -1 : 1)));
       if (level === 7 && target !== 7 && r() < 0.6)
         level = 6;
-      const hh2 = hour % 24;
-      const dawnish = hh2 >= 3 && hh2 <= 9;
+      const hh = hour % 24;
+      const dawnish = hh >= 3 && hh <= 9;
       if (fog)
         fog = dawnish && r() > 0.25;
       else
@@ -3758,7 +4091,7 @@ function weatherText(w) {
     parts.push("still air");
   return parts.join(", ");
 }
-function forecastText(hours, hhmm2) {
+function forecastText(hours, hhmm) {
   if (!hours.length)
     return "";
   const out = [];
@@ -3766,14 +4099,14 @@ function forecastText(hours, hhmm2) {
   for (const h of hours.slice(1)) {
     if (h.condition !== prev.condition) {
       const verb = h.level < prev.level ? "easing" : h.level > prev.level ? "worsening" : "turning";
-      out.push(`${verb} ${hhmm2(h.abs % 1440)} \u2192 ${h.condition}`);
+      out.push(`${verb} ${hhmm(h.abs % 1440)} \u2192 ${h.condition}`);
       prev = h;
       if (out.length >= 3)
         break;
     }
   }
   if (!out.length)
-    return `${hours[0].condition} holding through ${hhmm2(hours[hours.length - 1].abs % 1440)}`;
+    return `${hours[0].condition} holding through ${hhmm(hours[hours.length - 1].abs % 1440)}`;
   const t = hours.map((h) => h.tempC);
   return `${out.join("; ")} (${Math.round(Math.min(...t))}\u2013${Math.round(Math.max(...t))}\xB0C)`;
 }
@@ -3783,6 +4116,7 @@ function seedFor(chatId) {
 
 // src/core/engines/almanac.ts
 var calCache = new Map;
+var STORY_SEASON_DOY = { spring: 80, summer: 172, autumn: 266, winter: 355 };
 function calendarFor(cfg) {
   const k = JSON.stringify([cfg.calendar, cfg.startPoint, cfg.climate, cfg.headerDate, cfg.anchorDay, cfg.latitude]);
   let c = calCache.get(k);
@@ -3799,10 +4133,14 @@ function almanacFor(state, cfg) {
   if (!t)
     return null;
   const cal = calendarFor(cfg);
-  const d = dateFor(cal, t.day);
+  const d = dateFor(cal, t.day, state.season?.name);
   const lat = latitudeFrom(cfg.latitude || cfg.climate);
-  const sun = sunFor(d.doy, cal.hemisphere === "south" && lat > 0 ? -lat : lat, yearLength(cal));
-  const moon = moonFor(t.day, t.minute, moonOffset(cfg.chatId, cfg.moonAnchor));
+  const sun = cal.seasons === "story" ? sunFor(STORY_SEASON_DOY[d.season], Math.abs(lat)) : sunFor(d.doy, cal.hemisphere === "south" && lat > 0 ? -lat : lat, yearLength(cal));
+  const moons = cal.moons?.length ? cal.moons.map((m, i) => {
+    const x = moonFor(t.day, t.minute, moonOffset(`${cfg.chatId}:${m.name}`, i === 0 ? cfg.moonAnchor : undefined, m.period), m.period);
+    return { name: m.name, phase: x.name, glyph: x.glyph, illumination: x.illumination };
+  }) : null;
+  const moon = moons ? { name: moons.map((m) => `${m.name} ${m.phase}`).join(" \xB7 "), glyph: moons[0].glyph, illumination: moons[0].illumination } : moonFor(t.day, t.minute, moonOffset(cfg.chatId, cfg.moonAnchor));
   const now = absMinutes(t);
   const climate = climateFrom(cfg.climate);
   const w = state.weather;
@@ -3848,7 +4186,9 @@ function almanacFor(state, cfg) {
       daylight: sun.sunrise != null && sun.sunset != null ? t.minute >= sun.sunrise && t.minute < sun.sunset : sun.polar === "day"
     },
     moon: { name: moon.name, glyph: moon.glyph, illumination: moon.illumination },
-    calendar: cal
+    moons: moons ?? [{ name: "moon", phase: moon.name, glyph: moon.glyph, illumination: moon.illumination }],
+    calendar: cal,
+    calendarNote: describeCalendar(cal)
   };
 }
 function parseHours(text) {
@@ -3878,11 +4218,11 @@ function isOpen(hours, minute) {
 }
 function parseRoutine(text) {
   const out = [];
-  for (const seg2 of text.split(/\s*[;\n]\s*/)) {
-    const h = parseHours(seg2);
+  for (const seg of text.split(/\s*[;\n]\s*/)) {
+    const h = parseHours(seg);
     if (!h)
       continue;
-    const rest = seg2.replace(/^[^a-zA-Z]*(?:\d{1,2}[:.]?\d{0,2}\s*(am|pm)?\s*(?:to|\u2013|-|until)\s*\d{1,2}[:.]?\d{0,2}\s*(am|pm)?)\s*/i, "");
+    const rest = seg.replace(/^[^a-zA-Z]*(?:\d{1,2}[:.]?\d{0,2}\s*(am|pm)?\s*(?:to|\u2013|-|until)\s*\d{1,2}[:.]?\d{0,2}\s*(am|pm)?)\s*/i, "");
     const act = /\(([^)]*)\)/.exec(rest)?.[1];
     out.push({ from: h[0], to: h[1], place: rest.replace(/\([^)]*\)/, "").replace(/^[:,\s]+/, "").trim(), activity: act });
   }
@@ -4191,14 +4531,14 @@ class ChatLedger {
       warn(`getMessages ${this.chatId}: ${describe(err)}`);
       this.raw = [];
     }
-    let path2 = toPath(this.raw);
+    let path = toPath(this.raw);
     if (opts.excludeTrailingAssistant) {
-      while (path2.length && !path2[path2.length - 1].isUser)
-        path2 = path2.slice(0, -1);
+      while (path.length && !path[path.length - 1].isUser)
+        path = path.slice(0, -1);
     }
-    this.path = path2;
+    this.path = path;
     const fo = this.foldOptions(files.meta, settings);
-    const res = this.runtime.fold(path2, fo, files.side);
+    const res = this.runtime.fold(path, fo, files.side);
     this.state = res.state;
     this.events = res.events;
     for (const [id, p] of Object.entries(files.meta.pressures))
@@ -4468,7 +4808,7 @@ function buildLedgerNote(input) {
   if (state.time) {
     const parts = [`Day ${state.time.day}`];
     if (al)
-      parts.push(al.clock);
+      parts.push(al.calendar.seasons === "story" ? `${al.clock} \xB7 ${al.season}` : al.clock);
     else
       parts.push(fmtTime(state.time).replace(/^Day \d+ /, ""));
     if (al)
@@ -4492,10 +4832,10 @@ function buildLedgerNote(input) {
     const full = caps.map((c) => capsule(c, state, { sealed: input.sealed, nsfw: input.nsfw, pressure: input.pressures?.[c.id], full: true }));
     if (user && !caps.includes(user) && (user.injuries.length || user.flags.length || user.look))
       full.push(capsule({ ...user, tier: "spot" }, state, { sealed: input.sealed, nsfw: input.nsfw, full: true }));
-    let text2 = `[PRESENT] ${full.join(" \xB7 ") || "no one else"}`;
-    if (estTokens(text2) > B.present)
-      text2 = `[PRESENT] ${caps.map((c) => capsule(c, state, { sealed: input.sealed, nsfw: input.nsfw, full: false })).join(" \xB7 ")}`;
-    lanes.present = truncateTokens(text2, B.present);
+    let text = `[PRESENT] ${full.join(" \xB7 ") || "no one else"}`;
+    if (estTokens(text) > B.present)
+      text = `[PRESENT] ${caps.map((c) => capsule(c, state, { sealed: input.sealed, nsfw: input.nsfw, full: false })).join(" \xB7 ")}`;
+    lanes.present = truncateTokens(text, B.present);
   }
   const cons = constraints(state, input.records, input.userName);
   const rejected = input.lastDelta?.rejected ?? [];
@@ -4617,15 +4957,15 @@ function recall(input) {
     scores.set(id, s);
   };
   const fired = [];
-  const scan = (text2, seg2, w) => {
-    if (!text2)
+  const scan = (text, seg, w) => {
+    if (!text)
       return;
-    for (const h of input.index.match(text2, seg2)) {
+    for (const h of input.index.match(text, seg)) {
       const hk = `${h.recordId}|${h.key}`;
       if (input.heat?.[hk]?.demoted && !h.isName)
         continue;
       fired.push(hk);
-      bump(h.recordId, w * Math.min(2, h.count), `${seg2}: \u201C${h.key}\u201D`);
+      bump(h.recordId, w * Math.min(2, h.count), `${seg}: \u201C${h.key}\u201D`);
     }
   };
   scan(input.playerMsg, "player", 10);
@@ -5235,6 +5575,7 @@ var PUSH = [
   { name: "almSun", description: "Sunrise and sunset" },
   { name: "almMoon", description: "Moon phase" },
   { name: "almSeason", description: "Season" },
+  { name: "almCalendar", description: "One line about a fantasy or custom calendar (empty for Gregorian)" },
   { name: "almPlace", description: "Place path" },
   { name: "almVoices", description: "Voice-slot roster for [spk] marks" },
   { name: "almCast", description: "Present characters, one line each" },
@@ -5334,6 +5675,7 @@ async function pushMacros(chatId, userId) {
     push("almSun", al?.sun.text ?? "");
     push("almMoon", al?.moon.name ?? "");
     push("almSeason", al?.season ?? "");
+    push("almCalendar", al?.calendarNote ?? "");
     push("almPlace", st.place.join(" \u203A "));
     push("almMode", st.mode);
     const present = Object.values(st.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.dead);
@@ -6331,13 +6673,13 @@ async function runChronicle(chatId, userId, force = false) {
     const L = ledgerFor(chatId, userId);
     for (let round = 0;round < 3; round++) {
       await L.refresh();
-      const path2 = toPath(L.raw);
-      const job = planChronicle(path2, L.state, files.chronicle, { rawTail: settings.rawTail, rawTailTokens: settings.rawTailTokens, chapterThresholdTokens: settings.chapterThresholdTokens, fanIn: settings.fanIn });
+      const path = toPath(L.raw);
+      const job = planChronicle(path, L.state, files.chronicle, { rawTail: settings.rawTail, rawTailTokens: settings.rawTailTokens, chapterThresholdTokens: settings.chapterThresholdTokens, fanIn: settings.fanIn });
       if (!job)
         break;
       let text;
       if (job.level === "chapter") {
-        const transcript = transcriptFor(path2, job, L.names.user, L.names.char);
+        const transcript = transcriptFor(path, job, L.names.user, L.names.char);
         const prev = files.chronicle.units.filter((u) => u.level === "chapter" && !u.stale).sort((a, b) => b.endIdx - a.endIdx)[0];
         const detail = settings.summaryDetail;
         const focus = settings.summaryFocus;
@@ -6356,7 +6698,7 @@ ${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus);
       }
       if (!text || text.length < 40)
         break;
-      const unit = makeUnit(job, text, path2, L.state, files.chronicle);
+      const unit = makeUnit(job, text, path, L.state, files.chronicle);
       unit.detail = settings.summaryDetail;
       files.chronicle.units.push(unit);
       made++;
@@ -6555,7 +6897,7 @@ async function addUserOps(chatId, lines, userId) {
 async function scheduleWeather(chatId, spec, userId) {
   const files = await loadChat(chatId, userId);
   const id = `forecast:wx_${spec.day}_${spec.hour}`;
-  const fromAbs2 = (spec.day - 1) * 1440 + spec.hour * 60;
+  const fromAbs = (spec.day - 1) * 1440 + spec.hour * 60;
   files.codex.overlays[id] = {
     id,
     standalone: true,
@@ -6563,7 +6905,7 @@ async function scheduleWeather(chatId, spec, userId) {
     tense: "future",
     name: `${spec.condition} on Day ${spec.day} ${String(spec.hour).padStart(2, "0")}:00`,
     summary: `Upcoming weather: ${spec.condition} from Day ${spec.day} ${String(spec.hour).padStart(2, "0")}:00 for about ${spec.hours} h.`,
-    body: { weatherLevel: levelOf(spec.condition).level, fromAbs: fromAbs2, toAbs: fromAbs2 + spec.hours * 60 },
+    body: { weatherLevel: levelOf(spec.condition).level, fromAbs, toAbs: fromAbs + spec.hours * 60 },
     provenance: { source: "user" }
   };
   save(chatId, "codex", userId);
@@ -7005,11 +7347,11 @@ var LABEL_KIND = [
   [/^(customs|culture|traditions|atmosphere|slang|language)$/i, "texture", "timeless"],
   [/^(ooc|instructions|format|style)$/i, "meta", "timeless"]
 ];
-function normalizeEntry(raw, uid2) {
+function normalizeEntry(raw, uid) {
   const key = Array.isArray(raw.key) ? raw.key.map(String) : typeof raw.key === "string" ? raw.key.split(/\s*,\s*/) : [];
   const ks = Array.isArray(raw.keysecondary) ? raw.keysecondary.map(String) : [];
   return {
-    uid: uid2,
+    uid,
     comment: String(raw.comment ?? raw.title ?? ""),
     content: String(raw.content ?? ""),
     key,
@@ -7295,8 +7637,8 @@ function healthCheck(entries) {
 }
 function codexToLorebook(records, opts = {}) {
   const out = [];
-  let uid2 = 0;
-  const mk = (comment, content, keys, v3, tier, position = 0, depth = 4) => validateEntry(normalizeEntry({ comment, content, key: keys, priority: tier, order: tier, position, depth, extensions: { vellum3: v3, almanac: { exported: true } } }, uid2++)).entry;
+  let uid = 0;
+  const mk = (comment, content, keys, v3, tier, position = 0, depth = 4) => validateEntry(normalizeEntry({ comment, content, key: keys, priority: tier, order: tier, position, depth, extensions: { vellum3: v3, almanac: { exported: true } } }, uid++)).entry;
   for (const r of records) {
     if (r.scope.narratorOnly && !opts.includeNarratorOnly)
       continue;
@@ -7393,8 +7735,8 @@ async function creatorGenerate(req, userId, onProgress) {
   if (req.source.kind === "codex" && req.source.chatId) {
     const L = ledgerFor(req.source.chatId, userId);
     await L.refresh();
-    const entries2 = codexToLorebook(L.records);
-    return { entries: entries2, issues: {}, fixes: {} };
+    const entries = codexToLorebook(L.records);
+    return { entries, issues: {}, fixes: {} };
   }
   const text = (await sourceText(req.source, userId)).slice(0, 40000);
   const titles = req.plan.map((p) => p.title);
