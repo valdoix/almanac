@@ -29,6 +29,8 @@ export interface Detected {
   cot?: string;
   trackers?: string[];
   trackerView?: string;
+  /** Scene header setting: off · change · every. */
+  header?: string;
   theme?: string;
   ledger?: string;
   dialogueStyle?: string;

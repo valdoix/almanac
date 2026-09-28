@@ -268,6 +268,21 @@ export function plateSuffix(al: AlmanacReport): string {
   return ` ⟪${al.sun.rise}|${al.sun.set}|${al.moon.glyph} ${al.moon.name}⟫`;
 }
 
+/**
+ * The scene header for a reply that left it out when the preset asks for one every
+ * reply: drawn from the verified clock, weather and place, at display time only.
+ * Goes above a leading "# Title" so the plate takes the title too.
+ */
+export function fillHeader(content: string, al: AlmanacReport, place: string[]): string {
+  if (/^[ \t]*(?:\*\*)?🗓/mu.test(content)) return content;
+  const w = al.weather;
+  const wx = [`${w.glyph} ${w.condition}${w.intensity ? `, ${w.intensity}` : ""}`, w.tempC != null ? `${Math.round(w.tempC)}°C` : "", w.wind ? `wind ${w.wind}` : ""].filter(Boolean).join(" · ");
+  const head = `🗓️ Day ${al.day} · ${al.date} 🕰️ ${hhmm(al.minute)} ${wx}${plateSuffix(al)}${place.length ? `\n📍 ${place.join(" › ")}` : ""}`;
+  // After any opening rule ("---"), before the first line of the reply.
+  const m = /^(\s*(?:[-*_]{3,}[ \t]*\n\s*)?)/.exec(content)!;
+  return `${m[1]}${head}\n${/^#{1,3}[ \t]/.test(content.slice(m[1].length)) ? "" : "\n"}${content.slice(m[1].length)}`;
+}
+
 /** Per-speaker colour rules (the stylesheet half of "regex for structure, stylesheet for paint"). */
 export function speakerCss(state: WorldState, colors: Record<string, string>): string {
   const rules: string[] = [];

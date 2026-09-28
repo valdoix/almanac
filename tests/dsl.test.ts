@@ -178,3 +178,22 @@ describe("header with a clock face", () => {
     expect(header?.tempC).toBe(13);
   });
 });
+
+describe("bond lines without an axis", () => {
+  test("a bare delta counts as affection", () => {
+    expect(parseLine("bond Buffy>Gabriel: +1 — he came back smiling")?.args.changes).toEqual([{ axis: "affection", delta: 1 }]);
+    expect(parseLine("bond Dawn→Gabriel: +1 → +2 — she called him nice")?.args.changes).toEqual([{ axis: "affection", delta: 1 }]);
+  });
+  test("an axis named on its own counts; one inside a label or the cause does not", () => {
+    expect(parseLine("bond Buffy>Gabriel: Warm +1 — shoulder proximity")?.args.changes).toEqual([{ axis: "affection", delta: 1 }]);
+    expect(parseLine("bond Buffy>Gabriel: +2 major — the fear-of-loss resolves")?.args.changes).toEqual([{ axis: "affection", delta: 2 }]);
+    const moved = parseLine("bond Buffy>Gabriel: reluctant-anchor → fixed-point-fear | +1 — caught her when she fell");
+    expect(moved?.args).toMatchObject({ changes: [{ axis: "affection", delta: 1 }], label: "fixed-point-fear" });
+  });
+});
+
+describe("clock with a target time", () => {
+  test("+5m → 22:18 reads as 22:18, with the span as a fallback", () => {
+    expect(parseLine("clock: +5m → 22:18")?.args).toEqual({ kind: "abs", day: undefined, minute: 22 * 60 + 18, orRel: 5 });
+  });
+});

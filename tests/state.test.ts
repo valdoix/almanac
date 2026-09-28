@@ -195,3 +195,15 @@ describe("romance ladder falls", () => {
     expect(state.milestones.filter((m) => m.kind === "ladder").map((m) => m.text)).toEqual(["Buffy → Gabriel: Interested", "Buffy → Gabriel: Charged"]);
   });
 });
+
+describe("the first clock line", () => {
+  const H = (t: string, clock: string) => `🗓️ Day 1 · Monday 15 October 2001 🕰️ ${t} ☁️ overcast · 14°C\n📍 Sunnydale › cemetery\n\nProse.\n<ledger>\nclock: ${clock}\n</ledger>`;
+  test("a relative first clock starts from the header's time, not 08:00", () => {
+    const { state } = new LedgerRuntime().fold(toPath([msg(0, H("22:15", "+10m"))]), OPTS);
+    expect(state.time).toEqual({ day: 1, minute: 22 * 60 + 15 });
+  });
+  test("a target behind the clock falls back to the span", () => {
+    const { state } = new LedgerRuntime().fold(toPath([msg(0, H("22:15", "+10m")), msg(1, "ok", true), msg(2, H("22:18", "+5m → 22:10"))]), OPTS);
+    expect(state.time).toEqual({ day: 1, minute: 22 * 60 + 20 });
+  });
+});

@@ -52,7 +52,7 @@ export const SCENE_MODES = ["social", "intimacy", "conflict", "investigation", "
 
 const AXIS_ALIASES: Record<string, string> = {
   trust: "trust", distrust: "trust",
-  affection: "affection", fondness: "affection", love: "affection", warmth: "affection",
+  affection: "affection", fondness: "affection", love: "affection", warmth: "affection", warm: "affection",
   respect: "respect", esteem: "respect",
   familiarity: "familiarity", familiar: "familiarity", closeness: "familiarity",
   comfort: "comfort", safety: "comfort", ease: "comfort",
@@ -186,6 +186,14 @@ export function parseLine(rawLine: string, oneFact = false): ParsedOp | null {
 type LineParser = (p: ParsedOp, subject: string, rest: string, oneFact?: boolean) => ParsedOp | null;
 
 function parseClockSpec(s: string): Record<string, any> | null {
+  // "+5m → 22:18": the time it reaches, with the span as a fallback if that would run backwards.
+  const arrow = /^(.*?)\s*(?:→|->|=>)\s*(.+)$/.exec(s.trim());
+  if (arrow) {
+    const to = parseClockSpec(arrow[2]);
+    const by = arrow[1] ? parseClockSpec(arrow[1]) : null;
+    if (to?.kind === "abs") return by?.kind === "rel" ? { ...to, orRel: by.minutes } : to;
+    return by ?? to;
+  }
   const t = s.trim().toLowerCase();
   const abs = /^(?:day\s*(\d+)\D*?)?(\d{1,2})[:.h](\d{2})\s*(am|pm)?/.exec(t);
   if (/^day\s*\d+/.test(t) || (/^\d{1,2}[:.]\d{2}/.test(t) && !t.startsWith("+"))) {
@@ -357,7 +365,22 @@ const PARSERS: Record<OpName, LineParser> = {
       if (!axis) continue;
       changes.push({ axis, delta: parseInt(m[2].replace(/\s|−/g, (c) => (c === "−" ? "-" : "")), 10) });
     }
-    const label = /label\s*[:=]\s*["“]?([^"”]+)["”]?/i.exec(main)?.[1];
+    // "bond A>B: +1 — cause" or "wary → steady | +1 — cause", with no axis (models write
+    // it this way often): the delta still counts, on an axis named as a word of its own
+    // before the cause, else affection ("fear-of-loss" in a cause is not fear of them);
+    // a "from → to" before it becomes the label.
+    let moved: string | undefined;
+    if (!changes.length) {
+      const bare = /(^|[\s|(])([+\-−]\s*\d)(?!\d)/.exec(main);
+      if (bare) {
+        const named = main.toLowerCase().split(/[\s|,;()]+/).map((w) => AXIS_ALIASES[w]).find(Boolean);
+        changes.push({ axis: named ?? "affection", delta: parseInt(bare[2].replace(/\s/g, "").replace("−", "-"), 10) });
+        const before = main.slice(0, bare.index).replace(/[|,;]+\s*$/, "").trim();
+        const to = before.split(/\s*(?:→|->|=>)\s*/).pop()!.trim();
+        if (to && !/\d/.test(to)) moved = to;
+      }
+    }
+    const label = /label\s*[:=]\s*["“]?([^"”]+)["”]?/i.exec(main)?.[1] ?? moved;
     const tags = /tags?\s*[:=]\s*([\w ,-]+)/i.exec(main)?.[1]?.split(/\s*,\s*/).filter(Boolean);
     if (!changes.length && !label && !tags) {
       if (main && !/\d/.test(main)) p.args = { label: main.replace(/^["“]|["”]$/g, "") };

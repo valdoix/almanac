@@ -5,7 +5,7 @@
 import type { InterceptorResultDTO, LlmMessageDTO } from "lumiverse-spindle-types";
 import { splice, validateUnits } from "../core/chronicle";
 import { extractLedgerBlock, fixSpeakerLabels, rewriteKnowledgeLines } from "../core/dsl";
-import { renderDrawer, plateSuffix } from "../core/render";
+import { renderDrawer, plateSuffix, fillHeader } from "../core/render";
 import { sidecarPrompt } from "../core/prompts";
 import { hash, plainProse } from "../core/util";
 import { debug, describe, has, host, rememberUser, userFor, warn, within } from "./host";
@@ -128,6 +128,7 @@ function parseConfig(attrs: string): Detected {
     ledger: get("ledger"),
     trackers: list(get("trackers")),
     trackerView: get("view"),
+    header: get("header")?.toLowerCase() || undefined,
     theme: get("theme"),
     at: Date.now(),
   };
@@ -307,7 +308,7 @@ export function registerRenderProcessor() {
       const fixed = labelled ? fixSpeakerLabels(ctx.content) : ctx.content;
       if (!/<ledger\b|🗓/u.test(fixed)) return fixed !== ctx.content ? { content: fixed } : undefined;
       const L = ledgerFor(ctx.chatId, ctx.userId);
-      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}`;
+      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}:${files.meta.detected.header ?? ""}`;
       const hit = renderCache.get(key);
       if (hit != null) return { content: hit };
       if (!L.raw.some((m) => m.id === ctx.messageId)) await L.refresh();
@@ -317,6 +318,8 @@ export function registerRenderProcessor() {
       let content = fixed;
       // Plate enrichment: exact sun times and moon phase on the header line.
       if (al) content = content.replace(/^([ \t]*🗓[^\n]*?)(\s*⟪[^⟫]*⟫)?[ \t]*$/mu, (_m, line) => `${line}${plateSuffix(al)}`);
+      // "Every reply" in the preset, but the model left the header out: draw it from the ledger.
+      if (al && files.meta.detected.header === "every") content = fillHeader(content, al, state.place);
       const block = extractLedgerBlock(content);
       if (block) {
         const view = (files.meta.detected.trackerView ?? "drawer").toLowerCase();

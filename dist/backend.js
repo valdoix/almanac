@@ -1047,6 +1047,7 @@ var AXIS_ALIASES = {
   fondness: "affection",
   love: "affection",
   warmth: "affection",
+  warm: "affection",
   respect: "respect",
   esteem: "respect",
   familiarity: "familiarity",
@@ -1205,6 +1206,14 @@ function parseLine(rawLine, oneFact = false) {
   }
 }
 function parseClockSpec(s) {
+  const arrow = /^(.*?)\s*(?:\u2192|->|=>)\s*(.+)$/.exec(s.trim());
+  if (arrow) {
+    const to = parseClockSpec(arrow[2]);
+    const by = arrow[1] ? parseClockSpec(arrow[1]) : null;
+    if (to?.kind === "abs")
+      return by?.kind === "rel" ? { ...to, orRel: by.minutes } : to;
+    return by ?? to;
+  }
   const t = s.trim().toLowerCase();
   const abs = /^(?:day\s*(\d+)\D*?)?(\d{1,2})[:.h](\d{2})\s*(am|pm)?/.exec(t);
   if (/^day\s*\d+/.test(t) || /^\d{1,2}[:.]\d{2}/.test(t) && !t.startsWith("+")) {
@@ -1402,7 +1411,19 @@ var PARSERS = {
         continue;
       changes.push({ axis, delta: parseInt(m[2].replace(/\s|\u2212/g, (c) => c === "\u2212" ? "-" : ""), 10) });
     }
-    const label = /label\s*[:=]\s*["\u201C]?([^"\u201D]+)["\u201D]?/i.exec(main)?.[1];
+    let moved;
+    if (!changes.length) {
+      const bare = /(^|[\s|(])([+\-\u2212]\s*\d)(?!\d)/.exec(main);
+      if (bare) {
+        const named = main.toLowerCase().split(/[\s|,;()]+/).map((w) => AXIS_ALIASES[w]).find(Boolean);
+        changes.push({ axis: named ?? "affection", delta: parseInt(bare[2].replace(/\s/g, "").replace("\u2212", "-"), 10) });
+        const before = main.slice(0, bare.index).replace(/[|,;]+\s*$/, "").trim();
+        const to = before.split(/\s*(?:\u2192|->|=>)\s*/).pop().trim();
+        if (to && !/\d/.test(to))
+          moved = to;
+      }
+    }
+    const label = /label\s*[:=]\s*["\u201C]?([^"\u201D]+)["\u201D]?/i.exec(main)?.[1] ?? moved;
     const tags = /tags?\s*[:=]\s*([\w ,-]+)/i.exec(main)?.[1]?.split(/\s*,\s*/).filter(Boolean);
     if (!changes.length && !label && !tags) {
       if (main && !/\d/.test(main))
@@ -1922,7 +1943,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.9.1";
+var VERSION = "1.9.2";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -3252,6 +3273,10 @@ class Folder {
     const has = (o) => ops.some((x) => x.op === o);
     if (!has("clock") && h.time != null) {
       ops.unshift({ op: "clock", args: { kind: "abs", day: h.day, minute: h.time, fromHeader: true }, raw: "(header) time" });
+    } else if (h.time != null && !this.state.time) {
+      const i = ops.findIndex((x) => x.op === "clock" && x.args.kind === "rel");
+      if (i >= 0)
+        ops[i] = { ...ops[i], args: { kind: "abs", day: h.day, minute: h.time, fromHeader: true } };
     }
     if (!has("wx") && h.condition) {
       ops.push({ op: "wx", args: { condition: h.condition, intensity: h.intensity, tempC: h.tempC, wind: h.wind, glyph: h.glyph, fromHeader: true }, raw: "(header) weather" });
@@ -3300,6 +3325,12 @@ class Folder {
           day = cur.day + 1;
         const target = { day, minute: a.minute };
         const diff = absMinutes(target) - absMinutes(cur);
+        const slipped = a.day == null && a.minute < cur.minute && cur.minute - a.minute <= 180;
+        if (a.orRel != null && a.orRel >= 0 && (diff < 0 || slipped)) {
+          st.time = addMinutes(cur, a.orRel);
+          this.drift(absMinutes(cur), absMinutes(st.time));
+          return { verdict: "warned", reason: `${fmtClock(a.minute)} doesn't fit the verified clock; moved it +${fmtSpan(a.orRel)} instead`, line: `\uD83D\uDD70 +${fmtSpan(a.orRel)}` };
+        }
         if (diff < 0) {
           if (a.fromHeader)
             return { verdict: "warned", reason: "header time is behind the verified clock; kept the clock" };
@@ -4269,6 +4300,18 @@ function toH(s) {
 }
 function plateSuffix(al) {
   return ` \u27EA${al.sun.rise}|${al.sun.set}|${al.moon.glyph} ${al.moon.name}\u27EB`;
+}
+function fillHeader(content, al, place) {
+  if (/^[ \t]*(?:\*\*)?\uD83D\uDDD3/mu.test(content))
+    return content;
+  const w = al.weather;
+  const wx = [`${w.glyph} ${w.condition}${w.intensity ? `, ${w.intensity}` : ""}`, w.tempC != null ? `${Math.round(w.tempC)}\xB0C` : "", w.wind ? `wind ${w.wind}` : ""].filter(Boolean).join(" \xB7 ");
+  const head = `\uD83D\uDDD3\uFE0F Day ${al.day} \xB7 ${al.date} \uD83D\uDD70\uFE0F ${hhmm(al.minute)} ${wx}${plateSuffix(al)}${place.length ? `
+\uD83D\uDCCD ${place.join(" \u203A ")}` : ""}`;
+  const m = /^(\s*(?:[-*_]{3,}[ \t]*\n\s*)?)/.exec(content);
+  return `${m[1]}${head}
+${/^#{1,3}[ \t]/.test(content.slice(m[1].length)) ? "" : `
+`}${content.slice(m[1].length)}`;
 }
 function speakerCss(state, colors) {
   const rules = [];
@@ -7896,6 +7939,7 @@ function parseConfig(attrs) {
     ledger: get("ledger"),
     trackers: list(get("trackers")),
     trackerView: get("view"),
+    header: get("header")?.toLowerCase() || undefined,
     theme: get("theme"),
     at: Date.now()
   };
@@ -8083,7 +8127,7 @@ function registerRenderProcessor() {
       if (!/<ledger\b|\uD83D\uDDD3/u.test(fixed))
         return fixed !== ctx.content ? { content: fixed } : undefined;
       const L = ledgerFor(ctx.chatId, ctx.userId);
-      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}`;
+      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}:${files.meta.detected.header ?? ""}`;
       const hit = renderCache.get(key);
       if (hit != null)
         return { content: hit };
@@ -8096,6 +8140,8 @@ function registerRenderProcessor() {
       let content = fixed;
       if (al)
         content = content.replace(/^([ \t]*\uD83D\uDDD3[^\n]*?)(\s*\u27EA[^\u27EB]*\u27EB)?[ \t]*$/mu, (_m, line) => `${line}${plateSuffix(al)}`);
+      if (al && files.meta.detected.header === "every")
+        content = fillHeader(content, al, state.place);
       const block = extractLedgerBlock(content);
       if (block) {
         const view = (files.meta.detected.trackerView ?? "drawer").toLowerCase();

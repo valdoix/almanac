@@ -456,6 +456,10 @@ export class Folder {
     const has = (o: string) => ops.some((x) => x.op === o);
     if (!has("clock") && h.time != null) {
       ops.unshift({ op: "clock", args: { kind: "abs", day: h.day, minute: h.time, fromHeader: true }, raw: "(header) time" });
+    } else if (h.time != null && !this.state.time) {
+      // The first reply: "clock: +10m" has nothing to count from, so the header's time starts the clock.
+      const i = ops.findIndex((x) => x.op === "clock" && x.args.kind === "rel");
+      if (i >= 0) ops[i] = { ...ops[i], args: { kind: "abs", day: h.day, minute: h.time, fromHeader: true } };
     }
     if (!has("wx") && h.condition) {
       ops.push({ op: "wx", args: { condition: h.condition, intensity: h.intensity, tempC: h.tempC, wind: h.wind, glyph: h.glyph, fromHeader: true }, raw: "(header) weather" });
@@ -513,6 +517,15 @@ export class Folder {
         if (a.day == null && a.minute < cur.minute) day = cur.day + 1; // passed midnight
         const target = { day, minute: a.minute };
         const diff = absMinutes(target) - absMinutes(cur);
+        // "+5m → 22:10" when the clock says 22:15: a target a little behind the clock is
+        // the model's arithmetic slipping, not a night passing, so the span wins. (An
+        // overnight skip, "+4m → 09:25" at 23:40, keeps its target.)
+        const slipped = a.day == null && a.minute < cur.minute && cur.minute - a.minute <= 180;
+        if (a.orRel != null && a.orRel >= 0 && (diff < 0 || slipped)) {
+          st.time = addMinutes(cur, a.orRel);
+          this.drift(absMinutes(cur), absMinutes(st.time));
+          return { verdict: "warned", reason: `${fmtClock(a.minute)} doesn't fit the verified clock; moved it +${fmtSpan(a.orRel)} instead`, line: `🕰 +${fmtSpan(a.orRel)}` };
+        }
         if (diff < 0) {
           if (a.fromHeader) return { verdict: "warned", reason: "header time is behind the verified clock; kept the clock" };
           return reject(`time cannot run backwards (${fmtClock(a.minute)} Day ${day} is before the current clock)`);
