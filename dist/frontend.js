@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.9.0";
+var VERSION = "1.9.1";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -1181,7 +1181,7 @@ function worldPanel(w, simulator) {
   if (!w)
     return "";
   const agency = w.agenda || w.holds?.length;
-  return `<div class="rec"><div class="hd"><b class="grow">${escapeHtml(w.name)}</b><span class="pill" title="A world built in Lumiverse's Dream Weaver: you chat with a narrator that runs this place and voices its people">Dream Weaver · world</span><span class="pill">${agency ? "agency on" : "cozy"}</span></div>
+  return `<div class="rec" style="margin-bottom:10px"><div class="hd"><b class="grow">${escapeHtml(w.name)}</b><span class="pill" title="A world built in Lumiverse's Dream Weaver: you chat with a narrator that runs this place and voices its people">Dream Weaver · world</span><span class="pill">${agency ? "agency on" : "cozy"}</span></div>
 ${w.premise ? `<div class="alm-cc__row"><b>premise</b>${escapeHtml(w.premise)}</div>` : ""}${w.tension ? `<div class="alm-cc__row"><b>tension</b>${escapeHtml(w.tension)}</div>` : ""}${w.agenda ? `<div class="alm-cc__row"><b>agenda</b>${escapeHtml(w.agenda)}</div>` : ""}${w.holds?.length ? `<div class="alm-cc__row"><b>holds</b>${w.holds.map((h) => escapeHtml(h)).join("<br>")}</div>` : ""}
 <p class="muted">The card is the narrator, and the place is a Codex record. Chapters call its replies the Narrator's.${agency ? simulator ? " Between scenes, the off-screen simulator moves the world's agenda and never breaks its holds." : " Turn on the off-screen simulator (Settings) to have the world's agenda move between scenes." : ""}</p></div>`;
 }
@@ -2328,7 +2328,9 @@ var PANEL_CSS = `
 .almp .kv b{font:500 10.5px/1.7 var(--alm-font-mono);color:var(--alm-muted);text-transform:uppercase;letter-spacing:.08em}
 .almp .list{display:grid;gap:8px}
 .almp .rec{padding:10px;border-radius:10px;background:var(--alm-panel-2);border:1px solid var(--alm-line)}
-.almp .rec .hd{display:flex;gap:8px;align-items:center}
+.almp .rec .hd{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.almp .rec .hd b.grow{flex:1 1 12em;overflow-wrap:anywhere}
+.almp .rec .hd .pill{white-space:nowrap}
 .almp .rec .hd b{font:600 14px/1.2 var(--alm-font-display)}
 .almp .kind{font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;padding:3px 6px;border-radius:5px;background:color-mix(in oklab,var(--alm-accent) 14%,var(--alm-panel));color:var(--alm-accent)}
 .almp .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--alm-panel-2)}

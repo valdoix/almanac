@@ -43,7 +43,7 @@ const LORE_KINDS: [string, string, string][] = [
 function worldPanel(w: any, simulator: boolean): string {
   if (!w) return "";
   const agency = w.agenda || w.holds?.length;
-  return `<div class="rec"><div class="hd"><b class="grow">${e(w.name)}</b><span class="pill" title="A world built in Lumiverse's Dream Weaver: you chat with a narrator that runs this place and voices its people">Dream Weaver · world</span><span class="pill">${agency ? "agency on" : "cozy"}</span></div>
+  return `<div class="rec" style="margin-bottom:10px"><div class="hd"><b class="grow">${e(w.name)}</b><span class="pill" title="A world built in Lumiverse's Dream Weaver: you chat with a narrator that runs this place and voices its people">Dream Weaver · world</span><span class="pill">${agency ? "agency on" : "cozy"}</span></div>
 ${w.premise ? `<div class="alm-cc__row"><b>premise</b>${e(w.premise)}</div>` : ""}${w.tension ? `<div class="alm-cc__row"><b>tension</b>${e(w.tension)}</div>` : ""}${w.agenda ? `<div class="alm-cc__row"><b>agenda</b>${e(w.agenda)}</div>` : ""}${w.holds?.length ? `<div class="alm-cc__row"><b>holds</b>${w.holds.map((h: string) => e(h)).join("<br>")}</div>` : ""}
 <p class="muted">The card is the narrator, and the place is a Codex record. Chapters call its replies the Narrator's.${agency ? (simulator ? " Between scenes, the off-screen simulator moves the world's agenda and never breaks its holds." : " Turn on the off-screen simulator (Settings) to have the world's agenda move between scenes.") : ""}</p></div>`;
 }

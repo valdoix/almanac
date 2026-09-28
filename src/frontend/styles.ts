@@ -348,7 +348,9 @@ export const PANEL_CSS = `
 .almp .kv b{font:500 10.5px/1.7 var(--alm-font-mono);color:var(--alm-muted);text-transform:uppercase;letter-spacing:.08em}
 .almp .list{display:grid;gap:8px}
 .almp .rec{padding:10px;border-radius:10px;background:var(--alm-panel-2);border:1px solid var(--alm-line)}
-.almp .rec .hd{display:flex;gap:8px;align-items:center}
+.almp .rec .hd{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.almp .rec .hd b.grow{flex:1 1 12em;overflow-wrap:anywhere}
+.almp .rec .hd .pill{white-space:nowrap}
 .almp .rec .hd b{font:600 14px/1.2 var(--alm-font-display)}
 .almp .kind{font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;padding:3px 6px;border-radius:5px;background:color-mix(in oklab,var(--alm-accent) 14%,var(--alm-panel));color:var(--alm-accent)}
 .almp .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--alm-panel-2)}
