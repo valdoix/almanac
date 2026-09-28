@@ -1943,7 +1943,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.9.2";
+var VERSION = "1.9.3";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -4302,7 +4302,7 @@ function plateSuffix(al) {
   return ` \u27EA${al.sun.rise}|${al.sun.set}|${al.moon.glyph} ${al.moon.name}\u27EB`;
 }
 function fillHeader(content, al, place) {
-  if (/^[ \t]*(?:\*\*)?\uD83D\uDDD3/mu.test(content))
+  if (/\uD83D\uDDD3/u.test(content))
     return content;
   const w = al.weather;
   const wx = [`${w.glyph} ${w.condition}${w.intensity ? `, ${w.intensity}` : ""}`, w.tempC != null ? `${Math.round(w.tempC)}\xB0C` : "", w.wind ? `wind ${w.wind}` : ""].filter(Boolean).join(" \xB7 ");

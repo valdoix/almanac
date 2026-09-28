@@ -274,7 +274,9 @@ export function plateSuffix(al: AlmanacReport): string {
  * Goes above a leading "# Title" so the plate takes the title too.
  */
 export function fillHeader(content: string, al: AlmanacReport, place: string[]): string {
-  if (/^[ \t]*(?:\*\*)?🗓/mu.test(content)) return content;
+  // Any 🗓 at all: a header, or one the display regex already drew as a plate (Lumiverse
+  // can run the processors again over rendered content).
+  if (/🗓/u.test(content)) return content;
   const w = al.weather;
   const wx = [`${w.glyph} ${w.condition}${w.intensity ? `, ${w.intensity}` : ""}`, w.tempC != null ? `${Math.round(w.tempC)}°C` : "", w.wind ? `wind ${w.wind}` : ""].filter(Boolean).join(" · ");
   const head = `🗓️ Day ${al.day} · ${al.date} 🕰️ ${hhmm(al.minute)} ${wx}${plateSuffix(al)}${place.length ? `\n📍 ${place.join(" › ")}` : ""}`;

@@ -23,3 +23,11 @@ describe("scene header on every reply", () => {
     expect(fillHeader(has, al, ["Home"])).toBe(has);
   });
 });
+
+describe("scene header over rendered content", () => {
+  test("a plate already drawn by the display regex gets no second header", async () => {
+    const { PLATE_REPLACE } = await import("../preset/src/plate");
+    const drawn = fillHeader("---\n\nProse.", al, ["Home"]).replace(new RegExp(PLATE_FIND), PLATE_REPLACE);
+    expect(fillHeader(drawn, al, ["Home"])).toBe(drawn);
+  });
+});
