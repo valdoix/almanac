@@ -87,7 +87,7 @@ async function doSync(chatId: string, userId?: string): Promise<void> {
     // Desired projection
     const desired = new Map<string, { comment: string; content: string; key: string[]; kind: string }>();
     for (const r of L.records) {
-      if (r.id === "char:user" || r.kind === "meta") continue;
+      if (r.id === "char:user" || r.kind === "meta" || r.kind === "directive") continue;
       if (r.provenance.source === "lore" && !r.id.startsWith("lore:")) {
         // Lore baselines already live in the user's own books; don't duplicate them. A lore person the
         // story tracks is joined to the story's record (buildCodex), so it gets that record's one entry,

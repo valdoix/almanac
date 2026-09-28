@@ -24,6 +24,38 @@ const KIND_HELP: Record<string, string> = {
   noted: "One person noticed it; no one is known to lack it (never sent to the model)",
 };
 
+// Lumiverse's Dream Weaver book roles: [label, what the book does].
+const WEAVER_BOOK: Record<string, [string, string]> = {
+  governance: ["rules book", "Always-on rules and the re-anchor that keep the character on spec. Left to Lumiverse: the Ledger never folds, forces or switches these entries off."],
+  lore: ["lore book", "The world's deep lore, surfacing when relevant."],
+  npc: ["NPC book", "The people the narrator can voice, one entry per person."],
+  depth: ["depth book", "More about the card's character, surfacing when relevant."],
+  persona: ["persona depth", "More about your persona, surfacing when relevant."],
+};
+// How each category reads in the Lore tab, in display order.
+const LORE_KINDS: [string, string, string][] = [
+  ["directive", "always-on rule", "always-on rules"], ["person", "person", "people"], ["place", "place", "places"], ["group", "group", "groups"],
+  ["object", "object", "objects"], ["law", "world rule", "world rules"], ["history", "history", "history"], ["situation", "situation", "situations"],
+  ["belief", "belief", "beliefs"], ["forecast", "upcoming event", "upcoming events"], ["boundary", "canon point", "canon points"],
+  ["texture", "custom or detail", "customs & detail"], ["meta", "instruction", "instructions"],
+];
+/** A Dream Weaver world card: the narrator runs this place, and an agency world moves on its own. */
+function worldPanel(w: any, simulator: boolean): string {
+  if (!w) return "";
+  const agency = w.agenda || w.holds?.length;
+  return `<div class="rec"><div class="hd"><b class="grow">${e(w.name)}</b><span class="pill" title="A world built in Lumiverse's Dream Weaver: you chat with a narrator that runs this place and voices its people">Dream Weaver · world</span><span class="pill">${agency ? "agency on" : "cozy"}</span></div>
+${w.premise ? `<div class="alm-cc__row"><b>premise</b>${e(w.premise)}</div>` : ""}${w.tension ? `<div class="alm-cc__row"><b>tension</b>${e(w.tension)}</div>` : ""}${w.agenda ? `<div class="alm-cc__row"><b>agenda</b>${e(w.agenda)}</div>` : ""}${w.holds?.length ? `<div class="alm-cc__row"><b>holds</b>${w.holds.map((h: string) => e(h)).join("<br>")}</div>` : ""}
+<p class="muted">The card is the narrator, and the place is a Codex record. Chapters call its replies the Narrator's.${agency ? (simulator ? " Between scenes, the off-screen simulator moves the world's agenda and never breaks its holds." : " Turn on the off-screen simulator (Settings) to have the world's agenda move between scenes.") : ""}</p></div>`;
+}
+
+function loreKinds(kinds?: Record<string, number>): string {
+  if (!kinds) return "";
+  const known = new Map(LORE_KINDS.map(([k, one, many]) => [k, [one, many]]));
+  const label = (k: string) => known.get(k)?.[kinds[k] === 1 ? 0 : 1] ?? k;
+  const parts = [...LORE_KINDS.map(([k]) => k), ...Object.keys(kinds).filter((k) => !known.has(k))].filter((k) => kinds[k]).map((k) => `${kinds[k]} ${label(k)}`);
+  return parts.length ? `<div class="muted" style="margin:4px 0">Read as: ${e(parts.join(" · "))}</div>` : "";
+}
+
 const PERSON_OPTS: [string, string][] = [["", "as the story says"], ["knows", "knows it"], ["believes", "believes it"], ["suspects", "suspects it"], ["doubts", "doubts it"], ["wrong", "has it wrong"], ["unaware", "doesn't know"], ["none", "no record either way"]];
 
 export class AlmanacApp {
@@ -417,8 +449,10 @@ ${w.canon.length ? `<h4>Minted canon</h4><ul class="alm-list">${w.canon.map((c: 
   tab_lore(v: any): string {
     const books = Object.entries(v.lore.books ?? {});
     return `<p class="muted">The Lore Bridge reads the character, persona, chat and global lorebooks into the Codex. Your books are never edited unless you allow it.</p>
+${worldPanel(v.lore.world, !!v.settings?.simulator)}
 <div class="row"><button class="btn primary" data-act="loreScan">Re-read lorebooks</button>${v.lore.review?.length ? `<button class="btn" data-act="loreClassify">Classify ${v.lore.review.length} unclear entries with the model</button>` : ""}<button class="btn" data-act="mirrorSync">Sync mirror book</button></div>
-<div class="list" style="margin-top:10px">${books.map(([id, b]: any) => `<div class="rec"><div class="hd"><b class="grow">${e(b.name)}</b><span class="pill">${e(b.scope)}</span><span class="pill">${b.count} entries</span></div>
+<div class="list" style="margin-top:10px">${books.map(([id, b]: any) => `<div class="rec"><div class="hd"><b class="grow">${e(b.name)}</b>${b.weaver ? `<span class="pill" title="${e(WEAVER_BOOK[b.weaver]?.[1] ?? "")}">Dream Weaver · ${e(WEAVER_BOOK[b.weaver]?.[0] ?? b.weaver)}</span>` : ""}<span class="pill">${e(b.scope)}</span><span class="pill">${b.count} entries</span></div>
+${loreKinds(b.kinds)}
 <div class="row"><label class="f grow">Activation<select data-lore-mode="${e(id)}">${["native", "assisted", "managed"].map((m) => `<option value="${m}"${m === b.mode ? " selected" : ""}>${m}</option>`).join("")}</select></label><label class="f grow">Permission<select data-lore-perm="${e(id)}">${["read", "overlay", "write"].map((m) => `<option value="${m}"${m === b.permission ? " selected" : ""}>${m === "read" ? "read-only" : m}</option>`).join("")}</select></label></div></div>`).join("") || `<div class="empty">No lorebooks are attached to this chat.</div>`}</div>
 <p class="muted"><b>Native</b>: your keywords decide; the Ledger only annotates lore the story has moved past. <b>Assisted</b>: plus the entries Recall picks. <b>Managed</b>: the Ledger is the only retrieval owner for that book.</p>
 ${v.lore.review?.length ? `<h4>Review queue</h4><ul class="alm-list">${v.lore.review.slice(0, 40).map((r: any) => `<li>${e(r.title)} — read as <b>${e(r.kind)}</b> (${Math.round(r.confidence * 100)}%)</li>`).join("")}</ul>` : ""}`;

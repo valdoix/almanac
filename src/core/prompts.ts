@@ -99,10 +99,13 @@ Output JSON only: {"set":[{"id":"char:mara","summary":"…","keys":["…"],"body
   };
 }
 
-export function simulatorPrompt(opts: { slice: string; from: string; to: string; userName: string }): { system: string; user: string } {
+export function simulatorPrompt(opts: { slice: string; from: string; to: string; userName: string; world?: boolean }): { system: string; user: string } {
+  const world = opts.world
+    ? `\nThe WORLD line is the setting's own agenda: it is an actor too, moving at its own pace whatever ${opts.userName} does. Advance it through consequences and movement in the world (a move, a cost, a changed place), never by announcing it. Lines under HOLDS never break; pressure may strain them, nothing breaks them.`
+    : "";
   return {
     system: `You advance the off-screen world of a roleplay between two story times. ${SAFETY_DATA}
-For each actor with an active agenda, thread or faction clock, decide at most ONE change, only if Motive, Knowledge, Access, Means and Time (MKAMT) all allow it. A stalled thread must name its blocker; two stalls in a row force a change of evidence, position, stakes or resolution. Never decide anything ${opts.userName} does, says, thinks or knows.
+For each actor with an active agenda, thread or faction clock, decide at most ONE change, only if Motive, Knowledge, Access, Means and Time (MKAMT) all allow it. A stalled thread must name its blocker; two stalls in a row force a change of evidence, position, stakes or resolution. Never decide anything ${opts.userName} does, says, thinks or knows.${world}
 When a development should reach ${opts.userName}, give it a route and a time (a messenger at 18:00, a changed shop sign, a rumour at the market).
 Output JSON only: {"ops":["<ledger line>", …],"arrivals":[{"text":"…","route":"…","at":"Day 3 18:00","place":"…"}]}
 Ledger lines use: bond, know, item, thread, clockf, rumor, owe, cons, journal (the same syntax as the story ledger).`,

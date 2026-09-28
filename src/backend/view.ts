@@ -180,7 +180,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
 
 function pickBody(b: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = {};
-  for (const k of ["role", "hours", "routine", "routes", "customs", "parent", "holder", "members", "participants", "expected", "text", "kind", "archivist", "divergedNote", "want", "fear", "traits", "secrets"]) if (b[k] != null) out[k] = b[k];
+  for (const k of ["role", "hours", "routine", "routes", "customs", "parent", "holder", "members", "participants", "expected", "text", "kind", "archivist", "divergedNote", "want", "voice", "tension", "fear", "traits", "secrets"]) if (b[k] != null) out[k] = b[k];
   return out;
 }
 

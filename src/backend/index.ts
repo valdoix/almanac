@@ -36,6 +36,7 @@ async function onSwitch(chatId: string | null, userId?: string) {
   try {
     const files = await loadChat(chatId, userId);
     const settings = await loadSettings(userId);
+    setDebug(settings.debug); // boot can't read an operator install's settings: no user yet
     if (!files.meta.config.sessionZeroDone && !files.meta.config.genres.length) {
       const defaults = await characterDefaults(chatId, userId).catch(() => null);
       if (defaults) await applyChatConfig(chatId, { ...defaults, sessionZeroDone: true }, userId);

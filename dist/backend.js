@@ -284,8 +284,9 @@ function planChronicle(path, state, store, s) {
   const msgIds = path.filter((m) => m.index >= startIdx && m.index <= endIdx).map((m) => m.id);
   return { level: "chapter", startIdx, endIdx, msgIds, children: [], scenes: take };
 }
-function transcriptFor(path, job, userName, charName) {
-  return path.filter((m) => m.index >= job.startIdx && m.index <= job.endIdx).map((m) => `${m.isUser ? userName : m.name || charName}: ${plainProse(m.content)}`).filter((l) => l.trim().length > 3).join(`
+function transcriptFor(path, job, userName, charName, narrator = false) {
+  const who = (m) => m.isUser ? userName : narrator && (!m.name || m.name === charName) ? "Narrator" : m.name || charName;
+  return path.filter((m) => m.index >= job.startIdx && m.index <= job.endIdx).map((m) => `${who(m)}: ${plainProse(m.content)}`).filter((l) => l.trim().length > 3).join(`
 
 `);
 }
@@ -1921,7 +1922,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.8.2";
+var VERSION = "1.9.0";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -4396,9 +4397,11 @@ ${opts.chapter}
   };
 }
 function simulatorPrompt(opts) {
+  const world = opts.world ? `
+The WORLD line is the setting's own agenda: it is an actor too, moving at its own pace whatever ${opts.userName} does. Advance it through consequences and movement in the world (a move, a cost, a changed place), never by announcing it. Lines under HOLDS never break; pressure may strain them, nothing breaks them.` : "";
   return {
     system: `You advance the off-screen world of a roleplay between two story times. ${SAFETY_DATA}
-For each actor with an active agenda, thread or faction clock, decide at most ONE change, only if Motive, Knowledge, Access, Means and Time (MKAMT) all allow it. A stalled thread must name its blocker; two stalls in a row force a change of evidence, position, stakes or resolution. Never decide anything ${opts.userName} does, says, thinks or knows.
+For each actor with an active agenda, thread or faction clock, decide at most ONE change, only if Motive, Knowledge, Access, Means and Time (MKAMT) all allow it. A stalled thread must name its blocker; two stalls in a row force a change of evidence, position, stakes or resolution. Never decide anything ${opts.userName} does, says, thinks or knows.${world}
 When a development should reach ${opts.userName}, give it a route and a time (a messenger at 18:00, a changed shop sign, a rumour at the market).
 Output JSON only: {"ops":["<ledger line>", \u2026],"arrivals":[{"text":"\u2026","route":"\u2026","at":"Day 3 18:00","place":"\u2026"}]}
 Ledger lines use: bond, know, item, thread, clockf, rumor, owe, cons, journal (the same syntax as the story ledger).`,
@@ -6103,13 +6106,18 @@ function path(chatId, kind) {
   return `chats/${safe}/${kind}.${kind === "events" ? "jsonl" : "json"}`;
 }
 async function readJson(p, fallback, userId) {
+  let exists;
   try {
-    if (!await host.userStorage.exists(p, userId))
-      return fallback;
+    exists = await host.userStorage.exists(p, userId);
+  } catch (err) {
+    throw new Error(`storage unavailable for ${p}${userId ? "" : " (no user yet)"}: ${describe(err)}`);
+  }
+  if (!exists)
+    return fallback;
+  try {
     return await host.userStorage.getJson(p, { fallback, userId });
   } catch (err) {
-    warn(`read ${p}: ${describe(err)}`);
-    return fallback;
+    throw new Error(`read ${p}: ${describe(err)}`);
   }
 }
 async function loadChat(chatId, userId) {
@@ -6120,16 +6128,19 @@ async function loadChat(chatId, userId) {
   if (pending)
     return pending;
   const p = (async () => {
-    const [meta, side, codex, chronicle] = await Promise.all([
-      readJson(path(chatId, "meta"), emptyMeta(), userId),
-      readJson(path(chatId, "side"), {}, userId),
-      readJson(path(chatId, "codex"), emptyCodexStore(), userId),
-      readJson(path(chatId, "chronicle"), emptyChronicle(), userId)
-    ]);
-    const files = { meta: { ...emptyMeta(), ...meta, config: { ...DEFAULT_CHAT_CONFIG, ...meta.config ?? {}, colors: { ...meta.config?.colors ?? {} } } }, side, codex, chronicle };
-    cache.set(chatId, files);
-    loading.delete(chatId);
-    return files;
+    try {
+      const [meta, side, codex, chronicle] = await Promise.all([
+        readJson(path(chatId, "meta"), emptyMeta(), userId),
+        readJson(path(chatId, "side"), {}, userId),
+        readJson(path(chatId, "codex"), emptyCodexStore(), userId),
+        readJson(path(chatId, "chronicle"), emptyChronicle(), userId)
+      ]);
+      const files = { meta: { ...emptyMeta(), ...meta, config: { ...DEFAULT_CHAT_CONFIG, ...meta.config ?? {}, colors: { ...meta.config?.colors ?? {} } } }, side, codex, chronicle };
+      cache.set(chatId, files);
+      return files;
+    } finally {
+      loading.delete(chatId);
+    }
   })();
   loading.set(chatId, p);
   return p;
@@ -6166,19 +6177,29 @@ async function copyChat(fromChat, toChat, userId) {
   for (const k of ["meta", "side", "codex", "chronicle"])
     save(toChat, k, userId, 0);
 }
-var settingsCache = null;
+var settingsCache = new Map;
 async function loadSettings(userId) {
-  if (settingsCache)
-    return settingsCache;
-  const s = await readJson("settings.json", {}, userId);
-  settingsCache = { ...DEFAULT_SETTINGS, ...s };
-  return settingsCache;
+  const hit = settingsCache.get(userId ?? "");
+  if (hit)
+    return hit;
+  let s;
+  try {
+    s = await readJson("settings.json", {}, userId);
+  } catch (err) {
+    if (userId)
+      warn(`settings: ${describe(err)}`);
+    return { ...DEFAULT_SETTINGS };
+  }
+  const out = { ...DEFAULT_SETTINGS, ...s };
+  settingsCache.set(userId ?? "", out);
+  return out;
 }
 async function saveSettings(patch, userId) {
-  const cur = await loadSettings(userId);
-  settingsCache = { ...cur, ...patch };
-  await host.userStorage.setJson("settings.json", settingsCache, { indent: 2, userId });
-  return settingsCache;
+  const onDisk = await readJson("settings.json", {}, userId);
+  const next = { ...DEFAULT_SETTINGS, ...onDisk, ...patch };
+  await host.userStorage.setJson("settings.json", next, { indent: 2, userId });
+  settingsCache.set(userId ?? "", next);
+  return next;
 }
 
 // src/backend/ledger.ts
@@ -7452,7 +7473,7 @@ ${recallItems.join(`
   for (const it of rc.items) {
     const le = it.record.provenance?.loreEntryId;
     const lb = it.record.provenance?.loreBookId;
-    if (!le || !lb || !meta.lore.books[lb] || meta.lore.books[lb].mode === "native")
+    if (!le || !lb || !meta.lore.books[lb] || meta.lore.books[lb].mode === "native" || meta.lore.books[lb].pinned?.includes(le))
       continue;
     if (mirrorPicks[it.record.id] && it.record.provenance.source !== "lore")
       loreFold[le] = it.record.id;
@@ -7833,7 +7854,7 @@ function registerWorldInfoInterceptor() {
         if (!plan)
           continue;
         const book = files.meta.lore.books[e.world_book_id];
-        if (!book)
+        if (!book || book.pinned?.includes(e.id))
           continue;
         const into = plan.loreFold[e.id];
         if (into && folded.has(into)) {
@@ -8417,7 +8438,7 @@ async function buildView(chatId, userId) {
 }
 function pickBody(b) {
   const out = {};
-  for (const k of ["role", "hours", "routine", "routes", "customs", "parent", "holder", "members", "participants", "expected", "text", "kind", "archivist", "divergedNote", "want", "fear", "traits", "secrets"])
+  for (const k of ["role", "hours", "routine", "routes", "customs", "parent", "holder", "members", "participants", "expected", "text", "kind", "archivist", "divergedNote", "want", "voice", "tension", "fear", "traits", "secrets"])
     if (b[k] != null)
       out[k] = b[k];
   return out;
@@ -8586,7 +8607,7 @@ async function doSync(chatId, userId) {
     const present = Object.values(L.state.chars).filter((c) => c.tier === "spot" || c.tier === "peri" || c.isUser).map((c) => c.id);
     const desired = new Map;
     for (const r of L.records) {
-      if (r.id === "char:user" || r.kind === "meta")
+      if (r.id === "char:user" || r.kind === "meta" || r.kind === "directive")
         continue;
       if (r.provenance.source === "lore" && !r.id.startsWith("lore:")) {
         continue;
@@ -8816,7 +8837,7 @@ async function runChronicle(chatId, userId, force = false) {
         break;
       let text;
       if (job.level === "chapter") {
-        const transcript = transcriptFor(path, job, L.names.user, L.names.char);
+        const transcript = transcriptFor(path, job, L.names.user, L.names.char, !!files.meta.lore.world);
         const prev = files.chronicle.units.filter((u) => u.level === "chapter" && !u.stale).sort((a, b) => b.endIdx - a.endIdx)[0];
         const detail = settings.summaryDetail;
         const focus = settings.summaryFocus;
@@ -8923,16 +8944,22 @@ async function runSimulator(chatId, userId, force = false) {
     const actors = Object.values(st.chars).filter((c) => !c.isUser && !c.dead && c.tier !== "spot" && c.tier !== "peri").slice(0, 10);
     const threads = Object.values(st.threads).filter((t) => t.status !== "resolved").slice(-8);
     const factions = Object.values(st.factions);
-    if (!actors.length && !threads.length && !factions.length)
+    const world = files.meta.lore.world;
+    const agency = world && (world.agenda || world.holds?.length) ? world : null;
+    if (!actors.length && !threads.length && !factions.length && !agency)
       return;
     const slice = [
+      ...agency ? [
+        `WORLD ${agency.name}: agenda: ${agency.agenda || "\u2014"}${agency.tension ? `; tension: ${agency.tension}` : ""}`,
+        ...agency.holds?.length ? [`HOLDS (never broken): ${agency.holds.join(" / ")}`] : []
+      ] : [],
       ...actors.map((c) => `PERSON ${c.name}: at ${c.place ?? "unknown"}; mood ${c.mood?.name ?? "?"}${c.pressure ? `; hidden pressure: ${c.pressure}` : ""}; knows: ${st.knowledge.filter((k) => k.holder === c.id && !k.supersededBy).slice(-4).map((k) => k.fact).join(" / ") || "\u2014"}`),
       ...threads.map((t) => `THREAD ${t.title}: ${t.status}${t.blocker ? ` (blocked by ${t.blocker})` : ""}; latest: ${t.latest ?? "\u2014"}; stalls: ${t.stalls}`),
       ...factions.map((f) => `FACTION ${f.name}: ${Object.values(f.clocks).map((c) => `${c.name} ${c.cur}/${c.max}`).join("; ")}`),
       `PLAYER is at ${st.place.join(" \u203A ")}.`
     ].join(`
 `);
-    const p = simulatorPrompt({ slice, from: fmtTime(fromAbs(last)), to: fmtTime(st.time), userName: L.names.user });
+    const p = simulatorPrompt({ slice, from: fmtTime(fromAbs(last)), to: fmtTime(st.time), userName: L.names.user, world: !!agency });
     const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 120000, label: "simulator" });
     const res = extractJson(text);
     const target = L.lastAssistant();
@@ -9050,6 +9077,121 @@ async function scheduleWeather(chatId, spec, userId) {
 }
 
 // src/core/lore.ts
+var WORLD_RULE = /^\s*<weaver_(?:lore|narrator|npcs|world_agency|agency)>/i;
+var WEAVER_BOOKS = [
+  [/^(.+?)\s+rules book$/i, /stays itself in any chat|Managed by the Weaver/i, "governance"],
+  [/^(.+?)\s+NPC book$/i, /trigger by name so the narrator can voice them/i, "npc"],
+  [/^(.+?)\s+lore book$/i, /narrator consults canon instead of inventing it/i, "lore"],
+  [/^(.+?)\s+depth book$/i, /Deepening answers from the Weaver interview/i, "depth"],
+  [/^(.+?)\s+[\u2014\u2013-]\s+persona depth$/i, /Triggered depth for the persona/i, "persona"]
+];
+function weaverEntry(e) {
+  const c = (e.comment ?? "").trim();
+  const body = (e.content ?? "").trimStart();
+  if (/^Weaver re-?anchor$/i.test(c))
+    return "anchor";
+  if (/^Weaver agency\b/i.test(c) || /^<weaver_agency>/i.test(body))
+    return "agenda";
+  if (/^Weaver governance\b/i.test(c) || /^<weaver_[a-z_]+>/i.test(body))
+    return "rule";
+  return null;
+}
+function weaverBook(book, entries = []) {
+  const name = (book.name ?? "").trim();
+  const md = book.metadata ?? {};
+  if (md.almanac_chat_id)
+    return null;
+  const byName = WEAVER_BOOKS.find(([re]) => re.test(name));
+  const anchor = entries.find((e) => weaverEntry(e) === "anchor");
+  const subject = (byName ? byName[0].exec(name)[1] : anchor?.key?.[0] ?? name).trim();
+  const tagged = WEAVER_BOOKS.find(([, , r]) => r === (md.persona_depth === true ? "persona" : md.weaver_role));
+  let role = tagged?.[2] ?? null;
+  if (!role && byName && (md.source === "weaver" || byName[1].test(book.description ?? "")))
+    role = byName[2];
+  if (!role && entries.some((e) => weaverEntry(e)))
+    role = "governance";
+  if (!role)
+    return null;
+  const world = entries.some((e) => WORLD_RULE.test(e.content ?? "") || weaverEntry(e) === "anchor" && /^\s*(Tension|Stance):/im.test(e.content ?? ""));
+  return world ? { role, subject, world } : { role, subject };
+}
+function parseAgency(content) {
+  const agenda = /^\s*Agenda:\s*(.+)$/im.exec(content)?.[1]?.trim();
+  const after = content.split(/^\s*Hard lines[^\n]*$/im)[1] ?? "";
+  const holds = [...after.matchAll(/^\s*[-*\u2022]\s*(.+)$/gm)].map((m) => m[1].trim()).filter(Boolean);
+  return { agenda, holds };
+}
+function weaverWorldCard(card) {
+  const w = card?.extensions?.weaver;
+  const s = w && typeof w === "object" ? w.structured : null;
+  if (!s || typeof s !== "object")
+    return null;
+  const slot = (k) => {
+    const v = s[k];
+    const t = typeof v === "string" ? v : typeof v?.content === "string" ? v.content : "";
+    return t.trim() || undefined;
+  };
+  if (!["premise", "central_tension", "rules", "power", "hooks", "world_agency"].some((k) => slot(k)))
+    return null;
+  return { name: (card?.name ?? "").trim(), premise: slot("premise"), tension: slot("central_tension") };
+}
+function anchorLines(content) {
+  const out = {};
+  for (const m of content.matchAll(/^\s*(Core|Drives|Voice|Now|Tension|Stance):\s*(.+)$/gim)) {
+    out[m[1].toLowerCase()] = m[2].replace(/[;,\s]*\u2026\s*$/, "").trim();
+  }
+  return out;
+}
+function clip(s, n) {
+  if (s.length <= n)
+    return s;
+  const cut = s.slice(0, n);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), n / 2)).replace(/[,;:\s]+$/, "")}\u2026`;
+}
+function classifyWeaverEntry(e, part, book) {
+  const base = {
+    entryId: e.id,
+    bookId: e.world_book_id,
+    kind: "directive",
+    tense: "timeless",
+    name: "",
+    aliases: [],
+    confidence: 1,
+    via: "weaver",
+    weaver: { role: "governance", part },
+    pinned: true,
+    summary: ""
+  };
+  if (part === "anchor") {
+    const l = anchorLines(e.content ?? "");
+    const who = (e.key ?? []).find((k) => k.trim())?.trim() || book?.subject || "";
+    if (who && (book?.world || l.tension || l.stance)) {
+      return { ...base, kind: "place", name: who, summary: clip(l.core ?? firstSentence(e.content ?? ""), 400), tension: l.tension ? clip(l.tension, 240) : undefined };
+    }
+    if (who) {
+      return {
+        ...base,
+        kind: "person",
+        name: who,
+        summary: clip(l.core ?? firstSentence(e.content ?? ""), 240),
+        role: l.core ? clip(l.core.split(/\s*(?:;|\.\s|,\s*(?:who|which|whose)\b)/)[0], 90) : undefined,
+        want: l.drives ? clip(l.drives, 220) : undefined,
+        voice: l.voice ? clip(l.voice, 220) : undefined
+      };
+    }
+    return { ...base, name: `${who || "World"} anchor`, summary: l.core ?? firstSentence(e.content ?? "") };
+  }
+  const title = (e.comment ?? "").replace(/^Weaver\s+(?:governance|agency)\s*[\u00B7:|-]\s*/i, "").trim();
+  const tag = /^\s*<weaver_([a-z_]+)>/i.exec(e.content ?? "")?.[1]?.replace(/_/g, " ");
+  const inner = (e.content ?? "").replace(/<\/?weaver_[a-z_]+>/gi, "").trim();
+  const agency = part === "agenda" ? parseAgency(inner) : null;
+  return {
+    ...base,
+    name: title || tag || "Weaver rule",
+    summary: clip(inner.split(/\n/)[0] ?? "", 200),
+    ...agency ? { agenda: agency.agenda, holds: agency.holds } : {}
+  };
+}
 var LABELS = [
   [/^(current|now|ongoing|active|right now)$/i, "situation", "now"],
   [/^(timeline boundary|era|canon point|story start)$/i, "boundary", "timeless"],
@@ -9062,6 +9204,14 @@ var LABELS = [
   [/^(upcoming|prophecy|planned|scheduled|future)$/i, "forecast", "future"],
   [/^(customs|culture|traditions|atmosphere|slang|language)$/i, "texture", "timeless"],
   [/^(ooc|instructions|author's note|format|style)$/i, "meta", "timeless"]
+];
+var LORE_TITLE_HINTS = [
+  [/\b(history|founding|founded|origins?|the fall of|war of|years? ago|age of|legend of|in the old days|before the)\b/i, "history", "past"],
+  [/\b(guild|order|council|clan|famil(?:y|ies)|house of|crew|church|cult|company|watch|brotherhood|sisterhood|society|faction|court|union|gang|coven|syndicate|circle)\b/i, "group", "timeless"],
+  [/\b(rules?|laws?|magic|how .+ works|the price|cost of|curse|pact|oath|bargain|covenant|forbidden|taboo)\b/i, "law", "timeless"],
+  [/\b(customs?|traditions?|festival|rites?|rituals?|ceremon(?:y|ies)|holiday|feast|superstitions?|etiquette|slang|dialect|cuisine|dress|fashion|night|day|season)\b/i, "texture", "timeless"],
+  [/\b(ledger|book|key|sword|ring|amulet|map|relic|artifact|artefact|crown|blade|mask|lantern|bell|idol|stone|coin)\b/i, "object", "timeless"],
+  [/\b(harbou?r|bay|port|docks?|pier|market|street|road|square|quarter|district|ward|tavern|inn|pub|bar|hall|temple|shrine|chapel|keep|castle|tower|manor|house|office|library|school|academy|forest|woods|marsh|river|lake|sea|coast|shore|island|mountain|valley|cave|mine|ruins?|gate|walls?|bridge|lighthouse|cemetery|graveyard|farm|mill|shop|store|warehouse|station|village|town|city|palace|prison|asylum|hospital)\b/i, "place", "timeless"]
 ];
 var BELIEF = /\b(believes?|thinks?|assumes?|unaware|doesn'?t know|don'?t know|suspects?|convinced)\b/i;
 var MISTAKEN = /\b(unbeknownst|in truth|actually|mistakenly|doesn'?t yet know|wrongly)\b/i;
@@ -9080,7 +9230,10 @@ function firstSentence(s) {
   const m = /^[\s\S]*?[.!?](\s|$)/.exec(t);
   return (m ? m[0] : t).trim();
 }
-function classify(e) {
+function classify(e, book = null) {
+  const part = weaverEntry(e);
+  if (part)
+    return classifyWeaverEntry(e, part, book);
   const meta = e.extensions?.vellum3 ?? e.extensions?.almanac?.vellum3 ?? null;
   const { label, name: titleName } = splitTitle(e.comment);
   const fs = firstSentence(e.content ?? "");
@@ -9127,6 +9280,20 @@ function classify(e) {
       base.via = "sentence";
       base.confidence = 0.55;
       base.kind = /\b(town|city|village|tavern|inn|club|house|shop|forest|street|district|castle|temple|library|school|bar|nightclub)\b/i.test(m[2]) ? "place" : /\b(sword|ring|amulet|book|blade|locket|key|device|gun|staff)\b/i.test(m[2]) ? "object" : /\b(gang|order|guild|clan|cult|company|group|faction|society)\b/i.test(m[2]) ? "group" : "person";
+    }
+  }
+  if (book) {
+    base.weaver = { role: book.role };
+    const unlabelled = base.via === "guess" || base.via === "sentence";
+    if (book.role === "npc" && unlabelled) {
+      Object.assign(base, { kind: "person", tense: "timeless", name: titleName || base.name, confidence: 0.9, via: "weaver" });
+    } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess") {
+      const past = /\b(history|past|childhood|upbringing|backstory|origins?|before|years ago|used to)\b/i.test(`${titleName} ${(e.key ?? []).join(" ")}`);
+      Object.assign(base, { kind: past ? "history" : "texture", tense: past ? "past" : "timeless", subject: book.subject, confidence: 0.6, via: "weaver" });
+    } else if (book.role === "lore" && base.via === "guess") {
+      const hint = LORE_TITLE_HINTS.find(([re]) => re.test(titleName));
+      if (hint)
+        Object.assign(base, { kind: hint[1], tense: hint[2], confidence: 0.6, via: "weaver" });
     }
   }
   if (base.kind === "situation" && BELIEF.test(`${titleName} ${fs}`))
@@ -9207,6 +9374,25 @@ var KIND_PREFIX = {
 function seedOverlays(items, opts = {}) {
   const out = {};
   const low = (s) => s.toLowerCase().replace(/\u2019/g, "'").trim();
+  const anchorInto = new Map;
+  for (const a of items) {
+    if (a.weaver?.part !== "anchor" || a.kind !== "person" && a.kind !== "place")
+      continue;
+    const an = low(a.name);
+    const at = an.split(/\s+/);
+    const t = items.find((c) => {
+      if (c === a || c.kind !== a.kind || c.weaver?.part === "anchor")
+        return false;
+      if ([c.name, ...c.aliases].some((n) => low(n) === an))
+        return true;
+      const ct = low(c.name).split(/\s+/);
+      return a.kind === "person" && ct[0] === at[0] && ct.every((w) => at.includes(w));
+    });
+    if (t)
+      anchorInto.set(a, t);
+  }
+  items = items.filter((c) => !anchorInto.has(c));
+  const anchorsOf = (c) => [...anchorInto].filter(([, t]) => t === c).map(([a]) => a);
   const titles = new Set(items.map((c) => low(c.name)));
   const claims = new Map;
   for (const c of items)
@@ -9228,7 +9414,7 @@ function seedOverlays(items, opts = {}) {
     });
   };
   for (const c of items) {
-    if (c.kind === "meta")
+    if (c.kind === "meta" || c.kind === "directive")
       continue;
     const prefix = KIND_PREFIX[c.kind] ?? "lore:";
     let id = `${prefix}${slug(c.name)}`;
@@ -9237,8 +9423,19 @@ function seedOverlays(items, opts = {}) {
     if (opts.userName && c.kind === "person" && c.name.toLowerCase() === opts.userName.toLowerCase())
       id = "char:user";
     const body = {};
-    if (c.role)
-      body.role = c.role;
+    const anchors = anchorsOf(c);
+    const role = c.role ?? anchors.find((a) => a.role)?.role;
+    const want = c.want ?? anchors.find((a) => a.want)?.want;
+    const voice = c.voice ?? anchors.find((a) => a.voice)?.voice;
+    if (role)
+      body.role = role;
+    if (want)
+      body.want = want;
+    if (voice)
+      body.voice = voice;
+    const tension = c.tension ?? anchors.find((a) => a.tension)?.tension;
+    if (tension)
+      body.tension = tension;
     if (c.hours)
       body.hours = c.hours;
     if (c.routes)
@@ -9272,6 +9469,8 @@ function seedOverlays(items, opts = {}) {
       links.push({ rel: "participant", to: `char:${slug(p)}` });
     if (c.place)
       links.push({ rel: "at", to: `loc:${slug(c.place)}` });
+    if (c.subject)
+      links.push({ rel: "about", to: user && low(c.subject) === user ? "char:user" : `char:${slug(c.subject)}` });
     const narratorOnly = c.kind === "texture" && !!c.secret;
     out[id] = {
       id,
@@ -9279,7 +9478,7 @@ function seedOverlays(items, opts = {}) {
       kind: c.kind,
       tense: c.tense,
       name: c.name,
-      aliases: aliasesOf(c),
+      aliases: [...new Set([...aliasesOf(c), ...anchors.map((a) => a.name).filter((n) => low(n) !== low(c.name))])],
       summary: c.kind === "forecast" ? `Upcoming (not yet true): ${c.summary}` : c.kind === "belief" && c.mistaken ? `${c.summary} (a mistaken belief)` : c.summary,
       body,
       links,
@@ -9302,7 +9501,7 @@ async function entriesOf(bookId, userId) {
   }
   return out;
 }
-async function attachedBooks(chatId, userId) {
+async function attachedBooks(chatId, userId, cards) {
   const out = [];
   const files = await loadChat(chatId, userId);
   const mirror = files.meta.mirror.bookId;
@@ -9311,6 +9510,8 @@ async function attachedBooks(chatId, userId) {
     if (chat) {
       if (has("characters") && chat.character_id) {
         const ch = await host.characters.get(chat.character_id, userId).catch(() => null);
+        if (ch)
+          cards?.push(ch);
         for (const id of ch?.world_book_ids ?? [])
           out.push({ id, scope: "character" });
       }
@@ -9340,7 +9541,9 @@ function scanLore(chatId, userId, force = false) {
     const meta = files.meta;
     if (!force && meta.lore.lastScan && Date.now() - meta.lore.lastScan < 60000)
       return { books: Object.keys(meta.lore.books).length, entries: 0, review: meta.lore.review.length };
-    const books = await attachedBooks(chatId, userId);
+    const cards = [];
+    const books = await attachedBooks(chatId, userId, cards);
+    const worldCard = weaverWorldCard(cards[0]);
     const L = ledgerFor(chatId, userId);
     if (!L.names.user || L.names.user === "You")
       await L.loadNames();
@@ -9352,28 +9555,59 @@ function scanLore(chatId, userId, force = false) {
       if (!book)
         continue;
       liveBooks.add(b.id);
-      const state = meta.lore.books[b.id] ??= { name: book.name, scope: b.scope, mode: settings.loreDefaultMode, permission: settings.lorePermission, entryHashes: {}, count: 0 };
+      const entries = await entriesOf(b.id, userId).catch(() => []);
+      const wv = weaverBook(book, entries);
+      if (wv?.role === "governance" && worldCard)
+        wv.world = true;
+      const mode = wv?.role === "governance" ? "native" : settings.loreDefaultMode;
+      const state = meta.lore.books[b.id] ??= { name: book.name, scope: b.scope, mode, permission: settings.lorePermission, entryHashes: {}, count: 0 };
       state.name = book.name;
       state.scope = b.scope;
-      const entries = await entriesOf(b.id, userId).catch(() => []);
+      if (wv?.role === "governance" && !state.weaver)
+        state.mode = "native";
+      state.weaver = wv?.role;
       state.count = entries.length;
+      state.kinds = {};
+      state.pinned = [];
       for (const e of entries) {
         if (e.disabled)
           continue;
         entryCount++;
         const h = hash(`${e.comment}|${e.content}|${e.key.join(",")}|${JSON.stringify(e.extensions ?? {})}`);
-        const c = classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, extensions: e.extensions });
+        const c = classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, extensions: e.extensions }, wv);
         classified.push(c);
         state.entryHashes[e.id] = h;
+        state.kinds[c.kind] = (state.kinds[c.kind] ?? 0) + 1;
+        if (c.pinned)
+          state.pinned.push(e.id);
       }
     }
     for (const id of Object.keys(meta.lore.books))
       if (!liveBooks.has(id))
         delete meta.lore.books[id];
+    const worldAnchor = classified.find((c) => c.weaver?.part === "anchor" && c.kind === "place");
+    const agency = classified.find((c) => c.weaver?.part === "agenda");
+    if (worldAnchor && worldCard) {
+      if (worldCard.name)
+        worldAnchor.name = worldCard.name;
+      if (worldCard.premise)
+        worldAnchor.summary = worldCard.premise.slice(0, 600);
+      if (worldCard.tension)
+        worldAnchor.tension = worldCard.tension.slice(0, 400);
+    }
+    meta.lore.world = worldCard || worldAnchor ? {
+      name: worldCard?.name || worldAnchor.name,
+      premise: worldCard?.premise ?? worldAnchor?.summary,
+      tension: worldCard?.tension ?? worldAnchor?.tension,
+      ...agency?.agenda || agency?.holds?.length ? { agenda: agency.agenda, holds: agency.holds } : {}
+    } : undefined;
     const seeded = seedOverlays(classified, { userName: L.names.user });
     const liveEntryIds = new Set(classified.map((c) => c.entryId));
+    const rules = new Set(classified.filter((c) => c.kind === "directive" || c.kind === "meta" || c.pinned).map((c) => c.entryId));
     for (const [id, ov] of Object.entries(files.codex.overlays)) {
-      if (ov.provenance?.source === "lore" && ov.provenance.loreEntryId && !liveEntryIds.has(ov.provenance.loreEntryId) && !ov.locked)
+      if (ov.provenance?.source !== "lore" || !ov.provenance.loreEntryId || ov.locked || seeded[id])
+        continue;
+      if (!liveEntryIds.has(ov.provenance.loreEntryId) || rules.has(ov.provenance.loreEntryId))
         delete files.codex.overlays[id];
     }
     for (const [id, ov] of Object.entries(seeded)) {
@@ -10411,6 +10645,7 @@ async function onSwitch(chatId, userId) {
   try {
     const files = await loadChat(chatId, userId);
     const settings = await loadSettings(userId);
+    setDebug(settings.debug);
     if (!files.meta.config.sessionZeroDone && !files.meta.config.genres.length) {
       const defaults = await characterDefaults(chatId, userId).catch(() => null);
       if (defaults)

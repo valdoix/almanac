@@ -12,6 +12,7 @@ import { emptyChronicle } from "../core/chronicle";
 import type { CodexStore } from "../core/codex";
 import { emptyCodexStore } from "../core/codex";
 import type { KeyHeat } from "../core/keys";
+import type { WeaverRole, WeaverWorld } from "../core/lore";
 import type { CraftReport } from "../core/telemetry";
 import type { ChatConfig, Settings } from "../core/types";
 import { DEFAULT_CHAT_CONFIG, DEFAULT_SETTINGS } from "../core/types";
@@ -62,6 +63,12 @@ export interface LoreBookState {
   permission: "read" | "overlay" | "write";
   entryHashes: Record<string, string>;
   count: number;
+  /** Set when Lumiverse's Dream Weaver made the book. */
+  weaver?: WeaverRole;
+  /** Entries read as each category, for the Lore tab. */
+  kinds?: Record<string, number>;
+  /** Always-on entries (Weaver rules and re-anchor) the Ledger never folds, forces or switches off. */
+  pinned?: string[];
 }
 
 export interface ChatMeta {
@@ -83,7 +90,7 @@ export interface ChatMeta {
     chronicle?: { id: string; name: string }[];
   }[];
   mirror: { bookId?: string; entries: Record<string, { entryId: string; hash: string; wrote?: string }> };
-  lore: { books: Record<string, LoreBookState>; review: { entryId: string; bookId: string; title: string; kind: string; confidence: number }[]; lastScan?: number };
+  lore: { books: Record<string, LoreBookState>; review: { entryId: string; bookId: string; title: string; kind: string; confidence: number }[]; lastScan?: number; world?: WeaverWorld };
   arrivals: Arrival[];
   lastSimAbs?: number;
   repaired: Record<string, "repair" | "extractor" | "failed">;
@@ -131,13 +138,24 @@ function path(chatId: string, kind: FileKind | "events") {
   return `chats/${safe}/${kind}.${kind === "events" ? "jsonl" : "json"}`;
 }
 
+/**
+ * Read a stored JSON file. A missing file gives the fallback; a failed read throws. The difference
+ * matters: an operator-scoped install can't reach user storage without a user id (as at boot), and
+ * treating that as "no file" used to cache defaults and then save them over the real files, so
+ * settings and chat setup reset after every update or restart.
+ */
 async function readJson<T>(p: string, fallback: T, userId?: string): Promise<T> {
+  let exists: boolean;
   try {
-    if (!(await host.userStorage.exists(p, userId))) return fallback;
+    exists = await host.userStorage.exists(p, userId);
+  } catch (err) {
+    throw new Error(`storage unavailable for ${p}${userId ? "" : " (no user yet)"}: ${describe(err)}`);
+  }
+  if (!exists) return fallback;
+  try {
     return await host.userStorage.getJson<T>(p, { fallback, userId });
   } catch (err) {
-    warn(`read ${p}: ${describe(err)}`);
-    return fallback;
+    throw new Error(`read ${p}: ${describe(err)}`);
   }
 }
 
@@ -147,16 +165,20 @@ export async function loadChat(chatId: string, userId?: string): Promise<ChatFil
   const pending = loading.get(chatId);
   if (pending) return pending;
   const p = (async () => {
-    const [meta, side, codex, chronicle] = await Promise.all([
-      readJson<ChatMeta>(path(chatId, "meta"), emptyMeta(), userId),
-      readJson<SideEventStore>(path(chatId, "side"), {}, userId),
-      readJson<CodexStore>(path(chatId, "codex"), emptyCodexStore(), userId),
-      readJson<ChronicleStore>(path(chatId, "chronicle"), emptyChronicle(), userId),
-    ]);
-    const files: ChatFiles = { meta: { ...emptyMeta(), ...meta, config: { ...DEFAULT_CHAT_CONFIG, ...(meta.config ?? {}), colors: { ...(meta.config?.colors ?? {}) } } }, side, codex, chronicle };
-    cache.set(chatId, files);
-    loading.delete(chatId);
-    return files;
+    try {
+      const [meta, side, codex, chronicle] = await Promise.all([
+        readJson<ChatMeta>(path(chatId, "meta"), emptyMeta(), userId),
+        readJson<SideEventStore>(path(chatId, "side"), {}, userId),
+        readJson<CodexStore>(path(chatId, "codex"), emptyCodexStore(), userId),
+        readJson<ChronicleStore>(path(chatId, "chronicle"), emptyChronicle(), userId),
+      ]);
+      const files: ChatFiles = { meta: { ...emptyMeta(), ...meta, config: { ...DEFAULT_CHAT_CONFIG, ...(meta.config ?? {}), colors: { ...(meta.config?.colors ?? {}) } } }, side, codex, chronicle };
+      cache.set(chatId, files);
+      return files;
+    } finally {
+      // A failed read caches nothing, so the next call (with a user) reads the real files.
+      loading.delete(chatId);
+    }
   })();
   loading.set(chatId, p);
   return p;
@@ -208,18 +230,30 @@ export function forget(chatId: string) {
 // Global settings
 // ---------------------------------------------------------------------------
 
-let settingsCache: Settings | null = null;
+// Per user: an operator-scoped install serves every user from one process.
+const settingsCache = new Map<string, Settings>();
 
+/** The user's settings. Before a user is known (at boot) this gives the defaults, uncached. */
 export async function loadSettings(userId?: string): Promise<Settings> {
-  if (settingsCache) return settingsCache;
-  const s = await readJson<Partial<Settings>>("settings.json", {}, userId);
-  settingsCache = { ...DEFAULT_SETTINGS, ...s };
-  return settingsCache;
+  const hit = settingsCache.get(userId ?? "");
+  if (hit) return hit;
+  let s: Partial<Settings>;
+  try {
+    s = await readJson<Partial<Settings>>("settings.json", {}, userId);
+  } catch (err) {
+    if (userId) warn(`settings: ${describe(err)}`);
+    return { ...DEFAULT_SETTINGS };
+  }
+  const out = { ...DEFAULT_SETTINGS, ...s };
+  settingsCache.set(userId ?? "", out);
+  return out;
 }
 
+/** Merge a change into the settings file as it is on disk, never into defaults read in its place. */
 export async function saveSettings(patch: Partial<Settings>, userId?: string): Promise<Settings> {
-  const cur = await loadSettings(userId);
-  settingsCache = { ...cur, ...patch };
-  await host.userStorage.setJson("settings.json", settingsCache, { indent: 2, userId });
-  return settingsCache;
+  const onDisk = await readJson<Partial<Settings>>("settings.json", {}, userId); // throws rather than guess
+  const next = { ...DEFAULT_SETTINGS, ...onDisk, ...patch };
+  await host.userStorage.setJson("settings.json", next, { indent: 2, userId });
+  settingsCache.set(userId ?? "", next);
+  return next;
 }

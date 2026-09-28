@@ -143,11 +143,15 @@ export function planChronicle(path: PathMessage[], state: WorldState, store: Chr
   return { level: "chapter", startIdx, endIdx, msgIds, children: [], scenes: take };
 }
 
-/** Render the covered raw turns for the summariser (display markup stripped). */
-export function transcriptFor(path: PathMessage[], job: ChronicleJob, userName: string, charName: string): string {
+/**
+ * Render the covered raw turns for the summariser (display markup stripped). A world card's replies
+ * are the narrator's, not a person called after the place, so `narrator` relabels them.
+ */
+export function transcriptFor(path: PathMessage[], job: ChronicleJob, userName: string, charName: string, narrator = false): string {
+  const who = (m: PathMessage) => (m.isUser ? userName : narrator && (!m.name || m.name === charName) ? "Narrator" : m.name || charName);
   return path
     .filter((m) => m.index >= job.startIdx && m.index <= job.endIdx)
-    .map((m) => `${m.isUser ? userName : m.name || charName}: ${plainProse(m.content)}`)
+    .map((m) => `${who(m)}: ${plainProse(m.content)}`)
     .filter((l) => l.trim().length > 3)
     .join("\n\n");
 }

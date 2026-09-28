@@ -128,7 +128,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   for (const it of rc.items) {
     const le = it.record.provenance?.loreEntryId;
     const lb = it.record.provenance?.loreBookId;
-    if (!le || !lb || !meta.lore.books[lb] || meta.lore.books[lb].mode === "native") continue;
+    if (!le || !lb || !meta.lore.books[lb] || meta.lore.books[lb].mode === "native" || meta.lore.books[lb].pinned?.includes(le)) continue;
     if (mirrorPicks[it.record.id] && it.record.provenance.source !== "lore") loreFold[le] = it.record.id;
     else lorePicks.add(le);
   }

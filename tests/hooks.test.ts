@@ -17,6 +17,10 @@ const messages = [OPENING, SAMPLE_USER, SAMPLE_REPLY].map((content, i) => ({
   id: `m${i}`, chat_id: CHAT, index_in_chat: i, is_user: i === 1, name: i === 1 ? "Wren" : "Mara", content, swipes: [content], swipe_id: 0, extra: {}, send_date: 1_700_000_000 + i * 60, created_at: 1_700_000_000 + i * 60,
 }));
 
+function op(userId?: string) {
+  if (!userId) throw new Error("userId is required for operator-scoped extensions");
+}
+
 /** Any API the test doesn't care about resolves to undefined (or an empty list). */
 function loose(path: string): any {
   return new Proxy(function () {}, {
@@ -28,12 +32,13 @@ function loose(path: string): any {
 const spindle: any = new Proxy({
   permissions: { has: () => true, getGranted: () => ["interceptor", "context_handler", "generation", "chats", "chat_mutation", "world_books", "characters", "personas", "tools", "ui_panels"] },
   log: { info: () => {}, warn: () => {}, error: () => {} },
+  // Like Lumiverse for an operator-scoped install (as the user's is): no user id, no storage.
   userStorage: {
-    exists: async (p: string) => files.has(p),
-    getJson: async (p: string, o: any) => (files.has(p) ? JSON.parse(files.get(p)!) : o?.fallback),
-    setJson: async (p: string, v: unknown) => void files.set(p, JSON.stringify(v)),
-    read: async (p: string) => files.get(p) ?? "",
-    write: async (p: string, t: string) => void files.set(p, t),
+    exists: async (p: string, u?: string) => (op(u), files.has(p)),
+    getJson: async (p: string, o: any) => (op(o?.userId), files.has(p) ? JSON.parse(files.get(p)!) : o?.fallback),
+    setJson: async (p: string, v: unknown, o: any) => (op(o?.userId), void files.set(p, JSON.stringify(v))),
+    read: async (p: string, u?: string) => (op(u), files.get(p) ?? ""),
+    write: async (p: string, t: string, u?: string) => (op(u), void files.set(p, t)),
   },
   chat: { getMessages: async () => messages, setMessagesHidden: async () => {} },
   chats: { get: async () => ({ id: CHAT, character_id: "char-1", metadata: {} }), getActive: async () => ({ id: CHAT }), update: async () => {} },
@@ -212,4 +217,84 @@ test("tidying a whole chat reads only what the clerk hasn't read in its current 
   } };
   expect(unreadReplies(path, meta).map((m) => m.id)).toEqual(["c", "d", "e"]);
   expect(unreadReplies(path, { clerked: {} } as any).map((m) => m.id)).toEqual(["a", "c", "d", "e"]);
+});
+
+describe("settings and chat setup survive a restart or update", () => {
+  // At boot an operator-scoped install has no user yet. Before 1.9.0 that read failed, was taken for
+  // "no file", and its defaults were cached and then saved over the real settings and chat files.
+  test("a read before any user is known caches nothing and overwrites nothing", async () => {
+    const { loadSettings, saveSettings, loadChat, forget } = await import("../src/backend/store");
+    const { DEFAULT_SETTINGS } = await import("../src/core/types");
+    files.set("settings.json", JSON.stringify({ ...DEFAULT_SETTINGS, recallBudget: 5000, theme: "candy", simulator: true }));
+    files.set("chats/boot-chat/meta.json", JSON.stringify({ version: 1, config: { genres: ["horror"], sessionZeroDone: true } }));
+
+    // Boot: no user.
+    expect((await loadSettings()).recallBudget).toBe(DEFAULT_SETTINGS.recallBudget);
+    await expect(loadChat("boot-chat")).rejects.toThrow(/no user yet/);
+
+    // The user arrives: their own values, not the boot defaults.
+    const RESTARTED = "user-after-restart"; // nothing cached for them yet, as after an update
+    const s = await loadSettings(RESTARTED);
+    expect([s.recallBudget, s.theme, s.simulator]).toEqual([5000, "candy", true]);
+    const chat = await loadChat("boot-chat", RESTARTED);
+    expect([chat.meta.config.genres, chat.meta.config.sessionZeroDone]).toEqual([["horror"], true]);
+
+    // Changing one setting keeps every other saved one.
+    await saveSettings({ fanIn: 6 }, RESTARTED);
+    expect(JSON.parse(files.get("settings.json")!)).toMatchObject({ recallBudget: 5000, theme: "candy", simulator: true, fanIn: 6 });
+    // A save that can't read the file refuses rather than writing defaults.
+    await expect(saveSettings({ fanIn: 7 })).rejects.toThrow();
+    expect(JSON.parse(files.get("settings.json")!).fanIn).toBe(6);
+    forget("boot-chat");
+  });
+});
+
+describe("a Dream Weaver world card", () => {
+  test("the lore scan reads the narrator card, seeds the place and carries the agenda to the simulator", async () => {
+    const WORLD_CHAT = "world-chat";
+    const saved = { chats: spindle.chats, characters: spindle.characters, world_books: spindle.world_books };
+    const books: Record<string, any> = {
+      rules: { id: "rules", name: "Saltmere rules book", description: "", metadata: { source: "weaver", weaver_role: "governance" } },
+      lore: { id: "lore", name: "Saltmere lore book", description: "", metadata: { source: "weaver", weaver_role: "lore" } },
+    };
+    const entries: Record<string, any[]> = {
+      rules: [
+        { id: "r0", comment: "Weaver re-anchor", key: ["Saltmere"], constant: true, content: "Core: A fishing town that pays a tithe;…\nVoice: Salt-dry\nNow: baseline" },
+        { id: "r1", comment: "Weaver governance · narrator craft", key: [], constant: true, content: "<weaver_narrator>\nYou run this place.\n</weaver_narrator>" },
+        { id: "r2", comment: "Weaver agency · agenda and holds", key: [], constant: true, content: "<weaver_agency>\nAgenda: The tithe will be paid in full before the spring tide.\nHard lines that never bend:\n- No one who has read the full ledger leaves Saltmere\n</weaver_agency>" },
+      ],
+      lore: [{ id: "l1", comment: "The Harbour Guild", key: ["guild"], content: "Nobody crosses them." }],
+    };
+    try {
+      spindle.chats = { ...saved.chats, get: async () => ({ id: WORLD_CHAT, character_id: "world-1", metadata: {} }) };
+      spindle.characters = {
+        get: async () => ({
+          id: "world-1", name: "Saltmere", world_book_ids: ["rules", "lore"],
+          extensions: { weaver: { source: "weaver", structured: { premise: { content: "Saltmere is a fishing town that pays a yearly tithe to something under the bay." }, central_tension: { content: "The count came back short." } } } },
+        }),
+      };
+      spindle.world_books = {
+        get: async (id: string) => books[id],
+        getGlobal: async () => [],
+        entries: { list: async (id: string) => ({ data: entries[id] ?? [] }) },
+      };
+      const { scanLore } = await import("../src/backend/lorebridge");
+      const { loadChat } = await import("../src/backend/store");
+      await scanLore(WORLD_CHAT, USER, true);
+      const f = await loadChat(WORLD_CHAT, USER);
+      expect(f.meta.lore.world).toEqual({
+        name: "Saltmere",
+        premise: "Saltmere is a fishing town that pays a yearly tithe to something under the bay.",
+        tension: "The count came back short.",
+        agenda: "The tithe will be paid in full before the spring tide.",
+        holds: ["No one who has read the full ledger leaves Saltmere"],
+      });
+      expect(f.meta.lore.books.rules).toMatchObject({ weaver: "governance", mode: "native", kinds: { place: 1, directive: 2 }, pinned: ["r0", "r1", "r2"] });
+      expect(f.meta.lore.books.lore).toMatchObject({ weaver: "lore", kinds: { group: 1 } });
+      expect(f.codex.overlays["loc:saltmere"]).toMatchObject({ kind: "place", summary: "Saltmere is a fishing town that pays a yearly tithe to something under the bay.", body: { tension: "The count came back short." } });
+      expect(f.codex.overlays["fac:the_harbour_guild"]?.kind).toBe("group");
+    } finally {
+      Object.assign(spindle, saved);
+    }
+  });
 });

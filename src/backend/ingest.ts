@@ -153,7 +153,7 @@ export async function runChronicle(chatId: string, userId?: string, force = fals
       if (!job) break;
       let text: string;
       if (job.level === "chapter") {
-        const transcript = transcriptFor(path, job, L.names.user, L.names.char);
+        const transcript = transcriptFor(path, job, L.names.user, L.names.char, !!files.meta.lore.world);
         const prev = files.chronicle.units.filter((u) => u.level === "chapter" && !u.stale).sort((a, b) => b.endIdx - a.endIdx)[0];
         const detail = settings.summaryDetail;
         const focus = settings.summaryFocus;
@@ -246,14 +246,23 @@ export async function runSimulator(chatId: string, userId?: string, force = fals
     const actors = Object.values(st.chars).filter((c) => !c.isUser && !c.dead && c.tier !== "spot" && c.tier !== "peri").slice(0, 10);
     const threads = Object.values(st.threads).filter((t) => t.status !== "resolved").slice(-8);
     const factions = Object.values(st.factions);
-    if (!actors.length && !threads.length && !factions.length) return;
+    // A Weaver world with agency pursues its agenda off-screen like any actor.
+    const world = files.meta.lore.world;
+    const agency = world && (world.agenda || world.holds?.length) ? world : null;
+    if (!actors.length && !threads.length && !factions.length && !agency) return;
     const slice = [
+      ...(agency
+        ? [
+            `WORLD ${agency.name}: agenda: ${agency.agenda || "—"}${agency.tension ? `; tension: ${agency.tension}` : ""}`,
+            ...(agency.holds?.length ? [`HOLDS (never broken): ${agency.holds.join(" / ")}`] : []),
+          ]
+        : []),
       ...actors.map((c) => `PERSON ${c.name}: at ${c.place ?? "unknown"}; mood ${c.mood?.name ?? "?"}${c.pressure ? `; hidden pressure: ${c.pressure}` : ""}; knows: ${st.knowledge.filter((k) => k.holder === c.id && !k.supersededBy).slice(-4).map((k) => k.fact).join(" / ") || "—"}`),
       ...threads.map((t) => `THREAD ${t.title}: ${t.status}${t.blocker ? ` (blocked by ${t.blocker})` : ""}; latest: ${t.latest ?? "—"}; stalls: ${t.stalls}`),
       ...factions.map((f) => `FACTION ${f.name}: ${Object.values(f.clocks).map((c) => `${c.name} ${c.cur}/${c.max}`).join("; ")}`),
       `PLAYER is at ${st.place.join(" › ")}.`,
     ].join("\n");
-    const p = simulatorPrompt({ slice, from: fmtTime(fromAbs(last)), to: fmtTime(st.time), userName: L.names.user });
+    const p = simulatorPrompt({ slice, from: fmtTime(fromAbs(last)), to: fmtTime(st.time), userName: L.names.user, world: !!agency });
     const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 120_000, label: "simulator" });
     const res = extractJson<{ ops?: string[]; arrivals?: { text: string; route?: string; at?: string; place?: string }[] }>(text);
     const target = L.lastAssistant();

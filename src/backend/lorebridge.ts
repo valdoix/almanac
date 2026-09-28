@@ -3,7 +3,7 @@
 // and seed Codex baselines. Books are read-only unless the user allows more.
 
 import type { WorldBookEntryDTO } from "lumiverse-spindle-types";
-import { classify, seedOverlays, type Classified } from "../core/lore";
+import { classify, seedOverlays, weaverBook, weaverWorldCard, type Classified } from "../core/lore";
 import { classifierPrompt, extractJson } from "../core/prompts";
 import { hash } from "../core/util";
 import { debug, describe, has, host, serial, warn } from "./host";
@@ -21,7 +21,7 @@ async function entriesOf(bookId: string, userId?: string): Promise<WorldBookEntr
   return out;
 }
 
-export async function attachedBooks(chatId: string, userId?: string): Promise<{ id: string; scope: string }[]> {
+export async function attachedBooks(chatId: string, userId?: string, cards?: { name?: string; extensions?: Record<string, any> }[]): Promise<{ id: string; scope: string }[]> {
   const out: { id: string; scope: string }[] = [];
   const files = await loadChat(chatId, userId);
   const mirror = files.meta.mirror.bookId;
@@ -30,6 +30,7 @@ export async function attachedBooks(chatId: string, userId?: string): Promise<{ 
     if (chat) {
       if (has("characters") && chat.character_id) {
         const ch = await host.characters.get(chat.character_id, userId).catch(() => null);
+        if (ch) cards?.push(ch);
         for (const id of ch?.world_book_ids ?? []) out.push({ id, scope: "character" });
       }
       for (const id of ((chat.metadata as any)?.chat_world_book_ids ?? []) as string[]) out.push({ id, scope: "chat" });
@@ -53,7 +54,9 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
     const settings = await loadSettings(userId);
     const meta = files.meta;
     if (!force && meta.lore.lastScan && Date.now() - meta.lore.lastScan < 60_000) return { books: Object.keys(meta.lore.books).length, entries: 0, review: meta.lore.review.length };
-    const books = await attachedBooks(chatId, userId);
+    const cards: { name?: string; extensions?: Record<string, any> }[] = [];
+    const books = await attachedBooks(chatId, userId, cards);
+    const worldCard = weaverWorldCard(cards[0]);
     const L = ledgerFor(chatId, userId);
     if (!L.names.user || L.names.user === "You") await L.loadNames();
     let entryCount = 0;
@@ -63,26 +66,58 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
       const book = await host.world_books.get(b.id, userId).catch(() => null);
       if (!book) continue;
       liveBooks.add(b.id);
-      const state = (meta.lore.books[b.id] ??= { name: book.name, scope: b.scope, mode: settings.loreDefaultMode, permission: settings.lorePermission, entryHashes: {}, count: 0 });
+      const entries = await entriesOf(b.id, userId).catch(() => [] as WorldBookEntryDTO[]);
+      const wv = weaverBook(book, entries);
+      // The narrator card of a Weaver world: its rules book speaks to a narrator even when nothing in it says so.
+      if (wv?.role === "governance" && worldCard) wv.world = true;
+      // A Weaver rules book is always-on by design: its keywords (none) and constants decide.
+      const mode = wv?.role === "governance" ? "native" : settings.loreDefaultMode;
+      const state = (meta.lore.books[b.id] ??= { name: book.name, scope: b.scope, mode, permission: settings.lorePermission, entryHashes: {}, count: 0 });
       state.name = book.name;
       state.scope = b.scope;
-      const entries = await entriesOf(b.id, userId).catch(() => [] as WorldBookEntryDTO[]);
+      if (wv?.role === "governance" && !state.weaver) state.mode = "native";
+      state.weaver = wv?.role;
       state.count = entries.length;
+      state.kinds = {};
+      state.pinned = [];
       for (const e of entries) {
         if (e.disabled) continue;
         entryCount++;
         const h = hash(`${e.comment}|${e.content}|${e.key.join(",")}|${JSON.stringify(e.extensions ?? {})}`);
-        const c = classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, extensions: e.extensions as any });
+        const c = classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, extensions: e.extensions as any }, wv);
         classified.push(c);
         state.entryHashes[e.id] = h;
+        state.kinds[c.kind] = (state.kinds[c.kind] ?? 0) + 1;
+        if (c.pinned) state.pinned.push(e.id);
       }
     }
     for (const id of Object.keys(meta.lore.books)) if (!liveBooks.has(id)) delete meta.lore.books[id];
+    // A Weaver world: the card is a narrator and its anchor the place it runs (the card holds the
+    // full premise and tension; the anchor only a cut-down line). Agency counts only while its entry is on.
+    const worldAnchor = classified.find((c) => c.weaver?.part === "anchor" && c.kind === "place");
+    const agency = classified.find((c) => c.weaver?.part === "agenda");
+    if (worldAnchor && worldCard) {
+      if (worldCard.name) worldAnchor.name = worldCard.name;
+      if (worldCard.premise) worldAnchor.summary = worldCard.premise.slice(0, 600);
+      if (worldCard.tension) worldAnchor.tension = worldCard.tension.slice(0, 400);
+    }
+    meta.lore.world = worldCard || worldAnchor
+      ? {
+          name: worldCard?.name || worldAnchor!.name,
+          premise: worldCard?.premise ?? worldAnchor?.summary,
+          tension: worldCard?.tension ?? worldAnchor?.tension,
+          ...(agency?.agenda || agency?.holds?.length ? { agenda: agency.agenda, holds: agency.holds } : {}),
+        }
+      : undefined;
     // Seed overlays (never over locked user edits, never over story-derived fields)
     const seeded = seedOverlays(classified, { userName: L.names.user });
     const liveEntryIds = new Set(classified.map((c) => c.entryId));
+    // Entries now read as instructions, or read exactly (Weaver rules and re-anchors), whose older
+    // readings are stale: an earlier scan or the model filed them as story texture or a person "Weaver".
+    const rules = new Set(classified.filter((c) => c.kind === "directive" || c.kind === "meta" || c.pinned).map((c) => c.entryId));
     for (const [id, ov] of Object.entries(files.codex.overlays)) {
-      if (ov.provenance?.source === "lore" && ov.provenance.loreEntryId && !liveEntryIds.has(ov.provenance.loreEntryId) && !ov.locked) delete files.codex.overlays[id];
+      if (ov.provenance?.source !== "lore" || !ov.provenance.loreEntryId || ov.locked || seeded[id]) continue;
+      if (!liveEntryIds.has(ov.provenance.loreEntryId) || rules.has(ov.provenance.loreEntryId)) delete files.codex.overlays[id];
     }
     for (const [id, ov] of Object.entries(seeded)) {
       const cur = files.codex.overlays[id];

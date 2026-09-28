@@ -10,7 +10,9 @@ import { factKind } from "./facts";
 
 export type CodexKind =
   | "person" | "place" | "object" | "group" | "law" | "history" | "situation" | "belief" | "texture"
-  | "boundary" | "meta" | "thread" | "document" | "forecast" | "consequence" | "fact" | "clue";
+  | "boundary" | "meta" | "thread" | "document" | "forecast" | "consequence" | "fact" | "clue"
+  // Always-on play rules for the model (a Dream Weaver rules book): read, never seeded as story.
+  | "directive";
 
 export interface CodexRecord {
   id: string;

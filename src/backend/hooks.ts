@@ -83,7 +83,7 @@ export function registerWorldInfoInterceptor() {
         }
         if (!plan) continue;
         const book = files.meta.lore.books[e.world_book_id];
-        if (!book) continue;
+        if (!book || book.pinned?.includes(e.id)) continue;
         const into = plan.loreFold[e.id];
         if (into && folded.has(into)) {
           disabled.push(e.id);
