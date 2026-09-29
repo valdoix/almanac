@@ -95,7 +95,7 @@ const BASE = `
 .alm-hudc__row:last-child{border-bottom:0}
 .alm-hudc__ic{display:grid;place-items:center;width:28px;height:28px;border-radius:var(--alm-r-sm,10px);background:color-mix(in oklab,var(--alm-ink) 6%,transparent);font-size:14px}
 .alm-hudc__row b{font-weight:600}
-.alm-hudc__row>div>span,.alm-hudc__row small{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere}
+.alm-hudc__row>div>span,.alm-hudc__row small{display:block;overflow-wrap:anywhere}
 .alm-hudc__d{font:600 10.5px/1 var(--alm-font-mono);padding:4px 7px;border-radius:999px;white-space:nowrap;color:var(--alm-muted);background:color-mix(in oklab,var(--alm-ink) 6%,transparent)}
 .alm-hudc__d.up,.alm-hudc__tag.up{color:var(--alm-good);background:color-mix(in oklab,var(--alm-good) 14%,transparent)}
 .alm-hudc__d.dn,.alm-hudc__tag.dn{color:var(--alm-danger);background:color-mix(in oklab,var(--alm-danger) 13%,transparent)}
