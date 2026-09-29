@@ -9,6 +9,7 @@ import { SKIN_CSS, fontsFor } from "./frontend/skins";
 import { openSessionZero } from "./frontend/sessionzero";
 import { HUD_SIZE, hudCard, hudPill, measure, type HudUi } from "./frontend/hud";
 import { HUD_CSS } from "./frontend/hudstyles";
+import { attentionNote, engineNew } from "./frontend/orrery";
 import { VERSION } from "./core/version";
 
 const ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><circle cx="12" cy="10" r="3.2"/><path d="M12 4.5v1.3M12 14.2v1.3M6.5 10h1.3M16.2 10h1.3"/></svg>`;
@@ -324,6 +325,24 @@ export function setup(ctx: SpindleFrontendContext) {
     hud.setSize(Math.min(480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
   };
 
+  // The drawer tab's badge counts only Engine findings not yet looked at, and its
+  // tooltip (the tab title) says what they are.
+  let badgeSig = "";
+  const syncBadge = () => {
+    const v = app.view;
+    const seen = app.seenSet();
+    const count = v ? engineNew(v, seen) : 0;
+    const why = count ? attentionNote("engine", v, seen) : "";
+    if (`${count}|${why}` === badgeSig) return;
+    badgeSig = `${count}|${why}`;
+    tab.setBadge(count ? String(count > 9 ? "9+" : count) : null);
+    tab.setTitle?.(why ? `ALMANAC Ledger · ${why}` : "ALMANAC Ledger");
+  };
+  app.onSeen = () => {
+    syncBadge();
+    app.render();
+  };
+
   const applyView = (v: any) => {
     gotStateFor = v ? v.chatId : null;
     if (retry && v) {
@@ -354,8 +373,8 @@ export function setup(ctx: SpindleFrontendContext) {
       }
       if (v.settings && v.settings.fonts !== fontsOn) setFonts(!!v.settings.fonts);
       if (v.settings && !!v.settings.hud !== hudOn) ensureHud(!!v.settings.hud);
-      tab.setBadge(v.counts?.unverified ? String(v.counts.unverified) : null);
     }
+    syncBadge();
     renderHud(v);
   };
   ensureHud(true);

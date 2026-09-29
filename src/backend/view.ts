@@ -25,6 +25,8 @@ export interface UIView {
   theme: string;
   speakerCss: string;
   counts: { messages: number; ledgers: number; unverified: number; chapters: number };
+  /** Message indexes of the latest turns whose ledger came from repair or the extractor. */
+  unverifiedIdx: number[];
   now: any;
   cast: any[];
   bonds: any[];
@@ -143,6 +145,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     theme: themeFor(settings.theme, meta.detected.theme, lead, meta.config.theme),
     speakerCss: speakerCss(st, colors),
     counts: { messages: L.path.length, ledgers: st.ledgerCount, unverified: st.unverified.length, chapters: files.chronicle.units.filter((u) => u.level === "chapter").length },
+    unverifiedIdx: st.unverified.slice(-50),
     now: {
       day: st.time?.day ?? null, time: st.time ? hhmm(st.time.minute) : null, minute: st.time?.minute ?? null,
       clock: al?.clock ?? (st.time ? fmtTime(st.time) : "not started"),

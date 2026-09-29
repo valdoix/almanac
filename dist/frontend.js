@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.10.3";
+var VERSION = "1.10.4";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -1080,7 +1080,14 @@ function dueCount(v) {
   const w = v.world ?? {};
   return (w.cons ?? []).filter((c) => c.status === "due").length + (w.deadlines ?? []).filter((d) => d.passed && !d.done).length;
 }
-function attention(g, v) {
+function engineKeys(v) {
+  return [...(v?.unverifiedIdx ?? []).map((i) => `u${i}`), ...(v?.rejected ?? []).map((r) => `r${r.msgIndex}:${r.raw}`)];
+}
+function engineNew(v, seen = new Set) {
+  const fresh = engineKeys(v).filter((k) => !seen.has(k));
+  return fresh.filter((k) => k[0] === "u").length + (fresh.some((k) => k[0] === "r") ? 1 : 0);
+}
+function attention(g, v, seen) {
   if (!v)
     return 0;
   if (g === "story")
@@ -1088,8 +1095,30 @@ function attention(g, v) {
   if (g === "library")
     return v.lore?.review?.length ?? 0;
   if (g === "engine")
-    return (v.counts?.unverified ?? 0) + (v.rejected?.length ? 1 : 0);
+    return engineNew(v, seen);
   return 0;
+}
+function attentionNote(g, v, seen) {
+  if (!v)
+    return "";
+  if (g === "story") {
+    const due = dueCount(v);
+    return due ? `${n(due, "promise or deadline", "promises and deadlines")} due or overdue` : "";
+  }
+  if (g === "library") {
+    const r = v.lore?.review?.length ?? 0;
+    return r ? `${n(r, "lorebook entry", "lorebook entries")} to review` : "";
+  }
+  if (g === "engine") {
+    const fresh = engineKeys(v).filter((k) => !seen?.has(k));
+    const u = fresh.filter((k) => k[0] === "u").length;
+    const r = fresh.filter((k) => k[0] === "r").length;
+    return [
+      u ? `${n(u, "reply", "replies")} whose ledger had to be repaired or guessed (see the counts on Now)` : "",
+      r ? `${n(r, "ledger line")} rejected or corrected (listed on Recall)` : ""
+    ].filter(Boolean).join("; ");
+  }
+  return "";
 }
 function moon(m) {
   if (!m)
@@ -1128,11 +1157,12 @@ function pageTitle(v, page) {
   const g = groupOf(page);
   return `<div class="almo-head"><span class="almo-eyebrow" style="color:${g?.color}">${escapeHtml(g?.label ?? "")}</span><h3>${LABEL[page]}</h3><small>${escapeHtml(summary(page, v))}</small></div>`;
 }
-function dock(v, page, orbit) {
+function dock(v, page, orbit, seen) {
   const cur = groupOf(page);
   const planet = (g) => {
-    const a = attention(g.id, v);
-    return `<button class="almo-pl${cur === g ? " on" : ""}${a ? " alert" : ""}" style="--pc:${g.color}" data-orbit="${g.id}" aria-expanded="${orbit === g.id}" aria-label="${escapeHtml(g.label)}${a ? ` (${a} need a look)` : ""}"><span class="almo-orb">${icon(g.icon)}${a ? `<b>${a > 9 ? "9+" : a}</b>` : ""}</span><span>${escapeHtml(g.label)}</span></button>`;
+    const a = attention(g.id, v, seen);
+    const why = a ? attentionNote(g.id, v, seen) : "";
+    return `<button class="almo-pl${cur === g ? " on" : ""}${a ? " alert" : ""}" style="--pc:${g.color}" data-orbit="${g.id}" aria-expanded="${orbit === g.id}" aria-label="${escapeHtml(g.label)}${why ? ` (${escapeHtml(why)})` : ""}"${why ? ` title="${escapeHtml(why)}"` : ""}><span class="almo-orb">${icon(g.icon)}${a ? `<b>${a > 9 ? "9+" : a}</b>` : ""}</span><span>${escapeHtml(g.label)}</span></button>`;
   };
   const og = GROUPS.find((g) => g.id === orbit);
   const pos = [[0, 50], [96, 0], [192, 50]];
@@ -1220,6 +1250,8 @@ class AlmanacApp {
   status = "nochat";
   hudProblem = "";
   versionWarning = "";
+  engineSeen = {};
+  onSeen = () => {};
   constructor(ctx, root) {
     this.ctx = ctx;
     this.root = root;
@@ -1230,6 +1262,11 @@ class AlmanacApp {
       if (t && TABS.includes(t))
         this.tab = t;
     } catch {}
+    try {
+      this.engineSeen = JSON.parse(localStorage.getItem("alm-engine-seen") || "{}") ?? {};
+    } catch {
+      this.engineSeen = {};
+    }
     this.root.addEventListener("click", (ev) => this.onClick(ev));
     this.root.addEventListener("change", (ev) => this.onChange(ev));
     this.root.addEventListener("keydown", (ev) => {
@@ -1253,6 +1290,28 @@ class AlmanacApp {
     this.view = v;
     this.render();
   }
+  seenSet() {
+    return new Set(this.view?.chatId ? this.engineSeen[this.view.chatId] ?? [] : []);
+  }
+  markEngineSeen() {
+    const v = this.view;
+    if (!v?.chatId)
+      return;
+    const keys = engineKeys(v);
+    const had = this.engineSeen[v.chatId] ?? [];
+    if (keys.every((k) => had.includes(k)))
+      return;
+    delete this.engineSeen[v.chatId];
+    this.engineSeen[v.chatId] = keys;
+    const chats = Object.keys(this.engineSeen);
+    if (chats.length > 60)
+      for (const c of chats.slice(0, chats.length - 60))
+        delete this.engineSeen[c];
+    try {
+      localStorage.setItem("alm-engine-seen", JSON.stringify(this.engineSeen));
+    } catch {}
+    this.onSeen();
+  }
   render() {
     const v = this.view;
     if (!v) {
@@ -1271,13 +1330,15 @@ class AlmanacApp {
 ${escapeHtml(pe.stack)}</pre></details>` : ""}</div>` : "";
     const banner = !v.enabled ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block). You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button></div>` : "";
     const scroll = this.root.scrollTop;
-    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${planErr}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
+    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${planErr}${banner}${body}</main>${dock(v, this.tab, this.orbit, this.seenSet())}</div>`;
     this.root.scrollTop = scroll;
   }
   go(page) {
     const changed = page !== this.tab;
     this.tab = page;
     this.orbit = "";
+    if (groupOf(page)?.id === "engine")
+      this.markEngineSeen();
     try {
       localStorage.setItem("alm-tab", this.tab);
     } catch {}
@@ -1597,6 +1658,8 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
     const planet = t.closest("[data-orbit]");
     if (planet) {
       this.orbit = this.orbit === planet.dataset.orbit ? "" : planet.dataset.orbit;
+      if (this.orbit === "engine")
+        this.markEngineSeen();
       this.render();
       this.root.querySelector(".almo-moonb")?.focus();
       return;
@@ -4038,6 +4101,22 @@ function setup(ctx) {
     const size = measure(html);
     hud.setSize(Math.min(480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
   };
+  let badgeSig = "";
+  const syncBadge = () => {
+    const v = app.view;
+    const seen = app.seenSet();
+    const count = v ? engineNew(v, seen) : 0;
+    const why = count ? attentionNote("engine", v, seen) : "";
+    if (`${count}|${why}` === badgeSig)
+      return;
+    badgeSig = `${count}|${why}`;
+    tab.setBadge(count ? String(count > 9 ? "9+" : count) : null);
+    tab.setTitle?.(why ? `ALMANAC Ledger · ${why}` : "ALMANAC Ledger");
+  };
+  app.onSeen = () => {
+    syncBadge();
+    app.render();
+  };
   const applyView = (v) => {
     gotStateFor = v ? v.chatId : null;
     if (retry && v) {
@@ -4072,8 +4151,8 @@ function setup(ctx) {
         setFonts(!!v.settings.fonts);
       if (v.settings && !!v.settings.hud !== hudOn)
         ensureHud(!!v.settings.hud);
-      tab.setBadge(v.counts?.unverified ? String(v.counts.unverified) : null);
     }
+    syncBadge();
     renderHud(v);
   };
   ensureHud(true);

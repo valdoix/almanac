@@ -96,13 +96,47 @@ function dueCount(v: any): number {
   return (w.cons ?? []).filter((c: any) => c.status === "due").length + (w.deadlines ?? []).filter((d: any) => d.passed && !d.done).length;
 }
 
+/** The Engine's findings, one key each: unverified turns and rejected or corrected ledger lines. */
+export function engineKeys(v: any): string[] {
+  return [...(v?.unverifiedIdx ?? []).map((i: number) => `u${i}`), ...(v?.rejected ?? []).map((r: any) => `r${r.msgIndex}:${r.raw}`)];
+}
+
+/** Engine findings the player hasn't looked at yet: each new unverified turn, plus one for any new rejected lines. */
+export function engineNew(v: any, seen: ReadonlySet<string> = new Set()): number {
+  const fresh = engineKeys(v).filter((k) => !seen.has(k));
+  return fresh.filter((k) => k[0] === "u").length + (fresh.some((k) => k[0] === "r") ? 1 : 0);
+}
+
 /** Things that want a look, per group: shown as a glow and a count on the planet. */
-export function attention(g: Group["id"], v: any): number {
+export function attention(g: Group["id"], v: any, seen?: ReadonlySet<string>): number {
   if (!v) return 0;
   if (g === "story") return dueCount(v);
   if (g === "library") return v.lore?.review?.length ?? 0;
-  if (g === "engine") return (v.counts?.unverified ?? 0) + (v.rejected?.length ? 1 : 0);
+  if (g === "engine") return engineNew(v, seen);
   return 0;
+}
+
+/** What a planet's count is for, in words: its tooltip, and the drawer tab's. */
+export function attentionNote(g: Group["id"], v: any, seen?: ReadonlySet<string>): string {
+  if (!v) return "";
+  if (g === "story") {
+    const due = dueCount(v);
+    return due ? `${n(due, "promise or deadline", "promises and deadlines")} due or overdue` : "";
+  }
+  if (g === "library") {
+    const r = v.lore?.review?.length ?? 0;
+    return r ? `${n(r, "lorebook entry", "lorebook entries")} to review` : "";
+  }
+  if (g === "engine") {
+    const fresh = engineKeys(v).filter((k) => !seen?.has(k));
+    const u = fresh.filter((k) => k[0] === "u").length;
+    const r = fresh.filter((k) => k[0] === "r").length;
+    return [
+      u ? `${n(u, "reply", "replies")} whose ledger had to be repaired or guessed (see the counts on Now)` : "",
+      r ? `${n(r, "ledger line")} rejected or corrected (listed on Recall)` : "",
+    ].filter(Boolean).join("; ");
+  }
+  return "";
 }
 
 function moon(m: any): string {
@@ -145,11 +179,12 @@ export function pageTitle(v: any, page: Page): string {
 }
 
 /** The dock, and the orbit of the open planet above it. */
-export function dock(v: any, page: Page, orbit: string): string {
+export function dock(v: any, page: Page, orbit: string, seen?: ReadonlySet<string>): string {
   const cur = groupOf(page);
   const planet = (g: Group) => {
-    const a = attention(g.id, v);
-    return `<button class="almo-pl${cur === g ? " on" : ""}${a ? " alert" : ""}" style="--pc:${g.color}" data-orbit="${g.id}" aria-expanded="${orbit === g.id}" aria-label="${e(g.label)}${a ? ` (${a} need a look)` : ""}"><span class="almo-orb">${icon(g.icon)}${a ? `<b>${a > 9 ? "9+" : a}</b>` : ""}</span><span>${e(g.label)}</span></button>`;
+    const a = attention(g.id, v, seen);
+    const why = a ? attentionNote(g.id, v, seen) : "";
+    return `<button class="almo-pl${cur === g ? " on" : ""}${a ? " alert" : ""}" style="--pc:${g.color}" data-orbit="${g.id}" aria-expanded="${orbit === g.id}" aria-label="${e(g.label)}${why ? ` (${e(why)})` : ""}"${why ? ` title="${e(why)}"` : ""}><span class="almo-orb">${icon(g.icon)}${a ? `<b>${a > 9 ? "9+" : a}</b>` : ""}</span><span>${e(g.label)}</span></button>`;
   };
   const og = GROUPS.find((g) => g.id === orbit);
   const pos = [[0, 50], [96, 0], [192, 50]];

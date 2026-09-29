@@ -9,7 +9,7 @@ import { CreatorUI } from "./creator-ui";
 import { VERSION } from "../core/version";
 import { SKIN_LIST } from "./skins";
 import { NOT_A_PERSON } from "../core/state";
-import { PAGES, dock, emptySky, pageTitle, skyHeader, type Page } from "./orrery";
+import { PAGES, dock, emptySky, engineKeys, groupOf, pageTitle, skyHeader, type Page } from "./orrery";
 
 type Tab = Page;
 const TABS = PAGES;
@@ -86,6 +86,10 @@ export class AlmanacApp {
   status: "nochat" | "waiting" | "stalled" | "ok" = "nochat";
   hudProblem = "";
   versionWarning = "";
+  /** Per chat, the Engine findings the player has already looked at (kept in this browser). */
+  engineSeen: Record<string, string[]> = {};
+  /** Called when the Engine's unseen count may have changed (the drawer tab's badge follows it). */
+  onSeen: () => void = () => {};
 
   constructor(ctx: SpindleFrontendContext, root: HTMLElement) {
     this.ctx = ctx;
@@ -97,6 +101,11 @@ export class AlmanacApp {
       if (t && (TABS as readonly string[]).includes(t)) this.tab = t;
     } catch {
       /* private mode */
+    }
+    try {
+      this.engineSeen = JSON.parse(localStorage.getItem("alm-engine-seen") || "{}") ?? {};
+    } catch {
+      this.engineSeen = {};
     }
     this.root.addEventListener("click", (ev) => this.onClick(ev));
     this.root.addEventListener("change", (ev) => this.onChange(ev));
@@ -123,6 +132,29 @@ export class AlmanacApp {
     this.render();
   }
 
+  seenSet(): Set<string> {
+    return new Set(this.view?.chatId ? this.engineSeen[this.view.chatId] ?? [] : []);
+  }
+
+  /** Opening the Engine counts as looking at what it found. */
+  markEngineSeen() {
+    const v = this.view;
+    if (!v?.chatId) return;
+    const keys = engineKeys(v);
+    const had = this.engineSeen[v.chatId] ?? [];
+    if (keys.every((k) => had.includes(k))) return;
+    delete this.engineSeen[v.chatId];
+    this.engineSeen[v.chatId] = keys;
+    const chats = Object.keys(this.engineSeen);
+    if (chats.length > 60) for (const c of chats.slice(0, chats.length - 60)) delete this.engineSeen[c];
+    try {
+      localStorage.setItem("alm-engine-seen", JSON.stringify(this.engineSeen));
+    } catch {
+      /* private mode */
+    }
+    this.onSeen();
+  }
+
   render() {
     const v = this.view;
     if (!v) {
@@ -146,7 +178,7 @@ export class AlmanacApp {
       ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block). You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button></div>`
       : "";
     const scroll = this.root.scrollTop;
-    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${planErr}${banner}${body}</main>${dock(v, this.tab, this.orbit)}</div>`;
+    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${planErr}${banner}${body}</main>${dock(v, this.tab, this.orbit, this.seenSet())}</div>`;
     this.root.scrollTop = scroll;
   }
 
@@ -154,6 +186,7 @@ export class AlmanacApp {
     const changed = page !== this.tab;
     this.tab = page;
     this.orbit = "";
+    if (groupOf(page as Page)?.id === "engine") this.markEngineSeen();
     try {
       localStorage.setItem("alm-tab", this.tab);
     } catch {
@@ -520,6 +553,7 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
     const planet = t.closest("[data-orbit]") as HTMLElement | null;
     if (planet) {
       this.orbit = this.orbit === planet.dataset.orbit ? "" : planet.dataset.orbit!;
+      if (this.orbit === "engine") this.markEngineSeen();
       this.render();
       (this.root.querySelector(".almo-moonb") as HTMLElement | null)?.focus();
       return;

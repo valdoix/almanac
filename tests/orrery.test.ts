@@ -2,7 +2,7 @@
 // five buttons, the orbit lists the open planet's pages, and planets flag
 // what needs a look.
 import { expect, test } from "bun:test";
-import { GROUPS, PAGES, attention, dock, skyHeader, summary } from "../src/frontend/orrery";
+import { GROUPS, PAGES, attention, attentionNote, dock, engineKeys, skyHeader, summary } from "../src/frontend/orrery";
 
 const view = {
   enabled: true,
@@ -43,4 +43,15 @@ test("summaries and attention", () => {
   expect(attention("story", view)).toBe(2);
   expect(attention("library", view)).toBe(2);
   expect(dock(view, "now", "")).toContain("<b>2</b>");
+});
+
+test("Engine attention counts only findings not yet seen, and says what they are", () => {
+  const v = { unverifiedIdx: [3, 7], rejected: [{ msgIndex: 7, raw: "bond x +9" }] };
+  expect(attention("engine", v)).toBe(3);
+  expect(attentionNote("engine", v)).toContain("2 replies");
+  expect(attentionNote("engine", v)).toContain("1 ledger line rejected");
+  const seen = new Set(engineKeys(v));
+  expect(attention("engine", v, seen)).toBe(0);
+  expect(attentionNote("engine", v, seen)).toBe("");
+  expect(attention("engine", { ...v, unverifiedIdx: [3, 7, 9] }, seen)).toBe(1);
 });

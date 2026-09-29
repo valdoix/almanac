@@ -1964,7 +1964,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.10.3";
+var VERSION = "1.10.4";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -8513,6 +8513,7 @@ async function buildView(chatId, userId) {
     theme: themeFor(settings.theme, meta.detected.theme, lead, meta.config.theme),
     speakerCss: speakerCss(st, colors),
     counts: { messages: L.path.length, ledgers: st.ledgerCount, unverified: st.unverified.length, chapters: files.chronicle.units.filter((u) => u.level === "chapter").length },
+    unverifiedIdx: st.unverified.slice(-50),
     now: {
       day: st.time?.day ?? null,
       time: st.time ? hhmm(st.time.minute) : null,
