@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Almanac Now Widget</title>
+<meta name="description" content="Three layouts for the floating Now widget: an orrery, a tarot deck and an evening gazette. Clickable mockups.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=DM+Mono:wght@400;500&family=Gloock&family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..600&family=Schibsted+Grotesk:wght@400;500;700&family=UnifrakturMaguntia&display=swap">
+<style>
+/* ───────── Showcase chrome ───────── */
+:root{
+  color-scheme:dark;
+  --bg:#101116; --ink:#ecebe6; --muted:#9b9990; --line:#2a2b31; --hi:#e9c77b;
+  --sans:"Schibsted Grotesk","Segoe UI",system-ui,sans-serif; --mono:"DM Mono",ui-monospace,Menlo,Consolas,monospace;
+  --serif:"Newsreader",Georgia,serif; --display:"Gloock",Georgia,serif; --hand:"Caveat","Segoe Print",cursive;
+  --mira:#f0a34a; --kael:#3fb8ad; --bran:#a58bf5; --wren:#ee6f8f;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);padding:0 16px 80px}
+button{font:inherit;color:inherit}
+.wrap{max-width:1240px;margin:0 auto}
+header.top{padding:48px 0 22px;display:grid;gap:14px;max-width:780px}
+.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+h1{font:700 clamp(30px,5vw,46px)/1.05 var(--sans);letter-spacing:-.02em;margin:0;text-wrap:balance}
+.lede{color:#c9c7bf;margin:0;max-width:66ch}
+
+.controls{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 0;margin-bottom:8px;background:color-mix(in oklab,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.ctl{display:flex;align-items:center;gap:8px;font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:#17181d}
+.seg button{border:0;background:none;padding:7px 12px;border-radius:999px;font:500 12px/1 var(--sans);color:#bdbab1;cursor:pointer;text-transform:none;letter-spacing:0}
+.seg button[aria-pressed="true"]{background:var(--hi);color:#1b1810}
+.go{border:1px solid color-mix(in oklab,var(--hi) 50%,var(--line));background:color-mix(in oklab,var(--hi) 12%,#17181d);color:var(--hi);border-radius:999px;padding:9px 14px;font:600 12px/1 var(--sans);cursor:pointer}
+.go:hover{background:color-mix(in oklab,var(--hi) 22%,#17181d)}
+.ctl small{text-transform:none;letter-spacing:0;font:400 12px/1.3 var(--sans);color:#77756d;max-width:26ch}
+
+section.dir{border-top:1px solid var(--line);padding:40px 0 20px;display:grid;gap:24px}
+.intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:8px 44px;align-items:start}
+.intro .num{font:500 11px/1 var(--mono);letter-spacing:.18em;color:var(--muted);text-transform:uppercase}
+.intro h2{margin:10px 0 8px;font:700 30px/1.1 var(--sans);letter-spacing:-.01em}
+.intro .pitch{margin:0;color:#d2cfc6}
+.intro ul{margin:0;padding-left:18px;display:grid;gap:7px;color:#bdbab1;font-size:14px}
+.intro ul b{color:var(--ink);font-weight:500}
+@media (max-width:860px){.intro{grid-template-columns:1fr}}
+
+.stage{position:relative;border-radius:22px;border:1px solid var(--line);overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;padding:26px;min-height:720px}
+.chat{font:17px/1.7 var(--serif);color:#d8d4c8;opacity:.32;max-width:60ch;align-self:start;user-select:none}
+.chat p{margin:0 0 1em}
+.chat .spk{color:var(--c);font-style:normal}
+.chat h4{font:400 22px/1.2 var(--display);margin:6px 0 14px;color:#fff}
+.float{display:flex;flex-direction:column;align-items:flex-end;gap:12px;min-width:0}
+.stage.closed .win{display:none}
+.hint{font:400 12px/1.3 var(--sans);color:#6f6d66;text-align:right}
+@media (max-width:900px){.stage{grid-template-columns:1fr;padding:18px 12px;min-height:0}.chat{display:none}.float{align-items:center}}
+
+/* Shared bits */
+.hide{display:none!important}
+body.iv-off .iv,body:not(.iv-reg) .iv-reg,body:not(.iv-prose) .iv-prose{display:none!important}
+body:not(.narr) .narr{display:none!important}
+body.narr .narr-off{display:none!important}
+.trk{position:relative;display:block;height:6px;border-radius:9px;background:var(--trk-bg,rgba(255,255,255,.1))}
+.trk .mid{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--trk-mid,rgba(255,255,255,.3))}
+.trk .trail{position:absolute;top:0;bottom:0;background:var(--c);opacity:.45;border-radius:9px}
+.trk .ghost,.trk .knob{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%)}
+.trk .ghost{border:1.5px dashed var(--c);background:transparent;opacity:.8}
+.trk .knob{background:var(--c);box-shadow:0 0 0 2px var(--knob-ring,#14162e),0 0 10px var(--c)}
+.ring{display:block}
+@keyframes pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
+@keyframes slideIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+@keyframes spark{0%,100%{box-shadow:0 0 0 2px var(--knob-ring,#14162e),0 0 6px var(--c)}50%{box-shadow:0 0 0 2px var(--knob-ring,#14162e),0 0 18px 4px var(--c)}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 var(--m)}100%{box-shadow:0 0 0 7px transparent}}
+@keyframes rain{to{background-position:-40px 160px}}
+@keyframes twinkle{50%{opacity:.25}}
+body.fresh .fx-pop{animation:pop .6s cubic-bezier(.3,1.6,.5,1) both}
+body.fresh .fx-in{animation:slideIn .5s ease both;animation-delay:calc(var(--i,0) * 90ms + 150ms)}
+body.fresh .trk .knob.moved{animation:spark 1s ease 3}
+
+/* ═════════ 1 · ORRERY ═════════ */
+.s1{background:radial-gradient(120% 90% at 100% 0%,#232552 0%,#12132a 55%,#0c0d1c 100%)}
+.s1 .o-pill{position:relative;display:flex;align-items:center;gap:10px;height:46px;padding:0 14px 0 8px;border:0;border-radius:999px;cursor:pointer;color:#fff;
+  background:linear-gradient(90deg,#1b1f45,#3b2f63 45%,#7f4a6e 78%,#c9765f);font:500 12.5px/1 var(--mono);
+  box-shadow:0 14px 30px -14px #000,inset 0 0 0 1px rgba(255,255,255,.14);white-space:nowrap;max-width:100%}
+.s1 .o-pill:hover{box-shadow:0 18px 34px -14px #000,inset 0 0 0 1px rgba(255,255,255,.28)}
+.o-dial{position:relative;flex:none;width:32px;height:32px;border-radius:50%;overflow:hidden;background:linear-gradient(#27306e,#6a3f72 52%,#e0875e 60%,#0d0f2a 61%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+.o-dial i{position:absolute;right:5px;top:14px;width:8px;height:8px;border-radius:50%;background:#ffc06a;box-shadow:0 0 8px 2px #ff9a4a}
+.o-dial b{position:absolute;left:7px;top:6px;width:6px;height:6px;border-radius:50%;background:#f4ecd6;box-shadow:inset -2px 0 0 #6a5b8a}
+.o-time{font:400 17px/1 var(--display);letter-spacing:.02em}
+.o-wx{opacity:.9}
+.o-place{display:inline-flex;align-items:center;gap:4px;max-width:120px;overflow:hidden;text-overflow:ellipsis;opacity:.92}
+.o-stack{display:inline-flex;padding-left:4px}
+.med{position:relative;display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--c);color:#16122a;font:700 11px/1 var(--sans);box-shadow:0 0 0 2px #3a2d5e;margin-left:-5px;flex:none}
+.med .md{position:absolute;right:-2px;bottom:-2px;width:9px;height:9px;border-radius:50%;background:var(--m);box-shadow:0 0 0 2px #3a2d5e}
+.med .md.shift{animation:pulse 1.4s ease-out infinite}
+.o-chip{flex:none;height:24px;overflow:hidden;border-radius:999px;background:rgba(255,205,120,.18);color:#ffdca3;padding:0 10px;box-shadow:inset 0 0 0 1px rgba(255,205,120,.35)}
+.o-chip .rot{display:flex;flex-direction:column;animation:rot 10.5s steps(1) infinite}
+.o-chip .rot span{height:24px;line-height:24px}
+@keyframes rot{0%{transform:translateY(0)}33.3%{transform:translateY(-24px)}66.6%{transform:translateY(-48px)}}
+.o-badge{position:absolute;top:-6px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#ff5f7e;color:#fff;font:700 11px/20px var(--sans);text-align:center;box-shadow:0 0 0 2px #10112a,0 0 14px #ff5f7e}
+
+.o-win{width:384px;max-width:100%;border-radius:24px;overflow:hidden;background:#14162e;color:#ecebff;box-shadow:0 30px 60px -24px #000,0 0 0 1px rgba(255,255,255,.08);font:13px/1.45 var(--sans)}
+.o-sky{position:relative;height:178px;background:linear-gradient(180deg,#171a47 0%,#3d2c66 42%,#9a4d6b 74%,#ee8a5c 100%);overflow:hidden}
+.o-sky .stars{position:absolute;inset:0 0 50% 0;background:radial-gradient(1px 1px at 12% 20%,#fff,transparent),radial-gradient(1px 1px at 30% 45%,#fff,transparent),radial-gradient(1.5px 1.5px at 62% 14%,#fff,transparent),radial-gradient(1px 1px at 82% 38%,#fff,transparent),radial-gradient(1px 1px at 48% 30%,#fff,transparent);animation:twinkle 4s ease-in-out infinite}
+.o-sky .rainfx{position:absolute;inset:0;background:repeating-linear-gradient(105deg,transparent 0 13px,rgba(200,215,255,.22) 13px 14px,transparent 14px 29px);background-size:80px 80px;animation:rain .7s linear infinite;mix-blend-mode:screen;opacity:.8}
+.o-sky svg.arc{position:absolute;left:0;right:0;bottom:0;width:100%;height:100%}
+.o-sky .ttl{position:absolute;left:18px;top:14px;text-shadow:0 2px 10px rgba(0,0,0,.35)}
+.o-sky .ttl b{display:block;font:400 44px/1 var(--display);letter-spacing:.01em}
+.o-sky .ttl span{font:500 11px/1.4 var(--mono);letter-spacing:.06em;opacity:.85}
+.o-sky .ttl em{display:block;font:italic 500 15px/1.3 var(--serif);margin-top:5px;opacity:.95}
+.o-sky .x{position:absolute;right:12px;top:12px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(10,10,30,.35);color:#fff;cursor:pointer}
+.o-sky .sunset{position:absolute;right:12px;top:52px;display:grid;gap:4px;justify-items:end}
+.o-sky .sunset span{font:500 11px/1 var(--mono);padding:6px 9px;border-radius:999px;background:rgba(255,190,110,.22);color:#ffe2b8;box-shadow:inset 0 0 0 1px rgba(255,200,130,.4)}
+.o-sky .chips{position:absolute;left:14px;right:14px;bottom:10px;display:flex;gap:6px;flex-wrap:wrap}
+.o-sky .chips span{font:500 11px/1 var(--mono);padding:6px 9px;border-radius:999px;background:rgba(8,9,26,.55);backdrop-filter:blur(4px);color:#e7e5ff}
+.o-fc{display:grid;grid-template-columns:repeat(6,1fr);background:#101228;border-bottom:1px solid rgba(255,255,255,.06)}
+.o-fc div{display:grid;gap:3px;justify-items:center;padding:9px 0 8px;font:500 10.5px/1 var(--mono);color:#9ea3c9}
+.o-fc div b{font:500 16px/1 var(--sans)}
+.o-fc div i{font-style:normal;color:#ecebff}
+.o-fc div.now{background:linear-gradient(#2a2452,#1a1a3c);color:#ffd79a}
+.o-body{display:grid;grid-template-columns:54px minmax(0,1fr);height:360px}
+.o-rail{display:flex;flex-direction:column;gap:4px;padding:10px 7px;background:#101228;border-right:1px solid rgba(255,255,255,.06)}
+.o-rail button{position:relative;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;border:0;background:none;color:#8d92bd;cursor:pointer}
+.o-rail button:hover{background:rgba(255,255,255,.05);color:#fff}
+.o-rail button[aria-selected="true"]{background:linear-gradient(135deg,#3b2f6b,#5b3b6d);color:#ffd79a;box-shadow:inset 0 0 0 1px rgba(255,210,150,.3)}
+.o-rail button sup{position:absolute;top:3px;right:2px;min-width:15px;height:15px;border-radius:9px;background:#ff5f7e;color:#fff;font:700 9px/15px var(--sans);padding:0 3px}
+.o-rail button sup.dot{min-width:8px;height:8px;padding:0;top:7px;right:7px;background:#ffb14a}
+.o-rail svg{width:19px;height:19px}
+.o-pane{overflow:auto;padding:14px 16px 18px;scrollbar-width:thin;scrollbar-color:#3a3c66 transparent}
+.o-pane h6{margin:2px 0 10px;font:500 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#8d92bd;display:flex;justify-content:space-between}
+.o-pane h6+*{margin-top:0}
+.o-pane h6:not(:first-child){margin-top:18px}
+.o-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 0;border-bottom:1px dashed rgba(255,255,255,.07)}
+.o-row:last-child{border-bottom:0}
+.o-ic{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:rgba(255,255,255,.06);font-size:15px}
+.o-row b{font-weight:600}
+.o-row small{display:block;color:#9ea3c9;font:italic 400 13px/1.35 var(--serif)}
+.o-row .trk{margin:8px 0 4px;--knob-ring:#14162e}
+.delta{font:600 11px/1 var(--mono);padding:4px 7px;border-radius:999px;white-space:nowrap}
+.up{color:#7ef0b4;background:rgba(80,220,150,.13)}
+.dn{color:#ff8a9c;background:rgba(255,90,120,.13)}
+.due{color:#ffb14a;background:rgba(255,170,60,.14)}
+.mood{display:inline-flex;align-items:center;gap:5px;font:500 12px/1 var(--mono)}
+.mood s{opacity:.55}
+.o-count{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;padding:12px 14px;border-radius:16px;background:linear-gradient(135deg,#3a1f3f,#23193e);box-shadow:inset 0 0 0 1px rgba(255,140,160,.25)}
+.o-count b{grid-row:span 2;font:400 34px/1 var(--display);color:#ffc7a3}
+.o-count span{font-weight:600}
+.o-count small{color:#c7a9c4;font-size:12px}
+.o-count .bar{grid-column:1/-1;height:5px;border-radius:9px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:6px}
+.o-count .bar i{display:block;height:100%;width:62%;background:linear-gradient(90deg,#ff9a6b,#ff5f7e)}
+.o-rings{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;color:#3a3c66}
+.o-rings div{padding:10px 4px 8px;border-radius:14px;background:rgba(255,255,255,.035)}
+.o-rings small{display:block;color:#b8bce0;font-size:11.5px;line-height:1.25;margin-top:5px}
+.gauge{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+.gauge .g{display:flex;gap:3px}
+.gauge .g i{flex:1;height:12px;border-radius:3px;background:rgba(255,255,255,.08)}
+.gauge .g i.on{background:linear-gradient(#b06bff,#6b3bd6);box-shadow:0 0 8px rgba(160,100,255,.5)}
+.clue{display:grid;grid-template-columns:auto 1fr;gap:8px;padding:7px 0;font-size:12.5px}
+.clue .rel{font:500 10px/1 var(--mono);display:inline-flex;gap:2px;margin-top:4px}
+.clue .rel i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.18)}
+.clue .rel i.on{background:#ffd06b}
+.clue em{color:#9ea3c9;font-size:11.5px;font-style:normal}
+.o-who{display:grid;gap:10px}
+.o-per{padding:11px 12px;border-radius:16px;background:linear-gradient(135deg,color-mix(in oklab,var(--c) 14%,#171a36),#171a36 70%);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--c) 28%,transparent)}
+.o-per .hd{display:flex;align-items:center;gap:10px}
+.o-per .med{width:34px;height:34px;margin:0;font-size:14px;box-shadow:0 0 0 2px #14162e}
+.o-per .med .md{width:11px;height:11px;box-shadow:0 0 0 2px #14162e}
+.o-per .nm b{display:block;font-weight:600}
+.o-per .nm small{color:#9ea3c9;font:italic 400 12.5px/1.3 var(--serif)}
+.o-per .tags{display:flex;gap:5px;flex-wrap:wrap;margin:9px 0 4px}
+.tag{font:500 10.5px/1 var(--mono);padding:5px 7px;border-radius:999px;background:rgba(255,255,255,.07);color:#cfd2f2}
+.tag.inj{background:rgba(255,90,110,.14);color:#ffa0ae}
+.o-per .bars{display:grid;grid-template-columns:62px 1fr;gap:7px 10px;align-items:center;font:500 10px/1 var(--mono);color:#9ea3c9;margin-top:8px;--knob-ring:#191b38}
+.secret{margin-top:9px;padding:8px 10px;border-radius:10px;font:italic 400 12.5px/1.4 var(--serif);background:repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0 6px,transparent 6px 12px);border:1px dashed rgba(255,255,255,.2);color:#e2d9ff}
+.secret b{font:500 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;font-style:normal;display:block;margin-bottom:4px;color:#b6a4ff}
+.irony{padding:11px 12px;border-radius:14px;background:linear-gradient(#1b1d3a,#1b1d3a) padding-box,linear-gradient(135deg,#ff9a6b,#b06bff,#3fb8ad) border-box;border:1.5px solid transparent;font-size:12.5px}
+.irony b{display:block;font:500 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#ffc7a3;margin-bottom:5px}
+.locked{font:500 11px/1.4 var(--mono);color:#7a7fa8;padding:9px 11px;border-radius:12px;background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.1)}
+.thr{padding:9px 0;border-bottom:1px dashed rgba(255,255,255,.07)}
+.thr .t{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.thr small{display:block;color:#9ea3c9;font:italic 400 13px/1.35 var(--serif);margin-top:2px}
+.st{font:500 10px/1 var(--mono);padding:4px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.08em}
+.st.open{background:rgba(63,184,173,.16);color:#7ee3d8}
+.st.stall{background:rgba(255,170,60,.14);color:#ffc374}
+.chek{display:flex;gap:10px;align-items:center;padding:11px 12px;border-radius:14px;background:rgba(255,200,110,.06);border:1px solid rgba(255,200,110,.18);font-size:12.5px}
+.chek .gun{font-size:20px}
+.chek small{display:block;color:#c8b995}
+.rumor{font:italic 400 14px/1.4 var(--serif);color:#dcd8ff;padding:4px 0 0 12px;border-left:2px solid #6b5bd6}
+.rumor small{display:block;font:500 10.5px/1.4 var(--mono);font-style:normal;color:#8d92bd;margin-top:4px}
+.tok{display:flex;height:12px;border-radius:9px;overflow:hidden;margin:4px 0 8px}
+.tok i{display:block}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font:500 10.5px/1 var(--mono);color:#b8bce0}
+.legend span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--c);margin-right:5px;vertical-align:-1px}
+.fed{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed rgba(255,255,255,.07);font-size:12.5px}
+.fed .via{font:500 9.5px/1 var(--mono);padding:4px 6px;border-radius:6px;background:rgba(255,255,255,.07);color:#aab0dc;text-transform:uppercase;letter-spacing:.08em}
+.ok{display:flex;gap:8px;align-items:center;padding:9px 11px;border-radius:12px;background:rgba(80,220,150,.08);color:#9ef0c6;font-size:12.5px}
+
+/* Envelopes (register), used by Orrery and Deck */
+.env{position:relative;display:block;width:100%;text-align:left;border:0;padding:0;margin:0 0 12px;cursor:pointer;background:none;perspective:600px}
+.env .front{position:relative;display:block;padding:40px 14px 12px;border-radius:10px;background:linear-gradient(color-mix(in oklab,var(--c) 22%,#efe4cc),color-mix(in oklab,var(--c) 12%,#e8dcc0));color:#3b2f22;box-shadow:0 8px 18px -10px #000}
+.env .front::before{content:"";position:absolute;left:0;right:0;top:0;height:46px;background:color-mix(in oklab,var(--c) 34%,#e2d3b2);clip-path:polygon(0 0,100% 0,50% 100%);border-radius:10px 10px 0 0;transform-origin:top;transition:transform .5s}
+.env .seal{position:absolute;left:50%;top:26px;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,#d4475a,#8e1f2f 70%);color:#ffd9c9;font:400 14px/1 var(--display);box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 0 0 3px rgba(0,0,0,.15);z-index:1;transition:transform .45s,opacity .45s}
+.env .cue{display:block;font:italic 400 13.5px/1.35 var(--serif);text-align:center}
+.env .who{display:block;text-align:center;font:500 9.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;margin-top:7px;opacity:.6}
+.env .note{display:none;padding:14px 16px 12px;border-radius:10px;background:#fbf6ea;color:#2e261c;font:500 21px/1.2 var(--hand);box-shadow:0 8px 18px -10px #000;border-top:4px solid var(--c)}
+.env .note em{display:block;text-align:right;color:var(--c);font:700 20px/1 var(--hand);margin-top:6px;filter:brightness(.8)}
+.env.open .front{display:none}
+.env.open .note{display:block;animation:unfold .45s ease both}
+@keyframes unfold{from{transform:rotateX(-70deg);opacity:0;transform-origin:top}to{transform:none;opacity:1}}
+.env:hover .seal{transform:translate(-50%,-50%) rotate(-12deg) scale(1.08)}
+.lockcap{display:flex;gap:6px;align-items:center;font:500 10.5px/1.3 var(--mono);color:#8d92bd;margin:0 0 12px}
+.bub{position:relative;margin:0 0 16px 0;padding:11px 14px;border-radius:18px;background:color-mix(in oklab,var(--c) 18%,#1c1f40);font:italic 400 14px/1.4 var(--serif);color:#f2efff;box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--c) 35%,transparent)}
+.bub::after{content:"";position:absolute;left:22px;bottom:-9px;width:10px;height:10px;border-radius:50%;background:inherit;box-shadow:-9px 7px 0 -2px color-mix(in oklab,var(--c) 18%,#1c1f40)}
+.bub b{display:block;font:600 10.5px/1 var(--mono);font-style:normal;color:var(--c);margin-bottom:5px;letter-spacing:.06em}
+
+/* ═════════ 2 · TAROT DECK ═════════ */
+.s2{background:radial-gradient(90% 80% at 90% 10%,#3a2338 0%,#1d1420 50%,#120d14 100%)}
+.s2 .chat{color:#e6d6cf}
+.t-pill{position:relative;display:flex;align-items:stretch;height:54px;border:0;padding:0;cursor:pointer;color:#2f2418;background:none;filter:drop-shadow(0 12px 18px rgba(0,0,0,.55));max-width:100%}
+.t-pill>.l,.t-pill>.r{display:flex;align-items:center;gap:10px;background:#f3e7cf;background-image:radial-gradient(rgba(120,80,40,.07) 1px,transparent 1px);background-size:5px 5px}
+.t-pill .l{padding:0 14px 0 10px;border-radius:10px 0 0 10px;-webkit-mask:radial-gradient(circle at 100% 50%,transparent 7px,#000 7.5px);mask:radial-gradient(circle at 100% 50%,transparent 7px,#000 7.5px);min-width:0}
+.t-pill .r{padding:0 14px;border-radius:0 10px 10px 0;border-left:2px dashed #c8b28a;flex-direction:column;justify-content:center;align-items:flex-start;gap:3px;background-color:#e9d3a8;-webkit-mask:radial-gradient(circle at 0 50%,transparent 7px,#000 7.5px);mask:radial-gradient(circle at 0 50%,transparent 7px,#000 7.5px)}
+.t-orb{flex:none;width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 70% 70%,#ffcf7a 0 18%,transparent 19%),linear-gradient(#2b2a5e,#8a4a6a 60%,#f09a60);box-shadow:inset 0 0 0 2px #2f2418,0 0 0 2px #f3e7cf,0 0 0 3px #2f2418}
+.t-main{display:grid;gap:2px;line-height:1}
+.t-main b{font:400 21px/1 var(--display)}
+.t-main small{font:500 9.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;opacity:.7}
+.t-mid{font:italic 500 14px/1.2 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.t-pill .med{box-shadow:0 0 0 2px #f3e7cf;color:#1f1712}
+.t-pill .med .md{box-shadow:0 0 0 2px #f3e7cf}
+.t-pill .r small{font:500 9px/1 var(--mono);letter-spacing:.14em;color:#8a3a2a}
+.t-pill .r b{font:400 18px/1 var(--display);color:#6b1f1a}
+.t-seal{position:absolute;top:-9px;right:-9px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,#d4475a,#8e1f2f 70%);color:#ffe3d6;font:400 13px/1 var(--display);box-shadow:0 3px 7px rgba(0,0,0,.5),inset 0 0 0 3px rgba(0,0,0,.18)}
+.t-win{width:356px;max-width:100%;display:grid;gap:14px;justify-items:center}
+.t-deck{position:relative;width:340px;max-width:100%;height:500px;outline:none}
+.card{position:absolute;inset:0;border-radius:18px;padding:12px;background:#f5ead3;color:#2e2419;box-shadow:0 20px 40px -18px rgba(0,0,0,.8),0 0 0 1px rgba(80,50,20,.2);transition:transform .55s cubic-bezier(.3,.9,.3,1),opacity .45s;cursor:pointer;transform-origin:50% 90%}
+.card .frame{position:relative;height:100%;border:1.5px solid #a88a58;border-radius:11px;padding:12px 14px 14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:inset 0 0 0 3px #f5ead3,inset 0 0 0 4px #c9ae7c}
+.card .idx{position:absolute;left:9px;top:8px;font:400 13px/1 var(--display);color:#8a6a3a;text-align:center;width:22px}
+.card .idx i{display:block;font-style:normal;font-size:15px;margin-top:3px}
+.card .idx.b{left:auto;right:9px;top:auto;bottom:8px;transform:rotate(180deg)}
+.card h3{margin:0 0 2px;text-align:center;font:400 22px/1.1 var(--display);letter-spacing:.01em}
+.card .sub{text-align:center;font:italic 400 13px/1.3 var(--serif);color:#7a6242;margin:0 0 10px}
+.card .body{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#c9ae7c transparent;font-size:13px;line-height:1.45;padding:0 4px}
+.card[data-pos="0"]{transform:none;z-index:5}
+.card[data-pos="1"]{transform:translate(10px,10px) rotate(2.5deg) scale(.97);z-index:4;filter:brightness(.92)}
+.card[data-pos="2"]{transform:translate(-8px,18px) rotate(-3deg) scale(.94);z-index:3;filter:brightness(.85)}
+.card[data-pos="far"]{transform:translate(0,24px) scale(.9);opacity:0;z-index:1;pointer-events:none}
+.card[data-pos="gone"]{transform:translate(-130%,-20px) rotate(-16deg);opacity:0;z-index:6;pointer-events:none}
+.card:not([data-pos="0"]) .body{overflow:hidden}
+.t-nav{display:flex;align-items:center;gap:12px;color:#e6d6cf}
+.t-nav button{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,230,200,.25);background:rgba(255,240,220,.06);color:#f3e7cf;cursor:pointer;font-size:16px}
+.t-nav .dots{display:flex;gap:6px}
+.t-nav .dots button{width:9px;height:9px;padding:0;border:0;border-radius:50%;background:rgba(255,230,200,.25)}
+.t-nav .dots button[aria-current="true"]{background:#e9c77b;width:22px;border-radius:9px}
+.t-hint{font:italic 400 13px/1 var(--serif);color:#b89f93}
+/* card art */
+.art{position:relative;height:118px;border-radius:9px;overflow:hidden;margin:0 0 10px;flex:none}
+.art.sky{background:linear-gradient(#1f1f52,#5a3470 50%,#d57a63 82%,#f5b070)}
+.art.sky .rainfx{position:absolute;inset:0;background:repeating-linear-gradient(105deg,transparent 0 13px,rgba(220,225,255,.28) 13px 14px,transparent 14px 29px);background-size:80px 80px;animation:rain .7s linear infinite}
+.art.sky .sun{position:absolute;right:30px;bottom:22px;width:34px;height:34px;border-radius:50%;background:#ffcf7a;box-shadow:0 0 30px 10px rgba(255,170,90,.55)}
+.art.sky .moon{position:absolute;left:30px;top:18px;width:22px;height:22px;border-radius:50%;background:#f4ecd6;box-shadow:inset -6px 0 0 #6a5b8a,0 0 14px rgba(244,236,214,.5)}
+.art.sky svg{position:absolute;left:0;right:0;bottom:0;width:100%}
+.art.sky .big{position:absolute;left:0;right:0;top:34px;text-align:center;color:#fff;font:400 40px/1 var(--display);text-shadow:0 3px 14px rgba(0,0,0,.4)}
+.t-fc{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:6px 0 10px}
+.t-fc div{display:grid;justify-items:center;gap:2px;padding:6px 0;border-radius:8px;background:#ecdcbc;font:500 10px/1 var(--mono);color:#6d5634}
+.t-fc div b{font-size:15px;font-weight:400}
+.t-fc div.now{background:#2f2448;color:#ffd79a}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12.5px}
+.facts dt{font:500 10px/1.6 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:#8a6a3a}
+.facts dd{margin:0}
+.tele{font:500 12.5px/1.5 var(--mono);color:#2e2419}
+.tele li{list-style:none;padding:7px 0 7px 26px;border-bottom:1px dotted #c9ae7c;position:relative}
+.tele li::before{content:attr(data-g);position:absolute;left:0;top:6px;font-size:14px}
+.tele li em{display:block;font:italic 400 12.5px/1.3 var(--serif);color:#7a6242}
+.tele ul{margin:0;padding:0}
+.stamp{display:inline-block;transform:rotate(-6deg);border:2px solid #a8322a;color:#a8322a;padding:3px 8px;border-radius:5px;font:700 10px/1 var(--mono);letter-spacing:.14em;margin:2px 0 8px;opacity:.85}
+.tele .trk{--trk-bg:#e3cfa6;--trk-mid:#a88a58;--knob-ring:#f5ead3;margin:6px 0 2px;width:88%}
+.tc{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.tc .p{display:grid;justify-items:center;text-align:center;padding:9px 5px 8px;border-radius:10px;background:linear-gradient(color-mix(in oklab,var(--c) 30%,#f5ead3),#efe1c4 60%);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--c) 45%,#c9ae7c)}
+.tc .p .med{width:42px;height:42px;margin:0;font:400 19px/1 var(--display);box-shadow:0 0 0 2px #f5ead3,0 0 0 3px var(--c)}
+.tc .p .med .md{width:12px;height:12px;box-shadow:0 0 0 2px #f5ead3}
+.tc .p b{font:400 14px/1.1 var(--display);margin-top:7px}
+.tc .p .mood{font-size:10.5px;margin:4px 0 6px;color:#5b4630}
+.tc .p .icons{display:flex;gap:4px;font-size:13px;min-height:16px}
+.tc .p .mini{display:grid;grid-template-columns:auto 1fr;gap:4px 5px;align-items:center;width:100%;font:500 8.5px/1 var(--mono);color:#7a6242;margin-top:6px;--trk-bg:#e3cfa6;--trk-mid:#a88a58;--knob-ring:#f5ead3}
+.tc .p .mini .trk{height:4px}
+.tc .p .mini .trk .knob,.tc .p .mini .trk .ghost{width:8px;height:8px}
+.tc .p small{font:italic 400 11.5px/1.25 var(--serif);color:#6d5634;margin-top:6px}
+.paper-note{margin-top:10px;padding:9px 11px;border-radius:9px;font:italic 400 12.5px/1.4 var(--serif);background:#2f2448;color:#f1e6ff}
+.paper-note b{display:block;font:500 9.5px/1 var(--mono);font-style:normal;letter-spacing:.14em;text-transform:uppercase;color:#ffc7a3;margin-bottom:4px}
+.paper-lock{margin-top:10px;font:500 10.5px/1.3 var(--mono);color:#8a6a3a;text-align:center}
+.hg{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:10px 12px;border-radius:12px;background:#2f2448;color:#f5ead3;margin-bottom:10px}
+.hg .glass{font-size:30px;animation:tip 6s ease-in-out infinite}
+@keyframes tip{0%,80%{transform:none}90%,100%{transform:rotate(180deg)}}
+.hg b{font:400 28px/1 var(--display);color:#ffc7a3}
+.hg small{display:block;color:#cdbfd9;font-size:11.5px}
+.t-rings{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center;color:#d9c49b;margin-bottom:8px}
+.t-rings small{display:block;color:#5b4630;font-size:11px;line-height:1.2}
+.candle{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:end;padding:8px 4px}
+.candle .c{position:relative;width:20px;height:54px;display:flex;align-items:flex-end;justify-content:center}
+.candle .c i{display:block;width:14px;height:60%;background:linear-gradient(90deg,#efe4cf,#fff8ea,#e2d3b8);border-radius:3px 3px 2px 2px;box-shadow:inset 0 -2px 0 #c9ae7c}
+.candle .c b{position:absolute;left:50%;bottom:60%;width:8px;height:14px;transform:translateX(-50%);background:radial-gradient(ellipse at 50% 70%,#fff3b0,#ffae3c 50%,transparent 70%);border-radius:50% 50% 45% 45%;animation:flick 1.2s ease-in-out infinite alternate}
+@keyframes flick{to{transform:translateX(-50%) scale(1.1,.9) rotate(4deg)}}
+.cork{position:relative;height:318px;border-radius:9px;background:#b98a58;background-image:radial-gradient(rgba(70,40,15,.35) 1px,transparent 1.5px),radial-gradient(rgba(255,230,190,.25) 1px,transparent 1.5px);background-size:7px 7px,11px 11px;background-position:0 0,3px 4px;box-shadow:inset 0 0 0 5px #7d5530,inset 0 0 18px rgba(0,0,0,.35);overflow:hidden}
+.cork svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.pin{position:absolute;width:118px;padding:14px 9px 8px;background:#fdf8e6;color:#2e2419;font:500 17px/1.05 var(--hand);box-shadow:0 5px 10px rgba(0,0,0,.35)}
+.pin::before{content:"";position:absolute;left:50%;top:4px;width:10px;height:10px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ff8a7a,#b3261e);transform:translateX(-50%);box-shadow:0 2px 2px rgba(0,0,0,.4)}
+.pin small{display:block;font:500 8.5px/1.2 var(--mono);color:#8a6a3a;margin-top:5px;letter-spacing:.04em}
+.pin.suspect{background:#2f2448;color:#ffe2c4;width:96px;text-align:center}
+.pin.suspect small{color:#cdbfd9}
+.pin.pale{background:#e9f1fb}
+.lthr li{list-style:none;padding:8px 0;border-bottom:1px dotted #c9ae7c}
+.lthr ul{margin:0;padding:0}
+.lthr .t{display:flex;justify-content:space-between;gap:8px;align-items:center;font:400 15px/1.2 var(--display)}
+.lthr em{display:block;font:italic 400 12.5px/1.35 var(--serif);color:#6d5634;margin-top:2px}
+.lthr .st.open{background:#d7ecd9;color:#2c6b3a}
+.lthr .st.stall{background:#f6ddb4;color:#8a5a12}
+.gunbox{display:flex;gap:10px;align-items:center;margin-top:10px;padding:9px 11px;border:1.5px dashed #a88a58;border-radius:10px;font-size:12.5px}
+.gunbox b{font-size:22px}
+.gunbox small{display:block;color:#7a6242}
+.whisper{margin-top:10px;font:italic 400 14px/1.35 var(--serif);text-align:center;color:#4a3a28}
+.whisper small{display:block;font:500 9.5px/1.4 var(--mono);font-style:normal;color:#8a6a3a;margin-top:3px}
+.s2 .env .front{box-shadow:0 5px 12px -7px rgba(0,0,0,.6)}
+.s2 .lockcap{color:#8a6a3a;justify-content:center}
+.s2 .bub{background:#2f2448;box-shadow:none;color:#f1e6ff}
+.s2 .bub::after{box-shadow:-9px 7px 0 -2px #2f2448}
+.callsheet{font:500 12px/1.45 var(--mono)}
+.callsheet .ln{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:6px 0;border-bottom:1px dotted #c9ae7c;align-items:baseline}
+.callsheet .ln i{font-style:normal;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;padding:3px 5px;border-radius:4px;background:#ecdcbc;color:#7a5a2a}
+.s2 .tok{margin:10px 0 6px}
+.s2 .legend{color:#5b4630}
+.s2 .ok{background:#d7ecd9;color:#2c6b3a;margin-top:10px}
+
+/* ═════════ 3 · EVENING GAZETTE ═════════ */
+.s3{background:linear-gradient(160deg,#20242a,#15171b 60%,#101114)}
+.g-pill{display:flex;align-items:center;height:46px;padding:0;border:0;cursor:pointer;border-radius:4px;background:#efe6d2;color:#1d1a16;box-shadow:0 12px 26px -12px #000,3px 3px 0 #b7aa8c;overflow:hidden;width:min(470px,100%);font:500 12px/1 var(--mono);position:relative}
+.g-pill .mast{flex:none;display:flex;align-items:center;gap:8px;height:100%;padding:0 12px;background:#1d1a16;color:#efe6d2}
+.g-pill .mast b{font:400 22px/1 "UnifrakturMaguntia",serif}
+.g-pill .mast span{font:400 17px/1 var(--display)}
+.g-pill .tick{position:relative;flex:1;min-width:0;height:100%;overflow:hidden;-webkit-mask:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 20px),transparent);mask:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 20px),transparent)}
+.g-pill .tick div{position:absolute;top:0;bottom:0;display:flex;align-items:center;gap:22px;white-space:nowrap;animation:marq 26s linear infinite;padding-left:14px}
+.g-pill:hover .tick div{animation-play-state:paused}
+@keyframes marq{to{transform:translateX(-50%)}}
+.g-pill .tick span{font:italic 500 14px/1 "IM Fell English",serif}
+.g-pill .tick span b{font:700 10px/1 var(--mono);letter-spacing:.14em;font-style:normal;color:#a8322a;margin-right:6px}
+.g-pill .ed{flex:none;display:grid;place-items:center;width:40px;height:100%;border-left:1px solid #c7b996;background:#e6dbc2}
+.g-pill .ed b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#a8322a;color:#fff;font:700 11px/1 var(--sans)}
+.g-win{width:430px;max-width:100%;max-height:660px;overflow:auto;background:#efe6d2;color:#1d1a16;padding:16px 18px 22px;border-radius:3px;box-shadow:0 30px 60px -24px #000,4px 4px 0 #b7aa8c;font:14px/1.45 "IM Fell English",Georgia,serif;scrollbar-width:thin;scrollbar-color:#b7aa8c transparent;background-image:radial-gradient(rgba(60,45,20,.06) 1px,transparent 1px);background-size:4px 4px}
+.g-top{display:flex;justify-content:space-between;align-items:center;font:500 9.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#6a5e48}
+.g-top button{border:0;background:none;cursor:pointer;font:inherit;color:inherit}
+.g-mast{text-align:center;font:400 42px/1 "UnifrakturMaguntia",serif;margin:8px 0 6px;letter-spacing:.01em}
+.g-date{display:flex;justify-content:space-between;gap:8px;border-top:3px double #1d1a16;border-bottom:1px solid #1d1a16;padding:5px 0;font:400 11px/1.2 "IM Fell English SC",serif;letter-spacing:.06em}
+.g-wx{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid #1d1a16}
+.g-wx .dial{width:78px;height:46px}
+.g-wx p{margin:0;font-size:13px}
+.g-wx .fc{display:flex;gap:9px;margin-top:5px;font:500 10px/1 var(--mono);color:#4f4535}
+.g-wx .fc span{display:grid;justify-items:center;gap:2px}
+.g-wx .fc span b{font-size:13px;font-weight:400}
+.g-head{padding:12px 0 10px;border-bottom:1px solid #1d1a16;text-align:center}
+.g-head .kick{font:700 9.5px/1 var(--mono);letter-spacing:.2em;color:#a8322a}
+.g-head h3{margin:6px 0 6px;font:400 28px/1.02 var(--display);letter-spacing:-.005em;text-transform:uppercase}
+.g-head p{margin:0;font-style:italic;color:#3e372b}
+.g-cols{columns:2;column-gap:18px;column-rule:1px solid #b7aa8c;padding-top:12px}
+.g-cols>*{break-inside:avoid;margin:0 0 14px}
+.g-sec h5{margin:0 0 6px;font:400 13px/1 "IM Fell English SC",serif;letter-spacing:.12em;border-bottom:1px solid #1d1a16;padding-bottom:4px}
+.g-sec p,.g-sec li{font-size:13px;margin:0 0 5px}
+.g-sec ul{margin:0;padding:0}
+.g-sec li{list-style:none;padding-left:13px;position:relative}
+.g-sec li::before{content:"❧";position:absolute;left:0;font-size:10px;top:2px;color:#6a5e48}
+.g-sec .up{color:#1f6b3a;background:none;font:700 10px/1 var(--mono)}
+.g-sec .dn{color:#a8322a;background:none;font:700 10px/1 var(--mono)}
+.stop{border:2px solid #1d1a16;padding:8px 10px;text-align:center;background:#1d1a16;color:#efe6d2}
+.stop h5{margin:0 0 6px;padding-bottom:4px;border-bottom:1px solid #efe6d2;color:#ffc7a3;font:400 13px/1 "IM Fell English SC",serif;letter-spacing:.12em}
+.stop b.big{display:block;font:400 30px/1 var(--display);margin:4px 0 2px}
+.stop small{font:500 10px/1.3 var(--mono);letter-spacing:.06em}
+.stop hr{border:0;border-top:1px dashed rgba(239,230,210,.4);margin:8px 0}
+.soc .p{display:grid;grid-template-columns:auto 1fr;gap:8px;padding:6px 0;border-bottom:1px dotted #b7aa8c;align-items:start}
+.soc .p:last-child{border-bottom:0}
+.soc .cameo{width:32px;height:38px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 50% 38%,var(--c) 0 30%,transparent 31%),radial-gradient(ellipse at 50% 100%,var(--c) 0 45%,transparent 46%),#efe6d2;box-shadow:inset 0 0 0 1.5px #1d1a16,0 0 0 2px #efe6d2,0 0 0 3px #1d1a16;filter:saturate(.7)}
+.soc b{font:400 14px/1.1 var(--display)}
+.soc small{display:block;font-size:12px;font-style:italic;color:#4f4535}
+.soc .meta{font:500 9.5px/1.4 var(--mono);color:#6a5e48;display:block;margin-top:2px}
+.soc .tb{display:grid;grid-template-columns:auto 1fr;gap:3px 6px;align-items:center;margin-top:4px;font:500 8.5px/1 var(--mono);color:#6a5e48;--trk-bg:#d8ccb0;--trk-mid:#8f8367;--knob-ring:#efe6d2}
+.soc .tb .trk{height:4px}
+.soc .tb .trk .knob,.soc .tb .trk .ghost{width:8px;height:8px}
+.mkt{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;font-size:12.5px;color:#cbbd9c}
+.mkt small{display:block;color:#6a5e48;font:500 9.5px/1.2 var(--mono)}
+.mkt div span{color:#1d1a16}
+.puzzle .q{display:grid;grid-template-columns:auto 1fr;gap:6px;padding:4px 0;font-size:12.5px}
+.puzzle .q b{font:400 15px/1 var(--display);width:18px;height:18px;display:grid;place-items:center;border:1px solid #1d1a16;font-size:11px}
+.puzzle .q small{display:block;font:500 9.5px/1.3 var(--mono);color:#6a5e48}
+.puzzle .sus{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.puzzle .sus span{font:400 11px/1 "IM Fell English SC",serif;padding:4px 7px;border:1px solid #1d1a16;border-radius:2px}
+.puzzle .sus span.hot{background:#1d1a16;color:#efe6d2}
+.over .q{margin:0 0 10px}
+.over .cue{font:italic 400 12.5px/1.3 "IM Fell English",serif;color:#4f4535}
+.over .cue b{font:700 9px/1 var(--mono);letter-spacing:.14em;font-style:normal;color:#6a5e48;display:block;margin-bottom:3px}
+.over .said{display:block;margin-top:4px;padding:6px 8px;border-left:3px solid var(--c);background:rgba(255,255,255,.35);font:500 19px/1.1 var(--hand);color:#2e261c;cursor:pointer;border:0;border-left:3px solid var(--c);width:100%;text-align:left;transition:filter .4s}
+.over .said.blur{filter:blur(5px);user-select:none}
+.over .said .sig{display:block;text-align:right;font-size:16px;color:var(--c);filter:brightness(.75)}
+.over .foot{font:500 9.5px/1.3 var(--mono);color:#6a5e48}
+.conf{border:1.5px dashed #1d1a16;padding:8px 10px}
+.conf h5{color:#a8322a}
+.conf p{font-size:12.5px}
+.redact{background:#1d1a16;color:transparent;border-radius:1px;user-select:none;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.classif{font-size:12px}
+.classif p{text-indent:-10px;padding-left:10px}
+.classif b{font:400 11px/1 "IM Fell English SC",serif;letter-spacing:.08em}
+.printer{border-top:3px double #1d1a16;padding-top:10px;margin-top:4px}
+.printer h5{font:400 13px/1 "IM Fell English SC",serif;letter-spacing:.12em;margin:0 0 6px;text-align:center}
+.printer .tok{height:9px;border-radius:0;margin:6px 0}
+.printer .legend{color:#4f4535;justify-content:center}
+.printer .legend span::before{border-radius:0}
+.printer p{font-size:12px;text-align:center;margin:6px 0 0;font-style:italic;color:#4f4535}
+.fresh-mark{font:700 8.5px/1 var(--mono);letter-spacing:.12em;color:#a8322a;border:1px solid #a8322a;padding:2px 4px;border-radius:2px;vertical-align:2px;margin-left:4px}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body class="iv-reg">
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">ALMANAC · design / mockups · floating Now widget</span>
+  <h1>Three ways to make the Now widget worth a glance</h1>
+  <p class="lede">All three show the same story at the same moment: Thursday evening in Saltmarsh, sixteen minutes before sunset, just after a reply that changed six things. Each one has the pill, the sky, what changed, the stakes, the people, the threads, the unspoken thoughts and what the Almanac fed the model. Only the layout differs. Click a pill to close or open its window.</p>
+</header>
+
+<div class="controls" role="toolbar" aria-label="Mockup controls">
+  <div class="ctl">Inner voice
+    <span class="seg" data-ctl="iv">
+      <button data-v="off" aria-pressed="false">Off</button>
+      <button data-v="prose" aria-pressed="false">Inline</button>
+      <button data-v="reg" aria-pressed="true">Register</button>
+    </span>
+  </div>
+  <div class="ctl">Narrator view
+    <span class="seg" data-ctl="narr">
+      <button data-v="0" aria-pressed="true">Player</button>
+      <button data-v="1" aria-pressed="false">Narrator</button>
+    </span>
+    <small>Narrator view shows the spoilers: hidden pressures and dramatic irony.</small>
+  </div>
+  <button class="go" id="replay">✦ A new reply arrives</button>
+</div>
+
+<!-- ═════════ 1 ═════════ -->
+<section class="dir">
+  <div class="intro">
+    <div>
+      <span class="num">Direction 1</span>
+      <h2>Orrery</h2>
+      <p class="pitch">A pocket planetarium. The sky gets the top third of the window, a live arc with the sun sliding toward the rooftops, and everything else sits in tabs down the side. Closest to what's shipped today, and the easiest to build.</p>
+    </div>
+    <ul>
+      <li><b>Pill:</b> a mini sky dial, the time, weather, place and medallions with mood dots. A dot pulses when that mood just changed. One chip rotates through what's urgent (the ball, the debt, the sunset) and a red badge counts the changes.</li>
+      <li><b>Sky hero:</b> the sun and moon on their real arcs over a harbour skyline, with rain when it's raining and a sunset countdown. Below it, a six-hour forecast.</li>
+      <li><b>Rail:</b> Changed · Stakes · Cast · Threads · Unspoken · Backstage. It opens on <i>Changed</i> after every reply. The Unspoken tab is gone when inner voice is off.</li>
+      <li><b>Bond moves</b> show the old value as a dashed ghost knob and the new one as a glowing knob, as in design/03 §7.</li>
+    </ul>
+  </div>
+  <div class="stage s1" data-stage>
+    <div class="chat" aria-hidden="true"></div>
+    <div class="float" id="d1"></div>
+  </div>
+</section>
+
+<!-- ═════════ 2 ═════════ -->
+<section class="dir">
+  <div class="intro">
+    <div>
+      <span class="num">Direction 2</span>
+      <h2>The Deck</h2>
+      <p class="pitch">Every part of the scene is a tarot card you deal through. Each card is its own object: a painted sky, a telegram, trading cards, a candle burning down, a corkboard with red string, sealed envelopes and a call sheet. It fits the storybook direction in design/03.</p>
+    </div>
+    <ul>
+      <li><b>Pill:</b> an admission ticket. The stub is torn off for the most urgent thing ("THE BALL · 3h 18m") and a wax seal carries the change count.</li>
+      <li><b>Deck:</b> tap the top card, use the arrows or press ← → to deal the next one. After a reply, the deck opens on <i>Since Last Page</i>.</li>
+      <li><b>The genre card changes with the genre.</b> A mystery gets the clue board. Horror would get the dread candle, a thriller the countdown, and so on.</li>
+      <li>You break the <b>seal</b> on an envelope to read the thought, as the Unspoken register does in chat.</li>
+    </ul>
+  </div>
+  <div class="stage s2" data-stage>
+    <div class="chat" aria-hidden="true"></div>
+    <div class="float" id="d2"></div>
+  </div>
+</section>
+
+<!-- ═════════ 3 ═════════ -->
+<section class="dir">
+  <div class="intro">
+    <div>
+      <span class="num">Direction 3</span>
+      <h2>Evening Gazette</h2>
+      <p class="pitch">The world prints a newspaper every turn. The biggest change is the headline and everything else is a column: society pages for the cast, a stop-press box for deadlines, classifieds for the Chekhov plants. One long read, no tabs.</p>
+    </div>
+    <ul>
+      <li><b>Pill:</b> the masthead plus a scrolling ticker of this turn's changes and what's urgent. Hover pauses it.</li>
+      <li><b>Headline:</b> chosen from the changes by weight: knowledge shifts and due debts beat mood changes.</li>
+      <li><b>Overheard</b> holds the inner voice. In register mode the thought is smudged ink until you click it. In inline mode it's printed plainly.</li>
+      <li><b>Confidential</b> is redacted in player view and printed in narrator view.</li>
+    </ul>
+  </div>
+  <div class="stage s3" data-stage>
+    <div class="chat" aria-hidden="true"></div>
+    <div class="float" id="d3"></div>
+  </div>
+</section>
+</div>
+
+<script>
+/* ───────── The story at this moment (one set of data for all three) ───────── */
+const P = {
+  mira:{name:"Mira Vasquez",short:"Mira",i:"M",c:"var(--mira)",hex:"#f0a34a",mood:"warm",prev:"wary",m:"#ffbf6b",act:"polishing the same glass, slower now",holds:"the tavern ledger",inj:null,trust:3,aff:1,press:"is protecting someone who does not deserve it"},
+  kael:{name:"Kael Dorn",short:"Kael",i:"K",c:"var(--kael)",hex:"#3fb8ad",mood:"guarded",prev:null,m:"#7aa2ff",act:"hasn't touched his drink",holds:"a sealed letter",inj:"cut across the left palm",trust:2,trustPrev:1,aff:0,press:"has an exit plan ready and is watching for the moment"},
+  bran:{name:"Old Brannock",short:"Brannock",i:"B",c:"var(--bran)",hex:"#a58bf5",mood:"sly",prev:"bored",m:"#d59bff",act:"counting coins into stacks of seven",holds:"a harbour pass",inj:null,trust:-1,aff:-2,press:"has a debt coming due soon"},
+};
+const WREN = {i:"W",c:"var(--wren)",hex:"#ee6f8f"};
+const FC = [["19:00","🌧","11"],["20:00","🌧","11"],["21:00","🌧","10"],["22:00","☁️","9"],["23:00","☁️","8"],["00:00","🌙","7"]];
+const THOUGHTS = [
+  {who:"mira",cue:"her thumb keeps finding the locket's clasp",text:"If he opens that letter he'll know I read it first. Let the rain take the blame for the wax."},
+  {who:"kael",cue:"he hasn't touched his drink",text:"Wren lied to the Tidewatch for me. Nobody does that for free. So what do they want?"},
+  {who:"wren",cue:"a hand resting on the brass key",text:"Brannock gave this up too easily.",persona:true},
+];
+const CLUES = [
+  {t:"The heir's ring was paste",to:"Brannock",rel:3},
+  {t:"Wax on the letter was resealed",to:"Mira",rel:2},
+  {t:"A Tidewatch boot print at the pier",to:"the Tidewatch",rel:1},
+];
+const TOK = [["Lore",520,"#e9c77b"],["Recall",310,"#3fb8ad"],["Chronicle",780,"#a58bf5"],["Scene note",230,"#ee6f8f"]];
+const FED = [["mirror","The Gilded Stag","place"],["mirror","The Tidewatch","faction"],["recall","Kael owes the Guild 40 crowns","fact"],["recall","Mira grew up on the Drowned Pier","fact"],["recall","The heir vanished at high tide","fact"],["chronicle","Ch. I–II · The Wreck Season","summary"]];
+
+/* ───────── Helpers ───────── */
+const $ = (s,r=document)=>r.querySelector(s), $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const PIN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>`;
+const med = (p,extra="")=>`<span class="med" style="--c:${p.c};--m:${p.m||p.c}">${p.i}${p.m?`<i class="md ${p.prev?"shift":""}"></i>`:""}${extra}</span>`;
+const pct = x=>((x+5)/10*100);
+function track(v,prev,color){
+  const g = prev!=null && prev!==v ? `<i class="trail" style="left:${pct(Math.min(prev,v))}%;width:${Math.abs(v-prev)*10}%"></i><i class="ghost" style="left:${pct(prev)}%"></i>` : "";
+  return `<span class="trk" style="--c:${color}"><i class="mid"></i>${g}<i class="knob ${g?"moved":""}" style="left:${pct(v)}%"></i></span>`;
+}
+function ring(cur,max,color,size=56,label){
+  const r=(size-10)/2, cx=size/2, C=2*Math.PI*r, step=C/max, seg=step-4;
+  let s=`<svg class="ring" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="margin:0 auto" aria-label="${label||""} ${cur} of ${max}">`;
+  for(let i=0;i<max;i++) s+=`<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${i<cur?color:"currentColor"}" stroke-width="6" stroke-dasharray="${seg} ${C-seg}" stroke-dashoffset="${-i*step}" transform="rotate(-90 ${cx} ${cx})"/>`;
+  return s+`<text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="${color}" style="font:600 12px var(--mono)">${cur}/${max}</text></svg>`;
+}
+const tokBar = ()=>`<div class="tok">${TOK.map(([,n,c])=>`<i style="flex:${n};background:${c}"></i>`).join("")}</div><div class="legend">${TOK.map(([l,n,c])=>`<span style="--c:${c}">${l} ${n}</span>`).join("")}</div>`;
+const envs = ()=>`<p class="lockcap">🔒 No one else in the story knows these.</p>`+THOUGHTS.map(t=>{const p=P[t.who]||WREN;const nm=t.persona?"Wren · you":p.short;return `<button class="env" style="--c:${p.hex}" data-env><span class="front"><span class="seal">${p.i}</span><span class="cue">“${t.cue}”</span><span class="who">${nm} · break the seal</span></span><span class="note">${t.text}<em>— ${t.persona?"Wren":p.short}</em></span></button>`}).join("");
+const bubs = ()=>THOUGHTS.filter(t=>!t.persona).map(t=>{const p=P[t.who];return `<div class="bub" style="--c:${p.hex}"><b>${p.short.toUpperCase()} THINKS</b>${t.text}</div>`}).join("");
+const skyline = fill=>`<svg viewBox="0 0 380 44" preserveAspectRatio="none" aria-hidden="true"><path fill="${fill}" d="M0 44V30h14v-8h10v8h8V18l7-6 7 6v12h12v-9h16v9h6V8h4v6h6v16h14v-6h18v6h10V20l10-8 10 8v10h8v-7h20v7h12V14h3v-4h3v4h3v16h16v-9h22v9h10v-6h14v6h12V22l8-7 8 7v8h14v-11h6v11h18v14z"/><rect x="47" y="22" width="4" height="4" fill="#ffc86b"/><rect x="176" y="24" width="4" height="4" fill="#ffc86b"/><rect x="296" y="26" width="4" height="4" fill="#ffc86b"/></svg>`;
+const ICON = {
+  changed:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8 1.8.7-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/></svg>`,
+  stakes:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9"/></svg>`,
+  cast:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 20c.6-3.6 3-5.5 6-5.5s5.4 1.9 6 5.5M15 15c2.8-.3 5 1.2 5.6 4.5"/></svg>`,
+  threads:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7c4-4 7 4 11 0s5 2 5 2M4 13c4-4 7 4 11 0s5 2 5 2"/><circle cx="6" cy="19" r="1.5"/><path d="M7.5 19H20"/></svg>`,
+  unspoken:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6.5L20.5 7"/><circle cx="12" cy="13.5" r="2.2" fill="currentColor"/></svg>`,
+  backstage:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 5h16v10H4z"/><path d="M8 19h8M12 15v4"/><path d="M8 9h5M8 12h8"/></svg>`,
+};
+
+/* ───────── The chat behind each stage ───────── */
+const CHAT = `<h4># VII · What the Tide Left</h4>
+<p>Rain needles the back window of the Gilded Stag. Mira sets down the glass she's been polishing for a quarter hour; her thumb finds the locket's clasp again.</p>
+<p><span class="spk" style="--c:var(--mira)">“You covered for him,”</span> she says, and some of the frost goes out of her voice. <span class="spk" style="--c:var(--mira)">“With the Tidewatch. I saw.”</span></p>
+<p>Kael hasn't touched his drink. He turns the sealed letter over in his cut hand, studying the wax as if it had been lying to him. <span class="spk" style="--c:var(--kael)">“This seal's been lifted,”</span> he murmurs. <span class="spk" style="--c:var(--kael)">“Once, at least.”</span></p>
+<p>From the corner, Old Brannock slides a brass key across the table without looking up from his coins. <span class="spk" style="--c:var(--bran)">“Before the bells, Wren. You'll owe me that favour before the bells.”</span></p>`;
+$$(".chat").forEach(c=>c.innerHTML=CHAT);
+
+/* ═════════ 1 · ORRERY ═════════ */
+function d1(){
+  const who = Object.values(P);
+  const changes = `
+    <h6><span>Since your last message</span><span>6 changes</span></h6>
+    <div class="o-row fx-in" style="--i:0"><span class="o-ic" style="background:rgba(240,163,74,.15)">${med(P.mira)}</span><div><b>Mira</b> <span class="mood"><s>wary</s> → warm</span><small>“You covered for him.” The frost went out of her voice.</small></div><span class="delta up">mood</span></div>
+    <div class="o-row fx-in" style="--i:1"><span class="o-ic" style="background:rgba(63,184,173,.15)">${med(P.kael)}</span><div><b>Kael → you</b> · trust${track(2,1,P.kael.hex)}<small>You covered for him with the Tidewatch.</small></div><span class="delta up">▲ +1</span></div>
+    <div class="o-row fx-in" style="--i:2"><span class="o-ic">🔍</span><div><b>Kael now suspects</b> the letter was opened and resealed<small>He noticed the lifted wax.</small></div><span class="delta due">? suspects</span></div>
+    <div class="o-row fx-in" style="--i:3"><span class="o-ic">🗝️</span><div><b>Brass key</b> · Brannock → you<small>Slid across the table, no questions.</small></div><span class="delta up">item</span></div>
+    <div class="o-row fx-in" style="--i:4"><span class="o-ic">🧵</span><div><b>The Drowned Heir</b> · complicated<small>The heir's ring was paste.</small></div><span class="delta due">thread</span></div>
+    <div class="o-row fx-in" style="--i:5"><span class="o-ic">⚖️</span><div><b>Your favour to Brannock</b> is now due<small>“Before the bells.”</small></div><span class="delta dn">due</span></div>`;
+  const stakes = `
+    <h6><span>Nearest deadline</span></h6>
+    <div class="o-count"><b>3h 18m</b><span>The Harbourmaster's Ball</span><small>tonight at 23:00 · the invitation is in Kael's coat</small><div class="bar"><i></i></div></div>
+    <h6><span>Clocks</span></h6>
+    <div class="o-rings"><div>${ring(4,6,"#ff6b81",56,"Tidewatch suspicion")}<small>Tidewatch<br>suspicion</small></div><div>${ring(3,5,"#6ee7a8",56,"Smugglers' trust")}<small>Smugglers'<br>trust</small></div><div>${ring(2,6,"#7aa2ff",56,"Guild patience")}<small>Guild<br>patience</small></div></div>
+    <h6><span>Gauge</span></h6>
+    <div class="gauge"><span>Dread</span><span class="g">${Array.from({length:10},(_,i)=>`<i class="${i<6?"on":""}"></i>`).join("")}</span><span class="delta dn">6 ▲</span></div>
+    <h6><span>Owed and due</span></h6>
+    <div class="o-row"><span class="o-ic">⚖️</span><div><b>You → Brannock</b>: a favour, unnamed<small>due before the bells</small></div><span class="delta dn">due</span></div>
+    <div class="o-row"><span class="o-ic">🪙</span><div><b>Kael → the Guild</b>: 40 crowns<small>open since Day 1</small></div><span class="delta due">open</span></div>
+    <h6><span>Clue board · mystery</span></h6>
+    ${CLUES.map(c=>`<div class="clue"><span>📌</span><div>${c.t} <em>→ ${c.to}</em><br><span class="rel">${[1,2,3].map(n=>`<i class="${n<=c.rel?"on":""}"></i>`).join("")}</span></div></div>`).join("")}`;
+  const cast = `
+    <h6><span>Present · the back room</span><span>3</span></h6>
+    <div class="o-who">${who.map(p=>`<div class="o-per" style="--c:${p.hex}">
+      <div class="hd">${med(p)}<div class="nm"><b>${p.name}</b><small>${p.act}</small></div></div>
+      <div class="tags"><span class="tag mood">${p.prev?`<s>${p.prev}</s> → `:""}${p.mood}</span><span class="tag">✋ ${p.holds}</span>${p.inj?`<span class="tag inj">🩸 ${p.inj}</span>`:""}</div>
+      <div class="bars"><span>TRUST</span>${track(p.trust,p.trustPrev,p.hex)}<span>AFFECTION</span>${track(p.aff,null,p.hex)}</div>
+      <div class="secret narr"><b>Hidden pressure</b>${p.short} ${p.press}.</div>
+    </div>`).join("")}</div>
+    <h6 class="narr"><span>Dramatic irony</span></h6>
+    <div class="irony narr"><b>🎭 Only you know</b>Kael is certain the letter never left his coat. Mira lifted it an hour ago and read it.</div>
+    <p class="locked narr-off" style="margin-top:12px">🔒 3 hidden pressures and 1 irony alert. Switch to narrator view to see them.</p>`;
+  const threads = `
+    <h6><span>Threads</span></h6>
+    <div class="thr"><div class="t"><b>The Drowned Heir</b><span class="st open">open</span></div><small>Latest: the ring was paste. Someone swapped it before the wreck.</small></div>
+    <div class="thr"><div class="t"><b>Missing ledger pages</b><span class="st stall">stalled · 3 scenes</span></div><small>Blocked: you need the harbour logs.</small></div>
+    <div class="thr"><div class="t"><b>Kael's debt to the Guild</b><span class="st open">open</span></div><small>Latest: a Guild runner was asking after him at noon.</small></div>
+    <h6><span>Chekhov's shelf</span></h6>
+    <div class="chek"><span class="gun">🔱</span><div><b>The harpoon above the bar</b><small>planted 5 scenes ago · still waiting</small></div></div>
+    <h6><span>Word on the docks</span></h6>
+    <p class="rumor">“They say the Tidewatch captain drinks with smugglers on the Drowned Pier.”<small>from Brannock · passed through 2 mouths · truth unknown</small></p>`;
+  const unspoken = `<h6><span>Unspoken · this reply</span><span class="iv-reg">3 sealed</span></h6><div class="iv-reg">${envs()}</div><div class="iv-prose">${bubs()}</div>`;
+  const back = `
+    <h6><span>Fed to the model this turn</span><span>~1,840 tok</span></h6>
+    ${tokBar()}
+    <div style="margin-top:10px">${FED.map(([v,t,k])=>`<div class="fed"><span class="via">${v}</span><span>${t}</span><span class="tag">${k}</span></div>`).join("")}</div>
+    <h6><span>Knowledge clerk</span></h6>
+    <div class="ok">✓ Idle · every reply read · last turn went out with the Almanac</div>`;
+  const tabs = [["changed","Changed",changes,"<sup>6</sup>"],["stakes","Stakes",stakes,'<sup class="dot"></sup>'],["cast","Cast",cast,""],["threads","Threads",threads,""],["unspoken","Unspoken",unspoken,"",true],["backstage","Backstage",back,""]];
+  $("#d1").innerHTML = `
+  <button class="o-pill" data-toggle aria-expanded="true" title="Open the Now window">
+    <span class="o-dial"><b></b><i></i></span>
+    <b class="o-time">19:42</b>
+    <span class="o-wx">🌧 11°</span>
+    <span class="o-place">${PIN}Gilded Stag</span>
+    <span class="o-stack">${Object.values(P).map(p=>med(p)).join("")}</span>
+    <span class="o-chip"><span class="rot"><span>⏳ Ball · 3h 18m</span><span>⚖ Favour due</span><span>☀ Sunset 16m</span><span>⏳ Ball · 3h 18m</span></span></span>
+    <span class="o-badge fx-pop">6</span>
+  </button>
+  <div class="o-win win" role="dialog" aria-label="ALMANAC · Now">
+    <header class="o-sky">
+      <span class="stars"></span>
+      <svg class="arc" viewBox="0 0 384 178" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M30 150 A162 110 0 0 1 354 150" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2" stroke-dasharray="2 5"/>
+        <circle cx="222" cy="42" r="9" fill="#f4ecd6"/><circle cx="226" cy="40" r="8" fill="#2c2458" opacity=".85"/>
+        <circle cx="350" cy="140" r="26" fill="rgba(255,160,90,.25)"/><circle cx="350" cy="140" r="11" fill="#ffc66b"/>
+      </svg>
+      <span class="rainfx"></span>
+      <div style="position:absolute;left:0;right:0;bottom:0;line-height:0">${skyline("#0f1128")}</div>
+      <div class="ttl"><b>19:42</b><span>THU · 14 HARVESTMOON · DAY 3</span><em>VII · What the Tide Left</em></div>
+      <span class="sunset"><span>☀ sets in 16m</span><span>☾ waxing gibbous</span></span>
+      <button class="x" data-toggle aria-label="Close">✕</button>
+      <div class="chips"><span>🌧 Light rain · 11°</span><span>${PIN} Saltmarsh › Gilded Stag › back room</span></div>
+    </header>
+    <div class="o-fc">${FC.map((f,i)=>`<div class="${i===0?"now":""}"><span>${i===0?"NOW":f[0]}</span><b>${f[1]}</b><i>${f[2]}°</i></div>`).join("")}</div>
+    <div class="o-body">
+      <nav class="o-rail" role="tablist" aria-orientation="vertical">${tabs.map(([k,l,,b,iv],i)=>`<button role="tab" data-tab="${k}" title="${l}" aria-label="${l}" aria-selected="${i===0}" class="${iv?"iv":""}">${ICON[k]}${b}</button>`).join("")}</nav>
+      ${tabs.map(([k,,h,,iv],i)=>`<div class="o-pane ${iv?"iv":""} ${i?"hide":""}" data-pane="${k}" role="tabpanel">${h}</div>`).join("")}
+    </div>
+  </div>
+  <p class="hint">Click the pill to close it · the rail switches tabs</p>`;
+  const root=$("#d1");
+  root.addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(!b)return;$$("[data-tab]",root).forEach(x=>x.setAttribute("aria-selected",x===b));$$("[data-pane]",root).forEach(p=>p.classList.toggle("hide",p.dataset.pane!==b.dataset.tab));});
+}
+
+/* ═════════ 2 · DECK ═════════ */
+function d2(){
+  const cards = [
+    {k:"hour",n:"I",s:"☾",t:"The Hour",sub:"Thursday, the 14th of Harvestmoon",h:`
+      <div class="art sky"><span class="moon"></span><span class="sun"></span><span class="rainfx"></span><div class="big">19:42</div>${skyline("#2b1f2c")}</div>
+      <div class="t-fc">${FC.map((f,i)=>`<div class="${i===0?"now":""}">${i===0?"now":f[0].slice(0,2)}<b>${f[1]}</b>${f[2]}°</div>`).join("")}</div>
+      <dl class="facts"><dt>Where</dt><dd>Saltmarsh › the Gilded Stag › back room</dd><dt>Weather</dt><dd>Light rain, 11°, wind off the harbour</dd><dt>Sun</dt><dd>sets at 19:58 · <b>in 16 minutes</b></dd><dt>Moon</dt><dd>☾ waxing gibbous, rising</dd><dt>Scene</dt><dd>VII · <i>What the Tide Left</i></dd></dl>`},
+    {k:"since",n:"II",s:"✦",t:"Since Last Page",sub:"what the last reply changed",h:`
+      <span class="stamp fx-pop">6 CHANGES</span>
+      <ul class="tele">
+        <li data-g="☀" class="fx-in" style="--i:0">MIRA: WARY → WARM <em>the frost went out of her voice</em></li>
+        <li data-g="♥" class="fx-in" style="--i:1">KAEL TRUSTS YOU MORE · ▲+1 ${track(2,1,"#2a8f86")}<em>you covered for him with the Tidewatch</em></li>
+        <li data-g="?" class="fx-in" style="--i:2">KAEL SUSPECTS THE LETTER WAS RESEALED <em>he noticed the lifted wax</em></li>
+        <li data-g="🗝" class="fx-in" style="--i:3">BRASS KEY: BRANNOCK → YOU</li>
+        <li data-g="∞" class="fx-in" style="--i:4">DROWNED HEIR COMPLICATED <em>the ring was paste</em></li>
+        <li data-g="⚖" class="fx-in" style="--i:5;color:#a8322a">YOUR FAVOUR TO BRANNOCK IS DUE <em>“before the bells”</em></li>
+      </ul>`},
+    {k:"company",n:"III",s:"♥",t:"The Company",sub:"present in the back room",h:`
+      <div class="tc">${Object.values(P).map(p=>`<div class="p" style="--c:${p.hex}">${med(p)}<b>${p.short}</b><span class="mood">${p.prev?`<s>${p.prev}</s> → `:""}${p.mood}</span><span class="icons"><span title="holds ${p.holds}">✋</span>${p.inj?`<span title="${p.inj}">🩸</span>`:""}</span><span class="mini"><span>TRU</span>${track(p.trust,p.trustPrev,p.hex)}<span>AFF</span>${track(p.aff,null,p.hex)}</span><small>${p.act}</small></div>`).join("")}</div>
+      <div class="paper-note narr"><b>🎭 Only you know</b>Kael is certain the letter never left his coat. Mira lifted it an hour ago.</div>
+      <div class="paper-note narr" style="background:#3a2a1c"><b>Hidden pressures</b>${Object.values(P).map(p=>`${p.short} ${p.press}.`).join(" ")}</div>
+      <p class="paper-lock narr-off">🔒 3 pressures and 1 irony, sealed for the narrator</p>`},
+    {k:"stakes",n:"IV",s:"⚔",t:"The Stakes",sub:"what the hour is running toward",h:`
+      <div class="hg"><span class="glass">⏳</span><div><b>3h 18m</b><small>until the Harbourmaster's Ball · 23:00</small></div></div>
+      <div class="t-rings"><div>${ring(4,6,"#b3261e",54)}<small>Tidewatch suspicion</small></div><div>${ring(3,5,"#2c7a4a",54)}<small>Smugglers' trust</small></div><div>${ring(2,6,"#2f5fb3",54)}<small>Guild patience</small></div></div>
+      <div class="candle"><span class="c"><i></i><b></b></span><div><b style="font:400 16px var(--display)">Dread · 6 of 10</b><br><small style="color:#7a6242">burning faster since the key changed hands</small></div></div>
+      <div class="gunbox" style="border-color:#a8322a"><b>⚖</b><div>You owe Brannock a favour<small>due before the bells</small></div></div>`},
+    {k:"clues",n:"V",s:"⚲",t:"The Clue Board",sub:"genre card · mystery",h:`
+      <div class="cork">
+        <svg viewBox="0 0 280 318" preserveAspectRatio="none" aria-hidden="true"><g stroke="#c0302a" stroke-width="1.6" fill="none"><path d="M70 30 Q120 90 214 160"/><path d="M214 30 Q170 120 66 170"/><path d="M140 250 Q190 230 214 170"/></g></svg>
+        <div class="pin" style="left:10px;top:12px;transform:rotate(-4deg)">The heir's ring was paste<small>●●● solid</small></div>
+        <div class="pin pale" style="right:10px;top:16px;transform:rotate(3deg)">Wax on the letter resealed<small>●●○ likely</small></div>
+        <div class="pin suspect" style="right:14px;top:148px;transform:rotate(-2deg)">Brannock<small>2 threads</small></div>
+        <div class="pin suspect" style="left:20px;top:156px;transform:rotate(2deg)">Mira<small>1 thread</small></div>
+        <div class="pin" style="left:76px;top:236px;transform:rotate(-1deg);width:128px">Tidewatch boot print, pier<small>●○○ shaky</small></div>
+      </div>`},
+    {k:"threads",n:"VI",s:"∞",t:"Loose Threads",sub:"and a gun on the wall",h:`
+      <div class="lthr"><ul>
+        <li><div class="t">The Drowned Heir<span class="st open">open</span></div><em>the ring was paste; swapped before the wreck</em></li>
+        <li><div class="t">Missing ledger pages<span class="st stall">stalled · 3</span></div><em>blocked: you need the harbour logs</em></li>
+        <li><div class="t">Kael's debt to the Guild<span class="st open">open</span></div><em>40 crowns · a runner was asking at noon</em></li>
+      </ul></div>
+      <div class="gunbox"><b>🔱</b><div>The harpoon above the bar<small>planted 5 scenes ago · waiting to matter</small></div></div>
+      <p class="whisper">“The Tidewatch captain drinks with smugglers.”<small>rumour · from Brannock · 2 mouths · truth unknown</small></p>`},
+    {k:"unspoken",n:"VII",s:"✉",t:"The Unspoken",sub:"what no one said aloud",iv:true,h:`<div class="iv-reg">${envs()}</div><div class="iv-prose">${bubs()}</div>`},
+    {k:"back",n:"VIII",s:"☰",t:"Backstage",sub:"what the narrator was handed",h:`
+      <div class="callsheet">${FED.map(([v,t,k])=>`<div class="ln"><i>${v}</i><span>${t}</span><span style="color:#8a6a3a">${k}</span></div>`).join("")}</div>
+      ${tokBar()}
+      <div class="ok">✓ Clerk idle · last turn went out with the Almanac</div>`},
+  ];
+  $("#d2").innerHTML = `
+  <button class="t-pill" data-toggle aria-expanded="true" title="Open the Now window">
+    <span class="l"><span class="t-orb"></span><span class="t-main"><b>19:42</b><small>Thu · 14 Harvestmoon</small></span><span class="t-mid">🌧 the Gilded Stag</span><span class="o-stack" style="display:inline-flex;padding-left:5px">${Object.values(P).map(p=>med(p)).join("")}</span></span>
+    <span class="r"><small>THE BALL</small><b>3h 18m</b></span>
+    <span class="t-seal fx-pop">6</span>
+  </button>
+  <div class="t-win win">
+    <div class="t-deck" tabindex="0" role="region" aria-roledescription="deck" aria-label="ALMANAC · Now">
+      ${cards.map(c=>`<article class="card ${c.iv?"iv":""}" data-card="${c.k}"><div class="frame"><span class="idx">${c.n}<i>${c.s}</i></span><span class="idx b">${c.n}<i>${c.s}</i></span><h3>${c.t}</h3><p class="sub">${c.sub}</p><div class="body">${c.h}</div></div></article>`).join("")}
+    </div>
+    <div class="t-nav"><button data-deck="-1" aria-label="Previous card">‹</button><span class="dots"></span><button data-deck="1" aria-label="Next card">›</button></div>
+    <span class="t-hint">tap the top card to deal the next one</span>
+  </div>`;
+  const root=$("#d2"), deck=$(".t-deck",root);
+  let cur=1; // opens on "Since Last Page"
+  const live=()=>$$(".card",deck).filter(c=>getComputedStyle(c).display!=="none");
+  function lay(){
+    const cs=live(); cur=(cur+cs.length)%cs.length;
+    $$(".card",deck).forEach(c=>c.dataset.pos="far");
+    cs.forEach((c,i)=>{const d=(i-cur+cs.length)%cs.length;c.dataset.pos=d<3?String(d):(d===cs.length-1?"gone":"far");});
+    $(".dots",root).innerHTML=cs.map((c,i)=>`<button aria-label="${$("h3",c).textContent}" aria-current="${i===cur}" data-dot="${i}"></button>`).join("");
+  }
+  root.addEventListener("click",e=>{
+    const n=e.target.closest("[data-deck]"), d=e.target.closest("[data-dot]"), c=e.target.closest('.card[data-pos="0"]');
+    if(n){cur+=+n.dataset.deck;lay();}
+    else if(d){cur=+d.dataset.dot;lay();}
+    else if(c){cur++;lay();}
+  });
+  deck.addEventListener("keydown",e=>{if(e.key==="ArrowRight"){cur++;lay();}if(e.key==="ArrowLeft"){cur--;lay();}});
+  window.layDeck=lay; lay();
+}
+
+/* ═════════ 3 · GAZETTE ═════════ */
+function d3(){
+  const cameo = p=>`<span class="cameo" style="--c:${p.hex}"></span>`;
+  const ticker = `<span><b>STOP PRESS</b>Favour to Brannock due before the bells</span><span><b>KNOWLEDGE</b>Kael suspects the letter was resealed</span><span><b>SOCIETY</b>Mira warms: wary → warm</span><span><b>BONDS</b>Kael's trust in you ▲ +1</span><span><b>GOODS</b>Brass key changes hands</span><span><b>DEADLINE</b>The Ball in 3h 18m</span><span><b>SKY</b>Sunset in 16 minutes</span>`;
+  $("#d3").innerHTML = `
+  <button class="g-pill" data-toggle aria-expanded="true" title="Open the evening edition">
+    <span class="mast"><b>𝔄</b><span>19:42</span><span style="font-size:14px">🌧</span></span>
+    <span class="tick"><div>${ticker}${ticker}</div></span>
+    <span class="ed"><b class="fx-pop">6</b></span>
+  </button>
+  <article class="g-win win" aria-label="ALMANAC · Evening Gazette">
+    <div class="g-top"><span>Evening edition · vol. III</span><button data-toggle aria-label="Fold the paper">fold ✕</button></div>
+    <div class="g-mast">The Saltmarsh Almanac</div>
+    <div class="g-date"><span>Thursday, 14 Harvestmoon</span><span>Scene VII</span><span>19:42 · one copper</span></div>
+    <div class="g-wx">
+      <svg class="dial" viewBox="0 0 78 46" aria-hidden="true"><path d="M4 42 A35 35 0 0 1 74 42" fill="none" stroke="#1d1a16" stroke-width="1" stroke-dasharray="2 3"/><line x1="0" y1="42" x2="78" y2="42" stroke="#1d1a16"/><circle cx="72" cy="37" r="5" fill="#1d1a16"/><circle cx="14" cy="20" r="4" fill="none" stroke="#1d1a16"/><path d="M14 16a4 4 0 0 0 0 8a3 4 0 0 1 0-8z" fill="#1d1a16"/></svg>
+      <div><p><b>Weather.</b> Light rain, 11°, wind off the harbour. Sun sets at 19:58, <i>in sixteen minutes</i>. Moon waxing gibbous.</p>
+      <div class="fc">${FC.map(f=>`<span>${f[0].slice(0,2)}<b>${f[1]}</b>${f[2]}°</span>`).join("")}</div></div>
+    </div>
+    <div class="g-head fx-in"><span class="kick">KNOWLEDGE · THIS HOUR</span><h3>Dorn Suspects Letter Was Resealed</h3><p>Lifted wax noticed at the Gilded Stag; “Once, at least,” says Mr Dorn.</p></div>
+    <div class="g-cols">
+      <section class="g-sec fx-in" style="--i:1"><h5>In Brief <span class="fresh-mark">NEW</span></h5><ul>
+        <li>Miss Vasquez warms to you: wary → warm.</li>
+        <li>Mr Dorn's trust in you rises <span class="up">▲ +1</span>, for covering with the Tidewatch.</li>
+        <li>A brass key passes from Brannock to you.</li>
+        <li>The Drowned Heir affair complicates: the ring was paste.</li>
+      </ul></section>
+      <section class="stop fx-in" style="--i:2"><h5>Stop Press</h5><small>THE HARBOURMASTER'S BALL</small><b class="big">3h 18m</b><small>tonight at 23:00</small><hr><small>DUE: YOUR FAVOUR TO BRANNOCK<br>“before the bells”</small></section>
+      <section class="g-sec soc"><h5>Society · Seen at the Stag</h5>${Object.values(P).map(p=>`<div class="p">${cameo(p)}<div><b>${p.name}</b><small>${p.mood}${p.prev?` (was ${p.prev})`:""}; ${p.act}</small><span class="meta">✋ ${p.holds}${p.inj?` · 🩸 ${p.inj}`:""}</span><span class="tb"><span>TRU</span>${track(p.trust,p.trustPrev,p.hex)}<span>AFF</span>${track(p.aff,null,p.hex)}</span></div></div>`).join("")}</section>
+      <section class="g-sec"><h5>Markets &amp; Tides</h5><div class="mkt"><span>${ring(4,6,"#a8322a",44)}</span><div><span>Tidewatch suspicion</span><small>up one this week</small></div><span>${ring(3,5,"#1f6b3a",44)}</span><div><span>Smugglers' trust</span><small>steady</small></div><span>${ring(2,6,"#2f5fb3",44)}</span><div><span>Guild patience</span><small>thinning</small></div></div><p style="margin-top:8px"><b>Dread index:</b> 6 of 10, rising.</p></section>
+      <section class="g-sec puzzle"><h5>The Puzzle Corner</h5>${CLUES.map((c,i)=>`<div class="q"><b>${i+1}</b><div>${c.t}<small>points to ${c.to} · ${["","shaky","likely","solid"][c.rel]}</small></div></div>`).join("")}<div class="sus"><span class="hot">Brannock</span><span>Mira</span><span>Tidewatch</span></div></section>
+      <section class="g-sec over iv"><h5>Overheard</h5>
+        <div class="iv-reg">${THOUGHTS.map(t=>{const p=P[t.who]||WREN;return `<div class="q" style="--c:${p.hex}"><div class="cue"><b>${t.persona?"YOU":p.short.toUpperCase()} · OBSERVED</b>${t.cue}</div><button class="said blur" data-smudge>${t.text}<span class="sig">— ${t.persona?"Wren":p.short}</span></button></div>`}).join("")}<p class="foot">Smudged for privacy. Click to read. No one in the story knows these.</p></div>
+        <div class="iv-prose">${THOUGHTS.filter(t=>!t.persona).map(t=>{const p=P[t.who];return `<div class="q" style="--c:${p.hex}"><span class="said">${t.text}<span class="sig">— ${p.short}</span></span></div>`}).join("")}</div>
+      </section>
+      <section class="g-sec conf"><h5>Confidential</h5>
+        <p><span class="narr">Kael is certain the letter never left his coat; Mira lifted it an hour ago.</span><span class="narr-off"><span class="redact">Kael is certain the letter never left his coat;</span> <span class="redact">Mira lifted it an hour ago.</span></span></p>
+        <p><span class="narr">Mira ${P.mira.press}. Kael ${P.kael.press}.</span><span class="narr-off"><span class="redact">Mira is protecting someone who does not</span> <span class="redact">deserve it. Kael has an exit</span></span></p>
+        <p class="narr-off" style="font:500 9.5px/1.3 var(--mono);color:#6a5e48">Redacted. Narrator view only.</p></section>
+      <section class="g-sec classif"><h5>Classifieds</h5>
+        <p><b>Still hanging.</b> Harpoon, above the bar of the Gilded Stag. Mounted 5 scenes ago. Awaiting occasion.</p>
+        <p><b>Wanted.</b> Harbour logs, any season. Enquire re: missing ledger pages (stalled 3 scenes).</p>
+        <p><b>Word on the docks.</b> “The Tidewatch captain drinks with smugglers.” From Brannock, second-hand. Unconfirmed.</p>
+        <p><b>Owed.</b> K. Dorn to the Guild, 40 crowns. Runner seen at noon.</p></section>
+    </div>
+    <footer class="printer"><h5>From the Printer's Desk</h5>${tokBar()}<p>This edition was set from 2 lore entries, 3 recalled facts and a chronicle of chapters I–II. The clerk is idle.</p></footer>
+  </article>`;
+  $("#d3").addEventListener("click",e=>{const s=e.target.closest("[data-smudge]");if(s)s.classList.toggle("blur");});
+}
+
+d1(); d2(); d3();
+
+/* ───────── Shared controls ───────── */
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-toggle]"); if(t){const st=t.closest("[data-stage]");st.classList.toggle("closed");$$("[aria-expanded]",st).forEach(b=>b.setAttribute("aria-expanded",!st.classList.contains("closed")));}
+  const env=e.target.closest("[data-env]"); if(env){env.classList.toggle("open");e.stopPropagation();}
+  const b=e.target.closest(".seg button"); if(b){
+    const seg=b.parentElement; $$("button",seg).forEach(x=>x.setAttribute("aria-pressed",x===b));
+    if(seg.dataset.ctl==="iv"){document.body.classList.remove("iv-off","iv-prose","iv-reg");document.body.classList.add("iv-"+b.dataset.v);
+      if(b.dataset.v==="off"){const u=$('#d1 [data-tab="unspoken"]');if(u.getAttribute("aria-selected")==="true")$('#d1 [data-tab="changed"]').click();}
+      window.layDeck();}
+    else document.body.classList.toggle("narr",b.dataset.v==="1");
+  }
+},true);
+function replay(){
+  document.body.classList.remove("fresh"); void document.body.offsetWidth; document.body.classList.add("fresh");
+  $$("[data-stage]").forEach(s=>s.classList.remove("closed"));
+  $('#d1 [data-tab="changed"]').click();
+}
+$("#replay").addEventListener("click",replay);
+setTimeout(replay,300);
+</script>
+</body>
+</html>

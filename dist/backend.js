@@ -1777,7 +1777,18 @@ function parseThoughts(text) {
     const who = /who\s*=\s*"([^"]*)"/i.exec(attrs)?.[1] ?? "?";
     const cue = /cue\s*=\s*"([^"]*)"/i.exec(attrs)?.[1];
     const [name, slot] = who.split("#");
-    out.push({ who: name.trim(), slot: slot ? parseInt(slot, 10) : undefined, cue, text: m[2].trim() });
+    out.push({ who: name.trim(), slot: slot ? parseInt(slot, 10) : undefined, cue, text: m[2].trim(), kind: "register" });
+  }
+  return out;
+}
+function parseInlineThoughts(text) {
+  const out = [];
+  const re = /\[thk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*[a-z]+)?\]([\s\S]*?)(?:\[\/thk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)/gi;
+  let m;
+  while (m = re.exec(text)) {
+    const body = m[3].replace(/\[\/?(?:spk|txt)[^\]]*\]/g, "").trim();
+    if (body)
+      out.push({ who: m[1].trim(), slot: m[2] ? parseInt(m[2], 10) : undefined, text: body, kind: "inline" });
   }
   return out;
 }
@@ -1899,7 +1910,7 @@ function parseMessage(text) {
     truncated: block?.truncated ?? false,
     header,
     title,
-    thoughts: parseThoughts(text ?? ""),
+    thoughts: [...parseThoughts(text ?? ""), ...parseInlineThoughts(text ?? "")],
     vtks: parseVtks(text ?? ""),
     speakers: parseSpeakers(text ?? ""),
     speech: parseSpeech(text ?? "")
@@ -1943,7 +1954,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.9.3";
+var VERSION = "1.10.0";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -3168,11 +3179,18 @@ class Folder {
       run(op, source);
     for (const op of extra)
       run(op, extraSource);
+    const thoughts = [];
     for (const t of parsed.thoughts ?? []) {
       const id = this.charId(t.who, msgIndex);
       if (id && id !== "user")
         this.state.chars[id].lastSeen = msgIndex;
+      if (id === "user" && this.opts.sealed && !this.opts.personaThoughts)
+        continue;
+      if (thoughts.length < 8)
+        thoughts.push({ who: id ?? t.who, name: id ? this.nm(id) : t.who, cue: t.cue, text: t.text.slice(0, 600), kind: t.kind ?? "register" });
     }
+    if (!fromUser)
+      st.thoughts = { msgIndex, list: thoughts };
     for (const v of parsed.vtks ?? []) {
       const aid = `doc:${slug(v.title || v.kind)}`;
       const existing = st.artifacts[aid];
@@ -3220,6 +3238,8 @@ class Folder {
       st.lastReply = msgIndex;
     this.kctx = null;
     st.lastDelta = delta;
+    if (!fromUser)
+      st.replyDelta = delta;
     return events;
   }
   kctx = null;
@@ -3435,7 +3455,7 @@ class Folder {
         if (c.dead)
           return reject(`${c.name} is dead`);
         const prev = c.mood?.name;
-        c.mood = { name: a.name, v: a.v ?? c.mood?.v, a: a.a ?? c.mood?.a, d: a.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null };
+        c.mood = { name: a.name, v: a.v ?? c.mood?.v, a: a.a ?? c.mood?.a, d: a.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null, msg: mi };
         return { verdict: "accepted", line: `\uD83C\uDFAD ${c.name}: ${prev ? prev + " \u2192 " : ""}${a.name}` };
       }
       case "body": {
@@ -7929,6 +7949,7 @@ function parseConfig(attrs) {
   return {
     sealed: persona ? persona === "sealed" || persona === "continuity" : undefined,
     personaThoughts: get("thoughts") === "1",
+    innerVoice: get("inner")?.toLowerCase() || undefined,
     genres: list(get("genres")),
     lead: get("lead")?.toLowerCase() || undefined,
     nsfw: get("nsfw"),
@@ -8266,6 +8287,66 @@ function registerTools() {
   });
 }
 
+// src/core/changes.ts
+var CHANGE_KIND = {
+  "\uD83C\uDF26": "weather",
+  "\uD83D\uDCCD": "place",
+  "\uD83D\uDC65": "cast",
+  "\uD83C\uDFAD": "mood",
+  "\uD83E\uDE79": "body",
+  "\uD83D\uDC57": "look",
+  "\uD83D\uDDE3": "knowledge",
+  "\uD83E\uDD2B": "secret",
+  "\uD83E\uDDE0": "knowledge",
+  "\uD83C\uDF92": "item",
+  "\u2696": "debt",
+  "\u23F3": "clock",
+  "\uD83C\uDFF7": "reputation",
+  "\uD83D\uDCD3": "journal",
+  "\uD83D\uDCDC": "canon",
+  "\uD83D\uDCC4": "artifact",
+  "\uD83D\uDCCA": "gauge",
+  "\uD83D\uDD0E": "clue",
+  "\uD83C\uDFAF": "payoff",
+  "\u23F0": "deadline",
+  "\uD83C\uDF42": "season",
+  "\uD83D\uDD78": "bond"
+};
+var RANK = ["debt", "deadline", "secret", "knowledge", "bond", "mood", "item", "cast", "clock", "gauge", "clue", "payoff", "reputation", "artifact", "journal", "canon", "place", "season", "weather", "body"];
+function replyChanges(st, nm, color) {
+  const d = st.replyDelta;
+  if (!d)
+    return { msg: -1, rows: [] };
+  const rows = [];
+  for (const b of Object.values(st.bonds)) {
+    for (const h of b.history) {
+      if (h.msgIndex !== d.msgIndex || !h.delta)
+        continue;
+      rows.push({
+        icon: "\uD83D\uDD78",
+        kind: "bond",
+        text: `${nm(b.from)} \u2192 ${nm(b.to)} \xB7 ${h.axis}`,
+        sub: h.cause,
+        tone: h.delta > 0 ? "up" : "down",
+        bond: { axis: h.axis, from: h.from, to: h.to, delta: h.delta, lo: BIPOLAR_AXES.includes(h.axis) ? -5 : 0, color: color(b.from) }
+      });
+    }
+  }
+  for (const line of d.lines) {
+    const m = /^(\S+)\s+([\s\S]*)$/u.exec(line);
+    if (!m)
+      continue;
+    const icon = m[1].replace(/\uFE0F/g, "");
+    const kind = Object.entries(CHANGE_KIND).find(([k]) => k.replace(/\uFE0F/g, "") === icon)?.[1];
+    if (!kind || !RANK.includes(kind) || kind === "bond" && !/\u201C/.test(m[2]))
+      continue;
+    const tone = kind === "debt" ? /\((due|broken)\)$/.test(m[2]) ? "due" : undefined : kind === "body" ? "down" : undefined;
+    rows.push({ icon, kind, text: m[2], tone });
+  }
+  const rank = (r) => r.kind === "debt" && r.tone !== "due" ? RANK.indexOf("item") : RANK.indexOf(r.kind);
+  return { msg: d.msgIndex, rows: rows.map((r, i) => ({ r, i })).sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i).map((x) => x.r).slice(0, 16) };
+}
+
 // src/backend/view.ts
 var AUTO_THEME = {
   horror: "nocturne",
@@ -8315,6 +8396,7 @@ async function buildView(chatId, userId) {
   const lead = meta.detected.lead || meta.detected.genres?.[0] || meta.config.genres?.[0];
   const nm = (id) => id === "user" ? L.names.user : st.chars[id]?.name ?? id;
   const now = st.time ? absMinutes(st.time) : null;
+  const colorOf = (id) => st.chars[id] ? voiceColor(st.chars[id], colors) : "var(--alm-muted)";
   const allFacts = Object.values(st.facts ?? {});
   const people = Object.values(st.chars).filter((c) => isKnower(c));
   const inPlay = new Set(factsInPlay(st, "", 8).map((f) => f.key));
@@ -8447,7 +8529,9 @@ async function buildView(chatId, userId) {
       ageSet: !!c.age,
       appearance: c.appearance,
       edit: meta.config.castEdits?.[c.id] ?? null,
-      held: Object.values(st.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name)
+      held: Object.values(st.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name),
+      moodFresh: !!c.mood?.prev && c.mood.prev !== c.mood.name && c.mood.msg != null && c.mood.msg === st.replyDelta?.msgIndex,
+      toYou: bondToUser(st, c.id)
     })),
     bonds: Object.values(st.bonds).map((b) => ({ from: b.from, to: b.to, fromName: nm(b.from), toName: nm(b.to), axes: b.axes, label: b.label, tags: b.tags, history: b.history.slice(-6), ladder: st.ladders[`${b.from}>${b.to}`] ?? null, lastMsg: b.history.at(-1)?.msgIndex ?? 0 })),
     knowledge: facts,
@@ -8464,7 +8548,7 @@ async function buildView(chatId, userId) {
       rumors: st.rumors.slice(-12),
       rep: Object.values(st.rep),
       gauges: Object.values(st.gauges),
-      deadlines: Object.values(st.deadlines).map((d) => ({ title: d.title, at: fmtTime(d.at), left: now != null ? fmtSpan(absMinutes(d.at) - now) : "", done: !!d.done, passed: now != null && absMinutes(d.at) <= now })),
+      deadlines: Object.values(st.deadlines).map((d) => ({ title: d.title, at: fmtTime(d.at), left: now != null ? fmtSpan(absMinutes(d.at) - now) : "", leftMin: now != null ? absMinutes(d.at) - now : null, done: !!d.done, passed: now != null && absMinutes(d.at) <= now })),
       cons: Object.values(st.cons).map((c) => ({ ...c, whoName: nm(c.who), whomName: c.whom ? nm(c.whom) : undefined, dueText: c.due?.at ? fmtTime(c.due.at) : c.due?.trigger })),
       threads: Object.values(st.threads),
       clues: st.clues,
@@ -8479,8 +8563,25 @@ async function buildView(chatId, userId) {
     rejected: L.events.filter((e) => e.verdict !== "accepted").slice(-20).map((e) => ({ msgIndex: e.msgIndex, raw: e.op.raw, verdict: e.verdict, reason: e.reason })),
     telemetry: meta.telemetry ?? null,
     note: plan?.note ?? "",
-    recall: plan?.recallText ?? ""
+    recall: plan?.recallText ?? "",
+    changes: replyChanges(st, nm, colorOf),
+    thoughts: {
+      msg: st.thoughts?.msgIndex ?? -1,
+      innerVoice: meta.detected.innerVoice ?? "",
+      list: (st.thoughts?.list ?? []).map((t) => ({ name: t.name, color: colorOf(t.who), isUser: t.who === "user", cue: t.cue, text: t.text, kind: t.kind }))
+    },
+    irony: facts.flatMap((f) => f.stances.filter((s) => s.status === "wrong" && st.chars[s.id] && isHere(st.chars[s.id]) && !st.chars[s.id].isUser).map((s) => ({ name: s.name, color: colorOf(s.id), statement: f.statement }))).slice(0, 4)
   };
+}
+function bondToUser(st, id) {
+  const b = st.bonds[`${id}>user`];
+  if (!b || id === "user")
+    return null;
+  const last = st.replyDelta?.msgIndex;
+  const was = (axis) => b.history.find((h) => h.axis === axis && h.msgIndex === last)?.from;
+  if (b.axes.trust == null && b.axes.affection == null)
+    return null;
+  return { trust: b.axes.trust, affection: b.axes.affection, trustWas: was("trust"), affectionWas: was("affection") };
 }
 function pickBody(b) {
   const out = {};

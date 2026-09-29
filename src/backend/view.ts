@@ -5,6 +5,8 @@ import { voiceColor, speakerCss } from "../core/render";
 import { absMinutes, estTokens, fmtSpan, fmtTime, hhmm } from "../core/util";
 import { coverageMap, finestUnits, storySoFar } from "../core/chronicle";
 import { factKind, factsInPlay, isHere, isKnower, lackOf, lackText, stanceVerb, storyStamp } from "../core/facts";
+import type { WorldState } from "../core/types";
+import { replyChanges, type ChangeRow } from "../core/changes";
 import { debounce, describe, host, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings } from "./store";
@@ -42,6 +44,12 @@ export interface UIView {
   telemetry: any;
   note: string;
   recall: string;
+  /** What the last reply changed, newest reply only. */
+  changes: { msg: number; rows: ChangeRow[] };
+  /** The last reply's private thoughts, and the preset's inner voice setting (off · prose · register). */
+  thoughts: { msg: number; innerVoice: string; list: { name: string; color: string; isUser: boolean; cue?: string; text: string; kind: string }[] };
+  /** Present people certain of something false (narrator-only). */
+  irony: { name: string; color: string; statement: string }[];
 }
 
 const AUTO_THEME: Record<string, string> = {
@@ -72,6 +80,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
   const lead = meta.detected.lead || meta.detected.genres?.[0] || meta.config.genres?.[0];
   const nm = (id: string) => (id === "user" ? L.names.user : st.chars[id]?.name ?? id);
   const now = st.time ? absMinutes(st.time) : null;
+  const colorOf = (id: string) => (st.chars[id] ? voiceColor(st.chars[id], colors) : "var(--alm-muted)");
 
   // Facts, newest first: statement, kind, who has it and how, who lacks it and why, the secret's keeping, and how it came out.
   const allFacts = Object.values(st.facts ?? {});
@@ -148,6 +157,8 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       journal: c.journal.slice(-5), dead: !!c.dead, isUser: c.isUser, lastSeen: c.lastSeen,
       age: c.age ?? loreAge(L.records, c.name, c.aliases), ageSet: !!c.age, appearance: c.appearance, edit: meta.config.castEdits?.[c.id] ?? null,
       held: Object.values(st.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name),
+      moodFresh: !!c.mood?.prev && c.mood.prev !== c.mood.name && c.mood.msg != null && c.mood.msg === st.replyDelta?.msgIndex,
+      toYou: bondToUser(st, c.id),
     })),
     bonds: Object.values(st.bonds).map((b) => ({ from: b.from, to: b.to, fromName: nm(b.from), toName: nm(b.to), axes: b.axes, label: b.label, tags: b.tags, history: b.history.slice(-6), ladder: st.ladders[`${b.from}>${b.to}`] ?? null, lastMsg: b.history.at(-1)?.msgIndex ?? 0 })),
     knowledge: facts,
@@ -162,7 +173,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     world: {
       factions: Object.values(st.factions).map((f) => ({ name: f.name, clocks: Object.values(f.clocks) })),
       rumors: st.rumors.slice(-12), rep: Object.values(st.rep), gauges: Object.values(st.gauges),
-      deadlines: Object.values(st.deadlines).map((d) => ({ title: d.title, at: fmtTime(d.at), left: now != null ? fmtSpan(absMinutes(d.at) - now) : "", done: !!d.done, passed: now != null && absMinutes(d.at) <= now })),
+      deadlines: Object.values(st.deadlines).map((d) => ({ title: d.title, at: fmtTime(d.at), left: now != null ? fmtSpan(absMinutes(d.at) - now) : "", leftMin: now != null ? absMinutes(d.at) - now : null, done: !!d.done, passed: now != null && absMinutes(d.at) <= now })),
       cons: Object.values(st.cons).map((c) => ({ ...c, whoName: nm(c.who), whomName: c.whom ? nm(c.whom) : undefined, dueText: c.due?.at ? fmtTime(c.due.at) : c.due?.trigger })),
       threads: Object.values(st.threads), clues: st.clues, plants: st.plants, canon: st.canon.slice(-20),
       calendar: al ? { weekday: al.weekday, date: al.date, season: al.season } : null,
@@ -175,7 +186,24 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     telemetry: meta.telemetry ?? null,
     note: plan?.note ?? "",
     recall: plan?.recallText ?? "",
+    changes: replyChanges(st, nm, colorOf),
+    thoughts: {
+      msg: st.thoughts?.msgIndex ?? -1,
+      innerVoice: meta.detected.innerVoice ?? "",
+      list: (st.thoughts?.list ?? []).map((t) => ({ name: t.name, color: colorOf(t.who), isUser: t.who === "user", cue: t.cue, text: t.text, kind: t.kind })),
+    },
+    irony: facts.flatMap((f) => f.stances.filter((s) => s.status === "wrong" && st.chars[s.id] && isHere(st.chars[s.id]) && !st.chars[s.id].isUser).map((s) => ({ name: s.name, color: colorOf(s.id), statement: f.statement }))).slice(0, 4),
   };
+}
+
+/** Where this person stands with the player: trust and affection now, and before the last reply moved them. */
+function bondToUser(st: WorldState, id: string): { trust?: number; affection?: number; trustWas?: number; affectionWas?: number } | null {
+  const b = st.bonds[`${id}>user`];
+  if (!b || id === "user") return null;
+  const last = st.replyDelta?.msgIndex;
+  const was = (axis: string) => b.history.find((h) => h.axis === axis && h.msgIndex === last)?.from;
+  if (b.axes.trust == null && b.axes.affection == null) return null;
+  return { trust: b.axes.trust, affection: b.axes.affection, trustWas: was("trust"), affectionWas: was("affection") };
 }
 
 function pickBody(b: Record<string, any>): Record<string, any> {

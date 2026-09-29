@@ -118,6 +118,7 @@ function parseConfig(attrs: string): Detected {
   return {
     sealed: persona ? persona === "sealed" || persona === "continuity" : undefined,
     personaThoughts: get("thoughts") === "1",
+    innerVoice: get("inner")?.toLowerCase() || undefined,
     genres: list(get("genres")),
     lead: get("lead")?.toLowerCase() || undefined,
     nsfw: get("nsfw"),

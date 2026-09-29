@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.9.3";
+var VERSION = "1.10.0";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -2377,47 +2377,6 @@ var PANEL_CSS = `
 .almp .timeline .ev{position:relative;margin:0 0 10px;font-size:13px}
 .almp .timeline .ev::before{content:"";position:absolute;left:-17px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--alm-accent);box-shadow:0 0 0 3px var(--alm-panel)}
 .almp .timeline .ev small{display:block;font:500 10.5px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
-.alm-hudw{box-sizing:border-box;width:max-content;max-width:440px;height:40px;display:flex;align-items:center;gap:9px;padding:0 12px 0 7px;border-radius:999px;background:linear-gradient(90deg,#1c2146,#3a3060 60%,#6a4a6a);color:#fff;font:500 12px/1 var(--alm-font-mono);box-shadow:0 10px 26px -12px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,255,255,.12);cursor:pointer;white-space:nowrap;user-select:none;transition:transform .15s,box-shadow .15s}
-.alm-hudw:hover{transform:translateY(-1px);box-shadow:0 14px 30px -12px rgba(0,0,0,.8),inset 0 0 0 1px rgba(255,255,255,.22)}
-.alm-hudw:focus-visible{outline:2px solid #ffc46b;outline-offset:2px}
-.alm-hudw>*{flex:none}
-.alm-hudw b{font-weight:600;letter-spacing:.02em}
-.alm-hudw__orb{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),0 0 10px rgba(255,255,255,.15)}
-.alm-hudw__orb i{width:10px;height:10px;border-radius:50%}
-.alm-hudw__orb i.moon{background:#f7efd9;box-shadow:inset -3px 0 0 rgba(20,24,60,.75),0 0 7px rgba(247,239,217,.55)}
-.alm-hudw__orb i.sun{background:#ffd36b;box-shadow:0 0 8px #ffc46b}
-.alm-hudw__pl{display:inline-flex;align-items:center;gap:4px;flex:0 1 auto!important;min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis}
-.alm-hudw__pl svg{flex:none;opacity:.8}
-.alm-hudw .alm-stack{display:inline-flex;padding-left:5px}
-.alm-hudw .alm-mini{box-shadow:0 0 0 2px #3f3264!important}
-.alm-hudw__dim{opacity:.72;font-style:italic}
-.alm-hudc{box-sizing:border-box;width:300px;border-radius:18px;overflow:hidden;background:var(--alm-panel);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:13px;line-height:1.45;box-shadow:0 24px 50px -18px rgba(0,0,0,.75),0 0 0 1px var(--alm-line)}
-.alm-hudc button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
-.alm-hudc__sky{position:relative;padding:12px 12px 11px;color:#fff;cursor:grab}
-.alm-hudc__row{display:flex;align-items:flex-end;gap:10px}
-.alm-hudc__clock{font:800 30px/.9 "Syne",var(--alm-font-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.alm-hudc__date{font:500 10.5px/1.3 var(--alm-font-mono);opacity:.85;min-width:0}
-.alm-hudc__x{margin-left:auto!important;align-self:flex-start;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.14)!important;color:#fff!important;font-size:12px!important}
-.alm-hudc__x:hover{background:rgba(255,255,255,.26)!important}
-.alm-hudc__title{margin-top:7px;font-weight:700;font-size:15px;font-family:var(--alm-font-display)}
-.alm-hudc__chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.alm-hudc__chips span{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.16);font-size:11px}
-.alm-hudc__bd{padding:4px 12px 12px}
-.alm-hudc h5{margin:10px 0 6px;font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--alm-muted)}
-.alm-hudc ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
-.alm-hudc__who li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start}
-.alm-hudc__who b{font-weight:600}
-.alm-hudc__mood{color:var(--alm-muted);font-size:12px}
-.alm-hudc__who small{display:block;color:var(--alm-muted);font-size:11.5px;overflow-wrap:anywhere}
-.alm-hudc__owed li{padding-left:12px;position:relative;font-size:12.5px}
-.alm-hudc__owed li::before{content:"";position:absolute;left:0;top:.55em;width:6px;height:6px;border-radius:50%;background:var(--alm-accent)}
-.alm-hudc__owed li.due::before{background:var(--alm-warn)}
-.alm-hudc__owed small{color:var(--alm-muted)}
-.alm-hudc__muted{margin:0;color:var(--alm-muted);font-size:12px}
-.alm-hudc__go{display:block;width:100%;margin-top:12px!important;padding:9px 12px!important;border-radius:12px;text-align:center;background:var(--alm-accent)!important;color:var(--alm-on-accent)!important;font-weight:600!important;font-size:12.5px!important}
-.alm-hudc__go:hover{filter:brightness(1.08)}
-.alm-hudw__err{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#ffc46b;color:#2a1d00;font-weight:700;font-size:12px}
-.alm-hudc__err{margin:0 0 10px;padding:8px 10px;border-radius:10px;font-size:12px;line-height:1.4;border:1px solid color-mix(in oklab,var(--alm-warn) 55%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 12%,transparent);overflow-wrap:anywhere}
 .alm-sz{font-size:14px}
 .alm-sz .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
 @media (max-width:560px){.alm-sz .grid{grid-template-columns:1fr}}
@@ -3180,42 +3139,286 @@ function openSessionZero(ctx, chatId, current) {
 }
 
 // src/frontend/hud.ts
-var PIN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>`;
-var mini = (c) => `<span class="alm-mini" style="--c:${escapeHtml(c.color)}" title="${escapeHtml(c.name)}${c.mood?.name ? ` · ${escapeHtml(c.mood.name)}` : ""}">${escapeHtml(initials(c.name))}</span>`;
-var presentOf = (v) => (v.cast ?? []).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead);
+var HUD_TABS = ["changed", "stakes", "cast", "threads", "unspoken", "backstage"];
+var PIN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>`;
+var ICON = {
+  changed: `<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8 1.8.7-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/>`,
+  stakes: `<path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9"/>`,
+  cast: `<circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 20c.6-3.6 3-5.5 6-5.5s5.4 1.9 6 5.5M15 15c2.8-.3 5 1.2 5.6 4.5"/>`,
+  threads: `<path d="M4 7c4-4 7 4 11 0s5 2 5 2M4 13c4-4 7 4 11 0s5 2 5 2"/><circle cx="6" cy="19" r="1.5"/><path d="M7.5 19H20"/>`,
+  unspoken: `<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6.5L20.5 7"/><circle cx="12" cy="13.5" r="2.2" fill="currentColor"/>`,
+  backstage: `<path d="M4 5h16v10H4z"/><path d="M8 19h8M12 15v4"/><path d="M8 9h5M8 12h8"/>`,
+  book: `<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/>`,
+  eye: `<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/>`
+};
+var TAB_LABEL = { changed: "What changed", stakes: "Stakes", cast: "Who is here", threads: "Threads", unspoken: "Unspoken", backstage: "Backstage" };
+var svg = (k, size = 19) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
+var NIGHT = /night|hours|pre-dawn|evening|dusk/;
 var skyOf = (v) => BAND_SKY[v?.now?.band] ?? BAND_SKY.evening;
-function hudPill(v, note) {
+var presentOf = (v) => (v.cast ?? []).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead);
+var hm = (s) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s ?? "");
+  return m ? +m[1] * 60 + +m[2] : null;
+};
+var span = (min) => min < 60 ? `${min}m` : min < 1440 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ""}` : `${Math.floor(min / 1440)}d ${Math.floor(min % 1440 / 60)}h`;
+function moodDot(c) {
+  const v = c.mood?.v;
+  if (typeof v !== "number")
+    return c.mood ? "var(--alm-accent-2)" : "transparent";
+  return v > 0.2 ? "var(--alm-gold)" : v < -0.2 ? "var(--alm-danger)" : "var(--alm-accent-2)";
+}
+var med = (c, big = false) => `<span class="alm-om${big ? " alm-om--big" : ""}" style="--c:${escapeHtml(c.color)}" title="${escapeHtml(c.name)}${c.mood?.name ? ` · ${escapeHtml(c.mood.name)}` : ""}">${escapeHtml(initials(c.name))}${c.mood ? `<i class="alm-om__md${c.moodFresh ? " is-fresh" : ""}" style="--m:${moodDot(c)}"></i>` : ""}</span>`;
+function track(v, was, color, lo = -5) {
+  if (v == null)
+    return `<span class="alm-otrk is-empty"></span>`;
+  const pct = (x) => (x - lo) / (5 - lo) * 100;
+  const moved = was != null && was !== v;
+  return `<span class="alm-otrk" style="--c:${escapeHtml(color)}">${lo < 0 ? `<i class="alm-otrk__mid"></i>` : ""}${moved ? `<i class="alm-otrk__trail" style="left:${pct(Math.min(was, v))}%;width:${Math.abs(pct(v) - pct(was))}%"></i><i class="alm-otrk__ghost" style="left:${pct(was)}%"></i>` : ""}<i class="alm-otrk__knob${moved ? " is-moved" : ""}" style="left:${pct(v)}%"></i></span>`;
+}
+function ring(cur, max, color, size = 52) {
+  const n = Math.max(1, Math.min(12, max));
+  const k = Math.round(Math.max(0, Math.min(cur, max)) / Math.max(1, max) * n);
+  const r = (size - 10) / 2;
+  const c = size / 2;
+  const C = 2 * Math.PI * r;
+  const step = C / n;
+  const seg = Math.max(1, step - (n > 8 ? 2.5 : 4));
+  let out = `<svg class="alm-oring" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="${cur} of ${max}">`;
+  for (let i = 0;i < n; i++)
+    out += `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${i < k ? color : "var(--alm-line)"}" stroke-width="6" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-i * step).toFixed(2)}" transform="rotate(-90 ${c} ${c})"/>`;
+  return `${out}<text x="50%" y="52%" text-anchor="middle" dominant-baseline="middle" fill="${color}">${cur}/${max}</text></svg>`;
+}
+var clockColor = (name) => /suspicio|alert|threat|heat|doom|danger|wrath|hunt|alarm|war|fear|dread|pursuit|exposure/i.test(name) ? "var(--alm-danger)" : /trust|favou?r|hope|progress|support|loyal|alliance|ready|repair|heal/i.test(name) ? "var(--alm-good)" : "var(--alm-accent-2)";
+function urgent(v) {
+  const out = [];
+  for (const d of v.world?.deadlines ?? []) {
+    if (d.done || d.passed || d.leftMin == null || d.leftMin > 72 * 60)
+      continue;
+    out.push({ w: d.leftMin, t: `⏳ ${d.title} · ${span(d.leftMin)}` });
+  }
+  for (const c of v.world?.cons ?? [])
+    if (c.status === "due")
+      out.push({ w: 90, t: `⚖ ${c.whoName}${c.whomName ? ` → ${c.whomName}` : ""} due` });
+  const n = v.now ?? {};
+  const set = hm(n.sun?.set);
+  const rise = hm(n.sun?.rise);
+  if (n.minute != null) {
+    const toSet = set != null ? set - n.minute : -1;
+    const toRise = rise != null ? (rise - n.minute + 1440) % 1440 : -1;
+    if (toSet > 0 && toSet <= 60)
+      out.push({ w: 200 + toSet, t: `☀ sets in ${toSet}m` });
+    else if (toRise > 0 && toRise <= 60)
+      out.push({ w: 200 + toRise, t: `☀ rises in ${toRise}m` });
+  }
+  return out.sort((a, b) => a.w - b.w).slice(0, 3).map((x) => x.t);
+}
+function hudPill(v, note, ui) {
   if (note || !v) {
-    return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" title="Open the Almanac"><span class="alm-hudw__orb" style="background:${BAND_SKY.evening}"></span><b>ALMANAC</b><span class="alm-hudw__dim">${escapeHtml(note ?? "connecting…")}</span></div>`;
+    return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" title="Open the Almanac"><span class="alm-hudw__dial" style="background:${BAND_SKY.evening}"><b class="moon"></b></span><b class="alm-hudw__brand">ALMANAC</b><span class="alm-hudw__dim">${escapeHtml(note ?? "connecting…")}</span></div>`;
   }
   const n = v.now ?? {};
   const place = n.place ?? [];
   const present = presentOf(v).slice(0, 4);
+  const chips = urgent(v);
+  const night = NIGHT.test(n.band ?? "evening");
+  const unseen = ui?.unseen ?? 0;
   return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" aria-expanded="false" title="Open the Now window">
-<span class="alm-hudw__orb" style="background:${skyOf(v)}"><i class="${/night|hours|pre-dawn|evening|dusk/.test(n.band ?? "evening") ? "moon" : "sun"}"></i></span><b class="alm-hudw__t">${escapeHtml(n.time ?? "--:--")}</b>${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${escapeHtml(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-stack">${present.map(mini).join("")}</span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}</div>`;
+<span class="alm-hudw__dial" style="background:${skyOf(v)}"><b class="${night ? "moon" : "sun"}"></b></span><b class="alm-hudw__t">${escapeHtml(n.time ?? "--:--")}</b>${n.weather ? `<span class="alm-hudw__wx">${escapeHtml(n.weather.glyph)}${n.weather.tempC != null ? ` ${Math.round(n.weather.tempC)}°` : ` ${escapeHtml(n.weather.condition)}`}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${escapeHtml(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-hudw__who">${present.map((c) => med(c)).join("")}</span>` : ""}${chips.length ? `<span class="alm-hudw__chip"><span class="alm-hudw__rot" data-n="${chips.length}">${chips.map((c) => `<span>${escapeHtml(c)}</span>`).join("")}</span></span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}${unseen ? `<span class="alm-hudw__badge" title="${unseen} change${unseen === 1 ? "" : "s"} since you last looked">${unseen > 9 ? "9+" : unseen}</span>` : ""}</div>`;
 }
-function hudCard(v) {
+function skyArc(v) {
+  const n = v.now ?? {};
+  const rise = hm(n.sun?.rise) ?? 360;
+  const set = hm(n.sun?.set) ?? 1080;
+  const now = n.minute ?? 720;
+  const W = 360;
+  const H = 150;
+  const cx = W / 2;
+  const base = 128;
+  const rx = 150;
+  const ry = 98;
+  const at = (t) => ({ x: cx - rx * Math.cos(Math.PI * t), y: base - ry * Math.sin(Math.PI * t) });
+  const day = set > rise && now >= rise && now < set;
+  const nightLen = (rise + 1440 - set) % 1440 || 1;
+  const t = day ? (now - rise) / (set - rise) : (now - set + 1440) % 1440 / nightLen;
+  const p = at(Math.min(0.97, Math.max(0.03, t)));
+  const moon = n.moon;
+  const lit = typeof moon?.illumination === "number" ? moon.illumination : 0.5;
+  const body = day ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="26" fill="rgba(255,190,110,.22)"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="11" fill="#ffcf73"/>` : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="16" fill="rgba(244,236,214,.14)"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="#f4ecd6"/><circle cx="${(p.x + 3 + (1 - lit) * 6).toFixed(1)}" cy="${(p.y - 1).toFixed(1)}" r="${(8 * (1 - lit) + 0.01).toFixed(1)}" fill="rgba(20,22,60,.8)"/>`;
+  return `<svg class="alm-hudc__arc" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path d="M${cx - rx} ${base} A${rx} ${ry} 0 0 1 ${cx + rx} ${base}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2" stroke-dasharray="2 5"/>${body}</svg>`;
+}
+var HILLS = `<svg class="alm-hudc__land" viewBox="0 0 360 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 40V26c30-8 60-12 96-6 20 3 30-6 44-6h6v-7h6v7h10v-4l7-5 7 5v8c26 2 52-10 86-8 34 2 60 8 98 2v24z"/><rect x="160" y="15" width="3" height="3" fill="#ffc86b"/><rect x="170" y="17" width="3" height="3" fill="#ffc86b"/></svg>`;
+function precip(v) {
+  const c = String(v.now?.weather?.condition ?? "").toLowerCase();
+  if (/snow|sleet|blizzard|flurr/.test(c))
+    return `<span class="alm-hudc__fx is-snow"></span>`;
+  if (/rain|drizzle|storm|shower|thunder|downpour/.test(c))
+    return `<span class="alm-hudc__fx is-rain"></span>`;
+  if (/fog|mist|haze/.test(c))
+    return `<span class="alm-hudc__fx is-fog"></span>`;
+  return "";
+}
+var empty = (t) => `<p class="alm-hudc__empty">${t}</p>`;
+var h6 = (t, right = "") => `<h6><span>${t}</span>${right ? `<span>${right}</span>` : ""}</h6>`;
+function paneChanged(v) {
+  const rows = v.changes?.rows ?? [];
+  if (!rows.length)
+    return h6("Since the last reply") + empty("The last reply didn't change anything the Almanac tracks.");
+  return h6("Since the last reply", `${rows.length} change${rows.length === 1 ? "" : "s"}`) + rows.map((r, i) => {
+    const delta = r.bond ? `<span class="alm-hudc__d ${r.bond.delta > 0 ? "up" : "dn"}">${r.bond.delta > 0 ? "▲ +" : "▼ "}${r.bond.delta}</span>` : r.tone === "due" ? `<span class="alm-hudc__d due">due</span>` : "";
+    const body = r.bond ? `<b>${escapeHtml(r.text)}</b>${track(r.bond.to, r.bond.from, r.bond.color, r.bond.lo)}${r.sub ? `<small>${escapeHtml(r.sub)}</small>` : ""}` : `<span>${escapeHtml(r.text)}</span>${r.sub ? `<small>${escapeHtml(r.sub)}</small>` : ""}`;
+    return `<div class="alm-hudc__row" style="--i:${i}"><span class="alm-hudc__ic">${escapeHtml(r.icon)}</span><div>${body}</div>${delta}</div>`;
+  }).join("");
+}
+function paneStakes(v) {
+  const w = v.world ?? {};
+  const out = [];
+  const dl = (w.deadlines ?? []).filter((d) => !d.done && !d.passed && d.leftMin != null).sort((a, b) => a.leftMin - b.leftMin);
+  if (dl.length) {
+    const d = dl[0];
+    out.push(h6("Nearest deadline"), `<div class="alm-hudc__count"><b>${escapeHtml(span(d.leftMin))}</b><span>${escapeHtml(d.title)}</span><small>${escapeHtml(d.at)}</small><i style="--p:${Math.max(4, Math.min(100, 100 - d.leftMin / (72 * 60) * 100)).toFixed(0)}%"></i></div>`);
+    if (dl.length > 1)
+      out.push(dl.slice(1, 4).map((x) => `<div class="alm-hudc__row"><span class="alm-hudc__ic">⏳</span><div><span>${escapeHtml(x.title)}</span><small>${escapeHtml(x.at)}</small></div><span class="alm-hudc__d">${escapeHtml(span(x.leftMin))}</span></div>`).join(""));
+  }
+  const clocks = (w.factions ?? []).flatMap((f) => (f.clocks ?? []).map((c) => ({ ...c, faction: f.name }))).slice(0, 6);
+  if (clocks.length)
+    out.push(h6("Clocks"), `<div class="alm-hudc__rings">${clocks.map((c) => `<div>${ring(c.cur, c.max, clockColor(c.name))}<small>${escapeHtml(c.faction)}<br>${escapeHtml(c.name)}</small></div>`).join("")}</div>`);
+  const gauges = w.gauges ?? [];
+  if (gauges.length)
+    out.push(h6("Gauges"), gauges.slice(0, 4).map((g) => {
+      const prev = g.history?.length > 1 ? g.history[g.history.length - 2].v : null;
+      const trend = prev == null || prev === g.cur ? "" : g.cur > prev ? `<span class="alm-hudc__d dn">▲</span>` : `<span class="alm-hudc__d up">▼</span>`;
+      const segs = g.max <= 12 ? `<span class="alm-hudc__segs">${Array.from({ length: g.max }, (_, i) => `<i class="${i < g.cur ? "on" : ""}"></i>`).join("")}</span>` : `<span class="alm-hudc__bar"><i style="width:${Math.round(g.cur / Math.max(1, g.max) * 100)}%"></i></span>`;
+      return `<div class="alm-hudc__gauge"><span title="${escapeHtml(g.cause ?? "")}">${escapeHtml(g.name)}</span>${segs}<span class="alm-hudc__n">${g.cur}/${g.max}</span>${trend}</div>`;
+    }).join(""));
+  const owed = (w.cons ?? []).filter((c) => c.status === "due" || c.status === "open").sort((a, b) => (a.status === "due" ? -1 : 0) - (b.status === "due" ? -1 : 0) || b.msgIndex - a.msgIndex).slice(0, 5);
+  if (owed.length)
+    out.push(h6("Owed and due"), owed.map((c) => `<div class="alm-hudc__row"><span class="alm-hudc__ic">${c.kind === "owe" ? "⚖" : "⛓"}</span><div><span><b>${escapeHtml(c.whoName)}${c.whomName ? ` → ${escapeHtml(c.whomName)}` : ""}</b>: ${escapeHtml(c.what ?? "")}</span>${c.dueText ? `<small>due ${escapeHtml(c.dueText)}</small>` : ""}</div>${c.status === "due" ? `<span class="alm-hudc__d due">due</span>` : ""}</div>`).join(""));
+  const clues = (w.clues ?? []).slice(-5).reverse();
+  if (clues.length) {
+    const rel = (r) => !r ? 0 : /solid|confirm|certain|strong|reliable|high/i.test(r) ? 3 : /likely|probable|good|medium|fair/i.test(r) ? 2 : 1;
+    out.push(h6("Clue board"), clues.map((c) => `<div class="alm-hudc__clue"><span>\uD83D\uDCCC</span><div>${escapeHtml(c.text)}${c.pointsTo ? ` <em>→ ${escapeHtml(c.pointsTo)}</em>` : ""}${c.reliability ? `<span class="alm-hudc__rel" title="${escapeHtml(c.reliability)}">${[1, 2, 3].map((k) => `<i class="${k <= rel(c.reliability) ? "on" : ""}"></i>`).join("")}</span>` : ""}</div></div>`).join(""));
+  }
+  const rep = (w.rep ?? []).filter((r) => r.score).slice(0, 4);
+  if (rep.length)
+    out.push(h6("Standing"), `<div class="alm-hudc__tags">${rep.map((r) => `<span class="alm-hudc__tag ${r.score > 0 ? "up" : "dn"}">${escapeHtml(r.group)} ${r.score > 0 ? "+" : ""}${r.score}</span>`).join("")}</div>`);
+  return out.length ? out.join("") : h6("Stakes") + empty("No deadlines, clocks, gauges or debts yet.");
+}
+function paneCast(v, ui) {
+  const who = presentOf(v);
+  const narrBtn = `<button class="alm-hudc__narr${ui.narr ? " is-on" : ""}" data-hud="narr" aria-pressed="${ui.narr}" title="${ui.narr ? "Hide the narrator's secrets" : "Show the narrator's secrets (spoilers)"}">${svg("eye", 14)}${ui.narr ? "Narrator" : "Player"}</button>`;
+  const head = `<h6><span>Present${(v.now?.place ?? []).length ? ` · ${escapeHtml(v.now.place[v.now.place.length - 1])}` : ""}</span>${narrBtn}</h6>`;
+  if (!who.length)
+    return head + empty("No one else is here.");
+  const cards = who.slice(0, 8).map((c) => {
+    const tags = [
+      c.mood ? `<span class="alm-hudc__tag" title="${escapeHtml(c.mood.prev && c.moodFresh ? `${c.mood.prev} → ` : "")}${escapeHtml(c.mood.name)}">${c.mood.prev && c.moodFresh ? `<s>${escapeHtml(c.mood.prev)}</s> → ` : ""}${escapeHtml(c.mood.name)}</span>` : "",
+      ...(c.held ?? []).slice(0, 2).map((h) => `<span class="alm-hudc__tag" title="${escapeHtml(h)}">✋ ${escapeHtml(h)}</span>`),
+      ...(c.injuries ?? []).slice(0, 2).map((i) => `<span class="alm-hudc__tag dn" title="${escapeHtml(i.where)}${i.note ? `, ${escapeHtml(i.note)}` : ""}">\uD83E\uDE78 ${escapeHtml(i.where)}${i.note ? `, ${escapeHtml(i.note)}` : ""}</span>`)
+    ].join("");
+    const y = c.toYou;
+    const bars = y ? `<div class="alm-hudc__bars">${y.trust != null ? `<span>trust</span>${track(y.trust, y.trustWas, c.color)}` : ""}${y.affection != null ? `<span>affection</span>${track(y.affection, y.affectionWas, c.color)}` : ""}</div>` : "";
+    const secret = ui.narr && c.pressure ? `<div class="alm-hudc__secret"><b>Hidden pressure</b>${escapeHtml(c.name)} ${escapeHtml(c.pressure)}</div>` : "";
+    return `<div class="alm-hudc__per" style="--c:${escapeHtml(c.color)}"><div class="alm-hudc__perh">${med(c, true)}<div><b>${escapeHtml(c.name)}</b>${c.activity ? `<small>${escapeHtml(c.activity)}</small>` : ""}</div></div>${tags ? `<div class="alm-hudc__tags">${tags}</div>` : ""}${bars}${secret}</div>`;
+  }).join("");
+  const irony = v.irony ?? [];
+  const hidden = presentOf(v).filter((c) => c.pressure).length + irony.length;
+  const tail = ui.narr ? irony.map((x) => `<div class="alm-hudc__irony"><b>\uD83C\uDFAD Dramatic irony</b>${escapeHtml(x.name)} is certain of something false: ${escapeHtml(x.statement)}</div>`).join("") : hidden ? `<p class="alm-hudc__locked">\uD83D\uDD12 ${hidden} secret${hidden === 1 ? "" : "s"} the narrator keeps. Narrator view shows ${hidden === 1 ? "it" : "them"}.</p>` : "";
+  return head + `<div class="alm-hudc__who">${cards}</div>` + tail;
+}
+function paneThreads(v) {
+  const w = v.world ?? {};
+  const out = [];
+  const threads = (w.threads ?? []).filter((t) => t.status !== "resolved").sort((a, b) => b.lastMsg - a.lastMsg).slice(0, 6);
+  if (threads.length)
+    out.push(h6("Threads"), threads.map((t) => `<div class="alm-hudc__thr"><div><b>${escapeHtml(t.title)}</b><span class="alm-hudc__st ${t.status === "stalled" ? "stall" : ""}">${t.status === "stalled" ? `stalled${t.stalls ? ` · ${t.stalls}` : ""}` : "open"}</span></div>${t.latest ? `<small>${escapeHtml(t.latest)}</small>` : ""}${t.blocker ? `<small>Blocked: ${escapeHtml(t.blocker)}</small>` : ""}</div>`).join(""));
+  const scene = v.now?.scene ?? 0;
+  const plants = (w.plants ?? []).filter((p) => p.paidAt == null).slice(-3).reverse();
+  if (plants.length)
+    out.push(h6("Chekhov's shelf"), plants.map((p) => {
+      const ago = Math.max(0, scene - (p.plantedScene ?? scene));
+      return `<div class="alm-hudc__chek"><span>\uD83D\uDD2B</span><div><b>${escapeHtml(p.text)}</b><small>${ago ? `planted ${ago} scene${ago === 1 ? "" : "s"} ago` : "planted this scene"}${p.payoff ? ` · payoff: ${escapeHtml(p.payoff)}` : ""}</small></div></div>`;
+    }).join(""));
+  const rumors = (w.rumors ?? []).slice(-2).reverse();
+  if (rumors.length)
+    out.push(h6("Word going round"), rumors.map((r) => `<p class="alm-hudc__rumor">“${escapeHtml(r.text)}”<small>${r.hops ? `passed through ${r.hops} mouth${r.hops === 1 ? "" : "s"}` : "first-hand"}</small></p>`).join(""));
+  return out.length ? out.join("") : h6("Threads") + empty("No open threads, plants or rumours yet.");
+}
+function hasThoughtsTab(v) {
+  const iv = v?.thoughts?.innerVoice ?? "";
+  if (iv === "off")
+    return false;
+  return !!iv || (v?.thoughts?.list ?? []).length > 0;
+}
+function paneUnspoken(v, ui) {
+  const t = v.thoughts ?? { list: [] };
+  const list = t.list ?? [];
+  const fresh = t.msg >= 0 && t.msg === v.changes?.msg;
+  if (!list.length)
+    return h6("Unspoken") + empty(t.innerVoice === "prose" ? "No one thought aloud in the last reply." : "The last reply kept its thoughts to itself.");
+  const sealed = list.map((x, i) => {
+    const key = `${t.msg}:${i}`;
+    const nm = x.isUser ? `${x.name} · you` : x.name;
+    if (x.kind === "inline" || !x.cue)
+      return `<div class="alm-hudc__bub" style="--c:${escapeHtml(x.color)}"><b>${escapeHtml(nm)} thinks</b>${escapeHtml(x.text)}</div>`;
+    const open = ui.opened.has(key);
+    return `<button class="alm-hudc__env${open ? " is-open" : ""}" style="--c:${escapeHtml(x.color)}" data-hud="env" data-key="${escapeHtml(key)}" aria-expanded="${open}">${open ? `<span class="alm-hudc__note">${escapeHtml(x.text)}<em>— ${escapeHtml(x.name)}</em></span>` : `<span class="alm-hudc__front"><span class="alm-hudc__seal">${escapeHtml(initials(x.name))}</span><span class="alm-hudc__cue">“${escapeHtml(x.cue)}”</span><span class="alm-hudc__envwho">${escapeHtml(nm)} · break the seal</span></span>`}</button>`;
+  }).join("");
+  return h6(fresh ? "Unspoken · the last reply" : "Unspoken · an earlier reply", `${list.length}`) + `<p class="alm-hudc__lockcap">\uD83D\uDD12 No one else in the story knows these.</p>` + sealed;
+}
+function paneBackstage(v) {
+  const f = (v.feed ?? [])[0];
+  const out = [];
+  const noteTok = Math.round(String(v.note ?? "").length / 4);
+  const chron = v.chronicle?.tokens ? (v.chronicle.tokens.chapter ?? 0) + (v.chronicle.tokens.arc ?? 0) + (v.chronicle.tokens.volume ?? 0) : 0;
+  const lore = f?.tokens ?? 0;
+  const parts = [["Lore & recall", lore, "var(--alm-gold)"], ["Chronicle", chron, "var(--alm-accent-2)"], ["Scene note", noteTok, "var(--alm-accent)"]];
+  const total = parts.reduce((a, p) => a + p[1], 0);
+  if (total)
+    out.push(h6("Fed to the model", `~${total.toLocaleString()} tokens`), `<div class="alm-hudc__tok">${parts.filter((p) => p[1]).map((p) => `<i style="flex:${p[1]};background:${p[2]}"></i>`).join("")}</div><div class="alm-hudc__legend">${parts.filter((p) => p[1]).map((p) => `<span style="--c:${p[2]}">${p[0]} ${p[1].toLocaleString()}</span>`).join("")}</div>`);
+  const items = (f?.items ?? []).filter((i) => i.injected).slice(0, 8);
+  const chapters = (f?.chronicle ?? []).slice(0, 4);
+  if (items.length || chapters.length)
+    out.push(h6("What went in this turn"), [...items.map((i) => `<div class="alm-hudc__fed"><span class="alm-hudc__via">${escapeHtml(i.via ?? "recall")}</span><span>${escapeHtml(i.name)}</span></div>`), ...chapters.map((c) => `<div class="alm-hudc__fed"><span class="alm-hudc__via">chronicle</span><span>${escapeHtml(c.name)}</span></div>`)].join(""));
+  const k = v.clerk ?? {};
+  const clerk = k.running ? "⏳ The knowledge clerk is reading replies…" : k.unread ? `${k.unread} repl${k.unread === 1 ? "y" : "ies"} the clerk hasn't read yet` : "✓ The clerk is idle; every reply read";
+  out.push(h6("Health"), v.planError ? `<p class="alm-hudc__ok is-warn">The last turn went out without the Almanac (${escapeHtml(v.planError.where)}).</p>` : `<p class="alm-hudc__ok">✓ The last turn went out with the Almanac</p>`, `<p class="alm-hudc__ok${k.unread ? " is-warn" : ""}">${escapeHtml(clerk)}</p>`);
+  return out.join("");
+}
+function hudCard(v, ui = { tab: "changed", narr: false, unseen: 0, opened: new Set }) {
   const n = v.now ?? {};
   const place = n.place ?? [];
   const clock = String(n.clock ?? "");
   const cut = clock.lastIndexOf(", ");
   const date = n.time && cut > 0 ? clock.slice(0, cut) : "";
-  const present = presentOf(v).slice(0, 5);
-  const owed = (v.world?.cons ?? []).filter((c) => c.status === "due" || c.status === "open").slice(-2);
-  const who = present.map((c) => `<li>${mini(c)}<div><b>${escapeHtml(c.name)}</b>${c.mood?.name ? ` <span class="alm-hudc__mood">${escapeHtml(c.mood.name)}</span>` : ""}${c.activity ? `<small>${escapeHtml(c.activity)}</small>` : ""}</div></li>`).join("");
+  const night = NIGHT.test(n.band ?? "evening");
+  const tabs = HUD_TABS.filter((t) => t !== "unspoken" || hasThoughtsTab(v));
+  const tab = tabs.includes(ui.tab) ? ui.tab : "changed";
+  const rows = v.changes?.rows?.length ?? 0;
+  const due = (v.world?.cons ?? []).some((c) => c.status === "due") || (v.world?.deadlines ?? []).some((d) => !d.done && !d.passed && d.leftMin != null && d.leftMin < 180);
+  const badge = (t) => t === "changed" && ui.unseen ? `<sup>${ui.unseen > 9 ? "9+" : ui.unseen}</sup>` : t === "stakes" && due ? `<sup class="dot"></sup>` : t === "unspoken" && (v.thoughts?.list ?? []).length && v.thoughts.msg === v.changes?.msg ? `<sup class="dot soft"></sup>` : "";
+  const set = hm(n.sun?.set);
+  const rise = hm(n.sun?.rise);
+  let sunChip = "";
+  if (n.minute != null && set != null && rise != null) {
+    const toSet = set - n.minute;
+    const toRise = (rise - n.minute + 1440) % 1440;
+    sunChip = n.sun?.daylight ? toSet > 0 ? `☀ sets in ${span(toSet)}` : "" : `☀ rises in ${span(toRise)}`;
+  }
+  const fc = (n.forecastHours ?? []).filter((_, i) => i % 2 === 0).slice(0, 6);
+  const pane = tab === "stakes" ? paneStakes(v) : tab === "cast" ? paneCast(v, ui) : tab === "threads" ? paneThreads(v) : tab === "unspoken" ? paneUnspoken(v, ui) : tab === "backstage" ? paneBackstage(v) : paneChanged(v);
   return `<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now">
-<div class="alm-hudc__sky" style="background:${skyOf(v)}">
-  <div class="alm-hudc__row"><b class="alm-hudc__clock">${escapeHtml(n.time ?? "--:--")}</b><span class="alm-hudc__date">${escapeHtml(date)}</span><button class="alm-hudc__x" data-hud="toggle" aria-label="Close the Now window">✕</button></div>
-  ${n.title ? `<div class="alm-hudc__title">${escapeHtml(n.title)}</div>` : ""}
-  <div class="alm-hudc__chips">${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${escapeHtml(place.slice(-2).join(" › "))}</span>` : ""}${n.mode ? `<span>${escapeHtml(n.mode)}</span>` : ""}</div>
-</div>
-<div class="alm-hudc__bd">
-  ${v.planError ? `<p class="alm-hudc__err"><b>The last turn went out without the Almanac.</b> ${escapeHtml(v.planError.message)}</p>` : ""}
-  <h5>Present</h5>
-  ${who ? `<ul class="alm-hudc__who">${who}</ul>` : `<p class="alm-hudc__muted">No one else is here.</p>`}
-  ${owed.length ? `<h5>Owed and due</h5><ul class="alm-hudc__owed">${owed.map((c) => `<li class="${c.status === "due" ? "due" : ""}">${escapeHtml(c.whoName)}${c.whomName ? ` → ${escapeHtml(c.whomName)}` : ""}: ${escapeHtml(c.what ?? "")}${c.dueText ? ` <small>due ${escapeHtml(c.dueText)}</small>` : ""}</li>`).join("")}</ul>` : ""}
-  ${n.forecast ? `<h5>Ahead</h5><p class="alm-hudc__muted">${escapeHtml(n.forecast)}</p>` : ""}
-  <button class="alm-hudc__go" data-hud="open">Open the Almanac →</button>
+<header class="alm-hudc__sky${night ? " is-night" : ""}" style="background:${skyOf(v)}">
+  ${night ? `<span class="alm-hudc__stars"></span>` : ""}${skyArc(v)}${precip(v)}${HILLS}
+  <div class="alm-hudc__ttl"><b>${escapeHtml(n.time ?? "--:--")}</b><span>${escapeHtml(date)}${n.day != null ? ` · Day ${n.day}` : ""}</span>${n.title ? `<em>${escapeHtml(n.title)}</em>` : ""}</div>
+  <div class="alm-hudc__astro">${sunChip ? `<span>${escapeHtml(sunChip)}</span>` : ""}${n.moon ? `<span>${escapeHtml(n.moon.glyph)} ${escapeHtml(n.moon.name)}</span>` : ""}</div>
+  <button class="alm-hudc__x" data-hud="toggle" aria-label="Close the Now window">✕</button>
+  <div class="alm-hudc__chips">${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${escapeHtml(place.slice(-3).join(" › "))}</span>` : ""}</div>
+</header>
+${fc.length ? `<div class="alm-hudc__fc">${fc.map((h, i) => `<div class="${i === 0 ? "now" : ""}"><span>${i === 0 ? "now" : escapeHtml(h.t)}</span><b>${escapeHtml(h.glyph)}</b><i>${escapeHtml(h.temp)}°</i></div>`).join("")}</div>` : ""}
+${v.planError ? `<p class="alm-hudc__err alm-hudc__err--top" data-hud="tab" data-tab="backstage"><b>The last turn went out without the Almanac.</b> ${escapeHtml(v.planError.message)}</p>` : ""}
+<div class="alm-hudc__body">
+  <nav class="alm-hudc__rail" role="tablist" aria-orientation="vertical">${tabs.map((t) => `<button role="tab" data-hud="tab" data-tab="${t}" aria-selected="${t === tab}" title="${TAB_LABEL[t]}" aria-label="${TAB_LABEL[t]}">${svg(t)}${badge(t)}</button>`).join("")}<button class="alm-hudc__open" data-hud="open" title="Open the Almanac" aria-label="Open the Almanac">${svg("book")}</button></nav>
+  <div class="alm-hudc__pane" role="tabpanel" data-tab="${tab}">${pane}</div>
 </div></div>`;
 }
 function measure(html, width) {
@@ -3231,12 +3434,286 @@ function measure(html, width) {
       return { w: Math.ceil(r.width), h: Math.ceil(r.height) };
   } catch {}
   const text = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-  const avatars = (html.match(/class="alm-mini"/g) ?? []).length;
-  return width ? { w: width, h: 380 } : { w: Math.ceil(text.length * 7.4 + 56 + avatars * 18), h: 40 };
+  const avatars = (html.match(/class="alm-om/g) ?? []).length;
+  return width ? { w: width, h: 540 } : { w: Math.ceil(text.length * 7.4 + 56 + avatars * 18), h: 44 };
 }
 
+// src/frontend/hudstyles.ts
+var S2 = (id) => `:root[data-alm-skin="${id}"]`;
+var BASE = `
+.alm-hudw,.alm-hudc{--alm-hud-r:var(--alm-radius,18px);--alm-hud-pill:999px;--alm-hud-ring:var(--alm-panel);box-sizing:border-box;-webkit-font-smoothing:antialiased}
+.alm-hudw *,.alm-hudc *{box-sizing:border-box}
+.alm-hudc button,.alm-hudw button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit;min-width:0;min-height:0;box-shadow:none}
+
+/* ── Pill ── */
+.alm-hudw{position:relative;width:max-content;max-width:480px;height:44px;display:flex;align-items:center;gap:9px;padding:0 13px 0 6px;border-radius:var(--alm-hud-pill);
+  background:var(--alm-texture,none),var(--alm-panel);color:var(--alm-ink);border:1px solid var(--alm-line);font:500 12px/1 var(--alm-font-mono);
+  box-shadow:0 12px 28px -14px rgba(0,0,0,.55),var(--alm-lift,none);cursor:pointer;white-space:nowrap;user-select:none;transition:transform .15s,box-shadow .15s}
+.alm-hudw:hover{transform:translateY(-1px);box-shadow:0 16px 32px -14px rgba(0,0,0,.65),var(--alm-lift,none)}
+.alm-hudw:focus-visible{outline:2px solid var(--alm-accent);outline-offset:2px}
+.alm-hudw>*{flex:none}
+.alm-hudw__dial{position:relative;display:block;width:32px;height:32px;border-radius:50%;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),0 0 0 2px var(--alm-panel),0 0 0 3px var(--alm-line)}
+.alm-hudw__dial::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34%;background:rgba(10,12,34,.78)}
+.alm-hudw__dial b{position:absolute;width:10px;height:10px;border-radius:50%}
+.alm-hudw__dial b.sun{right:6px;top:10px;background:#ffcf73;box-shadow:0 0 8px 2px rgba(255,170,80,.8)}
+.alm-hudw__dial b.moon{left:8px;top:6px;background:#f4ecd6;box-shadow:inset -3px 0 0 rgba(30,30,80,.8),0 0 7px rgba(247,239,217,.55)}
+.alm-hudw__brand{font-weight:600;letter-spacing:.14em}
+.alm-hudw__t{font:600 17px/1 var(--alm-font-display);letter-spacing:.01em;font-variant-numeric:tabular-nums}
+.alm-hudw__wx{color:var(--alm-muted)}
+.alm-hudw__pl{display:inline-flex;align-items:center;gap:4px;flex:0 1 auto!important;min-width:64px;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.alm-hudw__pl svg{flex:none;opacity:.7}
+.alm-hudw__who{display:inline-flex;padding-left:5px}
+.alm-hudw__who .alm-om{margin-left:-5px}
+.alm-hudw__dim{color:var(--alm-muted);font-style:italic}
+.alm-hudw__chip{flex:0 1 auto!important;min-width:0;max-width:190px;height:24px;overflow:hidden;border-radius:var(--alm-hud-pill);padding:0 10px;color:color-mix(in oklab,var(--alm-accent) 80%,var(--alm-ink));background:color-mix(in oklab,var(--alm-accent) 13%,transparent);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-accent) 35%,transparent)}
+.alm-hudw__rot{display:flex;flex-direction:column}
+.alm-hudw__rot span{height:24px;line-height:24px;overflow:hidden;text-overflow:ellipsis}
+.alm-hudw__err{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--alm-warn);color:#1d1400;font-weight:700;font-size:12px}
+.alm-hudw__badge{position:absolute;top:-7px;right:-5px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--alm-danger);color:#fff;font:700 11px/20px var(--alm-font-body);text-align:center;box-shadow:0 0 0 2px var(--alm-panel),0 0 12px color-mix(in oklab,var(--alm-danger) 70%,transparent)}
+
+/* Medallions */
+.alm-om{--c:var(--alm-muted);position:relative;display:inline-grid;place-items:center;flex:none;width:24px;height:24px;border-radius:50%;background:var(--c);color:var(--alm-on-voice,#fff);font:700 10.5px/1 var(--alm-font-display);box-shadow:0 0 0 2px var(--alm-hud-ring)}
+.alm-om--big{width:36px;height:36px;font-size:15px}
+.alm-om__md{position:absolute;right:-2px;bottom:-2px;width:9px;height:9px;border-radius:50%;background:var(--m);box-shadow:0 0 0 2px var(--alm-hud-ring)}
+.alm-om--big .alm-om__md{width:11px;height:11px}
+
+/* ── Window ── */
+.alm-hudc{width:360px;border-radius:calc(var(--alm-hud-r) + 6px);overflow:hidden;background:var(--alm-panel);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:13px;line-height:1.45;
+  box-shadow:0 30px 60px -24px rgba(0,0,0,.7),0 0 0 1px var(--alm-line)}
+.alm-hudc__sky{position:relative;height:164px;overflow:hidden;color:#fff;cursor:grab}
+.alm-hudc__stars{position:absolute;inset:0 0 45% 0;background:radial-gradient(1px 1px at 12% 20%,#fff,transparent),radial-gradient(1px 1px at 30% 55%,#fff,transparent),radial-gradient(1.5px 1.5px at 62% 14%,#fff,transparent),radial-gradient(1px 1px at 82% 38%,#fff,transparent),radial-gradient(1px 1px at 48% 30%,#fff,transparent),radial-gradient(1px 1px at 92% 12%,#fff,transparent)}
+.alm-hudc__arc{position:absolute;inset:0;width:100%;height:100%}
+.alm-hudc__land{position:absolute;left:0;right:0;bottom:0;width:100%;height:40px;fill:rgba(8,10,26,.88)}
+.alm-hudc__fx{position:absolute;inset:0;pointer-events:none}
+.alm-hudc__fx.is-rain{background:repeating-linear-gradient(105deg,transparent 0 13px,rgba(210,220,255,.24) 13px 14px,transparent 14px 29px) 0 0/80px 80px;mix-blend-mode:screen}
+.alm-hudc__fx.is-snow{background:radial-gradient(1.6px 1.6px at 10px 12px,#fff,transparent),radial-gradient(1.2px 1.2px at 40px 30px,#fff,transparent),radial-gradient(2px 2px at 64px 58px,#fff,transparent) 0 0/80px 80px;opacity:.85}
+.alm-hudc__fx.is-fog{background:linear-gradient(transparent 35%,rgba(230,230,240,.35) 70%,rgba(230,230,240,.5))}
+.alm-hudc__ttl{position:absolute;left:16px;top:12px;right:120px;text-shadow:0 2px 10px rgba(0,0,0,.35)}
+.alm-hudc__ttl b{display:block;font:600 40px/1 var(--alm-font-display);letter-spacing:.01em;font-variant-numeric:tabular-nums}
+.alm-hudc__ttl span{display:block;margin-top:4px;font:500 10.5px/1.35 var(--alm-font-mono);letter-spacing:.06em;text-transform:uppercase;opacity:.88}
+.alm-hudc__ttl em{display:block;margin-top:4px;font:italic 500 14px/1.25 var(--alm-font-display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.alm-hudc__astro{position:absolute;right:12px;top:48px;display:grid;gap:4px;justify-items:end}
+.alm-hudc__astro span,.alm-hudc__chips span{font:500 10.5px/1 var(--alm-font-mono);padding:5px 8px;border-radius:999px;background:rgba(8,9,26,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:#f1efff;white-space:nowrap}
+.alm-hudc__x{position:absolute!important;right:12px;top:12px;width:28px;height:28px;border-radius:50%!important;display:grid;place-items:center;background:rgba(8,9,26,.38)!important;color:#fff!important;font-size:12px!important}
+.alm-hudc__x:hover{background:rgba(8,9,26,.6)!important}
+.alm-hudc__chips{position:absolute;left:12px;right:12px;bottom:8px;display:flex;gap:5px;flex-wrap:wrap}
+.alm-hudc__chips span{display:inline-flex;align-items:center;gap:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;background:rgba(8,9,26,.6)}
+.alm-hudc__fc{display:grid;grid-template-columns:repeat(6,1fr);background:var(--alm-panel-2);border-bottom:1px solid var(--alm-line)}
+.alm-hudc__fc div{display:grid;gap:3px;justify-items:center;padding:7px 0 6px;font:500 10px/1 var(--alm-font-mono);color:var(--alm-muted)}
+.alm-hudc__fc b{font:400 15px/1 var(--alm-font-body)}
+.alm-hudc__fc i{font-style:normal;color:var(--alm-ink)}
+.alm-hudc__fc .now{color:var(--alm-accent);background:color-mix(in oklab,var(--alm-accent) 10%,transparent)}
+.alm-hudc__err{margin:0;padding:8px 12px;font-size:12px;line-height:1.4;border-bottom:1px solid color-mix(in oklab,var(--alm-warn) 45%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 14%,var(--alm-panel));overflow-wrap:anywhere;cursor:pointer}
+.alm-hudc__body{display:grid;grid-template-columns:52px minmax(0,1fr);height:318px}
+.alm-hudc__rail{display:flex;flex-direction:column;gap:4px;padding:9px 6px;background:var(--alm-panel-2);border-right:1px solid var(--alm-line)}
+.alm-hudc__rail button{position:relative;display:grid;place-items:center;width:40px;height:38px;border-radius:var(--alm-r-sm,12px);color:var(--alm-muted)}
+.alm-hudc__rail button:hover{color:var(--alm-ink);background:color-mix(in oklab,var(--alm-ink) 6%,transparent)}
+.alm-hudc__rail button[aria-selected="true"]{color:var(--alm-on-accent);background:var(--alm-accent);box-shadow:0 6px 14px -8px var(--alm-accent)}
+.alm-hudc__rail button:focus-visible{outline:2px solid var(--alm-accent);outline-offset:1px}
+.alm-hudc__rail sup{position:absolute;top:1px;right:0;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--alm-danger);color:#fff;font:700 9.5px/16px var(--alm-font-body);text-align:center;box-shadow:0 0 0 2px var(--alm-panel-2)}
+.alm-hudc__rail sup.dot{min-width:8px;width:8px;height:8px;padding:0;top:6px;right:6px;background:var(--alm-warn)}
+.alm-hudc__rail sup.dot.soft{background:var(--alm-accent-2)}
+.alm-hudc__open{margin-top:auto}
+.alm-hudc__pane{overflow:auto;padding:12px 14px 16px;background:var(--alm-texture,none),var(--alm-panel);scrollbar-width:thin;scrollbar-color:var(--alm-line) transparent;overscroll-behavior:contain}
+.alm-hudc h6{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 8px;font:500 9.5px/1.2 var(--alm-font-mono);letter-spacing:.15em;text-transform:uppercase;color:var(--alm-muted)}
+.alm-hudc h6:not(:first-child){margin-top:16px}
+.alm-hudc small{display:block;color:var(--alm-muted);font-size:12px;line-height:1.35;font-style:italic}
+.alm-hudc__empty{margin:6px 0 0;color:var(--alm-muted);font-style:italic}
+.alm-hudc__row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:9px;align-items:start;padding:8px 0;border-bottom:1px dashed var(--alm-line)}
+.alm-hudc__row:last-child{border-bottom:0}
+.alm-hudc__ic{display:grid;place-items:center;width:28px;height:28px;border-radius:var(--alm-r-sm,10px);background:color-mix(in oklab,var(--alm-ink) 6%,transparent);font-size:14px}
+.alm-hudc__row b{font-weight:600}
+.alm-hudc__row>div>span,.alm-hudc__row small{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere}
+.alm-hudc__d{font:600 10.5px/1 var(--alm-font-mono);padding:4px 7px;border-radius:999px;white-space:nowrap;color:var(--alm-muted);background:color-mix(in oklab,var(--alm-ink) 6%,transparent)}
+.alm-hudc__d.up,.alm-hudc__tag.up{color:var(--alm-good);background:color-mix(in oklab,var(--alm-good) 14%,transparent)}
+.alm-hudc__d.dn,.alm-hudc__tag.dn{color:var(--alm-danger);background:color-mix(in oklab,var(--alm-danger) 13%,transparent)}
+.alm-hudc__d.due{color:var(--alm-warn);background:color-mix(in oklab,var(--alm-warn) 15%,transparent)}
+.alm-otrk{--c:var(--alm-accent);position:relative;display:block;height:6px;margin:8px 6px 5px;border-radius:9px;background:color-mix(in oklab,var(--alm-ink) 10%,transparent)}
+.alm-otrk.is-empty{opacity:.4}
+.alm-otrk__mid{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:color-mix(in oklab,var(--alm-ink) 28%,transparent)}
+.alm-otrk__trail{position:absolute;top:0;bottom:0;background:var(--c);opacity:.4;border-radius:9px}
+.alm-otrk__ghost,.alm-otrk__knob{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%)}
+.alm-otrk__ghost{border:1.5px dashed var(--c)}
+.alm-otrk__knob{background:var(--c);box-shadow:0 0 0 2px var(--alm-panel),0 0 8px color-mix(in oklab,var(--c) 70%,transparent)}
+.alm-hudc__count{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 12px;align-items:center;padding:11px 13px;border-radius:var(--alm-hud-r);background:linear-gradient(135deg,color-mix(in oklab,var(--alm-danger) 16%,var(--alm-panel)),color-mix(in oklab,var(--alm-accent) 8%,var(--alm-panel)));box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-danger) 30%,transparent)}
+.alm-hudc__count b{grid-row:span 2;font:600 28px/1 var(--alm-font-display);color:var(--alm-danger);white-space:nowrap}
+.alm-hudc__count span{font-weight:600}
+.alm-hudc__count small{font-style:normal}
+.alm-hudc__count i{grid-column:1/-1;height:4px;margin-top:6px;border-radius:9px;background:linear-gradient(90deg,var(--alm-warn),var(--alm-danger)) 0 0/var(--p) 100% no-repeat,color-mix(in oklab,var(--alm-ink) 8%,transparent)}
+.alm-hudc__rings{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;text-align:center}
+.alm-hudc__rings div{padding:8px 3px 7px;border-radius:var(--alm-r-sm,12px);background:color-mix(in oklab,var(--alm-ink) 4%,transparent)}
+.alm-hudc__rings small{font-style:normal;font-size:11px;margin-top:3px;overflow-wrap:anywhere}
+.alm-oring{display:block;margin:0 auto}
+.alm-oring text{font:600 11px var(--alm-font-mono)}
+.alm-hudc__gauge{display:grid;grid-template-columns:minmax(0,74px) 1fr auto auto;gap:8px;align-items:center;padding:4px 0}
+.alm-hudc__gauge>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alm-hudc__segs{display:flex;gap:2px}
+.alm-hudc__segs i{flex:1;height:11px;border-radius:2px;background:color-mix(in oklab,var(--alm-ink) 9%,transparent)}
+.alm-hudc__segs i.on{background:var(--alm-accent-2);box-shadow:0 0 6px color-mix(in oklab,var(--alm-accent-2) 45%,transparent)}
+.alm-hudc__bar{height:8px;border-radius:9px;background:color-mix(in oklab,var(--alm-ink) 9%,transparent);overflow:hidden}
+.alm-hudc__bar i{display:block;height:100%;background:var(--alm-accent-2)}
+.alm-hudc__n{font:500 10.5px/1 var(--alm-font-mono);color:var(--alm-muted)}
+.alm-hudc__clue{display:grid;grid-template-columns:auto 1fr;gap:8px;padding:5px 0;font-size:12.5px}
+.alm-hudc__clue em{color:var(--alm-muted);font-style:normal}
+.alm-hudc__rel{display:flex;gap:2px;margin-top:4px}
+.alm-hudc__rel i{width:6px;height:6px;border-radius:50%;background:color-mix(in oklab,var(--alm-ink) 16%,transparent)}
+.alm-hudc__rel i.on{background:var(--alm-gold)}
+.alm-hudc__tags{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px}
+.alm-hudc__tag{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 10.5px/1.1 var(--alm-font-mono);padding:4px 7px;border-radius:999px;background:color-mix(in oklab,var(--alm-ink) 7%,transparent)}
+.alm-hudc__tag s{opacity:.6}
+.alm-hudc__narr{display:inline-flex!important;align-items:center;gap:4px;padding:3px 8px!important;border-radius:999px!important;border:1px solid var(--alm-line)!important;text-transform:none;letter-spacing:.02em;color:var(--alm-muted)}
+.alm-hudc__narr.is-on{color:var(--alm-on-accent);background:var(--alm-accent-2)!important;border-color:transparent!important}
+.alm-hudc__who{display:grid;gap:9px}
+.alm-hudc__per{--alm-hud-ring:var(--alm-panel);padding:10px 11px;border-radius:var(--alm-hud-r);background:linear-gradient(135deg,color-mix(in oklab,var(--c) 13%,var(--alm-panel)),var(--alm-panel) 70%);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--c) 28%,var(--alm-line))}
+.alm-hudc__perh{display:flex;align-items:center;gap:10px}
+.alm-hudc__perh b{display:block;font:600 14px/1.2 var(--alm-font-display)}
+.alm-hudc__bars{display:grid;grid-template-columns:62px 1fr;gap:6px 8px;align-items:center;margin-top:6px;font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--alm-muted)}
+.alm-hudc__bars .alm-otrk{margin:0 6px}
+.alm-hudc__secret,.alm-hudc__irony{margin-top:9px;padding:8px 10px;border-radius:var(--alm-r-sm,10px);font-size:12.5px;font-style:italic}
+.alm-hudc__secret{border:1px dashed color-mix(in oklab,var(--alm-accent-2) 50%,var(--alm-line));background:color-mix(in oklab,var(--alm-accent-2) 7%,transparent)}
+.alm-hudc__irony{font-style:normal;border:1.5px solid transparent;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,linear-gradient(135deg,var(--alm-accent),var(--alm-accent-2),var(--alm-gold)) border-box}
+.alm-hudc__secret b,.alm-hudc__irony b{display:block;margin-bottom:3px;font:500 9.5px/1 var(--alm-font-mono);font-style:normal;letter-spacing:.14em;text-transform:uppercase;color:var(--alm-accent-2)}
+.alm-hudc__locked{margin:12px 0 0;padding:8px 10px;border-radius:var(--alm-r-sm,10px);border:1px dashed var(--alm-line);font:500 11px/1.4 var(--alm-font-mono);color:var(--alm-muted)}
+.alm-hudc__thr{padding:8px 0;border-bottom:1px dashed var(--alm-line)}
+.alm-hudc__thr>div{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.alm-hudc__st{flex:none;font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.08em;text-transform:uppercase;padding:4px 7px;border-radius:999px;color:var(--alm-good);background:color-mix(in oklab,var(--alm-good) 14%,transparent)}
+.alm-hudc__st.stall{color:var(--alm-warn);background:color-mix(in oklab,var(--alm-warn) 15%,transparent)}
+.alm-hudc__chek{display:grid;grid-template-columns:auto 1fr;gap:9px;align-items:center;padding:9px 11px;margin-bottom:6px;border-radius:var(--alm-r-sm,12px);border:1px solid color-mix(in oklab,var(--alm-gold) 35%,var(--alm-line));background:color-mix(in oklab,var(--alm-gold) 7%,transparent);font-size:12.5px}
+.alm-hudc__rumor{margin:0 0 8px;padding-left:11px;border-left:2px solid var(--alm-accent-2);font-style:italic}
+.alm-hudc__rumor small{font:500 10px/1.4 var(--alm-font-mono);font-style:normal;margin-top:3px}
+.alm-hudc__lockcap{margin:0 0 10px;font:500 10.5px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
+.alm-hudc__bub{position:relative;margin:0 0 16px;padding:10px 13px;border-radius:18px;background:color-mix(in oklab,var(--c) 13%,var(--alm-panel));box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--c) 35%,transparent);font:500 1.2em/1.25 var(--alm-font-hand)}
+.alm-hudc__bub::after{content:"";position:absolute;left:20px;bottom:-8px;width:9px;height:9px;border-radius:50%;background:color-mix(in oklab,var(--c) 13%,var(--alm-panel));box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--c) 35%,transparent)}
+.alm-hudc__bub b{display:block;margin-bottom:4px;font:600 9.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--c)}
+.alm-hudc__env{display:block!important;width:100%;margin:0 0 10px!important}
+.alm-hudc__front{position:relative;display:block;padding:38px 14px 11px;border-radius:var(--alm-r-sm,10px);background:linear-gradient(color-mix(in oklab,var(--c) 22%,#efe4cc),color-mix(in oklab,var(--c) 12%,#e8dcc0));color:#3b2f22;box-shadow:0 8px 16px -10px rgba(0,0,0,.6)}
+.alm-hudc__front::before{content:"";position:absolute;left:0;right:0;top:0;height:42px;background:color-mix(in oklab,var(--c) 34%,#e2d3b2);clip-path:polygon(0 0,100% 0,50% 100%);border-radius:var(--alm-r-sm,10px) var(--alm-r-sm,10px) 0 0}
+.alm-hudc__seal{position:absolute;left:50%;top:24px;z-index:1;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 35% 30%,#d4475a,#8e1f2f 70%);color:#ffd9c9;font:600 12px/1 var(--alm-font-display);box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 0 0 3px rgba(0,0,0,.15);transition:transform .25s}
+.alm-hudc__env:hover .alm-hudc__seal{transform:translate(-50%,-50%) rotate(-12deg) scale(1.08)}
+.alm-hudc__cue{display:block;text-align:center;font-style:italic;font-size:13px;line-height:1.35}
+.alm-hudc__envwho{display:block;margin-top:6px;text-align:center;font:500 9px/1 var(--alm-font-mono);letter-spacing:.14em;text-transform:uppercase;opacity:.6}
+.alm-hudc__note{display:block;padding:12px 14px 10px;border-radius:var(--alm-r-sm,10px);border-top:4px solid var(--c);background:#fbf6ea;color:#2e261c;font:500 1.4em/1.2 var(--alm-font-hand);box-shadow:0 8px 16px -10px rgba(0,0,0,.6)}
+.alm-hudc__note em{display:block;margin-top:5px;text-align:right;color:color-mix(in oklab,var(--c) 70%,#000);font-style:normal}
+.alm-hudc__tok{display:flex;height:10px;border-radius:9px;overflow:hidden;margin:2px 0 7px}
+.alm-hudc__tok i{display:block;min-width:3px}
+.alm-hudc__legend{display:flex;flex-wrap:wrap;gap:5px 11px;font:500 10px/1 var(--alm-font-mono);color:var(--alm-muted)}
+.alm-hudc__legend span::before{content:"";display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:2px;background:var(--c);vertical-align:-1px}
+.alm-hudc__fed{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--alm-line);font-size:12.5px}
+.alm-hudc__via{font:500 9px/1 var(--alm-font-mono);letter-spacing:.08em;text-transform:uppercase;padding:4px 6px;border-radius:5px;color:var(--alm-muted);background:color-mix(in oklab,var(--alm-ink) 7%,transparent)}
+.alm-hudc__ok{margin:0 0 6px;padding:7px 10px;border-radius:var(--alm-r-sm,10px);font-size:12.5px;color:var(--alm-good);background:color-mix(in oklab,var(--alm-good) 10%,transparent)}
+.alm-hudc__ok.is-warn{color:var(--alm-warn);background:color-mix(in oklab,var(--alm-warn) 12%,transparent)}
+
+@media (prefers-reduced-motion:no-preference){
+  .alm-om__md.is-fresh{animation:alm-hud-pulse 1.4s ease-out infinite}
+  .alm-hudw__badge{animation:alm-hud-pop .6s cubic-bezier(.3,1.6,.5,1) both}
+  .alm-hudw__rot[data-n="2"]{animation:alm-hud-rot2 7s steps(1) infinite}
+  .alm-hudw__rot[data-n="3"]{animation:alm-hud-rot3 10.5s steps(1) infinite}
+  .alm-hudc__row{animation:alm-hud-in .45s ease both;animation-delay:calc(var(--i,0) * 60ms)}
+  .alm-otrk__knob.is-moved{animation:alm-hud-spark 1s ease 3}
+  .alm-hudc__fx.is-rain{animation:alm-hud-rain .7s linear infinite}
+  .alm-hudc__fx.is-snow{animation:alm-hud-snow 6s linear infinite}
+  .alm-hudc__stars{animation:alm-hud-twinkle 4s ease-in-out infinite}
+  .alm-hudc__note{animation:alm-hud-unfold .4s ease both;transform-origin:top}
+}
+@keyframes alm-hud-pulse{0%{box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 0 2px var(--m)}100%{box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 0 8px transparent}}
+@keyframes alm-hud-pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.2)}100%{transform:none;opacity:1}}
+@keyframes alm-hud-rot2{0%{transform:none}50%{transform:translateY(-24px)}}
+@keyframes alm-hud-rot3{0%{transform:none}33.33%{transform:translateY(-24px)}66.66%{transform:translateY(-48px)}}
+@keyframes alm-hud-in{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+@keyframes alm-hud-spark{50%{box-shadow:0 0 0 2px var(--alm-panel),0 0 16px 4px var(--c)}}
+@keyframes alm-hud-rain{to{background-position:-40px 160px}}
+@keyframes alm-hud-snow{to{background-position:20px 160px,-20px 160px,10px 160px}}
+@keyframes alm-hud-twinkle{50%{opacity:.35}}
+@keyframes alm-hud-unfold{from{opacity:0;transform:rotateX(-60deg)}to{opacity:1;transform:none}}
+`;
+var SIGNATURES2 = `
+/* Almanac: the sun on the section heads */
+${S2("almanac")} .alm-hudc h6>span:first-child::before{content:"☉ ";color:var(--alm-gold);letter-spacing:0}
+
+/* Solar: square, ruled, highlighter yellow */
+${S2("solar")} .alm-hudw,${S2("solar")} .alm-hudc{--alm-hud-pill:0px;--alm-hud-r:0px}
+${S2("solar")} .alm-hudw{border:2px solid var(--alm-rule);box-shadow:none}
+${S2("solar")} .alm-hudc{box-shadow:0 0 0 2px var(--alm-rule)}
+${S2("solar")} .alm-hudc h6{border-top:2px solid var(--alm-rule);padding-top:6px;color:var(--alm-ink);font-weight:700}
+${S2("solar")} .alm-hudc__rail button{border-radius:0}
+${S2("solar")} .alm-hudc__rail button[aria-selected="true"]{box-shadow:none;color:#111}
+${S2("solar")} .alm-om,${S2("solar")} .alm-hudw__dial{border-radius:0}
+${S2("solar")} .alm-hudc__ttl b{font-weight:900}
+
+/* Nocturne: arched portraits, a filigree frame */
+${S2("nocturne")} .alm-om{border-radius:50% 50% 3px 3px;font-style:italic}
+${S2("nocturne")} .alm-hudc{box-shadow:0 30px 60px -24px rgba(0,0,0,.8),0 0 0 1px var(--alm-line),inset 0 0 0 4px var(--alm-panel)}
+${S2("nocturne")} .alm-hudc__pane{box-shadow:inset 0 0 0 4px var(--alm-panel),inset 0 0 0 5px var(--alm-line)}
+${S2("nocturne")} .alm-hudc h6{font-family:var(--alm-font-display);font-style:italic;text-transform:none;letter-spacing:.04em;font-size:13px}
+${S2("nocturne")} .alm-hudc__ttl b{font-style:italic;font-weight:500}
+
+/* Botanical: specimen labels and tape */
+${S2("botanical")} .alm-hudw,${S2("botanical")} .alm-hudc{--alm-hud-pill:4px}
+${S2("botanical")} .alm-hudw{border-color:var(--alm-ink)}
+${S2("botanical")} .alm-om{border-radius:4px;background:var(--alm-panel);color:var(--c);box-shadow:0 0 0 1px var(--c);font-family:var(--alm-font-mono);font-weight:400}
+${S2("botanical")} .alm-hudc{overflow:visible;border:1px solid var(--alm-ink)}
+${S2("botanical")} .alm-hudc__sky{border-radius:calc(var(--alm-hud-r) + 5px) calc(var(--alm-hud-r) + 5px) 0 0}
+${S2("botanical")} .alm-hudc::before{content:"";position:absolute;z-index:2;top:-8px;left:40%;width:70px;height:17px;background:color-mix(in oklab,var(--alm-gold) 40%,transparent);transform:rotate(-3deg);pointer-events:none}
+${S2("botanical")} .alm-hudc__rail button{border-radius:3px}
+
+/* Prism: holographic foil */
+${S2("prism")} .alm-hudw{border:1.5px solid transparent;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,var(--alm-holo) border-box}
+${S2("prism")} .alm-hudc{box-shadow:0 30px 60px -24px rgba(0,0,0,.7);border:1.5px solid transparent;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,var(--alm-holo) border-box}
+${S2("prism")} .alm-hudc__rail button[aria-selected="true"],${S2("prism")} .alm-hudw__badge{background:var(--alm-holo);color:#15152c}
+${S2("prism")} .alm-hudc__ttl b{font-weight:800}
+
+/* Candy: stickers with hard shadows */
+${S2("candy")} .alm-hudw{border:2.5px solid var(--alm-pop);box-shadow:3px 3px 0 var(--alm-pop)}
+${S2("candy")} .alm-hudc{border:2.5px solid var(--alm-pop);box-shadow:5px 5px 0 var(--alm-pop)}
+${S2("candy")} .alm-om{box-shadow:0 0 0 2px var(--alm-pop);transform:rotate(-6deg)}
+${S2("candy")} .alm-hudc__rail button[aria-selected="true"]{border:2px solid var(--alm-pop);box-shadow:2px 2px 0 var(--alm-pop)}
+${S2("candy")} .alm-hudc__per,${S2("candy")} .alm-hudc__count{box-shadow:inset 0 0 0 2px var(--alm-pop),3px 3px 0 var(--c,var(--alm-accent))}
+${S2("candy")} .alm-hudw__badge{border:2px solid var(--alm-pop);box-shadow:2px 2px 0 var(--alm-pop)}
+
+/* Dossier: case file, a stamped count */
+${S2("dossier")} .alm-hudw,${S2("dossier")} .alm-hudc{--alm-hud-pill:3px}
+${S2("dossier")} .alm-om{border-radius:3px}
+${S2("dossier")} .alm-hudw__badge{border-radius:2px;background:none;color:var(--alm-accent);box-shadow:none;border:1.5px solid var(--alm-accent);transform:rotate(-8deg);font-family:var(--alm-font-mono)}
+${S2("dossier")} .alm-hudc__row{border-bottom-style:solid}
+${S2("dossier")} .alm-hudc__per{background:var(--alm-panel);border-left:3px solid var(--c);border-radius:2px}
+${S2("dossier")} .alm-hudc__note{font-size:1.7em}
+
+/* Scriptorium: ribbons, a wax seal, blackletter */
+${S2("scriptorium")} .alm-hudw,${S2("scriptorium")} .alm-hudc{--alm-hud-pill:3px}
+${S2("scriptorium")} .alm-hudw{outline:1px solid var(--alm-line);outline-offset:-4px}
+${S2("scriptorium")} .alm-hudw__t{font:400 20px/1 "UnifrakturMaguntia",serif}
+${S2("scriptorium")} .alm-hudc__ttl b{font:400 42px/1 "UnifrakturMaguntia",serif}
+${S2("scriptorium")} .alm-hudw__badge{width:24px;height:24px;line-height:24px;background:radial-gradient(circle at 35% 30%,#d4475a,#8e1f2f 70%);box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 0 0 3px rgba(0,0,0,.18)}
+${S2("scriptorium")} .alm-om{border-radius:50% 50% 6px 6px;box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 0 3px var(--alm-gold);font:400 13px/1 "UnifrakturMaguntia",serif}
+${S2("scriptorium")} .alm-hudc h6{border-bottom:3px double var(--alm-line);padding-bottom:4px}
+${S2("scriptorium")} .alm-hudc__pane{box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px var(--alm-line)}
+
+/* Arcana: gold frames, glowing voices */
+${S2("arcana")} .alm-hudc{box-shadow:0 30px 60px -24px rgba(0,0,0,.8),0 0 0 1px color-mix(in oklab,var(--alm-gold) 45%,transparent),0 0 36px -16px var(--alm-gold)}
+${S2("arcana")} .alm-hudw{border-color:color-mix(in oklab,var(--alm-gold) 50%,var(--alm-line))}
+${S2("arcana")} .alm-om{box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 12px -1px var(--c)}
+${S2("arcana")} .alm-hudc h6{font-family:var(--alm-font-display);letter-spacing:.2em;color:var(--alm-gold)}
+${S2("arcana")} .alm-hudc__per{box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-gold) 30%,transparent),0 0 20px -12px var(--c)}
+
+/* Orbital: clipped corners, instrument readout */
+${S2("orbital")} .alm-hudw,${S2("orbital")} .alm-hudc{--alm-hud-pill:0px;--alm-hud-r:0px}
+${S2("orbital")} .alm-hudw{border-top:2px solid var(--alm-accent);text-transform:uppercase}
+${S2("orbital")} .alm-hudc{clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));border-top:3px solid var(--alm-accent)}
+${S2("orbital")} .alm-om,${S2("orbital")} .alm-hudw__dial,${S2("orbital")} .alm-om__md{border-radius:0}
+${S2("orbital")} .alm-hudc__rail button,${S2("orbital")} .alm-hudc__tag,${S2("orbital")} .alm-hudc__d,${S2("orbital")} .alm-hudc__st{border-radius:0}
+${S2("orbital")} .alm-hudw__badge{border-radius:0}
+${S2("orbital")} .alm-hudc h6>span:first-child::before{content:"// ";color:var(--alm-accent)}
+
+/* Posy: round, with a sprig of roses */
+${S2("posy")} .alm-om{box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 0 4px color-mix(in oklab,var(--c) 35%,transparent)}
+${S2("posy")} .alm-hudc__pane{position:relative}
+${S2("posy")} .alm-hudc__pane::after{content:"";position:sticky;display:block;float:right;bottom:-10px;margin:-40px -12px -16px 0;width:64px;height:64px;background:var(--alm-sprig) center/contain no-repeat;opacity:.55;pointer-events:none}
+${S2("posy")} .alm-hudc h6>span:first-child::after{content:" ✿";color:var(--alm-accent)}
+`;
+var HUD_CSS = BASE + SIGNATURES2;
+
 // src/frontend.ts
-var ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><circle cx="12" cy="10" r="3.2"/><path d="M12 4.5v1.3M12 14.2v1.3M6.5 10h1.3M16.2 10h1.3"/></svg>`;
+var ICON2 = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><circle cx="12" cy="10" r="3.2"/><path d="M12 4.5v1.3M12 14.2v1.3M6.5 10h1.3M16.2 10h1.3"/></svg>`;
 var COMMANDS = [
   ["/skip 15m", "⏩ Skip 15 minutes"],
   ["/skip 1h", "⏩ Skip an hour"],
@@ -3265,7 +3742,7 @@ function setup(ctx) {
     fontsOn = on;
   };
   setFonts(true);
-  removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS));
+  removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS + HUD_CSS));
   let modePref = "auto";
   const systemDark = () => typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
   const hostMode = () => {
@@ -3329,7 +3806,7 @@ function setup(ctx) {
     description: "Story state, Codex, chapters, bonds, knowledge, lore bridge and lorebook creator",
     keywords: ["almanac", "ledger", "codex", "tracker", "chronicle", "lorebook", "bonds", "weather"],
     headerTitle: "Almanac",
-    iconSvg: ICON
+    iconSvg: ICON2
   });
   const app = new AlmanacApp(ctx, tab.root);
   app.render();
@@ -3361,14 +3838,44 @@ function setup(ctx) {
   let hud = null;
   let hudOn = true;
   let hudOpen = false;
-  try {
-    hudOpen = localStorage.getItem("alm-hud-open") === "1";
-  } catch {}
-  const setHudOpen = (open) => {
-    hudOpen = open;
+  const hudUi = { tab: "changed", narr: false, unseen: 0, opened: new Set };
+  let seen = {};
+  let thoughtsMsg = -1;
+  const load = (k) => {
     try {
-      localStorage.setItem("alm-hud-open", open ? "1" : "0");
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  };
+  const save = (k, val) => {
+    try {
+      localStorage.setItem(k, val);
     } catch {}
+  };
+  hudOpen = load("alm-hud-open") === "1";
+  hudUi.tab = load("alm-hud-tab") || "changed";
+  try {
+    seen = JSON.parse(load("alm-hud-seen") || "{}") ?? {};
+  } catch {
+    seen = {};
+  }
+  const markSeen = (v) => {
+    const msg = v?.changes?.msg ?? -1;
+    if (!v?.chatId || msg < 0 || seen[v.chatId] === msg)
+      return;
+    seen[v.chatId] = msg;
+    const keys = Object.keys(seen);
+    if (keys.length > 60)
+      for (const k of keys.slice(0, keys.length - 60))
+        delete seen[k];
+    save("alm-hud-seen", JSON.stringify(seen));
+  };
+  const setHudOpen = (open) => {
+    if (open && hudUi.unseen)
+      hudUi.tab = "changed";
+    hudOpen = open;
+    save("alm-hud-open", open ? "1" : "0");
     renderHud(app.view);
   };
   const onHudAction = (target) => {
@@ -3377,11 +3884,24 @@ function setup(ctx) {
       return;
     const v = app.view;
     const live = v && v.chatId === ctx.getActiveChat().chatId && v.enabled;
-    if (el.dataset.hud === "open" || !live) {
+    const act = el.dataset.hud;
+    if (act === "open" || !live) {
       tab.activate();
       return;
     }
-    setHudOpen(!hudOpen);
+    if (act === "tab" && el.dataset.tab) {
+      hudUi.tab = el.dataset.tab;
+      save("alm-hud-tab", hudUi.tab);
+    } else if (act === "narr")
+      hudUi.narr = !hudUi.narr;
+    else if (act === "env" && el.dataset.key) {
+      if (hudUi.opened.has(el.dataset.key))
+        hudUi.opened.delete(el.dataset.key);
+      else
+        hudUi.opened.add(el.dataset.key);
+    } else if (act === "toggle")
+      return setHudOpen(!hudOpen);
+    renderHud(v);
   };
   const ensureHud = (on) => {
     hudOn = on;
@@ -3422,21 +3942,31 @@ function setup(ctx) {
     hud.setVisible(true);
     let html;
     let width;
-    if (!v || v.chatId !== chatId)
+    const live = v && v.chatId === chatId;
+    if (live) {
+      const msg = v.changes?.msg ?? -1;
+      hudUi.unseen = msg >= 0 && msg !== seen[chatId] ? v.changes?.rows?.length ?? 0 : 0;
+      if ((v.thoughts?.msg ?? -1) !== thoughtsMsg) {
+        thoughtsMsg = v.thoughts?.msg ?? -1;
+        hudUi.opened.clear();
+      }
+    }
+    if (!live)
       html = hudPill(null, app.status === "stalled" ? "no answer yet" : "connecting…");
     else if (!v.enabled)
       html = hudPill(null, "off in this chat");
     else if (hudOpen) {
-      html = hudCard(v);
-      width = 300;
+      html = hudCard(v, hudUi);
+      width = 360;
+      markSeen(v);
     } else
-      html = hudPill(v);
+      html = hudPill(v, undefined, hudUi);
     if (html === lastHud)
       return;
     lastHud = html;
     hud.root.innerHTML = html;
     const size = measure(html, width);
-    hud.setSize(Math.min(width ?? 440, Math.max(120, size.w || 260)), Math.max(40, Math.min(560, size.h || 40)));
+    hud.setSize(Math.min(width ?? 480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
   };
   const applyView = (v) => {
     gotStateFor = v ? v.chatId : null;
@@ -3535,7 +4065,7 @@ function setup(ctx) {
     }
   }));
   try {
-    const action = ctx.ui.registerInputBarAction({ id: "almanac-command", label: "Almanac command…", iconSvg: ICON.replace(/20/g, "14") });
+    const action = ctx.ui.registerInputBarAction({ id: "almanac-command", label: "Almanac command…", iconSvg: ICON2.replace(/20/g, "14") });
     removers.push(action.onClick(async () => {
       try {
         const res = await ctx.ui.showContextMenu({ items: COMMANDS.map(([key, label]) => ({ key, label })), position: { x: Math.round(window.innerWidth / 2), y: window.innerHeight - 120 } });

@@ -5,7 +5,7 @@
 
 import type {
   BondAxis, BondState, CastEdit, CharacterState, EventSource, FactEdit, KnowRow, LedgerEvent, MessageDelta,
-  ParsedLedger, ParsedOp, WorldState,
+  ParsedLedger, ParsedOp, ThoughtState, WorldState,
 } from "./types";
 import { KNOW_OPS } from "./types";
 import { applyFactEdits, canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
@@ -356,10 +356,15 @@ export class Folder {
     for (const op of extra) run(op, extraSource);
 
     // Thoughts and artifacts in the prose.
+    const thoughts: ThoughtState[] = [];
     for (const t of parsed.thoughts ?? []) {
       const id = this.charId(t.who, msgIndex);
       if (id && id !== "user") this.state.chars[id].lastSeen = msgIndex;
+      // A sealed persona's mind is the player's own unless the preset asked for persona thoughts.
+      if (id === "user" && this.opts.sealed && !this.opts.personaThoughts) continue;
+      if (thoughts.length < 8) thoughts.push({ who: id ?? t.who, name: id ? this.nm(id) : t.who, cue: t.cue, text: t.text.slice(0, 600), kind: t.kind ?? "register" });
     }
+    if (!fromUser) st.thoughts = { msgIndex, list: thoughts };
     for (const v of parsed.vtks ?? []) {
       const aid = `doc:${slug(v.title || v.kind)}`;
       const existing = st.artifacts[aid];
@@ -402,6 +407,7 @@ export class Folder {
     if (!fromUser) st.lastReply = msgIndex;
     this.kctx = null;
     st.lastDelta = delta;
+    if (!fromUser) st.replyDelta = delta;
     return events;
   }
 
@@ -616,7 +622,7 @@ export class Folder {
         const c = st.chars[id];
         if (c.dead) return reject(`${c.name} is dead`);
         const prev = c.mood?.name;
-        c.mood = { name: a.name, v: a.v ?? c.mood?.v, a: a.a ?? c.mood?.a, d: a.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null };
+        c.mood = { name: a.name, v: a.v ?? c.mood?.v, a: a.a ?? c.mood?.a, d: a.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null, msg: mi };
         return { verdict: "accepted", line: `🎭 ${c.name}: ${prev ? prev + " → " : ""}${a.name}` };
       }
       case "body": {

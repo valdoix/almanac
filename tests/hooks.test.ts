@@ -73,7 +73,7 @@ beforeAll(async () => {
 });
 
 const CHARTER = "<almanac>\nYou are ALMANAC: narrator, director, and every living person in this story except Wren.\n</almanac>";
-const HANDSHAKE = `<almanac-config persona="sealed" thoughts="0" genres="mystery, romance" lead="mystery" nsfw="fade" romance="slow" dialogue="adaptive" style="blocks" cot="native" ledger="full" trackers="scene, cast, bonds, thoughts, inventory, threads, knowledge" view="drawer" theme="auto"/>`;
+const HANDSHAKE = `<almanac-config persona="sealed" thoughts="0" inner="register" genres="mystery, romance" lead="mystery" nsfw="fade" romance="slow" dialogue="adaptive" style="blocks" cot="native" ledger="full" trackers="scene, cast, bonds, thoughts, inventory, threads, knowledge" view="drawer" theme="auto"/>`;
 
 describe("extension hooks with the preset", () => {
   test("interceptor arms the chat, strips the handshake and injects the ledger note", async () => {
@@ -101,6 +101,7 @@ describe("extension hooks with the preset", () => {
     const meta = JSON.parse(files.get(metaKey!)!);
     expect(meta.enabled).toBe(true);
     expect(meta.detected.lead).toBe("mystery");
+    expect(meta.detected.innerVoice).toBe("register");
   });
 
   test("macros report the linked state the preset branches on", async () => {

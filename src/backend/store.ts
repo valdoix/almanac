@@ -21,6 +21,8 @@ import { debounce, describe, host, warn } from "./host";
 export interface Detected {
   sealed?: boolean;
   personaThoughts?: boolean;
+  /** Inner voice setting: off · prose · register. */
+  innerVoice?: string;
   genres?: string[];
   lead?: string;
   nsfw?: string;

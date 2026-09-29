@@ -685,8 +685,8 @@ function parseHeaderLine(l: string): SceneHeader {
   return h;
 }
 
-export function parseThoughts(text: string): { who: string; slot?: number; cue?: string; text: string }[] {
-  const out: { who: string; slot?: number; cue?: string; text: string }[] = [];
+export function parseThoughts(text: string): { who: string; slot?: number; cue?: string; text: string; kind?: "register" }[] {
+  const out: { who: string; slot?: number; cue?: string; text: string; kind?: "register" }[] = [];
   const block = /<unspoken>([\s\S]*?)(<\/unspoken>|$)/i.exec(text);
   if (!block) return out;
   const re = /<t\s+([^>]*)>([\s\S]*?)<\/t>/gi;
@@ -696,7 +696,19 @@ export function parseThoughts(text: string): { who: string; slot?: number; cue?:
     const who = /who\s*=\s*"([^"]*)"/i.exec(attrs)?.[1] ?? "?";
     const cue = /cue\s*=\s*"([^"]*)"/i.exec(attrs)?.[1];
     const [name, slot] = who.split("#");
-    out.push({ who: name.trim(), slot: slot ? parseInt(slot, 10) : undefined, cue, text: m[2].trim() });
+    out.push({ who: name.trim(), slot: slot ? parseInt(slot, 10) : undefined, cue, text: m[2].trim(), kind: "register" });
+  }
+  return out;
+}
+
+/** Thoughts written inline in the prose (inner voice "prose"): `[thk=Name#N]the thought[/thk]`, ending like the display regex does. */
+export function parseInlineThoughts(text: string): { who: string; slot?: number; text: string; kind: "inline" }[] {
+  const out: { who: string; slot?: number; text: string; kind: "inline" }[] = [];
+  const re = /\[thk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*[a-z]+)?\]([\s\S]*?)(?:\[\/thk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const body = m[3].replace(/\[\/?(?:spk|txt)[^\]]*\]/g, "").trim();
+    if (body) out.push({ who: m[1].trim(), slot: m[2] ? parseInt(m[2], 10) : undefined, text: body, kind: "inline" });
   }
   return out;
 }
@@ -833,7 +845,7 @@ export function parseMessage(text: string): ParsedLedger {
     truncated: block?.truncated ?? false,
     header,
     title,
-    thoughts: parseThoughts(text ?? ""),
+    thoughts: [...parseThoughts(text ?? ""), ...parseInlineThoughts(text ?? "")],
     vtks: parseVtks(text ?? ""),
     speakers: parseSpeakers(text ?? ""),
     speech: parseSpeech(text ?? ""),

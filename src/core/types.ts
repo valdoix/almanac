@@ -36,7 +36,7 @@ export interface ParsedLedger {
   header?: SceneHeader | null;
   title?: string | null;
   /** Unspoken register entries found in the same message. */
-  thoughts?: { who: string; slot?: number; cue?: string; text: string }[];
+  thoughts?: { who: string; slot?: number; cue?: string; text: string; kind?: "register" | "inline" }[];
   /** Filed artifacts ([vtk=…]) found in the same message. */
   vtks?: { kind: string; title: string; meta: string; body: string }[];
   /** Speakers named in [spk=Name#N] marks, first occurrence each. */
@@ -113,7 +113,7 @@ export interface CharacterState {
   place?: string;
   tier?: "spot" | "peri" | "off";
   activity?: string;
-  mood?: { name: string; v?: number; a?: number; d?: number; prev?: string; at?: StoryTime | null };
+  mood?: { name: string; v?: number; a?: number; d?: number; prev?: string; at?: StoryTime | null; msg?: number };
   meters: Meters;
   flags: string[];
   injuries: Injury[];
@@ -410,6 +410,15 @@ export interface MessageDelta {
   rejected: { raw: string; reason: string }[];
 }
 
+export interface ThoughtState {
+  /** Character id ("user" for the persona), or the name as written when it matched no one. */
+  who: string;
+  name: string;
+  cue?: string;
+  text: string;
+  kind: "register" | "inline";
+}
+
 export interface WorldState {
   time: StoryTime | null;
   weather: WeatherState | null;
@@ -458,6 +467,10 @@ export interface WorldState {
   voices: Record<string, number>; // char id -> slot
   nextSlot: number;
   lastDelta: MessageDelta | null;
+  /** What the last reply changed (lastDelta can be the player's message). */
+  replyDelta?: MessageDelta | null;
+  /** The private thoughts the last reply voiced (Unspoken register or inline thought marks). */
+  thoughts?: { msgIndex: number; list: ThoughtState[] } | null;
   genreHits: Record<string, number>; // instrument -> last msg index
   msgCount: number;
   ledgerCount: number;

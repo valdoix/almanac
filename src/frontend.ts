@@ -7,7 +7,8 @@ import { AlmanacApp } from "./frontend/app";
 import { MESSAGE_CSS, PANEL_CSS, TOKENS } from "./frontend/styles";
 import { SKIN_CSS, fontsFor } from "./frontend/skins";
 import { openSessionZero } from "./frontend/sessionzero";
-import { hudCard, hudPill, measure } from "./frontend/hud";
+import { hudCard, hudPill, measure, type HudUi } from "./frontend/hud";
+import { HUD_CSS } from "./frontend/hudstyles";
 import { VERSION } from "./core/version";
 
 const ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><circle cx="12" cy="10" r="3.2"/><path d="M12 4.5v1.3M12 14.2v1.3M6.5 10h1.3M16.2 10h1.3"/></svg>`;
@@ -36,7 +37,7 @@ export function setup(ctx: SpindleFrontendContext) {
     fontsOn = on;
   };
   setFonts(true);
-  removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS));
+  removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS + HUD_CSS));
 
   // Light or dark: the player's choice, or Lumiverse's own mode read from its background.
   let modePref = "auto";
@@ -136,24 +137,51 @@ export function setup(ctx: SpindleFrontendContext) {
     }, delays[Math.min(attempt, delays.length - 1)]);
   };
 
-  // Floating "Now" widget (ui_panels). Shown whenever a chat is open and the
-  // widget is switched on. The pill opens into a small Now window; the window's
-  // button opens the full drawer. It sizes itself to what it shows.
+  // Floating "Now" widget (ui_panels), drawn as an orrery. Shown whenever a chat
+  // is open and the widget is switched on. The pill opens into the Now window
+  // (sky, forecast, a rail of tabs); its book button opens the full drawer. It
+  // sizes itself to what it shows. The tab, and which replies' changes the player
+  // has seen, are remembered in this browser.
   let hud: ReturnType<SpindleFrontendContext["ui"]["createFloatWidget"]> | null = null;
   let hudOn = true;
   let hudOpen = false;
-  try {
-    hudOpen = localStorage.getItem("alm-hud-open") === "1";
-  } catch {
-    /* private mode */
-  }
-  const setHudOpen = (open: boolean) => {
-    hudOpen = open;
+  const hudUi: HudUi = { tab: "changed", narr: false, unseen: 0, opened: new Set() };
+  let seen: Record<string, number> = {};
+  let thoughtsMsg = -1;
+  const load = (k: string) => {
     try {
-      localStorage.setItem("alm-hud-open", open ? "1" : "0");
+      return localStorage.getItem(k);
+    } catch {
+      return null; /* private mode */
+    }
+  };
+  const save = (k: string, val: string) => {
+    try {
+      localStorage.setItem(k, val);
     } catch {
       /* ignore */
     }
+  };
+  hudOpen = load("alm-hud-open") === "1";
+  hudUi.tab = load("alm-hud-tab") || "changed";
+  try {
+    seen = JSON.parse(load("alm-hud-seen") || "{}") ?? {};
+  } catch {
+    seen = {};
+  }
+  const markSeen = (v: any) => {
+    const msg = v?.changes?.msg ?? -1;
+    if (!v?.chatId || msg < 0 || seen[v.chatId] === msg) return;
+    seen[v.chatId] = msg;
+    const keys = Object.keys(seen);
+    if (keys.length > 60) for (const k of keys.slice(0, keys.length - 60)) delete seen[k];
+    save("alm-hud-seen", JSON.stringify(seen));
+  };
+  const setHudOpen = (open: boolean) => {
+    // Opening after a reply changed things starts on what changed.
+    if (open && hudUi.unseen) hudUi.tab = "changed";
+    hudOpen = open;
+    save("alm-hud-open", open ? "1" : "0");
     renderHud(app.view);
   };
   const onHudAction = (target: EventTarget | null) => {
@@ -161,11 +189,20 @@ export function setup(ctx: SpindleFrontendContext) {
     if (!el) return;
     const v = app.view;
     const live = v && v.chatId === ctx.getActiveChat().chatId && v.enabled;
-    if (el.dataset.hud === "open" || !live) {
+    const act = el.dataset.hud;
+    if (act === "open" || !live) {
       tab.activate();
       return;
     }
-    setHudOpen(!hudOpen);
+    if (act === "tab" && el.dataset.tab) {
+      hudUi.tab = el.dataset.tab;
+      save("alm-hud-tab", hudUi.tab);
+    } else if (act === "narr") hudUi.narr = !hudUi.narr;
+    else if (act === "env" && el.dataset.key) {
+      if (hudUi.opened.has(el.dataset.key)) hudUi.opened.delete(el.dataset.key);
+      else hudUi.opened.add(el.dataset.key);
+    } else if (act === "toggle") return setHudOpen(!hudOpen);
+    renderHud(v);
   };
   const ensureHud = (on: boolean) => {
     hudOn = on;
@@ -205,17 +242,28 @@ export function setup(ctx: SpindleFrontendContext) {
     hud.setVisible(true);
     let html: string;
     let width: number | undefined;
-    if (!v || v.chatId !== chatId) html = hudPill(null, app.status === "stalled" ? "no answer yet" : "connecting…");
+    const live = v && v.chatId === chatId;
+    if (live) {
+      const msg = v.changes?.msg ?? -1;
+      hudUi.unseen = msg >= 0 && msg !== seen[chatId] ? (v.changes?.rows?.length ?? 0) : 0;
+      // A new reply's thoughts arrive sealed.
+      if ((v.thoughts?.msg ?? -1) !== thoughtsMsg) {
+        thoughtsMsg = v.thoughts?.msg ?? -1;
+        hudUi.opened.clear();
+      }
+    }
+    if (!live) html = hudPill(null, app.status === "stalled" ? "no answer yet" : "connecting…");
     else if (!v.enabled) html = hudPill(null, "off in this chat");
     else if (hudOpen) {
-      html = hudCard(v);
-      width = 300;
-    } else html = hudPill(v);
+      html = hudCard(v, hudUi);
+      width = 360;
+      markSeen(v);
+    } else html = hudPill(v, undefined, hudUi);
     if (html === lastHud) return;
     lastHud = html;
     hud.root.innerHTML = html;
     const size = measure(html, width);
-    hud.setSize(Math.min(width ?? 440, Math.max(120, size.w || 260)), Math.max(40, Math.min(560, size.h || 40)));
+    hud.setSize(Math.min(width ?? 480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
   };
 
   const applyView = (v: any) => {
