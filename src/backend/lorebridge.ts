@@ -7,7 +7,7 @@ import { classify, seedOverlays, weaverBook, weaverWorldCard, type Classified } 
 import { classifierPrompt, extractJson } from "../core/prompts";
 import { hash } from "../core/util";
 import { debug, describe, has, host, serial, warn } from "./host";
-import { ledgerFor } from "./ledger";
+import { chatPersonaId, ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
 import { loadChat, loadSettings, save } from "./store";
 
@@ -36,7 +36,8 @@ export async function attachedBooks(chatId: string, userId?: string, cards?: { n
       for (const id of ((chat.metadata as any)?.chat_world_book_ids ?? []) as string[]) out.push({ id, scope: "chat" });
     }
     if (has("personas")) {
-      const p = await host.personas.getActive(userId).catch(() => null);
+      const pid = chatPersonaId(chat);
+      const p = pid ? await host.personas.get(pid, userId).catch(() => null) : await host.personas.getActive(userId).catch(() => null);
       if (p?.attached_world_book_id) out.push({ id: p.attached_world_book_id, scope: "persona" });
     }
     if (has("world_books")) for (const id of await host.world_books.getGlobal(userId).catch(() => [] as string[])) out.push({ id, scope: "global" });

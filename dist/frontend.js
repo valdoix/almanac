@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.10.1";
+var VERSION = "1.10.2";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [

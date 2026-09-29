@@ -6,7 +6,7 @@ import { batchPrompt, codexToLorebook, CREATOR_SYSTEM, linkEntries, normalizeEnt
 import { extractJson } from "../core/prompts";
 import { estTokens } from "../core/util";
 import { describe, has, host, warn } from "./host";
-import { ledgerFor } from "./ledger";
+import { chatPersonaId, ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
 import { loadSettings } from "./store";
 import { scanLore } from "./lorebridge";
@@ -177,7 +177,9 @@ async function attachBook(bookId: string, where: string, chatId?: string, userId
         if (ch && !ch.world_book_ids.includes(bookId)) await host.characters.update(ch.id, { world_book_ids: [...ch.world_book_ids, bookId] } as any, userId);
       }
     } else if (where === "persona") {
-      const p = await host.personas.getActive(userId);
+      const chat = chatId && has("chats") ? await host.chats.get(chatId, userId).catch(() => null) : null;
+      const pid = chatPersonaId(chat);
+      const p = pid ? await host.personas.get(pid, userId) : await host.personas.getActive(userId);
       if (p) await host.personas.update(p.id, { attached_world_book_id: bookId } as any, userId);
     }
   } catch (err) {

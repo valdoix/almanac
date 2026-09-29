@@ -17,7 +17,16 @@ export interface Names {
   char: string;
   characterId?: string;
   personaId?: string;
+  /** The persona came from the global active one, not this chat's own binding. */
+  personaGuessed?: boolean;
   chatName?: string;
+}
+
+/** The persona bound to a chat. Lumiverse keeps it as `active_persona_id` in the chat's metadata. */
+export function chatPersonaId(chat: { metadata?: unknown } | null | undefined): string | undefined {
+  const md = (chat?.metadata ?? {}) as Record<string, unknown>;
+  const id = md.active_persona_id ?? md.persona_id ?? md.personaId;
+  return typeof id === "string" && id ? id : undefined;
 }
 
 export class ChatLedger {
@@ -61,12 +70,14 @@ export class ChatLedger {
           const ch = await host.characters.get(chat.character_id, this.userId).catch(() => null);
           if (ch) this.names.char = ch.name;
         }
-        const pid = (chat.metadata as any)?.persona_id ?? (chat.metadata as any)?.personaId;
+        const pid = chatPersonaId(chat);
         if (has("personas")) {
-          const p = pid ? await host.personas.get(pid, this.userId).catch(() => null) : await host.personas.getActive(this.userId).catch(() => null);
+          const own = pid ? await host.personas.get(pid, this.userId).catch(() => null) : null;
+          const p = own ?? (await host.personas.getActive(this.userId).catch(() => null));
           if (p) {
             this.names.user = p.name;
             this.names.personaId = p.id;
+            this.names.personaGuessed = !own;
           }
         }
       }
@@ -105,6 +116,15 @@ export class ChatLedger {
       this.raw = [];
     }
     let path = toPath(this.raw);
+    // With no persona bound to the chat, the global active one may belong to another
+    // chat; the name on the player's own messages is the better witness.
+    if (this.names.personaGuessed) {
+      const said = [...path].reverse().find((m) => m.isUser && m.name)?.name;
+      if (said && said !== this.names.user) {
+        this.names.user = said;
+        this.names.personaId = undefined;
+      }
+    }
     if (opts.excludeTrailingAssistant) {
       while (path.length && !path[path.length - 1].isUser) path = path.slice(0, -1);
     }

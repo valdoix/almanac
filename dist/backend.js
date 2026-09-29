@@ -1964,7 +1964,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.10.1";
+var VERSION = "1.10.2";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -6276,6 +6276,12 @@ async function saveSettings(patch, userId) {
 }
 
 // src/backend/ledger.ts
+function chatPersonaId(chat) {
+  const md = chat?.metadata ?? {};
+  const id = md.active_persona_id ?? md.persona_id ?? md.personaId;
+  return typeof id === "string" && id ? id : undefined;
+}
+
 class ChatLedger {
   chatId;
   userId;
@@ -6313,12 +6319,14 @@ class ChatLedger {
           if (ch)
             this.names.char = ch.name;
         }
-        const pid = chat.metadata?.persona_id ?? chat.metadata?.personaId;
+        const pid = chatPersonaId(chat);
         if (has("personas")) {
-          const p = pid ? await host.personas.get(pid, this.userId).catch(() => null) : await host.personas.getActive(this.userId).catch(() => null);
+          const own = pid ? await host.personas.get(pid, this.userId).catch(() => null) : null;
+          const p = own ?? await host.personas.getActive(this.userId).catch(() => null);
           if (p) {
             this.names.user = p.name;
             this.names.personaId = p.id;
+            this.names.personaGuessed = !own;
           }
         }
       }
@@ -6355,6 +6363,13 @@ class ChatLedger {
       this.raw = [];
     }
     let path = toPath(this.raw);
+    if (this.names.personaGuessed) {
+      const said = [...path].reverse().find((m) => m.isUser && m.name)?.name;
+      if (said && said !== this.names.user) {
+        this.names.user = said;
+        this.names.personaId = undefined;
+      }
+    }
     if (opts.excludeTrailingAssistant) {
       while (path.length && !path[path.length - 1].isUser)
         path = path.slice(0, -1);
@@ -9677,7 +9692,8 @@ async function attachedBooks(chatId, userId, cards) {
         out.push({ id, scope: "chat" });
     }
     if (has("personas")) {
-      const p = await host.personas.getActive(userId).catch(() => null);
+      const pid = chatPersonaId(chat);
+      const p = pid ? await host.personas.get(pid, userId).catch(() => null) : await host.personas.getActive(userId).catch(() => null);
       if (p?.attached_world_book_id)
         out.push({ id: p.attached_world_book_id, scope: "persona" });
     }
@@ -10417,7 +10433,9 @@ async function attachBook(bookId, where, chatId, userId) {
           await host.characters.update(ch.id, { world_book_ids: [...ch.world_book_ids, bookId] }, userId);
       }
     } else if (where === "persona") {
-      const p = await host.personas.getActive(userId);
+      const chat = chatId && has("chats") ? await host.chats.get(chatId, userId).catch(() => null) : null;
+      const pid = chatPersonaId(chat);
+      const p = pid ? await host.personas.get(pid, userId) : await host.personas.getActive(userId);
       if (p)
         await host.personas.update(p.id, { attached_world_book_id: bookId }, userId);
     }
