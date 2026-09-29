@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.10.0";
+var VERSION = "1.10.1";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -3139,6 +3139,7 @@ function openSessionZero(ctx, chatId, current) {
 }
 
 // src/frontend/hud.ts
+var HUD_SIZE = { w: 360, h: 540, minW: 300, minH: 380, maxW: 720, maxH: 960 };
 var HUD_TABS = ["changed", "stakes", "cast", "threads", "unspoken", "backstage"];
 var PIN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>`;
 var ICON = {
@@ -3232,10 +3233,10 @@ function skyArc(v) {
   const now = n.minute ?? 720;
   const W = 360;
   const H = 150;
-  const cx = W / 2;
-  const base = 128;
-  const rx = 150;
-  const ry = 98;
+  const cx = 270;
+  const base = 132;
+  const rx = 78;
+  const ry = 86;
   const at = (t) => ({ x: cx - rx * Math.cos(Math.PI * t), y: base - ry * Math.sin(Math.PI * t) });
   const day = set > rise && now >= rise && now < set;
   const nightLen = (rise + 1440 - set) % 1440 || 1;
@@ -3244,7 +3245,7 @@ function skyArc(v) {
   const moon = n.moon;
   const lit = typeof moon?.illumination === "number" ? moon.illumination : 0.5;
   const body = day ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="26" fill="rgba(255,190,110,.22)"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="11" fill="#ffcf73"/>` : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="16" fill="rgba(244,236,214,.14)"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="#f4ecd6"/><circle cx="${(p.x + 3 + (1 - lit) * 6).toFixed(1)}" cy="${(p.y - 1).toFixed(1)}" r="${(8 * (1 - lit) + 0.01).toFixed(1)}" fill="rgba(20,22,60,.8)"/>`;
-  return `<svg class="alm-hudc__arc" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path d="M${cx - rx} ${base} A${rx} ${ry} 0 0 1 ${cx + rx} ${base}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2" stroke-dasharray="2 5"/>${body}</svg>`;
+  return `<svg class="alm-hudc__arc" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMaxYMax meet" aria-hidden="true"><path d="M${cx - rx} ${base} A${rx} ${ry} 0 0 1 ${cx + rx} ${base}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2" stroke-dasharray="2 5"/>${body}</svg>`;
 }
 var HILLS = `<svg class="alm-hudc__land" viewBox="0 0 360 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 40V26c30-8 60-12 96-6 20 3 30-6 44-6h6v-7h6v7h10v-4l7-5 7 5v8c26 2 52-10 86-8 34 2 60 8 98 2v24z"/><rect x="160" y="15" width="3" height="3" fill="#ffc86b"/><rect x="170" y="17" width="3" height="3" fill="#ffc86b"/></svg>`;
 function precip(v) {
@@ -3389,7 +3390,9 @@ function hudCard(v, ui = { tab: "changed", narr: false, unseen: 0, opened: new S
   const place = n.place ?? [];
   const clock = String(n.clock ?? "");
   const cut = clock.lastIndexOf(", ");
-  const date = n.time && cut > 0 ? clock.slice(0, cut) : "";
+  const date = String(n.date ?? (n.time && cut > 0 ? clock.slice(0, cut) : ""));
+  const dayNo = n.day != null && !/\bday\b/i.test(date) ? `${date ? " · " : ""}Day ${n.day}` : "";
+  const size = ui.size ?? HUD_SIZE;
   const night = NIGHT.test(n.band ?? "evening");
   const tabs = HUD_TABS.filter((t) => t !== "unspoken" || hasThoughtsTab(v));
   const tab = tabs.includes(ui.tab) ? ui.tab : "changed";
@@ -3402,15 +3405,15 @@ function hudCard(v, ui = { tab: "changed", narr: false, unseen: 0, opened: new S
   if (n.minute != null && set != null && rise != null) {
     const toSet = set - n.minute;
     const toRise = (rise - n.minute + 1440) % 1440;
-    sunChip = n.sun?.daylight ? toSet > 0 ? `☀ sets in ${span(toSet)}` : "" : `☀ rises in ${span(toRise)}`;
+    sunChip = n.sun?.daylight ? toSet > 0 ? `☀ sets ${span(toSet)}` : "" : `☀ rises ${span(toRise)}`;
   }
   const fc = (n.forecastHours ?? []).filter((_, i) => i % 2 === 0).slice(0, 6);
   const pane = tab === "stakes" ? paneStakes(v) : tab === "cast" ? paneCast(v, ui) : tab === "threads" ? paneThreads(v) : tab === "unspoken" ? paneUnspoken(v, ui) : tab === "backstage" ? paneBackstage(v) : paneChanged(v);
-  return `<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now">
+  return `<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now" style="width:${size.w}px;height:${size.h}px">
 <header class="alm-hudc__sky${night ? " is-night" : ""}" style="background:${skyOf(v)}">
   ${night ? `<span class="alm-hudc__stars"></span>` : ""}${skyArc(v)}${precip(v)}${HILLS}
-  <div class="alm-hudc__ttl"><b>${escapeHtml(n.time ?? "--:--")}</b><span>${escapeHtml(date)}${n.day != null ? ` · Day ${n.day}` : ""}</span>${n.title ? `<em>${escapeHtml(n.title)}</em>` : ""}</div>
-  <div class="alm-hudc__astro">${sunChip ? `<span>${escapeHtml(sunChip)}</span>` : ""}${n.moon ? `<span>${escapeHtml(n.moon.glyph)} ${escapeHtml(n.moon.name)}</span>` : ""}</div>
+  <div class="alm-hudc__ttl"><b>${escapeHtml(n.time ?? "--:--")}</b><span title="${escapeHtml(date + dayNo)}">${escapeHtml(date)}${escapeHtml(dayNo)}</span>${n.title ? `<em title="${escapeHtml(n.title)}">${escapeHtml(n.title)}</em>` : ""}</div>
+  <div class="alm-hudc__astro">${sunChip ? `<span>${escapeHtml(sunChip)}</span>` : ""}${n.moon ? `<span title="${escapeHtml(n.moon.name)}">${escapeHtml(n.moon.glyph)}<i> ${escapeHtml(n.moon.name)}</i></span>` : ""}</div>
   <button class="alm-hudc__x" data-hud="toggle" aria-label="Close the Now window">✕</button>
   <div class="alm-hudc__chips">${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${escapeHtml(place.slice(-3).join(" › "))}</span>` : ""}</div>
 </header>
@@ -3419,7 +3422,7 @@ ${v.planError ? `<p class="alm-hudc__err alm-hudc__err--top" data-hud="tab" data
 <div class="alm-hudc__body">
   <nav class="alm-hudc__rail" role="tablist" aria-orientation="vertical">${tabs.map((t) => `<button role="tab" data-hud="tab" data-tab="${t}" aria-selected="${t === tab}" title="${TAB_LABEL[t]}" aria-label="${TAB_LABEL[t]}">${svg(t)}${badge(t)}</button>`).join("")}<button class="alm-hudc__open" data-hud="open" title="Open the Almanac" aria-label="Open the Almanac">${svg("book")}</button></nav>
   <div class="alm-hudc__pane" role="tabpanel" data-tab="${tab}">${pane}</div>
-</div></div>`;
+</div><span class="alm-hudc__grip" data-hud-grip data-spindle-float-resize-handle title="Drag to resize · double-click to reset" aria-hidden="true"></span></div>`;
 }
 function measure(html, width) {
   try {
@@ -3441,13 +3444,13 @@ function measure(html, width) {
 // src/frontend/hudstyles.ts
 var S2 = (id) => `:root[data-alm-skin="${id}"]`;
 var BASE = `
-.alm-hudw,.alm-hudc{--alm-hud-r:var(--alm-radius,18px);--alm-hud-pill:999px;--alm-hud-ring:var(--alm-panel);box-sizing:border-box;-webkit-font-smoothing:antialiased}
+.alm-hudw,.alm-hudc{--alm-hud-r:var(--alm-radius,18px);--alm-hud-pill:999px;--alm-hud-ring:var(--alm-panel);--alm-hud-veil:linear-gradient(color-mix(in oklab,var(--alm-panel) 84%,transparent),color-mix(in oklab,var(--alm-panel) 84%,transparent));box-sizing:border-box;-webkit-font-smoothing:antialiased}
 .alm-hudw *,.alm-hudc *{box-sizing:border-box}
 .alm-hudc button,.alm-hudw button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit;min-width:0;min-height:0;box-shadow:none}
 
 /* ── Pill ── */
 .alm-hudw{position:relative;width:max-content;max-width:480px;height:44px;display:flex;align-items:center;gap:9px;padding:0 13px 0 6px;border-radius:var(--alm-hud-pill);
-  background:var(--alm-texture,none),var(--alm-panel);color:var(--alm-ink);border:1px solid var(--alm-line);font:500 12px/1 var(--alm-font-mono);
+  background:var(--alm-hud-veil),var(--alm-texture,none),var(--alm-panel);color:var(--alm-ink);border:1px solid var(--alm-line);font:500 12px/1 var(--alm-font-mono);
   box-shadow:0 12px 28px -14px rgba(0,0,0,.55),var(--alm-lift,none);cursor:pointer;white-space:nowrap;user-select:none;transition:transform .15s,box-shadow .15s}
 .alm-hudw:hover{transform:translateY(-1px);box-shadow:0 16px 32px -14px rgba(0,0,0,.65),var(--alm-lift,none)}
 .alm-hudw:focus-visible{outline:2px solid var(--alm-accent);outline-offset:2px}
@@ -3478,9 +3481,11 @@ var BASE = `
 .alm-om--big .alm-om__md{width:11px;height:11px}
 
 /* ── Window ── */
-.alm-hudc{width:360px;border-radius:calc(var(--alm-hud-r) + 6px);overflow:hidden;background:var(--alm-panel);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:13px;line-height:1.45;
+.alm-hudc{position:relative;display:flex;flex-direction:column;width:360px;max-width:100%;border-radius:calc(var(--alm-hud-r) + 6px);overflow:hidden;background:var(--alm-panel);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:13px;line-height:1.45;
   box-shadow:0 30px 60px -24px rgba(0,0,0,.7),0 0 0 1px var(--alm-line)}
-.alm-hudc__sky{position:relative;height:164px;overflow:hidden;color:#fff;cursor:grab}
+.alm-hudc__sky{position:relative;flex:none;height:176px;overflow:hidden;color:#fff;cursor:grab}
+.alm-hudc__sky::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(165deg,rgba(6,8,24,.5),rgba(6,8,24,.16) 42%,transparent 62%)}
+.alm-hudc__sky>div,.alm-hudc__sky>button{z-index:2}
 .alm-hudc__stars{position:absolute;inset:0 0 45% 0;background:radial-gradient(1px 1px at 12% 20%,#fff,transparent),radial-gradient(1px 1px at 30% 55%,#fff,transparent),radial-gradient(1.5px 1.5px at 62% 14%,#fff,transparent),radial-gradient(1px 1px at 82% 38%,#fff,transparent),radial-gradient(1px 1px at 48% 30%,#fff,transparent),radial-gradient(1px 1px at 92% 12%,#fff,transparent)}
 .alm-hudc__arc{position:absolute;inset:0;width:100%;height:100%}
 .alm-hudc__land{position:absolute;left:0;right:0;bottom:0;width:100%;height:40px;fill:rgba(8,10,26,.88)}
@@ -3488,11 +3493,12 @@ var BASE = `
 .alm-hudc__fx.is-rain{background:repeating-linear-gradient(105deg,transparent 0 13px,rgba(210,220,255,.24) 13px 14px,transparent 14px 29px) 0 0/80px 80px;mix-blend-mode:screen}
 .alm-hudc__fx.is-snow{background:radial-gradient(1.6px 1.6px at 10px 12px,#fff,transparent),radial-gradient(1.2px 1.2px at 40px 30px,#fff,transparent),radial-gradient(2px 2px at 64px 58px,#fff,transparent) 0 0/80px 80px;opacity:.85}
 .alm-hudc__fx.is-fog{background:linear-gradient(transparent 35%,rgba(230,230,240,.35) 70%,rgba(230,230,240,.5))}
-.alm-hudc__ttl{position:absolute;left:16px;top:12px;right:120px;text-shadow:0 2px 10px rgba(0,0,0,.35)}
+.alm-hudc__ttl{position:absolute;left:16px;top:10px;right:40%;min-width:180px;text-shadow:0 1px 2px rgba(0,0,0,.5),0 2px 12px rgba(0,0,0,.4)}
 .alm-hudc__ttl b{display:block;font:600 40px/1 var(--alm-font-display);letter-spacing:.01em;font-variant-numeric:tabular-nums}
-.alm-hudc__ttl span{display:block;margin-top:4px;font:500 10.5px/1.35 var(--alm-font-mono);letter-spacing:.06em;text-transform:uppercase;opacity:.88}
+.alm-hudc__ttl span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin-top:5px;font:500 10.5px/1.35 var(--alm-font-mono);letter-spacing:.06em;text-transform:uppercase}
 .alm-hudc__ttl em{display:block;margin-top:4px;font:italic 500 14px/1.25 var(--alm-font-display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.alm-hudc__astro{position:absolute;right:12px;top:48px;display:grid;gap:4px;justify-items:end}
+.alm-hudc__astro{position:absolute;right:48px;top:14px;display:flex;gap:5px;align-items:center}
+.alm-hudc__astro i{display:none;font-style:normal}
 .alm-hudc__astro span,.alm-hudc__chips span{font:500 10.5px/1 var(--alm-font-mono);padding:5px 8px;border-radius:999px;background:rgba(8,9,26,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:#f1efff;white-space:nowrap}
 .alm-hudc__x{position:absolute!important;right:12px;top:12px;width:28px;height:28px;border-radius:50%!important;display:grid;place-items:center;background:rgba(8,9,26,.38)!important;color:#fff!important;font-size:12px!important}
 .alm-hudc__x:hover{background:rgba(8,9,26,.6)!important}
@@ -3504,7 +3510,11 @@ var BASE = `
 .alm-hudc__fc i{font-style:normal;color:var(--alm-ink)}
 .alm-hudc__fc .now{color:var(--alm-accent);background:color-mix(in oklab,var(--alm-accent) 10%,transparent)}
 .alm-hudc__err{margin:0;padding:8px 12px;font-size:12px;line-height:1.4;border-bottom:1px solid color-mix(in oklab,var(--alm-warn) 45%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 14%,var(--alm-panel));overflow-wrap:anywhere;cursor:pointer}
-.alm-hudc__body{display:grid;grid-template-columns:52px minmax(0,1fr);height:318px}
+.alm-hudc__body{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:52px minmax(0,1fr)}
+.alm-hudc__fc,.alm-hudc__err{flex:none}
+.alm-hudc__grip{position:absolute;right:0;bottom:0;z-index:3;width:18px;height:18px;cursor:nwse-resize;touch-action:none;
+  background:linear-gradient(135deg,transparent 0 52%,var(--alm-muted) 52% 58%,transparent 58% 68%,var(--alm-muted) 68% 74%,transparent 74% 84%,var(--alm-muted) 84% 90%,transparent 90%);opacity:.55}
+.alm-hudc__grip:hover{opacity:1}
 .alm-hudc__rail{display:flex;flex-direction:column;gap:4px;padding:9px 6px;background:var(--alm-panel-2);border-right:1px solid var(--alm-line)}
 .alm-hudc__rail button{position:relative;display:grid;place-items:center;width:40px;height:38px;border-radius:var(--alm-r-sm,12px);color:var(--alm-muted)}
 .alm-hudc__rail button:hover{color:var(--alm-ink);background:color-mix(in oklab,var(--alm-ink) 6%,transparent)}
@@ -3514,7 +3524,7 @@ var BASE = `
 .alm-hudc__rail sup.dot{min-width:8px;width:8px;height:8px;padding:0;top:6px;right:6px;background:var(--alm-warn)}
 .alm-hudc__rail sup.dot.soft{background:var(--alm-accent-2)}
 .alm-hudc__open{margin-top:auto}
-.alm-hudc__pane{overflow:auto;padding:12px 14px 16px;background:var(--alm-texture,none),var(--alm-panel);scrollbar-width:thin;scrollbar-color:var(--alm-line) transparent;overscroll-behavior:contain}
+.alm-hudc__pane{min-width:0;overflow-x:hidden;overflow-y:auto;padding:12px 14px 16px;background:var(--alm-hud-veil),var(--alm-texture,none),var(--alm-panel);scrollbar-width:thin;scrollbar-color:var(--alm-line) transparent;overscroll-behavior:contain}
 .alm-hudc h6{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 8px;font:500 9.5px/1.2 var(--alm-font-mono);letter-spacing:.15em;text-transform:uppercase;color:var(--alm-muted)}
 .alm-hudc h6:not(:first-child){margin-top:16px}
 .alm-hudc small{display:block;color:var(--alm-muted);font-size:12px;line-height:1.35;font-style:italic}
@@ -3563,9 +3573,10 @@ var BASE = `
 .alm-hudc__tag s{opacity:.6}
 .alm-hudc__narr{display:inline-flex!important;align-items:center;gap:4px;padding:3px 8px!important;border-radius:999px!important;border:1px solid var(--alm-line)!important;text-transform:none;letter-spacing:.02em;color:var(--alm-muted)}
 .alm-hudc__narr.is-on{color:var(--alm-on-accent);background:var(--alm-accent-2)!important;border-color:transparent!important}
-.alm-hudc__who{display:grid;gap:9px}
-.alm-hudc__per{--alm-hud-ring:var(--alm-panel);padding:10px 11px;border-radius:var(--alm-hud-r);background:linear-gradient(135deg,color-mix(in oklab,var(--c) 13%,var(--alm-panel)),var(--alm-panel) 70%);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--c) 28%,var(--alm-line))}
-.alm-hudc__perh{display:flex;align-items:center;gap:10px}
+.alm-hudc__who{display:grid;grid-template-columns:minmax(0,1fr);gap:9px}
+.alm-hudc__per{--alm-hud-ring:var(--alm-panel);min-width:0;padding:10px 11px;border-radius:var(--alm-hud-r);background:linear-gradient(135deg,color-mix(in oklab,var(--c) 13%,var(--alm-panel)),var(--alm-panel) 70%);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--c) 28%,var(--alm-line))}
+.alm-hudc__perh{display:flex;align-items:center;gap:10px;min-width:0}
+.alm-hudc__perh>div{min-width:0;overflow-wrap:anywhere}
 .alm-hudc__perh b{display:block;font:600 14px/1.2 var(--alm-font-display)}
 .alm-hudc__bars{display:grid;grid-template-columns:62px 1fr;gap:6px 8px;align-items:center;margin-top:6px;font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--alm-muted)}
 .alm-hudc__bars .alm-otrk{margin:0 6px}
@@ -3856,6 +3867,17 @@ function setup(ctx) {
   hudOpen = load("alm-hud-open") === "1";
   hudUi.tab = load("alm-hud-tab") || "changed";
   try {
+    const sz = JSON.parse(load("alm-hud-size") || "null");
+    if (sz && Number.isFinite(sz.w) && Number.isFinite(sz.h))
+      hudUi.size = { w: sz.w, h: sz.h };
+  } catch {}
+  const fitSize = (w, h) => {
+    const vw = typeof innerWidth === "number" && innerWidth > 0 ? innerWidth - 16 : HUD_SIZE.maxW;
+    const vh = typeof innerHeight === "number" && innerHeight > 0 ? innerHeight - 16 : HUD_SIZE.maxH;
+    const clamp = (x, lo, hi) => Math.round(Math.max(lo, Math.min(hi, x)));
+    return { w: clamp(w, Math.min(HUD_SIZE.minW, vw), Math.min(HUD_SIZE.maxW, vw)), h: clamp(h, Math.min(HUD_SIZE.minH, vh), Math.min(HUD_SIZE.maxH, vh)) };
+  };
+  try {
     seen = JSON.parse(load("alm-hud-seen") || "{}") ?? {};
   } catch {
     seen = {};
@@ -3907,8 +3929,51 @@ function setup(ctx) {
     hudOn = on;
     try {
       if (on && !hud) {
-        hud = ctx.ui.createFloatWidget({ width: 260, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, tooltip: "ALMANAC · Now", chromeless: true });
+        hud = ctx.ui.createFloatWidget({ width: 260, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, chromeless: true });
         hud.root.addEventListener("click", (ev) => onHudAction(ev.target));
+        hud.root.addEventListener("pointerdown", (ev) => {
+          const pe = ev;
+          const grip = pe.target?.closest?.("[data-hud-grip]");
+          const card = hud?.root.querySelector(".alm-hudc");
+          if (!grip || !card || pe.button !== 0)
+            return;
+          pe.preventDefault();
+          pe.stopPropagation();
+          const start = { x: pe.clientX, y: pe.clientY, ...fitSize(hudUi.size?.w ?? HUD_SIZE.w, hudUi.size?.h ?? HUD_SIZE.h) };
+          let next = { w: start.w, h: start.h };
+          let frame = 0;
+          const onMove = (e) => {
+            next = fitSize(start.w + e.clientX - start.x, start.h + e.clientY - start.y);
+            if (frame)
+              return;
+            frame = requestAnimationFrame(() => {
+              frame = 0;
+              card.style.width = `${next.w}px`;
+              card.style.height = `${next.h}px`;
+              hud?.setSize(next.w, next.h);
+            });
+          };
+          const onUp = () => {
+            removeEventListener("pointermove", onMove);
+            removeEventListener("pointerup", onUp);
+            removeEventListener("pointercancel", onUp);
+            if (frame)
+              cancelAnimationFrame(frame);
+            hudUi.size = next;
+            save("alm-hud-size", JSON.stringify(next));
+            renderHud(app.view);
+          };
+          addEventListener("pointermove", onMove);
+          addEventListener("pointerup", onUp);
+          addEventListener("pointercancel", onUp);
+        });
+        hud.root.addEventListener("dblclick", (ev) => {
+          if (!ev.target?.closest?.("[data-hud-grip]"))
+            return;
+          hudUi.size = undefined;
+          save("alm-hud-size", "null");
+          renderHud(app.view);
+        });
         hud.root.addEventListener("keydown", (ev) => {
           const k = ev.key;
           if (k === "Escape" && hudOpen)
@@ -3941,7 +4006,6 @@ function setup(ctx) {
     }
     hud.setVisible(true);
     let html;
-    let width;
     const live = v && v.chatId === chatId;
     if (live) {
       const msg = v.changes?.msg ?? -1;
@@ -3956,17 +4020,23 @@ function setup(ctx) {
     else if (!v.enabled)
       html = hudPill(null, "off in this chat");
     else if (hudOpen) {
-      html = hudCard(v, hudUi);
-      width = 360;
+      const fit = fitSize(hudUi.size?.w ?? HUD_SIZE.w, hudUi.size?.h ?? HUD_SIZE.h);
+      html = hudCard(v, { ...hudUi, size: fit });
       markSeen(v);
+      if (html === lastHud)
+        return;
+      lastHud = html;
+      hud.root.innerHTML = html;
+      hud.setSize(fit.w, fit.h);
+      return;
     } else
       html = hudPill(v, undefined, hudUi);
     if (html === lastHud)
       return;
     lastHud = html;
     hud.root.innerHTML = html;
-    const size = measure(html, width);
-    hud.setSize(Math.min(width ?? 480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
+    const size = measure(html);
+    hud.setSize(Math.min(480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
   };
   const applyView = (v) => {
     gotStateFor = v ? v.chatId : null;

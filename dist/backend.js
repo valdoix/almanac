@@ -1275,7 +1275,9 @@ var PARSERS = {
   },
   wx(p, _s, rest) {
     const arrow = splitArrow(rest);
-    const now = arrow ? arrow[1] : rest;
+    const now = (arrow ? arrow[1] : rest).replace(/^\s*(?:unchanged|no change|same(?: as before)?|holds|holding|steady)\b\s*[\u2014\u2013:,-]*\s*/i, "");
+    if (!now.trim())
+      return null;
     p.args = { ...parseWeatherText(now), from: arrow ? arrow[0] : undefined, raw: now };
     if (!p.args.condition)
       return null;
@@ -1313,7 +1315,15 @@ var PARSERS = {
     if (!s)
       return null;
     p.subject = s;
-    const [emo, vad] = rest.split("|").map((x) => x.trim());
+    const { main, cause } = splitCause(rest);
+    if (cause)
+      p.cause = cause;
+    let [emo, vad] = main.split("|").map((x) => x.trim());
+    const paren = /\s*\(([^)]*\b[VAD]\s*[+-]?\d[^)]*)\)\s*/i.exec(emo);
+    if (paren) {
+      vad ??= paren[1];
+      emo = emo.replace(paren[0], " ").trim();
+    }
     const arrow = splitArrow(emo);
     p.args = { name: (arrow ? arrow[1] : emo).trim(), prev: arrow?.[0] };
     if (vad) {
@@ -1954,7 +1964,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.10.0";
+var VERSION = "1.10.1";
 
 // src/core/types.ts
 var KNOW_OPS = ["know", "reveal", "secret", "unaware"];
@@ -2983,7 +2993,7 @@ class Folder {
     return Object.values(this.state.chars).some((c) => !c.isUser && (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low)));
   }
   charId(name, msgIndex, create = true) {
-    let n = name.replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").trim();
+    let n = name.split(/\s*(?:\u2192|\u27F6|->|=>)\s*/)[0].replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").trim();
     if (!n)
       return null;
     const mergedTo = this.opts.merges?.[n.toLowerCase()];
@@ -3004,7 +3014,7 @@ class Folder {
     const byFirst = Object.values(this.state.chars).filter((c) => c.name.toLowerCase().split(/\s+/)[0] === first);
     if (byFirst.length === 1 && first.length > 2) {
       const c = byFirst[0];
-      if (n.length > c.name.length) {
+      if (n.length > c.name.length && /^\p{Lu}[\p{L}'\u2019.-]*(?:\s+(?:\p{Lu}[\p{L}'\u2019.-]*|of|the|de|van|von|al))*$/u.test(n)) {
         c.aliases.push(c.name);
         c.name = n;
       } else if (!c.aliases.includes(n))
@@ -8494,6 +8504,7 @@ async function buildView(chatId, userId) {
       minute: st.time?.minute ?? null,
       clock: al?.clock ?? (st.time ? fmtTime(st.time) : "not started"),
       weather: al?.weather ?? (st.weather ? { condition: st.weather.condition, glyph: st.weather.glyph ?? "\u26C5", text: st.weather.condition } : null),
+      date: al?.date ?? null,
       forecast: al?.forecast ?? "",
       forecastHours: (al?.forecastHours ?? []).map((h) => ({ t: hhmm(h.abs % 1440), glyph: h.glyph, temp: Math.round(h.tempC), condition: h.condition })),
       sun: al?.sun ?? null,

@@ -249,7 +249,9 @@ const PARSERS: Record<OpName, LineParser> = {
   },
   wx(p, _s, rest) {
     const arrow = splitArrow(rest);
-    const now = arrow ? arrow[1] : rest;
+    // "unchanged — heavy rain" restates the weather; a bare "unchanged" files nothing.
+    const now = (arrow ? arrow[1] : rest).replace(/^\s*(?:unchanged|no change|same(?: as before)?|holds|holding|steady)\b\s*[—–:,-]*\s*/i, "");
+    if (!now.trim()) return null;
     p.args = { ...parseWeatherText(now), from: arrow ? arrow[0] : undefined, raw: now };
     if (!p.args.condition) return null;
     return p;
@@ -282,7 +284,16 @@ const PARSERS: Record<OpName, LineParser> = {
   mood(p, s, rest) {
     if (!s) return null;
     p.subject = s;
-    const [emo, vad] = rest.split("|").map((x) => x.trim());
+    // "flustered → tender-open (V+3 A4 D-2) — the song broke her open": the reason and a
+    // parenthesised V/A/D aren't part of the mood's name.
+    const { main, cause } = splitCause(rest);
+    if (cause) p.cause = cause;
+    let [emo, vad] = main.split("|").map((x) => x.trim());
+    const paren = /\s*\(([^)]*\b[VAD]\s*[+-]?\d[^)]*)\)\s*/i.exec(emo);
+    if (paren) {
+      vad ??= paren[1];
+      emo = emo.replace(paren[0], " ").trim();
+    }
     const arrow = splitArrow(emo);
     p.args = { name: (arrow ? arrow[1] : emo).trim(), prev: arrow?.[0] };
     if (vad) {

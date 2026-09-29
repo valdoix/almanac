@@ -86,3 +86,15 @@ test("the widget: a change badge, the Unspoken tab only when inner voice isn't o
   // Off: the tab is gone and the window falls back to what changed.
   expect(hudCard({ ...v, thoughts: { ...v.thoughts, innerVoice: "off" } }, ui)).toContain('data-tab="changed"');
 });
+
+test("what the real chat wrote: restated weather, a line about two people, a mood with its reason", () => {
+  expect(parseMessage("<ledger>\nwx: unchanged\n</ledger>").ops.filter((o) => o.op === "wx")).toEqual([]);
+  expect(parseMessage("<ledger>\nwx: unchanged — heavy rain, 12°C, wind NW\n</ledger>").ops[0].args).toMatchObject({ condition: "heavy rain", tempC: 12 });
+  const mood = parseMessage("<ledger>\nmood Buffy: flustered-wrecked → tender-open (V+3 A4 D-2) — the song broke her open\n</ledger>").ops[0];
+  expect(mood.args).toMatchObject({ name: "tender-open", prev: "flustered-wrecked", v: 3, a: 4, d: -2 });
+  expect(mood.cause).toBe("the song broke her open");
+  const R = `<ledger>\ncast: Buffy@spot(by the TV)\nknow: Buffy → Gabriel: she almost said it — Gabriel heard the attempt\nmode: social\n</ledger>`;
+  const { state } = new LedgerRuntime().fold(toPath([msg(0, R1), msg(1, "…", true), msg(2, R.replace("Buffy", "Mara").replace("Buffy", "Mara"))]), OPTS);
+  expect(Object.values(state.chars).map((c) => c.name)).not.toContain("Mara → Gabriel");
+  expect(Object.values(state.chars).find((c) => c.id.startsWith("mara"))?.name).toBe("Mara");
+});

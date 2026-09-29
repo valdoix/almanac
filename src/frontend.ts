@@ -7,7 +7,7 @@ import { AlmanacApp } from "./frontend/app";
 import { MESSAGE_CSS, PANEL_CSS, TOKENS } from "./frontend/styles";
 import { SKIN_CSS, fontsFor } from "./frontend/skins";
 import { openSessionZero } from "./frontend/sessionzero";
-import { hudCard, hudPill, measure, type HudUi } from "./frontend/hud";
+import { HUD_SIZE, hudCard, hudPill, measure, type HudUi } from "./frontend/hud";
 import { HUD_CSS } from "./frontend/hudstyles";
 import { VERSION } from "./core/version";
 
@@ -165,6 +165,19 @@ export function setup(ctx: SpindleFrontendContext) {
   hudOpen = load("alm-hud-open") === "1";
   hudUi.tab = load("alm-hud-tab") || "changed";
   try {
+    const sz = JSON.parse(load("alm-hud-size") || "null");
+    if (sz && Number.isFinite(sz.w) && Number.isFinite(sz.h)) hudUi.size = { w: sz.w, h: sz.h };
+  } catch {
+    /* default size */
+  }
+  // The window never outgrows the screen, whatever size was saved on a bigger one.
+  const fitSize = (w: number, h: number) => {
+    const vw = typeof innerWidth === "number" && innerWidth > 0 ? innerWidth - 16 : HUD_SIZE.maxW;
+    const vh = typeof innerHeight === "number" && innerHeight > 0 ? innerHeight - 16 : HUD_SIZE.maxH;
+    const clamp = (x: number, lo: number, hi: number) => Math.round(Math.max(lo, Math.min(hi, x)));
+    return { w: clamp(w, Math.min(HUD_SIZE.minW, vw), Math.min(HUD_SIZE.maxW, vw)), h: clamp(h, Math.min(HUD_SIZE.minH, vh), Math.min(HUD_SIZE.maxH, vh)) };
+  };
+  try {
     seen = JSON.parse(load("alm-hud-seen") || "{}") ?? {};
   } catch {
     seen = {};
@@ -208,8 +221,49 @@ export function setup(ctx: SpindleFrontendContext) {
     hudOn = on;
     try {
       if (on && !hud) {
-        hud = ctx.ui.createFloatWidget({ width: 260, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, tooltip: "ALMANAC · Now", chromeless: true });
+        hud = ctx.ui.createFloatWidget({ width: 260, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, chromeless: true });
         hud.root.addEventListener("click", (ev) => onHudAction(ev.target));
+        // The corner grip resizes the window. Lumiverse leaves a press alone when it's
+        // defaultPrevented, so the grip doesn't also drag the widget.
+        hud.root.addEventListener("pointerdown", (ev) => {
+          const pe = ev as PointerEvent;
+          const grip = (pe.target as HTMLElement | null)?.closest?.("[data-hud-grip]");
+          const card = hud?.root.querySelector(".alm-hudc") as HTMLElement | null;
+          if (!grip || !card || pe.button !== 0) return;
+          pe.preventDefault();
+          pe.stopPropagation();
+          const start = { x: pe.clientX, y: pe.clientY, ...fitSize(hudUi.size?.w ?? HUD_SIZE.w, hudUi.size?.h ?? HUD_SIZE.h) };
+          let next = { w: start.w, h: start.h };
+          let frame = 0;
+          const onMove = (e: PointerEvent) => {
+            next = fitSize(start.w + e.clientX - start.x, start.h + e.clientY - start.y);
+            if (frame) return;
+            frame = requestAnimationFrame(() => {
+              frame = 0;
+              card.style.width = `${next.w}px`;
+              card.style.height = `${next.h}px`;
+              hud?.setSize(next.w, next.h);
+            });
+          };
+          const onUp = () => {
+            removeEventListener("pointermove", onMove);
+            removeEventListener("pointerup", onUp);
+            removeEventListener("pointercancel", onUp);
+            if (frame) cancelAnimationFrame(frame);
+            hudUi.size = next;
+            save("alm-hud-size", JSON.stringify(next));
+            renderHud(app.view);
+          };
+          addEventListener("pointermove", onMove);
+          addEventListener("pointerup", onUp);
+          addEventListener("pointercancel", onUp);
+        });
+        hud.root.addEventListener("dblclick", (ev) => {
+          if (!(ev.target as HTMLElement | null)?.closest?.("[data-hud-grip]")) return;
+          hudUi.size = undefined;
+          save("alm-hud-size", "null");
+          renderHud(app.view);
+        });
         hud.root.addEventListener("keydown", (ev) => {
           const k = (ev as KeyboardEvent).key;
           if (k === "Escape" && hudOpen) setHudOpen(false);
@@ -241,7 +295,6 @@ export function setup(ctx: SpindleFrontendContext) {
     }
     hud.setVisible(true);
     let html: string;
-    let width: number | undefined;
     const live = v && v.chatId === chatId;
     if (live) {
       const msg = v.changes?.msg ?? -1;
@@ -255,15 +308,20 @@ export function setup(ctx: SpindleFrontendContext) {
     if (!live) html = hudPill(null, app.status === "stalled" ? "no answer yet" : "connecting…");
     else if (!v.enabled) html = hudPill(null, "off in this chat");
     else if (hudOpen) {
-      html = hudCard(v, hudUi);
-      width = 360;
+      const fit = fitSize(hudUi.size?.w ?? HUD_SIZE.w, hudUi.size?.h ?? HUD_SIZE.h);
+      html = hudCard(v, { ...hudUi, size: fit });
       markSeen(v);
+      if (html === lastHud) return;
+      lastHud = html;
+      hud.root.innerHTML = html;
+      hud.setSize(fit.w, fit.h);
+      return;
     } else html = hudPill(v, undefined, hudUi);
     if (html === lastHud) return;
     lastHud = html;
     hud.root.innerHTML = html;
-    const size = measure(html, width);
-    hud.setSize(Math.min(width ?? 480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
+    const size = measure(html);
+    hud.setSize(Math.min(480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
   };
 
   const applyView = (v: any) => {

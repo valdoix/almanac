@@ -172,7 +172,8 @@ export class Folder {
 
   /** Resolve a written name to a character id, creating the character on first sight. */
   charId(name: string, msgIndex: number, create = true): string | null {
-    let n = name.replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").trim();
+    // "Buffy → Gabriel" names the first person (a line about two people), never a person called that.
+    let n = name.split(/\s*(?:→|⟶|->|=>)\s*/)[0].replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").trim();
     if (!n) return null;
     const mergedTo = this.opts.merges?.[n.toLowerCase()];
     if (mergedTo === NOT_A_PERSON) return null;
@@ -190,7 +191,8 @@ export class Folder {
     const byFirst = Object.values(this.state.chars).filter((c) => c.name.toLowerCase().split(/\s+/)[0] === first);
     if (byFirst.length === 1 && first.length > 2) {
       const c = byFirst[0];
-      if (n.length > c.name.length) {
+      // A fuller name ("Mara Voss") replaces the short one; anything that isn't a name stays an alias.
+      if (n.length > c.name.length && /^\p{Lu}[\p{L}'’.-]*(?:\s+(?:\p{Lu}[\p{L}'’.-]*|of|the|de|van|von|al))*$/u.test(n)) {
         c.aliases.push(c.name);
         c.name = n;
       } else if (!c.aliases.includes(n)) c.aliases.push(n);

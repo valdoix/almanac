@@ -19,7 +19,11 @@ export interface HudUi {
   unseen: number;
   /** Envelopes whose seal is broken (`msg:index`). */
   opened: Set<string>;
+  /** The window's size, as the player last dragged it. */
+  size?: { w: number; h: number };
 }
+
+export const HUD_SIZE = { w: 360, h: 540, minW: 300, minH: 380, maxW: 720, maxH: 960 };
 
 export const HUD_TABS = ["changed", "stakes", "cast", "threads", "unspoken", "backstage"] as const;
 
@@ -123,10 +127,11 @@ function skyArc(v: any): string {
   const now = n.minute ?? 720;
   const W = 360;
   const H = 150;
-  const cx = W / 2;
-  const base = 128;
-  const rx = 150;
-  const ry = 98;
+  // The arc sits on the right; the clock, date and title keep the left.
+  const cx = 270;
+  const base = 132;
+  const rx = 78;
+  const ry = 86;
   const at = (t: number) => ({ x: cx - rx * Math.cos(Math.PI * t), y: base - ry * Math.sin(Math.PI * t) });
   const day = set > rise && now >= rise && now < set;
   const nightLen = (rise + 1440 - set) % 1440 || 1;
@@ -137,7 +142,7 @@ function skyArc(v: any): string {
   const body = day
     ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="26" fill="rgba(255,190,110,.22)"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="11" fill="#ffcf73"/>`
     : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="16" fill="rgba(244,236,214,.14)"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="#f4ecd6"/><circle cx="${(p.x + 3 + (1 - lit) * 6).toFixed(1)}" cy="${(p.y - 1).toFixed(1)}" r="${(8 * (1 - lit) + 0.01).toFixed(1)}" fill="rgba(20,22,60,.8)"/>`;
-  return `<svg class="alm-hudc__arc" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path d="M${cx - rx} ${base} A${rx} ${ry} 0 0 1 ${cx + rx} ${base}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2" stroke-dasharray="2 5"/>${body}</svg>`;
+  return `<svg class="alm-hudc__arc" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMaxYMax meet" aria-hidden="true"><path d="M${cx - rx} ${base} A${rx} ${ry} 0 0 1 ${cx + rx} ${base}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2" stroke-dasharray="2 5"/>${body}</svg>`;
 }
 
 const HILLS = `<svg class="alm-hudc__land" viewBox="0 0 360 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 40V26c30-8 60-12 96-6 20 3 30-6 44-6h6v-7h6v7h10v-4l7-5 7 5v8c26 2 52-10 86-8 34 2 60 8 98 2v24z"/><rect x="160" y="15" width="3" height="3" fill="#ffc86b"/><rect x="170" y="17" width="3" height="3" fill="#ffc86b"/></svg>`;
@@ -280,7 +285,10 @@ export function hudCard(v: any, ui: HudUi = { tab: "changed", narr: false, unsee
   const place = (n.place ?? []) as string[];
   const clock = String(n.clock ?? "");
   const cut = clock.lastIndexOf(", ");
-  const date = n.time && cut > 0 ? clock.slice(0, cut) : "";
+  const date = String(n.date ?? (n.time && cut > 0 ? clock.slice(0, cut) : ""));
+  // "Day 2" only when the calendar's own date doesn't already count days.
+  const dayNo = n.day != null && !/\bday\b/i.test(date) ? `${date ? " · " : ""}Day ${n.day}` : "";
+  const size = ui.size ?? HUD_SIZE;
   const night = NIGHT.test(n.band ?? "evening");
   const tabs = HUD_TABS.filter((t) => t !== "unspoken" || hasThoughtsTab(v));
   const tab = tabs.includes(ui.tab as any) ? ui.tab : "changed";
@@ -293,15 +301,15 @@ export function hudCard(v: any, ui: HudUi = { tab: "changed", narr: false, unsee
   if (n.minute != null && set != null && rise != null) {
     const toSet = set - n.minute;
     const toRise = (rise - n.minute + 1440) % 1440;
-    sunChip = n.sun?.daylight ? (toSet > 0 ? `☀ sets in ${span(toSet)}` : "") : `☀ rises in ${span(toRise)}`;
+    sunChip = n.sun?.daylight ? (toSet > 0 ? `☀ sets ${span(toSet)}` : "") : `☀ rises ${span(toRise)}`;
   }
   const fc = (n.forecastHours ?? []).filter((_: any, i: number) => i % 2 === 0).slice(0, 6);
   const pane = tab === "stakes" ? paneStakes(v) : tab === "cast" ? paneCast(v, ui) : tab === "threads" ? paneThreads(v) : tab === "unspoken" ? paneUnspoken(v, ui) : tab === "backstage" ? paneBackstage(v) : paneChanged(v);
-  return `<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now">
+  return `<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now" style="width:${size.w}px;height:${size.h}px">
 <header class="alm-hudc__sky${night ? " is-night" : ""}" style="background:${skyOf(v)}">
   ${night ? `<span class="alm-hudc__stars"></span>` : ""}${skyArc(v)}${precip(v)}${HILLS}
-  <div class="alm-hudc__ttl"><b>${e(n.time ?? "--:--")}</b><span>${e(date)}${n.day != null ? ` · Day ${n.day}` : ""}</span>${n.title ? `<em>${e(n.title)}</em>` : ""}</div>
-  <div class="alm-hudc__astro">${sunChip ? `<span>${e(sunChip)}</span>` : ""}${n.moon ? `<span>${e(n.moon.glyph)} ${e(n.moon.name)}</span>` : ""}</div>
+  <div class="alm-hudc__ttl"><b>${e(n.time ?? "--:--")}</b><span title="${e(date + dayNo)}">${e(date)}${e(dayNo)}</span>${n.title ? `<em title="${e(n.title)}">${e(n.title)}</em>` : ""}</div>
+  <div class="alm-hudc__astro">${sunChip ? `<span>${e(sunChip)}</span>` : ""}${n.moon ? `<span title="${e(n.moon.name)}">${e(n.moon.glyph)}<i> ${e(n.moon.name)}</i></span>` : ""}</div>
   <button class="alm-hudc__x" data-hud="toggle" aria-label="Close the Now window">✕</button>
   <div class="alm-hudc__chips">${n.weather ? `<span>${e(n.weather.glyph)} ${e(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${e(place.slice(-3).join(" › "))}</span>` : ""}</div>
 </header>
@@ -310,7 +318,7 @@ ${v.planError ? `<p class="alm-hudc__err alm-hudc__err--top" data-hud="tab" data
 <div class="alm-hudc__body">
   <nav class="alm-hudc__rail" role="tablist" aria-orientation="vertical">${tabs.map((t) => `<button role="tab" data-hud="tab" data-tab="${t}" aria-selected="${t === tab}" title="${TAB_LABEL[t]}" aria-label="${TAB_LABEL[t]}">${svg(t)}${badge(t)}</button>`).join("")}<button class="alm-hudc__open" data-hud="open" title="Open the Almanac" aria-label="Open the Almanac">${svg("book")}</button></nav>
   <div class="alm-hudc__pane" role="tabpanel" data-tab="${tab}">${pane}</div>
-</div></div>`;
+</div><span class="alm-hudc__grip" data-hud-grip data-spindle-float-resize-handle title="Drag to resize · double-click to reset" aria-hidden="true"></span></div>`;
 }
 
 /** Measures rendered HTML off-screen (the widget's own root may not be in the page yet). */
