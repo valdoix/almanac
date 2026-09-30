@@ -331,8 +331,9 @@ const PARSERS: Record<OpName, LineParser> = {
     for (const seg0 of main.split(/\s*;\s*(?![^()]*\))/)) {
       const seg = seg0.trim();
       if (!seg) continue;
-      const inj = /^(?:injury|injured|wound|hurt)\s*:?\s*(.+)$/i.exec(seg);
-      if (inj) {
+      // "injury: left arm, serious, bandaged". Without the colon ("wound stable") it is a note about one.
+      const inj = /^(?:injur(?:y|ies|ed)|wounds?|hurt)\s*:\s*(.+)$/i.exec(seg);
+      if (inj && !/^(?:unchanged|no change|as before|same|none)\b/i.test(inj[1])) {
         const parts = inj[1].split(/\s*,\s*/);
         const where = parts[0] ?? "body";
         let severity: 1 | 2 | 3 | 4 = 2;
@@ -340,7 +341,7 @@ const PARSERS: Record<OpName, LineParser> = {
         for (const x of parts.slice(1)) {
           const k = x.toLowerCase().trim();
           if (SEVERITY[k]) severity = SEVERITY[k];
-          if (/bandag|treat|stitch|splint|dress|clean/.test(k)) treated = true;
+          if (TENDED.test(k)) treated = true;
         }
         injuries.push({ where, severity, treated, note: parts.slice(1).join(", ") });
         continue;
@@ -365,7 +366,7 @@ const PARSERS: Record<OpName, LineParser> = {
         }
       }
     }
-    p.args = { meters, flags, unflags, injuries, heals };
+    p.args = { meters, flags, unflags, injuries, heals, care: careIn(rest) };
     return p;
   },
   look(p, s, rest) {
@@ -686,9 +687,39 @@ function readRung(main: string, cause?: string): Record<string, any> {
 
 const INJURY = /\b(wound(?:ed|s)?|cuts?|gash(?:es)?|lacerations?|concussion|stitch(?:es|ed)?|burns?|burned|bruis\w*|fractur\w*|broken\s+(?:arm|leg|ribs?|wrist|nose|hand|fingers?|ankle|jaw|collarbone)|sprain\w*|bites?|stab(?:bed)?|bullet|graze[sd]?|scrapes?|scraped|blisters?|welts?|slash(?:ed)?|puncture[sd]?|split lip|black eye)\b/i;
 const NOT_HURT = /^(no|not|healed|without|free of)\b|\bwound (?:up|tight)\b|\bhealed\b/i;
-const PART = /\b((?:left|right|lower|upper)\s+)?(head|scalp|temple|brow|face|cheek|lip|mouth|jaw|nose|eye|ear|neck|throat|shoulder|arm|forearm|elbow|wrist|hand|palm|knuckles?|fingers?|thumb|chest|ribs?|side|flank|back|spine|stomach|belly|abdomen|hip|leg|thigh|knee|shin|calf|ankle|foot|feet|sole|arch|toes?)\b/i;
-const MILD = /\b(bruis|scrape|graze|blister|welt|scratch|split lip)/i;
-const BAD = /\b(fractur|broken|stab|bullet|puncture)/i;
+const PART = /\b((?:left|right|lower|upper)\s+)?(head|scalp|temples?|brows?|face|cheeks?|lips?|mouth|jaw|nose|eyes?|ears?|neck|throat|shoulders?|arms?|forearms?|elbows?|wrists?|hands?|palms?|knuckles?|fingers?|thumbs?|chest|ribs?|side|flank|back|spine|stomach|belly|abdomen|hips?|legs?|thighs?|knees?|shins?|calf|calves|ankles?|foot|feet|soles?|arch(?:es)?|heels?|toes?)\b/i;
+const MILD = /\b(bruis|scrape|graze|blister|welt|scratch|split lip|minor|small|shallow|superficial|nick)/i;
+const BAD = /\b(fractur|broken(?!\s+(?:glass|skin|nail))|stab|bullet|puncture)/i;
+/** Care inside a line about a wound ("untreated" is not "treated"). */
+const TENDED = /(?<!un)(?:stitch|bandag|treated|dressed|splint|closed|sutur|cleaned|gauze|wrapped)/i;
+/** "needs stitches", "not yet bandaged": care that hasn't happened. */
+const NOT_YET = /\b(?:no|not|needs?|without|refus\w*|yet to be)\b[^,;]*$/i;
+/** Care named anywhere in a body, look or cast note: narrower, since "dressed" and "closed" mean other things there. */
+const CARE = /(?<!un)(?:bandag|treat(?:ed|ing)\b|stitch|sutur|splint|gauze|re-?wrapped)/i;
+
+const REGION: Record<string, string> = { feet: "foot", calves: "calf", arch: "foot", arche: "foot", sole: "foot", heel: "foot", toe: "foot", palm: "hand", knuckle: "hand", scalp: "head", temple: "head", brow: "head" };
+
+/** The body part a wound is on and its side: "right arch" and "feet" are both the foot. Null for a bare "wound". */
+function spot(where: string): { part: string; side: string } | null {
+  const m = PART.exec(where);
+  if (!m) return null;
+  const word = m[2].toLowerCase();
+  const one = word === "feet" || word === "calves" ? word : word.replace(/s$/, "");
+  return { part: REGION[one] ?? one, side: (/\b(left|right)\b/i.exec(where)?.[1] ?? "").toLowerCase() };
+}
+
+/** Two ways of naming one place on the body ("feet", "right foot"). */
+export function sameSpot(a: string, b: string): boolean {
+  if (a.toLowerCase() === b.toLowerCase()) return true;
+  const x = spot(a), y = spot(b);
+  return !!x && !!y && x.part === y.part && (!x.side || !y.side || x.side === y.side);
+}
+
+/** True when the wound is filed under a body part, not just its kind ("cut", "bruise"). */
+export const hasPart = (where: string) => PART.test(where);
+
+/** A wound with no place on the body: "wound", "stitches". */
+export const isBareWound = (where: string) => /^wound$/i.test(where.trim());
 
 const METER = /^([a-zA-Z]+)\s*[:=]?\s*(?:[+-]?\d+\s*(?:→|->|=>|to)\s*)?([+-]?\d+)\s*\+?\s*(?:\/\s*5)?\s*(?:\([^)]*\))?(?:\s+(?:from|after|because|due to|—|-)\s.*)?[.]?$/;
 
@@ -722,13 +753,37 @@ export function injuriesIn(flag: string): { where: string; severity: 1 | 2 | 3 |
     // "hand pressed over his wound", "blood from his wound on her fingers": someone else's wound.
     const lead = part.slice(0, m.index);
     if (/\b(?:his|their|its|[A-Z][\p{L}'’-]+['’]s)\s+(?:[\p{L}-]+\s+)?$/u.test(lead) || /\b(?:over|on|to|at|against|from|near|around|beside|into|onto|across)\s+(?:the\s+|a\s+|his\s+|her\s+|their\s+)?(?:[\p{L}-]+\s+)?$/iu.test(lead)) continue;
-    const p = PART.exec(part);
+    // "bruises fading under his mouth": a part that belongs to someone else is not where the wound is.
+    const at = PART.exec(part);
+    const p = at && /\b(?:his|their|[A-Z][\p{L}'’-]+['’]s)\s+$/u.test(part.slice(0, at.index)) ? null : at;
     const raw = m[1].toLowerCase();
     const noun = NOUN.find(([re]) => re.test(raw))?.[1] ?? raw.replace(/s$/, "");
     const where = p ? `${(p[1] ?? "").toLowerCase()}${p[2].toLowerCase()}` : noun === "concussion" ? "head" : noun;
     const severity = BAD.test(part) ? 3 : MILD.test(part) ? 1 : 2;
-    const treated = /stitch|bandag|treated|dressed|splint|closed|sutur|cleaned|gauze/i.test(part);
+    const care = TENDED.exec(part);
+    const treated = !!care && !NOT_YET.test(part.slice(0, care.index));
     out.push({ where, severity, treated, note: part.trim().toLowerCase() });
+  }
+  return out;
+}
+
+/**
+ * Care named in a note: "hands bandaged" (that part), "bruises treated" (those), "bandaged" or
+ * "Valeria treating" (every wound). Someone else's bandage, or care still needed, is not care.
+ */
+export function careIn(text: string): { where?: string }[] {
+  const out: { where?: string }[] = [];
+  for (const part of text.split(/\s*(?:[,;+&·]|\band\b|→|—)\s*/)) {
+    const m = CARE.exec(part);
+    if (!m) continue;
+    const lead = part.slice(0, m.index);
+    if (NOT_YET.test(lead)) continue;
+    // "hand on his bandaged head", "Gabriel's gauze", "treating Gabriel's head": someone else's.
+    if (/[A-Z][\p{L}'’-]+['’]s\s+(?:[\p{L}-]+\s+)?$/u.test(lead) || /\b(?:over|on|to|at|against|from|near|around|beside|into|onto|across)\s+(?:the\s+|a\s+|his\s+|her\s+|their\s+)?(?:[\p{L}-]+\s+)?$/iu.test(lead) || /^\S*\s+(?:him|her|them|[A-Z])/.test(part.slice(m.index))) continue;
+    const p = PART.exec(part);
+    const noun = INJURY.exec(part)?.[1].toLowerCase();
+    const named = noun ? NOUN.find(([re]) => re.test(noun))?.[1] : undefined;
+    out.push({ where: p ? `${(p[1] ?? "").toLowerCase()}${p[2].toLowerCase()}` : named && named !== "wound" ? named : undefined });
   }
   return out;
 }

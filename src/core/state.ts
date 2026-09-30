@@ -9,7 +9,7 @@ import type {
 } from "./types";
 import { KNOW_OPS } from "./types";
 import { applyFactEdits, canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
-import { opWordOf, parseLine } from "./dsl";
+import { careIn, hasPart, isBareWound, opWordOf, parseLine, sameSpot } from "./dsl";
 import { mergeTraits } from "./traits";
 import type { KnowArgs } from "./knowparse";
 import { ALL_AXES, BIPOLAR_AXES, LADDER_NAMES } from "./types";
@@ -340,6 +340,8 @@ export class Folder {
     this.kctx = this.knowCtx(msgIndex);
     this.voicedNow = new Set((parsed.speakers ?? []).map((s) => this.charId(s.name, msgIndex, false)).filter((id): id is string => !!id));
     this.placeBefore = hadPlace;
+    this.care = [];
+    this.newWounds = new Set();
     let seq = 0;
     const run = (op: ParsedOp, src: EventSource) => {
       const ev: LedgerEvent = {
@@ -365,6 +367,16 @@ export class Folder {
     };
     for (const op of ops) run(op, source);
     for (const op of extra) run(op, extraSource);
+    // Care named anywhere in the reply's ledger reaches the wound, whichever line came first.
+    for (const { id, marks } of this.care) {
+      const c = st.chars[id];
+      if (!c) continue;
+      for (const m of marks) {
+        // "scrapes treated" with no scrape on file before this reply is about the wounds they do have.
+        const all = !m.where || !c.injuries.some((i) => !this.newWounds.has(i) && sameSpot(i.where, m.where!));
+        for (const i of c.injuries) if (all || sameSpot(i.where, m.where!) || isBareWound(i.where)) i.treated = true;
+      }
+    }
     // A line that names an op the Almanac couldn't read is reported, not dropped in silence.
     for (const raw of parsed.unknown ?? []) {
       const op = opWordOf(raw);
@@ -437,6 +449,9 @@ export class Folder {
   /** Who has a line (or a thought) in the message being filed, and where the scene was before it. */
   private voicedNow = new Set<string>();
   private placeBefore = "";
+  /** Care the message's body, look and cast notes name ("hands bandaged", "Valeria treating"): whose, and which wounds. */
+  private care: { id: string; marks: { where?: string }[] }[] = [];
+  private newWounds = new Set<object>();
 
   /** The knowledge engine's view of this message: names, listeners, edits, and what it files. */
   private knowCtx(mi: number): KnowCtx {
@@ -649,6 +664,13 @@ export class Folder {
             if (before !== "spot" && before !== "peri") lines.push(`${c.name} ${e.tier === "arrive" ? "arrives" : "is here"}`);
           }
           c.lastSeen = mi;
+          if (e.activity) {
+            this.care.push({ id, marks: careIn(e.activity) });
+            // "kneeling, treating Gabriel's head": the carer's note names the patient.
+            const patient = /\b(?:treating|bandaging|stitching|tending(?: to)?|patching up)\s+([A-Z][\p{L}-]+)/u.exec(e.activity);
+            const pid = patient && this.charId(patient[1], mi, false);
+            if (pid) this.care.push({ id: pid, marks: [{}] });
+          }
         }
         // A line that places people is the roster of the scene: whoever was here, isn't on it and
         // has no line in this reply is gone (models drop people without writing @left). Someone
@@ -702,20 +724,33 @@ export class Folder {
         }
         for (const f of a.unflags as string[]) c.flags = c.flags.filter((x) => x !== f && !x.startsWith(f));
         for (const inj of a.injuries as any[]) {
-          const ex = c.injuries.find((i) => i.where.toLowerCase() === inj.where.toLowerCase());
+          // "feet cut" and "right foot" are one wound; a bare "wound" is the one they already have.
+          const ex = c.injuries.find((i) => sameSpot(i.where, inj.where));
+          if (!ex && isBareWound(inj.where) && c.injuries.length) {
+            if (inj.treated) for (const i of c.injuries) i.treated = true;
+            continue;
+          }
+          // "cuts still raw but treated" after "feet cut on glass": the same cuts, named by kind.
+          const kind = !ex && !hasPart(inj.where) ? c.injuries.find((i) => i.note?.includes(inj.where.toLowerCase())) : undefined;
+          if (kind) {
+            kind.treated ||= inj.treated;
+            continue;
+          }
           // A later word on the same wound keeps it treated once it was (stitches loosening are still stitches).
-          if (ex) Object.assign(ex, inj, { since: ex.since, treated: inj.treated || ex.treated, severity: Math.max(ex.severity, inj.severity) });
-          else c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null });
+          if (ex) Object.assign(ex, inj, { where: ex.where, since: ex.since, treated: inj.treated || ex.treated, severity: Math.max(ex.severity, inj.severity) });
+          else this.newWounds.add(c.injuries[c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null }) - 1]);
           bits.push(`injury: ${inj.where}`);
           if (inj.severity >= 3) this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
         }
         for (const h of a.heals as string[]) c.injuries = c.injuries.filter((i) => !i.where.toLowerCase().includes(h.toLowerCase()));
+        this.care.push({ id, marks: a.care ?? [] });
         if (c.flags.length > 12) c.flags = c.flags.slice(-12);
         return { verdict: "accepted", line: bits.length ? `🩹 ${c.name}: ${bits.join(", ")}` : undefined };
       }
       case "look": {
         const id = this.charId(op.subject!, mi)!;
         st.chars[id].look = a.text;
+        this.care.push({ id, marks: careIn(String(a.text)) });
         // "new boots, his jacket": an item left at a shop or a place that the outfit now names is on them.
         const low = String(a.text).toLowerCase();
         for (const it of Object.values(st.items)) {
@@ -1250,13 +1285,13 @@ export class Folder {
 
 type ThreadOpName = "new" | "advance" | "complicate" | "bridge" | "resolve" | "stall";
 
-/** Causes that can bring a romance ladder down, and the ones that can drop it more than a rung. */
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** A cast note that puts someone out of the scene: another room, another floor, out of earshot. */
 const ELSEWHERE = /\b(?:next|another|other|adjoining|adjacent) room\b|\b(?:next door|elsewhere|off-?screen|off-?scene|out of (?:sight|earshot|the room)|not (?:here|present|in the (?:room|scene)))\b/i;
 
-const LADDER_FALL =/betray|\blie[sd]?\b|\blying\b|decei|neglect|abandon|cruel|cheat|reject|humiliat|contempt|disgust|resent|jealous|furious|\bangry\b|\banger\b|\bfight\b|argument|insult|threat|hurt (him|her|them)|\bhit\b|struck|walked (away|out)|left (him|her|them)|\bbroke\b|lost (her |his |their )?trust|distrust|suspicio|went cold|pulled away|shut (him|her|them) out|\bgrudge\b|regress|drops? a rung/i;
+/** Causes that can bring a romance ladder down, and the ones that can drop it more than a rung. */
+const LADDER_FALL = /betray|\blie[sd]?\b|\blying\b|decei|neglect|abandon|cruel|cheat|reject|humiliat|contempt|disgust|resent|jealous|furious|\bangry\b|\banger\b|\bfight\b|argument|insult|threat|hurt (him|her|them)|\bhit\b|struck|walked (away|out)|left (him|her|them)|\bbroke\b|lost (her |his |their )?trust|distrust|suspicio|went cold|pulled away|shut (him|her|them) out|\bgrudge\b|regress|drops? a rung/i;
 const LADDER_FALL_HARD = /betray|cheat|abandon|\bhit\b|struck|violen|unforgivable|\bmurder|\bkill/i;
 /** Causes that read as a warm beat: a lower rung here is almost always a mis-written step up. */
 const LADDER_WARM = /\bheld\b|\bhold|hug|embrac|kiss|smil|laugh|comfort|warm|tender|gentle|\bsafe\b|protect|saved|rescued|confess|\bstayed\b|didn't (pull|let) (away|go)|leaned|touch|\bhand\b|close|trust|open(ed)? up|let (him|her|them) (in|hold)|blush|flirt|charm|spark|linger/i;

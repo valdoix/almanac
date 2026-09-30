@@ -259,3 +259,34 @@ describe("running bits and the romance line", () => {
     expect(note).toContain("Interested (2/7)");
   });
 });
+
+describe("wounds that were treated say so", () => {
+  const wounds = (msgs: RawChatMessage[], who = "mara") => fold(msgs).state.chars[who].injuries.map((i) => `${i.where}:${i.severity}:${i.treated ? "treated" : "untreated"}`);
+  const hurt = reply(0, "cast: Mara@spot · Kael@peri\nbody Mara: feet cut on broken glass; fatigue 5");
+
+  test("a cut on broken glass is a wound, not a broken bone, and starts untreated", () => {
+    expect(wounds([hurt])).toEqual(["feet:2:untreated"]);
+  });
+  test("a later body line that bandages the part treats the wound, however the part is named", () => {
+    expect(wounds([hurt, reply(1, "body Mara: right foot bandaged (glass removed); fatigue 5")])).toEqual(["feet:2:treated"]);
+    expect(wounds([hurt, reply(1, "body Mara: right foot — glass removed, bandaged, throbbing dull")])).toEqual(["feet:2:treated"]);
+  });
+  test("care in a look or a cast note counts, in whatever order the lines come", () => {
+    expect(wounds([hurt, reply(1, "look Mara: torn dress, barefoot (bandaged)")])).toEqual(["feet:2:treated"]);
+    expect(wounds([reply(0, "cast: Mara@spot(on the floor, Kael treating) · Kael@spot\nbody Mara: concussion + scalp laceration, conscious")])).toEqual(["head:2:treated"]);
+    expect(wounds([hurt, reply(1, "cast: Mara@spot(sofa) · Kael@spot(kneeling, bandaging Mara's feet)")])).toEqual(["feet:2:treated"]);
+  });
+  test("untreated, someone else's bandage and care still needed are not care", () => {
+    expect(wounds([hurt, reply(1, "body Mara: glass in right arch (untreated); feet cut")])).toEqual(["feet:2:untreated"]);
+    expect(wounds([hurt, reply(1, "body Mara: hand on Kael's bandage; needs stitches")])).toEqual(["feet:2:untreated"]);
+    expect(parseLine("body Kael: injury: left arm, serious, untreated")!.args.injuries[0].treated).toBe(false);
+  });
+  test("a word on the wound without a place is the wound they have, not a new one", () => {
+    expect(wounds([hurt, reply(1, "body Mara: wound stable; watchful")])).toEqual(["feet:2:untreated"]);
+    expect(wounds([hurt, reply(1, "body Mara: feet clean + medicated (cuts still raw but treated)")])).toEqual(["feet:2:treated"]);
+  });
+  test("a part that is someone else's is not where the wound is", () => {
+    expect(injuriesIn("bruises fading under his mouth")[0].where).toBe("bruise");
+    expect(injuriesIn("hands cleaned (wounded but clean)")[0]).toMatchObject({ where: "hands", treated: true });
+  });
+});

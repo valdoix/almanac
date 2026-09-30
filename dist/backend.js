@@ -1640,8 +1640,8 @@ var PARSERS = {
       const seg = seg0.trim();
       if (!seg)
         continue;
-      const inj = /^(?:injury|injured|wound|hurt)\s*:?\s*(.+)$/i.exec(seg);
-      if (inj) {
+      const inj = /^(?:injur(?:y|ies|ed)|wounds?|hurt)\s*:\s*(.+)$/i.exec(seg);
+      if (inj && !/^(?:unchanged|no change|as before|same|none)\b/i.test(inj[1])) {
         const parts = inj[1].split(/\s*,\s*/);
         const where = parts[0] ?? "body";
         let severity = 2;
@@ -1650,7 +1650,7 @@ var PARSERS = {
           const k = x.toLowerCase().trim();
           if (SEVERITY[k])
             severity = SEVERITY[k];
-          if (/bandag|treat|stitch|splint|dress|clean/.test(k))
+          if (TENDED.test(k))
             treated = true;
         }
         injuries.push({ where, severity, treated, note: parts.slice(1).join(", ") });
@@ -1682,7 +1682,7 @@ var PARSERS = {
         }
       }
     }
-    p.args = { meters, flags, unflags, injuries, heals };
+    p.args = { meters, flags, unflags, injuries, heals, care: careIn(rest) };
     return p;
   },
   look(p, s, rest) {
@@ -2042,9 +2042,29 @@ function readRung(main, cause) {
 }
 var INJURY = /\b(wound(?:ed|s)?|cuts?|gash(?:es)?|lacerations?|concussion|stitch(?:es|ed)?|burns?|burned|bruis\w*|fractur\w*|broken\s+(?:arm|leg|ribs?|wrist|nose|hand|fingers?|ankle|jaw|collarbone)|sprain\w*|bites?|stab(?:bed)?|bullet|graze[sd]?|scrapes?|scraped|blisters?|welts?|slash(?:ed)?|puncture[sd]?|split lip|black eye)\b/i;
 var NOT_HURT = /^(no|not|healed|without|free of)\b|\bwound (?:up|tight)\b|\bhealed\b/i;
-var PART = /\b((?:left|right|lower|upper)\s+)?(head|scalp|temple|brow|face|cheek|lip|mouth|jaw|nose|eye|ear|neck|throat|shoulder|arm|forearm|elbow|wrist|hand|palm|knuckles?|fingers?|thumb|chest|ribs?|side|flank|back|spine|stomach|belly|abdomen|hip|leg|thigh|knee|shin|calf|ankle|foot|feet|sole|arch|toes?)\b/i;
-var MILD = /\b(bruis|scrape|graze|blister|welt|scratch|split lip)/i;
-var BAD = /\b(fractur|broken|stab|bullet|puncture)/i;
+var PART = /\b((?:left|right|lower|upper)\s+)?(head|scalp|temples?|brows?|face|cheeks?|lips?|mouth|jaw|nose|eyes?|ears?|neck|throat|shoulders?|arms?|forearms?|elbows?|wrists?|hands?|palms?|knuckles?|fingers?|thumbs?|chest|ribs?|side|flank|back|spine|stomach|belly|abdomen|hips?|legs?|thighs?|knees?|shins?|calf|calves|ankles?|foot|feet|soles?|arch(?:es)?|heels?|toes?)\b/i;
+var MILD = /\b(bruis|scrape|graze|blister|welt|scratch|split lip|minor|small|shallow|superficial|nick)/i;
+var BAD = /\b(fractur|broken(?!\s+(?:glass|skin|nail))|stab|bullet|puncture)/i;
+var TENDED = /(?<!un)(?:stitch|bandag|treated|dressed|splint|closed|sutur|cleaned|gauze|wrapped)/i;
+var NOT_YET = /\b(?:no|not|needs?|without|refus\w*|yet to be)\b[^,;]*$/i;
+var CARE = /(?<!un)(?:bandag|treat(?:ed|ing)\b|stitch|sutur|splint|gauze|re-?wrapped)/i;
+var REGION = { feet: "foot", calves: "calf", arch: "foot", arche: "foot", sole: "foot", heel: "foot", toe: "foot", palm: "hand", knuckle: "hand", scalp: "head", temple: "head", brow: "head" };
+function spot(where) {
+  const m = PART.exec(where);
+  if (!m)
+    return null;
+  const word = m[2].toLowerCase();
+  const one = word === "feet" || word === "calves" ? word : word.replace(/s$/, "");
+  return { part: REGION[one] ?? one, side: (/\b(left|right)\b/i.exec(where)?.[1] ?? "").toLowerCase() };
+}
+function sameSpot(a, b) {
+  if (a.toLowerCase() === b.toLowerCase())
+    return true;
+  const x = spot(a), y = spot(b);
+  return !!x && !!y && x.part === y.part && (!x.side || !y.side || x.side === y.side);
+}
+var hasPart = (where) => PART.test(where);
+var isBareWound = (where) => /^wound$/i.test(where.trim());
 var METER = /^([a-zA-Z]+)\s*[:=]?\s*(?:[+-]?\d+\s*(?:\u2192|->|=>|to)\s*)?([+-]?\d+)\s*\+?\s*(?:\/\s*5)?\s*(?:\([^)]*\))?(?:\s+(?:from|after|because|due to|\u2014|-)\s.*)?[.]?$/;
 function readMeter(seg, meters) {
   const mm = METER.exec(seg.trim());
@@ -2073,13 +2093,33 @@ function injuriesIn(flag) {
     const lead = part.slice(0, m.index);
     if (/\b(?:his|their|its|[A-Z][\p{L}'\u2019-]+['\u2019]s)\s+(?:[\p{L}-]+\s+)?$/u.test(lead) || /\b(?:over|on|to|at|against|from|near|around|beside|into|onto|across)\s+(?:the\s+|a\s+|his\s+|her\s+|their\s+)?(?:[\p{L}-]+\s+)?$/iu.test(lead))
       continue;
-    const p = PART.exec(part);
+    const at = PART.exec(part);
+    const p = at && /\b(?:his|their|[A-Z][\p{L}'\u2019-]+['\u2019]s)\s+$/u.test(part.slice(0, at.index)) ? null : at;
     const raw = m[1].toLowerCase();
     const noun = NOUN.find(([re]) => re.test(raw))?.[1] ?? raw.replace(/s$/, "");
     const where = p ? `${(p[1] ?? "").toLowerCase()}${p[2].toLowerCase()}` : noun === "concussion" ? "head" : noun;
     const severity = BAD.test(part) ? 3 : MILD.test(part) ? 1 : 2;
-    const treated = /stitch|bandag|treated|dressed|splint|closed|sutur|cleaned|gauze/i.test(part);
+    const care = TENDED.exec(part);
+    const treated = !!care && !NOT_YET.test(part.slice(0, care.index));
     out.push({ where, severity, treated, note: part.trim().toLowerCase() });
+  }
+  return out;
+}
+function careIn(text) {
+  const out = [];
+  for (const part of text.split(/\s*(?:[,;+&\u00B7]|\band\b|\u2192|\u2014)\s*/)) {
+    const m = CARE.exec(part);
+    if (!m)
+      continue;
+    const lead = part.slice(0, m.index);
+    if (NOT_YET.test(lead))
+      continue;
+    if (/[A-Z][\p{L}'\u2019-]+['\u2019]s\s+(?:[\p{L}-]+\s+)?$/u.test(lead) || /\b(?:over|on|to|at|against|from|near|around|beside|into|onto|across)\s+(?:the\s+|a\s+|his\s+|her\s+|their\s+)?(?:[\p{L}-]+\s+)?$/iu.test(lead) || /^\S*\s+(?:him|her|them|[A-Z])/.test(part.slice(m.index)))
+      continue;
+    const p = PART.exec(part);
+    const noun = INJURY.exec(part)?.[1].toLowerCase();
+    const named = noun ? NOUN.find(([re]) => re.test(noun))?.[1] : undefined;
+    out.push({ where: p ? `${(p[1] ?? "").toLowerCase()}${p[2].toLowerCase()}` : named && named !== "wound" ? named : undefined });
   }
   return out;
 }
@@ -2348,7 +2388,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.11.1";
+var VERSION = "1.11.2";
 
 // src/core/facts.ts
 var STOP2 = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));
@@ -3490,6 +3530,8 @@ class Folder {
     this.kctx = this.knowCtx(msgIndex);
     this.voicedNow = new Set((parsed.speakers ?? []).map((s) => this.charId(s.name, msgIndex, false)).filter((id) => !!id));
     this.placeBefore = hadPlace;
+    this.care = [];
+    this.newWounds = new Set;
     let seq = 0;
     const run = (op, src) => {
       const ev = {
@@ -3526,6 +3568,17 @@ class Folder {
       run(op, source);
     for (const op of extra)
       run(op, extraSource);
+    for (const { id, marks } of this.care) {
+      const c = st.chars[id];
+      if (!c)
+        continue;
+      for (const m of marks) {
+        const all = !m.where || !c.injuries.some((i) => !this.newWounds.has(i) && sameSpot(i.where, m.where));
+        for (const i of c.injuries)
+          if (all || sameSpot(i.where, m.where) || isBareWound(i.where))
+            i.treated = true;
+      }
+    }
     for (const raw of parsed.unknown ?? []) {
       const op = opWordOf(raw);
       if (!op || /:\s*(?:unchanged|no change|same(?: as before)?|none|n\/a|\u2014|-|holds?|steady)?\s*[.)]?\s*$/i.test(raw) || /:\s*(?:unchanged|no change|same)\b/i.test(raw))
@@ -3603,6 +3656,8 @@ class Folder {
   kctx = null;
   voicedNow = new Set;
   placeBefore = "";
+  care = [];
+  newWounds = new Set;
   knowCtx(mi) {
     const st = this.state;
     return {
@@ -3817,6 +3872,13 @@ class Folder {
               lines.push(`${c.name} ${e.tier === "arrive" ? "arrives" : "is here"}`);
           }
           c.lastSeen = mi;
+          if (e.activity) {
+            this.care.push({ id, marks: careIn(e.activity) });
+            const patient = /\b(?:treating|bandaging|stitching|tending(?: to)?|patching up)\s+([A-Z][\p{L}-]+)/u.exec(e.activity);
+            const pid = patient && this.charId(patient[1], mi, false);
+            if (pid)
+              this.care.push({ id: pid, marks: [{}] });
+          }
         }
         const entries = a.entries;
         const placed = entries.filter((e) => e.tier === "spot" || e.tier === "peri").length;
@@ -3871,17 +3933,29 @@ class Folder {
         for (const f of a.unflags)
           c.flags = c.flags.filter((x) => x !== f && !x.startsWith(f));
         for (const inj of a.injuries) {
-          const ex = c.injuries.find((i) => i.where.toLowerCase() === inj.where.toLowerCase());
+          const ex = c.injuries.find((i) => sameSpot(i.where, inj.where));
+          if (!ex && isBareWound(inj.where) && c.injuries.length) {
+            if (inj.treated)
+              for (const i of c.injuries)
+                i.treated = true;
+            continue;
+          }
+          const kind = !ex && !hasPart(inj.where) ? c.injuries.find((i) => i.note?.includes(inj.where.toLowerCase())) : undefined;
+          if (kind) {
+            kind.treated ||= inj.treated;
+            continue;
+          }
           if (ex)
-            Object.assign(ex, inj, { since: ex.since, treated: inj.treated || ex.treated, severity: Math.max(ex.severity, inj.severity) });
+            Object.assign(ex, inj, { where: ex.where, since: ex.since, treated: inj.treated || ex.treated, severity: Math.max(ex.severity, inj.severity) });
           else
-            c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null });
+            this.newWounds.add(c.injuries[c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null }) - 1]);
           bits.push(`injury: ${inj.where}`);
           if (inj.severity >= 3)
             this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
         }
         for (const h of a.heals)
           c.injuries = c.injuries.filter((i) => !i.where.toLowerCase().includes(h.toLowerCase()));
+        this.care.push({ id, marks: a.care ?? [] });
         if (c.flags.length > 12)
           c.flags = c.flags.slice(-12);
         return { verdict: "accepted", line: bits.length ? `\uD83E\uDE79 ${c.name}: ${bits.join(", ")}` : undefined };
@@ -3889,6 +3963,7 @@ class Folder {
       case "look": {
         const id = this.charId(op.subject, mi);
         st.chars[id].look = a.text;
+        this.care.push({ id, marks: careIn(String(a.text)) });
         const low = String(a.text).toLowerCase();
         for (const it of Object.values(st.items)) {
           if (it.gone || it.holder === id || !(it.holder?.startsWith("loc:") ?? true))
