@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.11.3";
+var VERSION = "1.12.0";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -570,8 +570,8 @@ var SKINS = {
       danger: "#ff3b5c",
       "on-accent": "#fff",
       pop: "#1d1033",
-      shadow: "5px 5px 0 #1d1033",
-      lift: "3px 3px 0 #1d1033",
+      shadow: "5px 5px 0 var(--alm-pop)",
+      lift: "3px 3px 0 var(--alm-pop)",
       texture: "radial-gradient(circle at 25% 25%,#ff9fcf 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#7fe3c1 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#b7a6ff 0 2.5px,transparent 3px) 0 0/60px 60px"
     },
     dark: {
@@ -588,7 +588,7 @@ var SKINS = {
       danger: "#ff6b86",
       "on-accent": "#160f2b",
       pop: "#fff4fb",
-      shadow: "5px 5px 0 #ff78bd",
+      shadow: "5px 5px 0 var(--alm-accent)",
       lift: "3px 3px 0 #7a5cff",
       texture: "radial-gradient(circle at 25% 25%,#ff78bd 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#5ef2c0 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#ffd84d 0 2.5px,transparent 3px) 0 0/60px 60px"
     },
@@ -786,6 +786,9 @@ function fontsFor(skin) {
   const fams = [...BASE_FONTS, ...SKINS[skin]?.fonts ?? []];
   return `@import url("https://fonts.googleapis.com/css2?${fams.map((f) => `family=${f}`).join("&")}&display=swap");`;
 }
+function isSkin(id) {
+  return id in SKINS || id === "lumiverse";
+}
 var decl = (p) => Object.entries(p).map(([k, v]) => `--alm-${k}:${v};`).join("");
 function tokens() {
   const out = [];
@@ -941,6 +944,55 @@ ${S("posy")} .alm-btn--primary,${S("posy")} .almp .btn.primary{background:var(--
 `;
 var SKIN_CSS = tokens() + `
 ` + SIGNATURES;
+var SKIN_COLORS = [
+  ["panel", "Paper", "cards, bubbles, the drawer"],
+  ["panel-2", "Shade", "fields and insets"],
+  ["ink", "Text", ""],
+  ["muted", "Quiet text", "labels and notes"],
+  ["line", "Lines", "borders and rules"],
+  ["accent", "Accent", "buttons and highlights"],
+  ["accent-2", "Second accent", ""],
+  ["gold", "Gold", "ornaments"],
+  ["good", "Good", ""],
+  ["warn", "Warning", ""],
+  ["danger", "Danger", ""]
+];
+var HEX = /^#[0-9a-f]{6}$/i;
+var INK_TOKENS = ["rule", "pop"];
+function skinPalette(skin, mode) {
+  return SKINS[skin]?.[mode] ?? null;
+}
+function readableOn(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 140 ? "#15120f" : "#fff";
+}
+function customCss(custom) {
+  const out = [];
+  for (const [id, modes] of Object.entries(custom ?? {})) {
+    if (!isSkin(id) || !modes)
+      continue;
+    for (const mode of ["light", "dark"]) {
+      const pal = {};
+      for (const [k] of SKIN_COLORS) {
+        const v = modes[mode]?.[k];
+        if (typeof v === "string" && HEX.test(v))
+          pal[k] = v.toLowerCase();
+      }
+      if (!Object.keys(pal).length)
+        continue;
+      if (pal.accent)
+        pal["on-accent"] = readableOn(pal.accent);
+      if (pal.ink) {
+        for (const t of INK_TOKENS)
+          if (SKINS[id]?.[mode][t])
+            pal[t] = pal.ink;
+      }
+      out.push(`html:root[data-alm-skin="${id}"][data-alm-mode="${mode}"]{${decl(pal)}}`);
+    }
+  }
+  return out.join(`
+`);
+}
 
 // src/core/knowparse.ts
 var CHANNEL_WORDS = "aloud|out loud|openly|announced|shouted|whisper(?:ed|s|ing)?|murmured|quietly|privately|in private|in secret|aside|in a letter|letter|written|wrote|a note|text(?:ed)?|message|shown|showed|showing|in plain sight|overheard|signed|mouthed|telepathically";
@@ -1281,6 +1333,11 @@ class AlmanacApp {
     }
     this.root.addEventListener("click", (ev) => this.onClick(ev));
     this.root.addEventListener("change", (ev) => this.onChange(ev));
+    this.root.addEventListener("input", (ev) => {
+      const t = ev.target;
+      if (t?.dataset?.skinColor)
+        this.ctx.events.emit("almanac:skinColors", this.withSkinColor(t.dataset.skinColor, t.value));
+    });
     this.root.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape" && this.orbit) {
         this.orbit = "";
@@ -1664,7 +1721,43 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
 <h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "Westeros · Roshar · Harptos · Shire Reckoning · or months: Name (30), …; weekdays: …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 1e4)}</label><label class="f">Simulator connection id${txt("simConnection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
 <h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection id${txt("sidecarConnection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label></div>
-<p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${escapeHtml(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ...SKIN_LIST])}</label><label class="f">Light or dark${sel("skinMode", [["auto", "Auto (follow Lumiverse)"], ["light", "Light"], ["dark", "Dark"]])}</label>${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${escapeHtml(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
+<p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${escapeHtml(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ...SKIN_LIST])}</label><label class="f">Light or dark${sel("skinMode", [["auto", "Auto (follow Lumiverse)"], ["light", "Light"], ["dark", "Dark"]])}</label>${this.skinColors(v)}${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${escapeHtml(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
+  }
+  lookTarget() {
+    const mode = document.documentElement.getAttribute?.("data-alm-mode") === "dark" ? "dark" : "light";
+    return { skin: this.view?.theme || "almanac", mode };
+  }
+  withSkinColor(token, value) {
+    const { skin, mode } = this.lookTarget();
+    const all = { ...this.view?.settings?.skinColors ?? {} };
+    const pal = token ? { ...all[skin]?.[mode] ?? {} } : {};
+    if (token && value)
+      pal[token] = value;
+    else if (token)
+      delete pal[token];
+    all[skin] = { ...all[skin] ?? {}, [mode]: pal };
+    if (!Object.keys(pal).length)
+      delete all[skin][mode];
+    if (!Object.keys(all[skin]).length)
+      delete all[skin];
+    return all;
+  }
+  saveSkinColors(colors) {
+    this.send({ type: "settings", patch: { skinColors: colors } });
+    if (this.view?.settings)
+      this.view.settings.skinColors = colors;
+    this.ctx.events.emit("almanac:skinColors", colors);
+    this.render();
+  }
+  skinColors(v) {
+    const { skin, mode } = this.lookTarget();
+    const mine = v.settings?.skinColors?.[skin]?.[mode] ?? {};
+    const own = skinPalette(skin, mode);
+    const name = SKIN_LIST.find(([id]) => id === skin)?.[1] ?? skin;
+    const rows = SKIN_COLORS.map(([k, lab, what]) => `<div class="almc-row"><label><input type="color" class="swatch" data-skin-color="${k}" value="${escapeHtml(toHex(mine[k] ?? own?.[k] ?? liveHex(k)))}"><span>${lab}${what ? ` <small class="muted">${what}</small>` : ""}</span></label>${mine[k] ? `<button class="btn" data-act="skinColorReset" data-id="${k}" title="Back to the skin's own colour" aria-label="Reset ${escapeHtml(lab)}">reset</button>` : ""}</div>`).join("");
+    return `<div class="almc"><div class="row"><span class="grow"><b>Colours</b> <span class="muted">— ${escapeHtml(skin === "lumiverse" ? "Lumiverse's theme" : name)}, ${mode}</span></span>${Object.keys(mine).length ? `<button class="btn" data-act="skinColorsReset" title="Put back every colour of this palette">Reset all</button>` : ""}</div>
+<div class="almc-grid">${rows}</div>
+<p class="muted" style="margin:0"><small>Your colours are kept for each skin, and for its light and its dark palette separately. To change the other palette, switch <b>Light or dark</b> above.</small></p></div>`;
   }
   onClick(ev) {
     const t = ev.target;
@@ -2018,6 +2111,13 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
       case "recheck":
         this.send({ type: "recheck" });
         break;
+      case "skinColorReset":
+        if (id)
+          this.saveSkinColors(this.withSkinColor(id, null));
+        break;
+      case "skinColorsReset":
+        this.saveSkinColors(this.withSkinColor(null, null));
+        break;
       case "saveTruths":
         this.send({ type: "config", patch: { truths: val("#almTruths").split(`
 `).map((s) => s.trim()).filter(Boolean) } });
@@ -2056,6 +2156,10 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
       this.ctx.events.emit("almanac:settings", { [d.setting]: value });
       return;
     }
+    if (d.skinColor) {
+      this.saveSkinColors(this.withSkinColor(d.skinColor, t.value));
+      return;
+    }
     if (d.set) {
       if (d.set === "asOf") {
         const max = Number(t.max);
@@ -2087,6 +2191,22 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
 }
 function toHex(c) {
   return /^#[0-9a-f]{6}$/i.test(c) ? c : "#888888";
+}
+function liveHex(token) {
+  try {
+    const probe = document.createElement("span");
+    probe.style.color = `var(--alm-${token})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    const g = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d");
+    g.fillStyle = color;
+    g.fillRect(0, 0, 1, 1);
+    const [r, gr, b] = g.getImageData(0, 0, 1, 1).data;
+    return `#${[r, gr, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+  } catch {
+    return "";
+  }
 }
 
 // src/frontend/styles.ts
@@ -2484,6 +2604,13 @@ var PANEL_CSS = `
 .almp pre{white-space:pre-wrap;font:12px/1.5 var(--alm-font-mono);background:var(--alm-panel-2);border:1px solid var(--alm-line);border-radius:10px;padding:10px;max-height:320px;overflow:auto}
 .almp .empty{padding:18px;text-align:center;color:var(--alm-muted);border:1px dashed var(--alm-line);border-radius:var(--alm-r-sm)}
 .almp .swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--alm-panel);box-shadow:0 0 0 1px var(--alm-line);padding:0;cursor:pointer}
+/* Settings › Look: the skin's colours */
+.almp .almc{margin:4px 0 10px;padding:10px;border-radius:10px;background:var(--alm-panel-2);border:1px solid var(--alm-line)}
+.almp .almc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 14px;margin:10px 0 8px}
+.almp .almc-row{display:flex;gap:8px;align-items:center;min-height:30px}
+.almp .almc-row label{display:flex;gap:8px;align-items:center;flex:1;min-width:0;cursor:pointer;font-size:13px}
+.almp .almc-row .swatch{flex:none;width:26px;height:26px}
+.almp .almc-row .btn{padding:4px 7px}
 .almp .spoiler{filter:blur(5px);transition:filter .2s;cursor:pointer}.almp .spoiler:hover,.almp .spoiler:focus{filter:none}
 .almp .timeline{position:relative;padding-left:18px}
 .almp .timeline::before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:var(--alm-line)}
@@ -3869,6 +3996,16 @@ function setup(ctx) {
   };
   setFonts(true);
   removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS + HUD_CSS));
+  let customStyle = null;
+  let lastCustom = "";
+  const applyCustom = (colors) => {
+    const css = customCss(colors);
+    if (css === lastCustom)
+      return;
+    customStyle?.();
+    customStyle = css ? ctx.dom.addStyle(css) : null;
+    lastCustom = css;
+  };
   let modePref = "auto";
   const systemDark = () => typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
   const hostMode = () => {
@@ -4194,6 +4331,7 @@ function setup(ctx) {
         modePref = pref;
         applyMode();
       }
+      applyCustom(v.settings?.skinColors);
       if (v.speakerCss !== lastSpeakerCss) {
         speakerStyle?.();
         speakerStyle = v.speakerCss ? ctx.dom.addStyle(v.speakerCss) : null;
@@ -4265,6 +4403,7 @@ function setup(ctx) {
       applyMode();
     }
   }));
+  removers.push(ctx.events.on("almanac:skinColors", (p) => applyCustom(p)));
   try {
     const action = ctx.ui.registerInputBarAction({ id: "almanac-command", label: "Almanac command…", iconSvg: ICON2.replace(/20/g, "14") });
     removers.push(action.onClick(async () => {
@@ -4299,6 +4438,7 @@ function setup(ctx) {
       } catch {}
     }
     speakerStyle?.();
+    customStyle?.();
     fontStyle?.();
     if (retry)
       clearTimeout(retry);

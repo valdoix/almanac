@@ -73,3 +73,17 @@ test("frontend keeps asking for state and shows the widget meanwhile", async () 
   expect(hud.root.innerHTML).toContain("alm-hudw");
   stop();
 }, 10000);
+
+test("the player's colours repaint one skin and mode, and nothing unsafe gets through", async () => {
+  const { customCss } = await import("../src/frontend/skins");
+  expect(customCss(undefined)).toBe("");
+  const css = customCss({
+    candy: { light: { accent: "#FFD21F", ink: "#102030", panel: "red;} body{display:none", bogus: "#000000" } },
+    nocturne: { dark: { accent: "#301020" }, light: {} },
+    "x]{}": { light: { ink: "#000000" } },
+  });
+  expect(css.split("\n")).toEqual([
+    `html:root[data-alm-skin="candy"][data-alm-mode="light"]{--alm-ink:#102030;--alm-accent:#ffd21f;--alm-on-accent:#15120f;--alm-pop:#102030;}`,
+    `html:root[data-alm-skin="nocturne"][data-alm-mode="dark"]{--alm-accent:#301020;--alm-on-accent:#fff;}`,
+  ]);
+});

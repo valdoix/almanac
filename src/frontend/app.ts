@@ -7,7 +7,7 @@ import { escapeHtml as e, initials, kpNote } from "../core/util";
 import { renderGraph, type GEdge, type GNode } from "./graph";
 import { CreatorUI } from "./creator-ui";
 import { VERSION } from "../core/version";
-import { SKIN_LIST } from "./skins";
+import { SKIN_COLORS, SKIN_LIST, skinPalette } from "./skins";
 import { NOT_A_PERSON } from "../core/state";
 import { PAGES, dock, emptySky, engineKeys, groupOf, pageTitle, skyHeader, type Page } from "./orrery";
 
@@ -109,6 +109,11 @@ export class AlmanacApp {
     }
     this.root.addEventListener("click", (ev) => this.onClick(ev));
     this.root.addEventListener("change", (ev) => this.onChange(ev));
+    // A colour picker repaints the skin while it's dragged; letting go saves it (onChange).
+    this.root.addEventListener("input", (ev) => {
+      const t = ev.target as HTMLInputElement;
+      if (t?.dataset?.skinColor) this.ctx.events.emit("almanac:skinColors", this.withSkinColor(t.dataset.skinColor, t.value));
+    });
     this.root.addEventListener("keydown", (ev) => {
       if ((ev as KeyboardEvent).key === "Escape" && this.orbit) {
         this.orbit = "";
@@ -542,7 +547,45 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
 <h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "Westeros · Roshar · Harptos · Shire Reckoning · or months: Name (30), …; weekdays: …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 10000)}</label><label class="f">Simulator connection id${txt("simConnection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
 <h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection id${txt("sidecarConnection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label></div>
-<p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${e(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ...SKIN_LIST])}</label><label class="f">Light or dark${sel("skinMode", [["auto", "Auto (follow Lumiverse)"], ["light", "Light"], ["dark", "Dark"]])}</label>${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${e(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
+<p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${e(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ...SKIN_LIST])}</label><label class="f">Light or dark${sel("skinMode", [["auto", "Auto (follow Lumiverse)"], ["light", "Light"], ["dark", "Dark"]])}</label>${this.skinColors(v)}${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${e(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
+  }
+
+  /** The skin and palette on screen: the ones the colour pickers change. */
+  lookTarget(): { skin: string; mode: "light" | "dark" } {
+    const mode = document.documentElement.getAttribute?.("data-alm-mode") === "dark" ? "dark" : "light";
+    return { skin: this.view?.theme || "almanac", mode };
+  }
+
+  /** The player's colours with one changed (null: back to the skin's own; no token: the whole palette). */
+  withSkinColor(token: string | null, value: string | null): Record<string, any> {
+    const { skin, mode } = this.lookTarget();
+    const all = { ...(this.view?.settings?.skinColors ?? {}) };
+    const pal = token ? { ...(all[skin]?.[mode] ?? {}) } : {};
+    if (token && value) pal[token] = value;
+    else if (token) delete pal[token];
+    all[skin] = { ...(all[skin] ?? {}), [mode]: pal };
+    if (!Object.keys(pal).length) delete all[skin][mode];
+    if (!Object.keys(all[skin]).length) delete all[skin];
+    return all;
+  }
+
+  saveSkinColors(colors: Record<string, any>) {
+    this.send({ type: "settings", patch: { skinColors: colors } });
+    if (this.view?.settings) this.view.settings.skinColors = colors;
+    this.ctx.events.emit("almanac:skinColors", colors);
+    this.render();
+  }
+
+  /** Settings › Look: a picker for each colour of the skin and palette on screen. */
+  skinColors(v: any): string {
+    const { skin, mode } = this.lookTarget();
+    const mine: Record<string, string> = v.settings?.skinColors?.[skin]?.[mode] ?? {};
+    const own = skinPalette(skin, mode);
+    const name = SKIN_LIST.find(([id]) => id === skin)?.[1] ?? skin;
+    const rows = SKIN_COLORS.map(([k, lab, what]) => `<div class="almc-row"><label><input type="color" class="swatch" data-skin-color="${k}" value="${e(toHex(mine[k] ?? own?.[k] ?? liveHex(k)))}"><span>${lab}${what ? ` <small class="muted">${what}</small>` : ""}</span></label>${mine[k] ? `<button class="btn" data-act="skinColorReset" data-id="${k}" title="Back to the skin's own colour" aria-label="Reset ${e(lab)}">reset</button>` : ""}</div>`).join("");
+    return `<div class="almc"><div class="row"><span class="grow"><b>Colours</b> <span class="muted">— ${e(skin === "lumiverse" ? "Lumiverse's theme" : name)}, ${mode}</span></span>${Object.keys(mine).length ? `<button class="btn" data-act="skinColorsReset" title="Put back every colour of this palette">Reset all</button>` : ""}</div>
+<div class="almc-grid">${rows}</div>
+<p class="muted" style="margin:0"><small>Your colours are kept for each skin, and for its light and its dark palette separately. To change the other palette, switch <b>Light or dark</b> above.</small></p></div>`;
   }
 
   // -------------------------------------------------------------------------
@@ -767,6 +810,8 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
       case "loreScan": this.send({ type: "lore", action: "scan" }); break;
       case "playbookPlayed": this.send({ type: "codexEdit", id, patch: { status: (t.closest("button") as HTMLElement | null)?.dataset.played ? "active" : "resolved" } }); break;
       case "recheck": this.send({ type: "recheck" }); break;
+      case "skinColorReset": if (id) this.saveSkinColors(this.withSkinColor(id, null)); break;
+      case "skinColorsReset": this.saveSkinColors(this.withSkinColor(null, null)); break;
       case "saveTruths": this.send({ type: "config", patch: { truths: val("#almTruths").split("\n").map((s) => s.trim()).filter(Boolean) } }); break;
       case "loreClassify": this.send({ type: "lore", action: "classify" }); break;
       case "mirrorSync": this.send({ type: "mirrorSync" }); break;
@@ -792,6 +837,10 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
       this.send({ type: "settings", patch: { [d.setting]: value } });
       if (this.view) this.view.settings[d.setting] = value;
       this.ctx.events.emit("almanac:settings", { [d.setting]: value });
+      return;
+    }
+    if (d.skinColor) {
+      this.saveSkinColors(this.withSkinColor(d.skinColor, t.value));
       return;
     }
     if (d.set) {
@@ -822,4 +871,22 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
 
 function toHex(c: string): string {
   return /^#[0-9a-f]{6}$/i.test(c) ? c : "#888888";
+}
+
+/** What a colour token paints right now, as #rrggbb (Follow Lumiverse takes its colours from the host). */
+function liveHex(token: string): string {
+  try {
+    const probe = document.createElement("span");
+    probe.style.color = `var(--alm-${token})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    const g = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d")!;
+    g.fillStyle = color;
+    g.fillRect(0, 0, 1, 1);
+    const [r, gr, b] = g.getImageData(0, 0, 1, 1).data;
+    return `#${[r, gr, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+  } catch {
+    return "";
+  }
 }

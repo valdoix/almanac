@@ -5,7 +5,7 @@
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { AlmanacApp } from "./frontend/app";
 import { MESSAGE_CSS, PANEL_CSS, TOKENS } from "./frontend/styles";
-import { SKIN_CSS, fontsFor } from "./frontend/skins";
+import { SKIN_CSS, customCss, fontsFor } from "./frontend/skins";
 import { openSessionZero } from "./frontend/sessionzero";
 import { HUD_SIZE, hudCard, hudPill, measure, type HudUi } from "./frontend/hud";
 import { HUD_CSS } from "./frontend/hudstyles";
@@ -39,6 +39,16 @@ export function setup(ctx: SpindleFrontendContext) {
   };
   setFonts(true);
   removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS + HUD_CSS));
+  // The player's own colours, laid over the skins' (added later, so it wins).
+  let customStyle: (() => void) | null = null;
+  let lastCustom = "";
+  const applyCustom = (colors: unknown) => {
+    const css = customCss(colors as any);
+    if (css === lastCustom) return;
+    customStyle?.();
+    customStyle = css ? ctx.dom.addStyle(css) : null;
+    lastCustom = css;
+  };
 
   // Light or dark: the player's choice, or Lumiverse's own mode read from its background.
   let modePref = "auto";
@@ -366,6 +376,7 @@ export function setup(ctx: SpindleFrontendContext) {
         modePref = pref;
         applyMode();
       }
+      applyCustom(v.settings?.skinColors);
       if (v.speakerCss !== lastSpeakerCss) {
         speakerStyle?.();
         speakerStyle = v.speakerCss ? ctx.dom.addStyle(v.speakerCss) : null;
@@ -434,6 +445,9 @@ export function setup(ctx: SpindleFrontendContext) {
     }
   }));
 
+  // A colour picker in Settings › Look, live while it's dragged.
+  removers.push(ctx.events.on("almanac:skinColors", (p: any) => applyCustom(p)));
+
   // Command button in the input bar's Extras popover.
   try {
     const action = ctx.ui.registerInputBarAction({ id: "almanac-command", label: "Almanac command…", iconSvg: ICON.replace(/20/g, "14") });
@@ -473,6 +487,7 @@ export function setup(ctx: SpindleFrontendContext) {
       }
     }
     speakerStyle?.();
+    customStyle?.();
     fontStyle?.();
     if (retry) clearTimeout(retry);
     hud?.destroy();

@@ -569,6 +569,8 @@ export interface Settings {
   theme: "preset" | "almanac" | "solar" | "nocturne" | "botanical" | "prism" | "candy" | "dossier" | "scriptorium" | "arcana" | "orbital" | "posy" | "lumiverse";
   /** Light or dark palette for the skin; auto follows Lumiverse. */
   skinMode: "auto" | "light" | "dark";
+  /** The player's own colours, laid over a skin's palette. */
+  skinColors: SkinColors;
   fonts: boolean;
   narratorOnlyToTools: boolean;
   telemetry: boolean;
@@ -583,6 +585,9 @@ export interface Settings {
   chekhov: boolean;
   debug: boolean;
 }
+
+/** Colours changed by the player: skin id → mode → token ("panel", "accent"…) → #rrggbb. */
+export type SkinColors = Record<string, { light?: Record<string, string>; dark?: Record<string, string> }>;
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: "auto",
@@ -627,6 +632,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hud: true,
   theme: "preset",
   skinMode: "auto",
+  skinColors: {},
   fonts: true,
   narratorOnlyToTools: false,
   telemetry: true,

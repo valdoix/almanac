@@ -614,6 +614,7 @@ var DEFAULT_SETTINGS = {
   hud: true,
   theme: "preset",
   skinMode: "auto",
+  skinColors: {},
   fonts: true,
   narratorOnlyToTools: false,
   telemetry: true,
@@ -2388,7 +2389,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.11.3";
+var VERSION = "1.12.0";
 
 // src/core/facts.ts
 var STOP2 = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));

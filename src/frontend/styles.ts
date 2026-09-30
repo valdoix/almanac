@@ -399,6 +399,13 @@ export const PANEL_CSS = `
 .almp pre{white-space:pre-wrap;font:12px/1.5 var(--alm-font-mono);background:var(--alm-panel-2);border:1px solid var(--alm-line);border-radius:10px;padding:10px;max-height:320px;overflow:auto}
 .almp .empty{padding:18px;text-align:center;color:var(--alm-muted);border:1px dashed var(--alm-line);border-radius:var(--alm-r-sm)}
 .almp .swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--alm-panel);box-shadow:0 0 0 1px var(--alm-line);padding:0;cursor:pointer}
+/* Settings › Look: the skin's colours */
+.almp .almc{margin:4px 0 10px;padding:10px;border-radius:10px;background:var(--alm-panel-2);border:1px solid var(--alm-line)}
+.almp .almc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 14px;margin:10px 0 8px}
+.almp .almc-row{display:flex;gap:8px;align-items:center;min-height:30px}
+.almp .almc-row label{display:flex;gap:8px;align-items:center;flex:1;min-width:0;cursor:pointer;font-size:13px}
+.almp .almc-row .swatch{flex:none;width:26px;height:26px}
+.almp .almc-row .btn{padding:4px 7px}
 .almp .spoiler{filter:blur(5px);transition:filter .2s;cursor:pointer}.almp .spoiler:hover,.almp .spoiler:focus{filter:none}
 .almp .timeline{position:relative;padding-left:18px}
 .almp .timeline::before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:var(--alm-line)}

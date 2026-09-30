@@ -80,6 +80,7 @@ Eleven skins, each with a light and a dark palette: **Almanac** (field almanac),
 
 - Pick one in Session Zero (for this chat) or in **Settings › Look**. Left on Auto, the skin follows the lead genre.
 - **Light or dark** (Settings › Look): Auto follows Lumiverse's light/dark mode, or pin either one.
+- **Colours** (Settings › Look): a picker for each colour of the skin on screen (paper, shade, text, quiet text, lines, the two accents, gold, good, warning, danger). The skin repaints as you drag. Your colours are kept for each skin, and for its light and dark palettes separately; **reset** puts one back and **Reset all** the whole palette. Follow Lumiverse can be repainted too.
 - Only the active skin's web fonts are loaded.
 - Every character's colour can be changed on the **People › Cast** page, including your persona's. **edit** on a character sets their name, age and appearance (the old name keeps working in the story's lines; your persona's name comes from Lumiverse), and **+ Add a person** adds someone the story hasn't named. An age the lore mentions in passing is shown until you set one.
 - Mockups of every skin in both modes: [design/mockups/skins.html](design/mockups/skins.html).

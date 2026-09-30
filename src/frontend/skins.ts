@@ -2,6 +2,9 @@
 // "lumiverse", which follows the host theme (the base tokens in styles.ts).
 // The frontend sets data-alm-skin and data-alm-mode on <html>; the tokens and a
 // few signature overrides per skin live here. Mockups: design/mockups/skins.html.
+// The player can repaint any palette (Settings › Look): customCss() at the end.
+
+import type { SkinColors } from "../core/types";
 
 export const SKIN_LIST: [string, string][] = [
   ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"],
@@ -66,10 +69,10 @@ const SKINS: Record<string, Skin> = {
   candy: {
     shared: { "font-display": `"Fredoka","Segoe UI Rounded",system-ui,sans-serif`, "font-body": `"Fredoka","Segoe UI Rounded",system-ui,sans-serif`, "font-mono": `"Fredoka",system-ui,sans-serif`, "font-hand": `"Fredoka",system-ui,sans-serif`, radius: "22px", "r-sm": "16px" },
     light: { panel: "#fffdf4", "panel-2": "#fff1c2", ink: "#1d1033", muted: "#6a5e80", line: "#ead9a6", accent: "#ff4fa3", "accent-2": "#28c994", gold: "#ffc933", good: "#12a978", warn: "#d98a00", danger: "#ff3b5c", "on-accent": "#fff",
-      pop: "#1d1033", shadow: "5px 5px 0 #1d1033", lift: "3px 3px 0 #1d1033",
+      pop: "#1d1033", shadow: "5px 5px 0 var(--alm-pop)", lift: "3px 3px 0 var(--alm-pop)",
       texture: "radial-gradient(circle at 25% 25%,#ff9fcf 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#7fe3c1 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#b7a6ff 0 2.5px,transparent 3px) 0 0/60px 60px" },
     dark: { panel: "#241a40", "panel-2": "#160f2b", ink: "#fff4fb", muted: "#c1b3df", line: "#44376b", accent: "#ff78bd", "accent-2": "#5ef2c0", gold: "#ffd84d", good: "#5ef2c0", warn: "#ffc04d", danger: "#ff6b86", "on-accent": "#160f2b",
-      pop: "#fff4fb", shadow: "5px 5px 0 #ff78bd", lift: "3px 3px 0 #7a5cff",
+      pop: "#fff4fb", shadow: "5px 5px 0 var(--alm-accent)", lift: "3px 3px 0 #7a5cff",
       texture: "radial-gradient(circle at 25% 25%,#ff78bd 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#5ef2c0 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#ffd84d 0 2.5px,transparent 3px) 0 0/60px 60px" },
     fonts: ["Fredoka:wght@400;500;600;700"],
   },
@@ -289,3 +292,59 @@ ${S("posy")} .alm-btn--primary,${S("posy")} .almp .btn.primary{background:var(--
 `;
 
 export const SKIN_CSS = tokens() + "\n" + SIGNATURES;
+
+// ---------------------------------------------------------------------------
+// The player's own colours
+// ---------------------------------------------------------------------------
+
+/** The colours a player can change in each palette: [token, label, what it paints]. */
+export const SKIN_COLORS: [string, string, string][] = [
+  ["panel", "Paper", "cards, bubbles, the drawer"],
+  ["panel-2", "Shade", "fields and insets"],
+  ["ink", "Text", ""],
+  ["muted", "Quiet text", "labels and notes"],
+  ["line", "Lines", "borders and rules"],
+  ["accent", "Accent", "buttons and highlights"],
+  ["accent-2", "Second accent", ""],
+  ["gold", "Gold", "ornaments"],
+  ["good", "Good", ""],
+  ["warn", "Warning", ""],
+  ["danger", "Danger", ""],
+];
+const HEX = /^#[0-9a-f]{6}$/i;
+/** Tokens a skin draws in its ink colour, which follow a changed ink. */
+const INK_TOKENS = ["rule", "pop"];
+
+/** A fixed skin's own colours for a mode (null for "lumiverse", whose colours come from the host). */
+export function skinPalette(skin: string, mode: "light" | "dark"): Pal | null {
+  return SKINS[skin]?.[mode] ?? null;
+}
+
+/** Black or white, whichever reads on the colour. */
+function readableOn(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 140 ? "#15120f" : "#fff";
+}
+
+/**
+ * The stylesheet for the player's colours, laid over the skins' own. Only known
+ * skins and tokens with #rrggbb values get through (the map comes from storage).
+ */
+export function customCss(custom: SkinColors | null | undefined): string {
+  const out: string[] = [];
+  for (const [id, modes] of Object.entries(custom ?? {})) {
+    if (!isSkin(id) || !modes) continue;
+    for (const mode of ["light", "dark"] as const) {
+      const pal: Pal = {};
+      for (const [k] of SKIN_COLORS) {
+        const v = modes[mode]?.[k];
+        if (typeof v === "string" && HEX.test(v)) pal[k] = v.toLowerCase();
+      }
+      if (!Object.keys(pal).length) continue;
+      if (pal.accent) pal["on-accent"] = readableOn(pal.accent);
+      if (pal.ink) for (const t of INK_TOKENS) if (SKINS[id]?.[mode][t]) pal[t] = pal.ink;
+      out.push(`html:root[data-alm-skin="${id}"][data-alm-mode="${mode}"]{${decl(pal)}}`);
+    }
+  }
+  return out.join("\n");
+}
