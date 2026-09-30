@@ -207,3 +207,34 @@ describe("the first clock line", () => {
     expect(state.time).toEqual({ day: 1, minute: 22 * 60 + 20 });
   });
 });
+
+describe("who is still in the scene", () => {
+  const r = (body: string, prose = "Prose.") => `${prose}\n<ledger>\n${body}\nmode: social\n</ledger>`;
+  const here = (path: ReturnType<typeof toPath>) =>
+    Object.values(new LedgerRuntime().fold(path, OPTS).state.chars).filter((c) => c.tier === "spot" || c.tier === "peri").map((c) => c.name).sort();
+  const crowd = msg(0, r("at: House › living room\ncast: Buffy@spot · Dawn@peri · Willow@peri · Tara@peri · Ruth@peri(sofa)"));
+
+  test("a roster that leaves someone out drops them", () => {
+    expect(here(toPath([crowd, msg(1, "ok", true), msg(2, r("cast: Buffy@spot(floor) · Dawn@peri(sofa)"))]))).toEqual(["Buffy", "Dawn"]);
+  });
+
+  test("someone with a line in the reply, or named in another's note, stays", () => {
+    const path = toPath([crowd, msg(1, "ok", true), msg(2, r("cast: Buffy@spot(floor) · Dawn@peri(sofa, Ruth in lap)", `[spk=Willow#3]"I didn't mean to."[/spk]`))]);
+    expect(here(path)).toEqual(["Buffy", "Dawn", "Ruth", "Willow"]);
+  });
+
+  test("arrivals and departures alone, or one name in the same place, say nothing about the rest", () => {
+    expect(here(toPath([crowd, msg(1, "ok", true), msg(2, r("cast: Tara@left(→ street) · Xander@arrive(← door)"))]))).toEqual(["Buffy", "Dawn", "Ruth", "Willow", "Xander"]);
+    expect(here(toPath([crowd, msg(1, "ok", true), msg(2, r("cast: Dawn@spot(standing)"))]))).toEqual(["Buffy", "Dawn", "Ruth", "Tara", "Willow"]);
+  });
+
+  test("one name after the scene moved is the roster; no cast line brings everyone along", () => {
+    expect(here(toPath([crowd, msg(1, "ok", true), msg(2, r("at: House › bedroom\ncast: Buffy@spot(bed)"))]))).toEqual(["Buffy"]);
+    expect(here(toPath([crowd, msg(1, "ok", true), msg(2, r("at: House › kitchen"))]))).toEqual(["Buffy", "Dawn", "Ruth", "Tara", "Willow"]);
+  });
+
+  test("periphery in another room is away", () => {
+    const path = toPath([crowd, msg(1, "ok", true), msg(2, r("cast: Buffy@spot · Dawn@peri(asleep, next room) · Willow@peri · Tara@peri · Ruth@peri"))]);
+    expect(here(path)).toEqual(["Buffy", "Ruth", "Tara", "Willow"]);
+  });
+});

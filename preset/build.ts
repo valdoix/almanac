@@ -9,7 +9,7 @@ import { craftBlocks } from "./src/blocks-craft";
 import { sourceBlocks, turnBlocks } from "./src/blocks-turn";
 import { REGEX, toScript } from "./src/regex";
 
-export const VERSION = "1.0.7";
+export const VERSION = "1.0.8";
 
 const DEFAULTS = {
   role: "system", enabled: true, position: "pre_history", depth: 0, marker: null, isLocked: false, color: null,

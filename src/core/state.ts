@@ -338,6 +338,8 @@ export class Folder {
       st.speech = [...(st.speech ?? []).filter((e) => e.msgIndex !== msgIndex), { msgIndex, lines: parsed.speech.slice(0, 60), present, ...(fromUser ? { fromUser } : {}) }].slice(-4);
     }
     this.kctx = this.knowCtx(msgIndex);
+    this.voicedNow = new Set((parsed.speakers ?? []).map((s) => this.charId(s.name, msgIndex, false)).filter((id): id is string => !!id));
+    this.placeBefore = hadPlace;
     let seq = 0;
     const run = (op: ParsedOp, src: EventSource) => {
       const ev: LedgerEvent = {
@@ -432,6 +434,9 @@ export class Folder {
   }
 
   private kctx: KnowCtx | null = null;
+  /** Who has a line (or a thought) in the message being filed, and where the scene was before it. */
+  private voicedNow = new Set<string>();
+  private placeBefore = "";
 
   /** The knowledge engine's view of this message: names, listeners, edits, and what it files. */
   private knowCtx(mi: number): KnowCtx {
@@ -617,7 +622,12 @@ export class Folder {
             if (strict) return reject(`${c.name} is dead and cannot appear`);
           }
           const before = c.tier;
-          if (e.tier === "left") {
+          // "Dawn@peri(asleep, next room)": in the house, not in the scene.
+          if (e.tier === "peri" && !c.isUser && e.activity && ELSEWHERE.test(e.activity)) {
+            c.tier = "off";
+            c.activity = undefined;
+            if (before === "spot" || before === "peri") lines.push(`${c.name} is elsewhere`);
+          } else if (e.tier === "left") {
             c.tier = "off";
             c.place = e.activity?.replace(/^→\s*/, "").trim() || undefined;
             c.activity = undefined;
@@ -639,6 +649,23 @@ export class Folder {
             if (before !== "spot" && before !== "peri") lines.push(`${c.name} ${e.tier === "arrive" ? "arrives" : "is here"}`);
           }
           c.lastSeen = mi;
+        }
+        // A line that places people is the roster of the scene: whoever was here, isn't on it and
+        // has no line in this reply is gone (models drop people without writing @left). Someone
+        // another person's note names ("armchair, Ruth in lap") is still here. A line of arrivals
+        // and departures alone says nothing about the rest; one name alone is the roster only
+        // when the scene moved.
+        const entries = a.entries as { tier: string; activity?: string }[];
+        const placed = entries.filter((e) => e.tier === "spot" || e.tier === "peri").length;
+        if (src !== "user" && (placed >= 2 || (placed === 1 && st.place.join(" › ") !== this.placeBefore))) {
+          const notes = entries.map((e) => e.activity ?? "").join(" · ").toLowerCase();
+          const named = (c: CharacterState) => [c.name, ...c.aliases].some((n) => n.length > 1 && new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(n.toLowerCase())}(?![\\p{L}\\p{N}])`, "u").test(notes));
+          for (const c of Object.values(st.chars)) {
+            if (c.isUser || listed.has(c.id) || (c.tier !== "spot" && c.tier !== "peri") || this.voicedNow.has(c.id) || named(c)) continue;
+            c.tier = "off";
+            c.activity = undefined;
+            lines.push(`${c.name} is no longer here`);
+          }
         }
         return { verdict: "accepted", line: lines.length ? `👥 ${lines.join(" · ")}` : undefined };
       }
@@ -1224,7 +1251,12 @@ export class Folder {
 type ThreadOpName = "new" | "advance" | "complicate" | "bridge" | "resolve" | "stall";
 
 /** Causes that can bring a romance ladder down, and the ones that can drop it more than a rung. */
-const LADDER_FALL = /betray|\blie[sd]?\b|\blying\b|decei|neglect|abandon|cruel|cheat|reject|humiliat|contempt|disgust|resent|jealous|furious|\bangry\b|\banger\b|\bfight\b|argument|insult|threat|hurt (him|her|them)|\bhit\b|struck|walked (away|out)|left (him|her|them)|\bbroke\b|lost (her |his |their )?trust|distrust|suspicio|went cold|pulled away|shut (him|her|them) out|\bgrudge\b|regress|drops? a rung/i;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** A cast note that puts someone out of the scene: another room, another floor, out of earshot. */
+const ELSEWHERE = /\b(?:next|another|other|adjoining|adjacent) room\b|\b(?:next door|elsewhere|off-?screen|off-?scene|out of (?:sight|earshot|the room)|not (?:here|present|in the (?:room|scene)))\b/i;
+
+const LADDER_FALL =/betray|\blie[sd]?\b|\blying\b|decei|neglect|abandon|cruel|cheat|reject|humiliat|contempt|disgust|resent|jealous|furious|\bangry\b|\banger\b|\bfight\b|argument|insult|threat|hurt (him|her|them)|\bhit\b|struck|walked (away|out)|left (him|her|them)|\bbroke\b|lost (her |his |their )?trust|distrust|suspicio|went cold|pulled away|shut (him|her|them) out|\bgrudge\b|regress|drops? a rung/i;
 const LADDER_FALL_HARD = /betray|cheat|abandon|\bhit\b|struck|violen|unforgivable|\bmurder|\bkill/i;
 /** Causes that read as a warm beat: a lower rung here is almost always a mis-written step up. */
 const LADDER_WARM = /\bheld\b|\bhold|hug|embrac|kiss|smil|laugh|comfort|warm|tender|gentle|\bsafe\b|protect|saved|rescued|confess|\bstayed\b|didn't (pull|let) (away|go)|leaned|touch|\bhand\b|close|trust|open(ed)? up|let (him|her|them) (in|hold)|blush|flirt|charm|spark|linger/i;

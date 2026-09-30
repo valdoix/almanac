@@ -2348,7 +2348,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.11.0";
+var VERSION = "1.11.1";
 
 // src/core/facts.ts
 var STOP2 = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));
@@ -3488,6 +3488,8 @@ class Folder {
       st.speech = [...(st.speech ?? []).filter((e) => e.msgIndex !== msgIndex), { msgIndex, lines: parsed.speech.slice(0, 60), present, ...fromUser ? { fromUser } : {} }].slice(-4);
     }
     this.kctx = this.knowCtx(msgIndex);
+    this.voicedNow = new Set((parsed.speakers ?? []).map((s) => this.charId(s.name, msgIndex, false)).filter((id) => !!id));
+    this.placeBefore = hadPlace;
     let seq = 0;
     const run = (op, src) => {
       const ev = {
@@ -3599,6 +3601,8 @@ class Folder {
     return events;
   }
   kctx = null;
+  voicedNow = new Set;
+  placeBefore = "";
   knowCtx(mi) {
     const st = this.state;
     return {
@@ -3784,7 +3788,12 @@ class Folder {
               return reject(`${c.name} is dead and cannot appear`);
           }
           const before = c.tier;
-          if (e.tier === "left") {
+          if (e.tier === "peri" && !c.isUser && e.activity && ELSEWHERE.test(e.activity)) {
+            c.tier = "off";
+            c.activity = undefined;
+            if (before === "spot" || before === "peri")
+              lines.push(`${c.name} is elsewhere`);
+          } else if (e.tier === "left") {
             c.tier = "off";
             c.place = e.activity?.replace(/^\u2192\s*/, "").trim() || undefined;
             c.activity = undefined;
@@ -3808,6 +3817,19 @@ class Folder {
               lines.push(`${c.name} ${e.tier === "arrive" ? "arrives" : "is here"}`);
           }
           c.lastSeen = mi;
+        }
+        const entries = a.entries;
+        const placed = entries.filter((e) => e.tier === "spot" || e.tier === "peri").length;
+        if (src !== "user" && (placed >= 2 || placed === 1 && st.place.join(" \u203A ") !== this.placeBefore)) {
+          const notes = entries.map((e) => e.activity ?? "").join(" \xB7 ").toLowerCase();
+          const named = (c) => [c.name, ...c.aliases].some((n) => n.length > 1 && new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe2(n.toLowerCase())}(?![\\p{L}\\p{N}])`, "u").test(notes));
+          for (const c of Object.values(st.chars)) {
+            if (c.isUser || listed.has(c.id) || c.tier !== "spot" && c.tier !== "peri" || this.voicedNow.has(c.id) || named(c))
+              continue;
+            c.tier = "off";
+            c.activity = undefined;
+            lines.push(`${c.name} is no longer here`);
+          }
         }
         return { verdict: "accepted", line: lines.length ? `\uD83D\uDC65 ${lines.join(" \xB7 ")}` : undefined };
       }
@@ -4461,6 +4483,8 @@ class Folder {
     }
   }
 }
+var escapeRe2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var ELSEWHERE = /\b(?:next|another|other|adjoining|adjacent) room\b|\b(?:next door|elsewhere|off-?screen|off-?scene|out of (?:sight|earshot|the room)|not (?:here|present|in the (?:room|scene)))\b/i;
 var LADDER_FALL = /betray|\blie[sd]?\b|\blying\b|decei|neglect|abandon|cruel|cheat|reject|humiliat|contempt|disgust|resent|jealous|furious|\bangry\b|\banger\b|\bfight\b|argument|insult|threat|hurt (him|her|them)|\bhit\b|struck|walked (away|out)|left (him|her|them)|\bbroke\b|lost (her |his |their )?trust|distrust|suspicio|went cold|pulled away|shut (him|her|them) out|\bgrudge\b|regress|drops? a rung/i;
 var LADDER_FALL_HARD = /betray|cheat|abandon|\bhit\b|struck|violen|unforgivable|\bmurder|\bkill/i;
 var LADDER_WARM = /\bheld\b|\bhold|hug|embrac|kiss|smil|laugh|comfort|warm|tender|gentle|\bsafe\b|protect|saved|rescued|confess|\bstayed\b|didn't (pull|let) (away|go)|leaned|touch|\bhand\b|close|trust|open(ed)? up|let (him|her|them) (in|hold)|blush|flirt|charm|spark|linger/i;
