@@ -53,6 +53,13 @@ export function slug(s: string): string {
     .slice(0, 64) || "x";
 }
 
+/** Display name for a holder or party id: the player, a place ("loc:…"), or a character. */
+export function partyName(state: { chars: Record<string, { name: string }>; places: Record<string, { name: string }> }, id: string, userName?: string): string {
+  if (id === "user" && userName) return userName;
+  if (id.startsWith("loc:")) return state.places[id]?.name ?? id.slice(4).replace(/_/g, " ");
+  return state.chars[id]?.name ?? id;
+}
+
 /** FNV-1a 32-bit hash, hex. Stable across runtimes. */
 export function hash(s: string): string {
   let h = 0x811c9dc5;

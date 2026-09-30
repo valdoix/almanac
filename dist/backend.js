@@ -123,6 +123,13 @@ function fmtSpan(minutes) {
 function slug(s) {
   return s.normalize("NFKD").replace(/[\u0300-\u036F]/g, "").toLowerCase().replace(/['\u2019`]/g, "").replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "x";
 }
+function partyName(state, id, userName) {
+  if (id === "user" && userName)
+    return userName;
+  if (id.startsWith("loc:"))
+    return state.places[id]?.name ?? id.slice(4).replace(/_/g, " ");
+  return state.chars[id]?.name ?? id;
+}
 function hash(s) {
   let h = 2166136261;
   for (let i = 0;i < s.length; i++) {
@@ -2389,7 +2396,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.12.0";
+var VERSION = "1.12.1";
 
 // src/core/facts.ts
 var STOP2 = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));
@@ -4825,7 +4832,7 @@ function renderDrawer(inp) {
       const now = state.time ? absMinutes(state.time) : null;
       parts.push(sub("\u2696", "Consequences", `${open.length} open`, `<ul class="alm-list">${open.slice(-8).map((c) => {
         const due = c.due?.at && now != null ? absMinutes(c.due.at) - now : null;
-        return `<li${due != null && due <= 0 ? ' class="due"' : ""}>${mini(state.chars[c.who], colors, c.who)} ${escapeHtml(state.chars[c.who]?.name ?? c.who)}${c.whom ? ` \u2192 ${escapeHtml(state.chars[c.whom]?.name ?? c.whom)}` : ""}: ${escapeHtml(c.what)}${due != null ? ` <small>${due <= 0 ? "due now" : `due in ${escapeHtml(fmtSpan(due))}`}</small>` : ""}</li>`;
+        return `<li${due != null && due <= 0 ? ' class="due"' : ""}>${mini(state.chars[c.who], colors, partyName(state, c.who))} ${escapeHtml(partyName(state, c.who))}${c.whom ? ` \u2192 ${escapeHtml(partyName(state, c.whom))}` : ""}: ${escapeHtml(c.what)}${due != null ? ` <small>${due <= 0 ? "due now" : `due in ${escapeHtml(fmtSpan(due))}`}</small>` : ""}</li>`;
       }).join("")}</ul>`));
     }
   }
@@ -7289,7 +7296,7 @@ function constraints(state, records, userName, query = "") {
   const out = [];
   const now = state.time ? absMinutes(state.time) : null;
   const present = new Set(Object.values(state.chars).filter((c) => c.tier === "spot" || c.tier === "peri" || c.isUser).map((c) => c.id));
-  const nm = (id) => !id ? "" : id === "user" ? userName : state.chars[id]?.name ?? id;
+  const nm = (id) => !id ? "" : partyName(state, id, userName);
   for (const c of Object.values(state.cons)) {
     if (c.status !== "open" && c.status !== "due")
       continue;
@@ -8657,7 +8664,7 @@ async function pushMacros(chatId, userId) {
 `));
     const now = st.time ? absMinutes(st.time) : null;
     const due = [
-      ...Object.values(st.cons).filter((c) => (c.status === "open" || c.status === "due") && c.due?.at && now != null && absMinutes(c.due.at) <= now + 60).map((c) => `${c.what} (${st.chars[c.who]?.name ?? c.who})`),
+      ...Object.values(st.cons).filter((c) => (c.status === "open" || c.status === "due") && c.due?.at && now != null && absMinutes(c.due.at) <= now + 60).map((c) => `${c.what} (${partyName(st, c.who)})`),
       ...Object.values(st.deadlines).filter((d) => !d.done && now != null && absMinutes(d.at) - now <= 180).map((d) => `${d.title}: ${now != null ? fmtSpan(Math.max(0, absMinutes(d.at) - now)) : ""} left`)
     ];
     push("almDue", due.join("; "));
@@ -9451,7 +9458,7 @@ async function buildView(chatId, userId) {
   const colors = meta.config.colors;
   const plan = lastPlan(chatId);
   const lead = meta.detected.lead || meta.detected.genres?.[0] || meta.config.genres?.[0];
-  const nm = (id) => id === "user" ? L.names.user : st.chars[id]?.name ?? id;
+  const nm = (id) => partyName(st, id, L.names.user);
   const now = st.time ? absMinutes(st.time) : null;
   const colorOf = (id) => st.chars[id] ? voiceColor(st.chars[id], colors) : "var(--alm-muted)";
   const allFacts = Object.values(st.facts ?? {});

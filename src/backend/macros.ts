@@ -2,7 +2,7 @@
 // arguments, and chat-variable mirrors so the preset's standalone mode can take
 // over seamlessly if the extension is disabled mid-chat.
 
-import { absMinutes, fmtSpan, hhmm } from "../core/util";
+import { absMinutes, fmtSpan, hhmm, partyName } from "../core/util";
 import { LADDER_NAMES, normFact, overlap } from "../core/state";
 import { factKind, lackOf, stanceVerb } from "../core/facts";
 import { describe, host, warn } from "./host";
@@ -127,7 +127,7 @@ export async function pushMacros(chatId: string, userId?: string) {
     push("almCast", present.map((c) => `${c.name} (${c.tier === "spot" ? "spotlight" : "periphery"}${c.activity ? `, ${c.activity}` : ""}${c.mood?.name ? `, ${c.mood.name}` : ""})`).join("\n"));
     const now = st.time ? absMinutes(st.time) : null;
     const due = [
-      ...Object.values(st.cons).filter((c) => (c.status === "open" || c.status === "due") && c.due?.at && now != null && absMinutes(c.due.at) <= now + 60).map((c) => `${c.what} (${st.chars[c.who]?.name ?? c.who})`),
+      ...Object.values(st.cons).filter((c) => (c.status === "open" || c.status === "due") && c.due?.at && now != null && absMinutes(c.due.at) <= now + 60).map((c) => `${c.what} (${partyName(st, c.who)})`),
       ...Object.values(st.deadlines).filter((d) => !d.done && now != null && absMinutes(d.at) - now <= 180).map((d) => `${d.title}: ${now != null ? fmtSpan(Math.max(0, absMinutes(d.at) - now)) : ""} left`),
     ];
     push("almDue", due.join("; "));

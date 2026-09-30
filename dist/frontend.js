@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.12.0";
+var VERSION = "1.12.1";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -2445,7 +2445,7 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 .alm-ladder__steps i{width:14px;height:8px;border-radius:2px;background:var(--alm-panel-2);box-shadow:inset 0 0 0 1px var(--alm-line)}
 .alm-ladder__steps i.on{background:linear-gradient(90deg,#ff9fb4,#e0566b);box-shadow:none}
 .alm-inv{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
-.alm-it{display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:start;border:1px solid var(--alm-line);border-radius:var(--alm-r-sm);padding:10px;background:var(--alm-panel-2);font-size:13.5px;line-height:1.4}
+.alm-it{display:grid;grid-template-columns:40px minmax(0,1fr);overflow-wrap:anywhere;gap:10px;align-items:start;border:1px solid var(--alm-line);border-radius:var(--alm-r-sm);padding:10px;background:var(--alm-panel-2);font-size:13.5px;line-height:1.4}
 .alm-it__ic{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;font-size:20px;background:linear-gradient(135deg,color-mix(in oklab,var(--alm-gold) 30%,var(--alm-panel)),var(--alm-panel));box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-gold) 40%,var(--alm-line))}
 .alm-it b{display:block;font:700 14.5px/1.25 var(--alm-font-display)}
 .alm-it__h{display:flex;align-items:center;gap:5px;margin:3px 0;font:500 10.5px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
@@ -2559,11 +2559,11 @@ var PANEL_CSS = `
 .almp .pill.on{color:var(--alm-on-accent);background:var(--alm-accent);border-color:transparent}
 .almp .kv{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;font-size:13px}
 .almp .kv b{font:500 10.5px/1.7 var(--alm-font-mono);color:var(--alm-muted);text-transform:uppercase;letter-spacing:.08em}
-.almp .list{display:grid;gap:8px}
-.almp .rec{padding:10px;border-radius:10px;background:var(--alm-panel-2);border:1px solid var(--alm-line)}
+.almp .list{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.almp .rec{min-width:0;overflow-wrap:anywhere;padding:10px;border-radius:10px;background:var(--alm-panel-2);border:1px solid var(--alm-line)}
 .almp .rec .hd{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 .almp .rec .hd b.grow{flex:1 1 12em;overflow-wrap:anywhere}
-.almp .rec .hd .pill{white-space:nowrap}
+.almp .rec .hd .pill{min-width:0;max-width:100%;border-radius:14px}
 .almp .rec .hd b{font:600 14px/1.2 var(--alm-font-display)}
 .almp .kind{font:500 9.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;padding:3px 6px;border-radius:5px;background:color-mix(in oklab,var(--alm-accent) 14%,var(--alm-panel));color:var(--alm-accent)}
 .almp .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--alm-panel-2)}

@@ -2,7 +2,7 @@
 
 import { VERSION } from "../core/version";
 import { voiceColor, speakerCss } from "../core/render";
-import { absMinutes, estTokens, fmtSpan, fmtTime, hhmm } from "../core/util";
+import { absMinutes, estTokens, fmtSpan, fmtTime, hhmm, partyName } from "../core/util";
 import { coverageMap, finestUnits, storySoFar } from "../core/chronicle";
 import { factKind, factsInPlay, isHere, isKnower, lackOf, lackText, stanceVerb, storyStamp } from "../core/facts";
 import type { WorldState } from "../core/types";
@@ -91,7 +91,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
   const colors = meta.config.colors;
   const plan = lastPlan(chatId);
   const lead = meta.detected.lead || meta.detected.genres?.[0] || meta.config.genres?.[0];
-  const nm = (id: string) => (id === "user" ? L.names.user : st.chars[id]?.name ?? id);
+  const nm = (id: string) => partyName(st, id, L.names.user);
   const now = st.time ? absMinutes(st.time) : null;
   const colorOf = (id: string) => (st.chars[id] ? voiceColor(st.chars[id], colors) : "var(--alm-muted)");
 

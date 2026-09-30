@@ -6,7 +6,7 @@
 import { VERSION } from "./version";
 import type { AlmanacReport } from "./engines/almanac";
 import type { CharacterState, MessageDelta, WorldState } from "./types";
-import { absMinutes, escapeHtml as e, fmtSpan, fmtTime, hhmm, initials, kpNote } from "./util";
+import { absMinutes, escapeHtml as e, fmtSpan, fmtTime, hhmm, initials, kpNote, partyName } from "./util";
 import { LADDER_NAMES } from "./state";
 import { factKind, factsInPlay, isKnower, lackOf, lackText, stanceVerb } from "./facts";
 
@@ -232,7 +232,7 @@ export function renderDrawer(inp: DrawerInput): string {
       const now = state.time ? absMinutes(state.time) : null;
       parts.push(sub("⚖", "Consequences", `${open.length} open`, `<ul class="alm-list">${open.slice(-8).map((c) => {
         const due = c.due?.at && now != null ? absMinutes(c.due.at) - now : null;
-        return `<li${due != null && due <= 0 ? ' class="due"' : ""}>${mini(state.chars[c.who], colors, c.who)} ${e(state.chars[c.who]?.name ?? c.who)}${c.whom ? ` → ${e(state.chars[c.whom]?.name ?? c.whom)}` : ""}: ${e(c.what)}${due != null ? ` <small>${due <= 0 ? "due now" : `due in ${e(fmtSpan(due))}`}</small>` : ""}</li>`;
+        return `<li${due != null && due <= 0 ? ' class="due"' : ""}>${mini(state.chars[c.who], colors, partyName(state, c.who))} ${e(partyName(state, c.who))}${c.whom ? ` → ${e(partyName(state, c.whom))}` : ""}: ${e(c.what)}${due != null ? ` <small>${due <= 0 ? "due now" : `due in ${e(fmtSpan(due))}`}</small>` : ""}</li>`;
       }).join("")}</ul>`));
     }
   }

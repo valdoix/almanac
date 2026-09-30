@@ -8,7 +8,7 @@ import type { CraftReport } from "./telemetry";
 import type { CharacterState, MessageDelta, Trait, WorldState } from "./types";
 import { mergeTraits, traitLine } from "./traits";
 import { offPageFacts, offPageLines } from "./offpage";
-import { absMinutes, estTokens, fmtSpan, fmtTime, truncateTokens } from "./util";
+import { absMinutes, estTokens, fmtSpan, fmtTime, partyName, truncateTokens } from "./util";
 import { LADDER_NAMES, normFact, overlap } from "./state";
 import { factsInPlay, gapsOf, lackOf, lackText, peopleHere, standsOn, stanceVerb } from "./facts";
 import { isOpen, parseHours } from "./engines/almanac";
@@ -156,7 +156,7 @@ export function constraints(state: WorldState, records: CodexRecord[], userName:
   const out: { t: string; w: number }[] = [];
   const now = state.time ? absMinutes(state.time) : null;
   const present = new Set(Object.values(state.chars).filter((c) => c.tier === "spot" || c.tier === "peri" || c.isUser).map((c) => c.id));
-  const nm = (id?: string) => (!id ? "" : id === "user" ? userName : state.chars[id]?.name ?? id);
+  const nm = (id?: string) => (!id ? "" : partyName(state, id, userName));
   for (const c of Object.values(state.cons)) {
     if (c.status !== "open" && c.status !== "due") continue;
     const due = c.due?.at ? absMinutes(c.due.at) : null;
