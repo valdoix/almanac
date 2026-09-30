@@ -2388,7 +2388,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.11.2";
+var VERSION = "1.11.3";
 
 // src/core/facts.ts
 var STOP2 = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));
@@ -3515,6 +3515,12 @@ class Folder {
     const ops = [...parsed.ops];
     if (parsed.header)
       this.applyHeader(parsed, ops, msgIndex);
+    const firstCast = ops.findIndex((o) => o.op === "cast");
+    const late = firstCast < 0 ? [] : ops.filter((o, i) => i > firstCast && o.op === "at");
+    if (late.length) {
+      const rest = ops.filter((o) => !late.includes(o));
+      ops.splice(0, ops.length, ...rest.slice(0, firstCast), ...late, ...rest.slice(firstCast));
+    }
     if (parsed.title)
       st.title = parsed.title;
     if (parsed.ops.length)
@@ -3721,7 +3727,7 @@ class Folder {
         wx.args.glyph = h.glyph;
     }
     if (!has("at") && h.place?.length) {
-      ops.push({ op: "at", args: { path: h.place, fromHeader: true }, raw: "(header) place" });
+      ops.splice(ops[0]?.op === "clock" ? 1 : 0, 0, { op: "at", args: { path: h.place, fromHeader: true }, raw: "(header) place" });
     }
   }
   applyOp(op, mi, src, castOp) {

@@ -325,6 +325,13 @@ export class Folder {
     // Header is a fallback source of time/place/weather when the ledger omits them.
     const ops = [...parsed.ops];
     if (parsed.header) this.applyHeader(parsed, ops, msgIndex);
+    // "cast:" written above "at:" still reads the new place: who is listed is listed there.
+    const firstCast = ops.findIndex((o) => o.op === "cast");
+    const late = firstCast < 0 ? [] : ops.filter((o, i) => i > firstCast && o.op === "at");
+    if (late.length) {
+      const rest = ops.filter((o) => !late.includes(o));
+      ops.splice(0, ops.length, ...rest.slice(0, firstCast), ...late, ...rest.slice(firstCast));
+    }
     if (parsed.title) st.title = parsed.title;
     if (parsed.ops.length) st.ledgerCount++;
 
@@ -514,7 +521,8 @@ export class Folder {
       if (wx) wx.args.glyph = h.glyph;
     }
     if (!has("at") && h.place?.length) {
-      ops.push({ op: "at", args: { path: h.place, fromHeader: true }, raw: "(header) place" });
+      // The header's place comes first (after the clock): the cast line reads where the scene is.
+      ops.splice(ops[0]?.op === "clock" ? 1 : 0, 0, { op: "at", args: { path: h.place, fromHeader: true }, raw: "(header) place" });
     }
   }
 

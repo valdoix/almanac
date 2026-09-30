@@ -233,6 +233,21 @@ describe("who is still in the scene", () => {
     expect(here(toPath([crowd, msg(1, "ok", true), msg(2, r("at: House › kitchen"))]))).toEqual(["Buffy", "Dawn", "Ruth", "Tara", "Willow"]);
   });
 
+  test("the header's place, or an at: line below the cast line, moves the scene before the cast is read", () => {
+    const head = (day: number, time: string, place: string, body: string) => `🗓️ Day ${day} · Monday 🕰️ ${time} 🌧️ rain, light · 11°C\n📍 ${place}\n<ledger>\n${body}\nmode: social\n</ledger>`;
+    const flagon = msg(0, head(1, "18:40", "Lowmarket › The Rusty Flagon", "cast: Mara@spot · Kael@spot"));
+    for (const next of [head(2, "07:30", "Lowmarket › Docks", "cast: Kael@spot"), r("cast: Kael@spot\nat: Lowmarket › Docks")]) {
+      const { state } = new LedgerRuntime().fold(toPath([flagon, msg(1, next)]), OPTS);
+      expect(state.place).toEqual(["Lowmarket", "Docks"]);
+      expect(state.chars.mara.tier).toBe("off");
+      expect(state.chars.kael.tier).toBe("spot");
+      expect(state.chars.kael.place).toBe("Docks");
+    }
+    // The same header place again is not a move: one name says nothing about the rest.
+    const stay = new LedgerRuntime().fold(toPath([flagon, msg(1, head(1, "18:50", "Lowmarket › The Rusty Flagon", "cast: Kael@spot"))]), OPTS).state;
+    expect(stay.chars.mara.tier).toBe("spot");
+  });
+
   test("periphery in another room is away", () => {
     const path = toPath([crowd, msg(1, "ok", true), msg(2, r("cast: Buffy@spot · Dawn@peri(asleep, next room) · Willow@peri · Tara@peri · Ruth@peri"))]);
     expect(here(path)).toEqual(["Buffy", "Ruth", "Tara", "Willow"]);
