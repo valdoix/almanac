@@ -10,6 +10,8 @@ import { absMinutes, estTokens, fmtSpan, fmtTime, slug, truncateTokens } from ".
 import { normFact, overlap } from "./state";
 import { lackOf, lackText, stanceVerb } from "./facts";
 import { isOpen, parseHours, parseRoutine, routineAt } from "./engines/almanac";
+import { isSchedule } from "./codex";
+import { offPageHits, redact, type OffPage } from "./offpage";
 
 export interface RecallInput {
   state: WorldState;
@@ -27,6 +29,8 @@ export interface RecallInput {
   budget: number;
   allowNarratorOnly: boolean;
   userName: string;
+  /** Secrets kept off the page: a playbook that would spoil one stays out; their words are redacted. */
+  offPage?: OffPage[];
 }
 
 export interface RecallItem {
@@ -84,10 +88,22 @@ export function recall(input: RecallInput): RecallResult {
 
   // Stage 2a: key / alias hits, weighted by segment
   const fired: string[] = [];
+  // A playbook (a scripted scene) is near only when this turn says two of its own words.
+  const near = new Map<string, Set<string>>();
+  const fromPlayer = new Map<string, Set<string>>();
+  // Anyone's name is no sign a scene is near ("Willow" is in half the replies).
+  const nameWords = new Set([
+    ...Object.values(state.chars).flatMap((c) => [c.name, ...c.aliases]),
+    ...records.filter((r) => r.kind === "person").flatMap((r) => [r.name, ...r.aliases]),
+  ].flatMap((n) => n.toLowerCase().split(/\s+/)));
   const scan = (text: string, seg: string, w: number) => {
     if (!text) return;
     for (const h of input.index.match(text, seg) as KeyHit[]) {
       const hk = `${h.recordId}|${h.key}`;
+      if (h.recordId.startsWith("play:") && !h.isName && (seg === "player" || seg === "last reply") && !nameWords.has(h.key.toLowerCase())) {
+        near.set(h.recordId, (near.get(h.recordId) ?? new Set()).add(h.key.toLowerCase()));
+        if (seg === "player") fromPlayer.set(h.recordId, (fromPlayer.get(h.recordId) ?? new Set()).add(h.key.toLowerCase()));
+      }
       if (input.heat?.[hk]?.demoted && !h.isName) continue;
       fired.push(hk);
       bump(h.recordId, w * Math.min(2, h.count), `${seg}: “${h.key}”`);
@@ -162,6 +178,12 @@ export function recall(input: RecallInput): RecallResult {
       s.reasons.push("injected twice recently");
     }
     if (r.scope.narratorOnly && !input.allowNarratorOnly) s.score = -Infinity;
+    if (r.kind === "playbook") {
+      const spoils = offPageHits(`${r.name} ${r.summary}`, input.offPage ?? []).filter((x) => !new RegExp(`\\b${x.word}\\b`, "i").test(input.playerMsg));
+      // Near: two of its own words this turn, at least one of them in the player's message.
+      if (r.status !== "active" || (near.get(id)?.size ?? 0) < 2 || !fromPlayer.get(id)?.size || spoils.length) s.score = -Infinity;
+      else s.reasons.push(`scene is near: ${[...near.get(id)!].join(", ")}`);
+    }
     if (r.id === "char:user") s.score -= 5; // the player's card is already in the prompt
   }
 
@@ -198,6 +220,8 @@ export function recall(input: RecallInput): RecallResult {
     addItem({ ...x, lane: x.record.kind === "document" ? "document" : "detail" }, [full, mid, x.record.summary]);
     if (used >= budget) break;
   }
+  // Anything that names an off-page secret is reworded before it reaches the model.
+  if (input.offPage?.length) for (const i of items) if (i.text) i.text = redact(i.text, input.offPage);
   const text = items.length ? `<recall>\n${items.map((i) => i.text).join("\n")}\n</recall>` : "";
   const injected = new Set(items.map((i) => i.record.id));
   return {
@@ -246,12 +270,13 @@ export function renderRecord(r: CodexRecord, state: WorldState, present: string[
     case "person": {
       const b = r.body;
       const bits: string[] = [];
+      if (b.fixed) bits.push(`always: ${b.fixed}`);
       if (b.status) bits.push(b.status);
-      if (b.look) bits.push(`looks: ${b.look}`);
+      if (b.look) bits.push(`wearing: ${b.look}`);
       if (b.held?.length) bits.push(`holds: ${b.held.join(", ")}`);
       if (b.injuries?.length) bits.push(`injuries: ${b.injuries.map((i: any) => i.where).join(", ")}`);
       if (full && b.journal?.length) bits.push(`in their own words: “${b.journal[b.journal.length - 1].text}”`);
-      if (full && b.routine) bits.push(`routine: ${b.routine}`);
+      if (full && b.routine && isSchedule(String(b.routine))) bits.push(`routine: ${b.routine}`);
       if (full && b.role) bits.push(b.role);
       if (full && b.archivist) bits.push(truncateTokens(String(b.archivist), 60));
       const lines = [`${tag}${r.summary}${bits.length ? " " + bits.join("; ") + "." : ""}${diverged}`];
@@ -279,6 +304,10 @@ export function renderRecord(r: CodexRecord, state: WorldState, present: string[
     case "thread": {
       const hist = (r.body.history ?? []) as { op: string; detail?: string }[];
       return `${tag}${r.summary}${full && hist.length > 1 ? ` Recent: ${hist.slice(-3).map((h) => `${h.op}${h.detail ? " (" + h.detail + ")" : ""}`).join(" → ")}.` : ""}`;
+    }
+    case "playbook": {
+      const who = r.body.subject ? String(r.body.subject) : "they";
+      return `[Playbook, not history] "${r.name}": how ${who} would act if the story reaches this moment. ${full ? truncateTokens(r.summary, 140) : truncateTokens(r.summary, 50)} It has not happened. Use it only if the player leads there; never stage it, and never treat it as past.`;
     }
     case "consequence": {
       const due = r.body.due?.at ? absMinutes(r.body.due.at) : null;

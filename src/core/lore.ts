@@ -5,6 +5,8 @@
 
 import type { CodexKind, CodexOverlay } from "./codex";
 import { slug } from "./util";
+import { traitsFromText } from "./traits";
+import type { TraitKind } from "./types";
 
 export interface LoreEntry {
   id: string;
@@ -48,6 +50,10 @@ export interface Classified {
   holds?: string[];
   /** Whom a depth-book entry deepens. */
   subject?: string;
+  /** The entry's own keywords (a playbook is recalled by them). */
+  keys?: string[];
+  /** Eyes, hair, age the entry states for a person. */
+  looks?: { kind: TraitKind; text: string }[];
   weaver?: { role: WeaverRole; part?: WeaverPart };
   /** Always-on entries the Ledger must leave to the host: never folded, forced or switched off. */
   pinned?: boolean;
@@ -280,6 +286,9 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
     if (book.role === "npc" && unlabelled) {
       // NPC book: the Weaver titles each entry with the person's name.
       Object.assign(base, { kind: "person", tense: "timeless", name: titleName || base.name, confidence: 0.9, via: "weaver" });
+    } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess" && isScene(e.comment || titleName, e.content ?? "", book.role)) {
+      // A scripted scene ("When Buffy learns…", "It happens in the kitchen…"): a playbook, not something that happened.
+      Object.assign(base, { kind: "playbook", tense: "future", subject: book.subject, confidence: 0.8, via: "weaver", name: (e.comment ?? titleName).trim(), aliases: [], keys: e.key ?? [], summary: clip((e.content ?? "").replace(/\s+/g, " ").trim(), 700) });
     } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess") {
       // Depth book: more about the card's character, or the persona's (history, bonds, secrets, daily texture).
       const past = /\b(history|past|childhood|upbringing|backstory|origins?|before|years ago|used to)\b/i.test(`${titleName} ${(e.key ?? []).join(" ")}`);
@@ -298,6 +307,9 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
     case "person": {
       const r = /\b(?:is|was)\s+(?:a|an|the)\s+(.+?)(?=\s+(?:who|that|in|of|with)\b|[,.;]|$)/i.exec(fs);
       if (r) base.role = r[1].trim();
+      // Eyes, hair and age the entry states for this person (not for someone it mentions).
+      const looks = traitsFromText(content, [base.name, base.name.split(/\s+/)[0], ...base.aliases]);
+      if (looks.length) base.looks = looks;
       if (/\b(died|is dead|was killed|passed away)\b/i.test(fs)) base.dead = true;
       break;
     }
@@ -348,8 +360,43 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
   return base;
 }
 
+// How a scripted scene opens: a trigger ("When…", "If…", "The first time…", "It happens…").
+const SCENE_OPEN = /^(?:when|whenever|if|once|the first time|the next time|the moment|it happens|after|as soon as|the day|the night|until|learning|seeing|hearing)\b/i;
+const SCENE_TITLE = /^(?:learning|seeing|hearing|arriving|finding|meeting|the first|the word|(?:her|his|their) first|when|if|once)\b/i;
+const QUOTED = /['‘"“][^'’"”\n]{4,}['’"”]/;
+
+/**
+ * A depth-book entry that scripts a scene (how someone acts if the story reaches a moment), rather
+ * than telling who they are. The Weaver's character depth books are mostly these, written as if
+ * they happen; its persona depth books are backstory.
+ */
+export function isScene(title: string, content: string, role: WeaverRole = "depth"): boolean {
+  const c = content.trim();
+  if (SCENE_OPEN.test(c)) return true;
+  if (role !== "depth") return false;
+  if (SCENE_TITLE.test(title.trim())) return true;
+  const first = firstSentence(c);
+  const scenic = /\b(when|if|once|tonight|the first time)\b/i.test(first) || /:\s|\s[—–]\s/.test(title);
+  return scenic && QUOTED.test(c);
+}
+
+const TITLE_STOP = new Set("with that this from their them then into when where what which while about after before have been were said says aloud".split(" "));
+
+/**
+ * Whether a chapter shows a playbook's scene happened: two of its own keywords (not names) and
+ * most of its title's words. Conservative on purpose; the Lore page can mark one played by hand.
+ */
+export function playbookPlayed(pb: { name: string; keys: string[] }, chapter: string): boolean {
+  const low = chapter.toLowerCase();
+  const has = (w: string) => new RegExp(`(?<![\\p{L}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "u").test(low);
+  const keyHits = pb.keys.map((k) => k.toLowerCase().trim()).filter((k) => k.length >= 4 && has(k)).length;
+  const words = [...new Set((pb.name.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).map((w) => w.replace(/['’]s$/, "")).filter((w) => !TITLE_STOP.has(w)))];
+  if (keyHits < 2 || !words.length) return false;
+  return words.filter(has).length / words.length >= 0.6;
+}
+
 const KIND_PREFIX: Partial<Record<CodexKind, string>> = {
-  person: "char:", place: "loc:", object: "item:", group: "fac:", thread: "thread:",
+  person: "char:", place: "loc:", object: "item:", group: "fac:", thread: "thread:", playbook: "play:",
 };
 
 /** Turn classified lore into Codex overlays (baseline records, "true as the story begins"). */
@@ -406,6 +453,7 @@ export function seedOverlays(items: Classified[], opts: { userName?: string } = 
     if (role) body.role = role;
     if (want) body.want = want;
     if (voice) body.voice = voice;
+    if (c.looks?.length) body.looks = c.looks;
     const tension = c.tension ?? anchors.find((a) => a.tension)?.tension;
     if (tension) body.tension = tension;
     if (c.hours) body.hours = c.hours;
@@ -437,7 +485,8 @@ export function seedOverlays(items: Classified[], opts: { userName?: string } = 
       summary: c.kind === "forecast" ? `Upcoming (not yet true): ${c.summary}` : c.kind === "belief" && c.mistaken ? `${c.summary} (a mistaken belief)` : c.summary,
       body,
       links,
-      scope: narratorOnly ? { narratorOnly: true } : c.visibility === "public" ? { public: true } : {},
+      scope: narratorOnly || c.kind === "playbook" ? { narratorOnly: true } : c.visibility === "public" ? { public: true } : {},
+      ...(c.kind === "playbook" && c.keys?.length ? { keys: c.keys.filter((k) => typeof k === "string" && k.trim()).slice(0, 12) } : {}),
       provenance: { loreEntryId: c.entryId, loreBookId: c.bookId, source: "lore" },
       status: c.dead ? "dead" : "active",
     };

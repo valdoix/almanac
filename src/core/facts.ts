@@ -660,6 +660,8 @@ export function fileSecret(ctx: KnowCtx, a: SecretArgs): string {
   const keepers = a.keepers.map((n) => ctx.who(n, true)).filter(Boolean) as string[];
   const from = a.from.map((n) => ctx.who(n, false)).filter(Boolean) as string[];
   const others = a.from.filter((n) => !ctx.who(n, false));
+  // "never say: Heaven": the page itself keeps it, not only the people.
+  if (a.unsaid?.length && f.offPage?.by !== "user") f.offPage = { words: [...new Set([...(f.offPage?.words ?? []), ...a.unsaid])].slice(0, 6), by: "auto" };
   for (const k of keepers) {
     if (ctx.st.chars[k]) ctx.st.chars[k].voiced = true;
     setStance(ctx, f, k, { status: "knows", route: "kept", how: "keeps it", derived: "secret" });
@@ -673,7 +675,7 @@ export function fileSecret(ctx: KnowCtx, a: SecretArgs): string {
   if (!from.length && others.length) f.history.push({ holder: keepers[0] ?? "", status: "knows", route: "kept", note: `kept from ${others.join(", ")}`, msgIndex: ctx.mi, at: ctx.at });
   f.lastMsg = Math.max(f.lastMsg, ctx.mi);
   linkGaps(ctx, f);
-  ctx.canon.push(`secret #${f.key}: ${f.statement} | ${keepers.length ? `kept by ${keepers.map(ctx.nm).join(", ")}` : ""}${keepers.length && a.from.length ? " · " : ""}${a.from.length ? `from ${[...from.map(ctx.nm), ...others].join(", ")}` : ""}`);
+  ctx.canon.push(`secret #${f.key}: ${f.statement} | ${keepers.length ? `kept by ${keepers.map(ctx.nm).join(", ")}` : ""}${keepers.length && a.from.length ? " · " : ""}${a.from.length ? `from ${[...from.map(ctx.nm), ...others].join(", ")}` : ""}${f.offPage?.words.length ? ` · never say: ${f.offPage.words.join(", ")}` : ""}`);
   return f.key;
 }
 
@@ -707,6 +709,13 @@ export function fileUnaware(ctx: KnowCtx, holder: string, things: string[]): voi
  * message, so it holds whatever the story writes later.
  */
 export function applyFactEdits(st: WorldState, mi: number, edits: Record<string, FactEdit>): void {
+  // Off the page, as the player set it: their words and wording, or off.
+  for (const [key, e] of Object.entries(edits)) {
+    if (e.offPage === undefined) continue;
+    const f = st.facts?.[key] ?? Object.values(st.facts ?? {}).find((x) => x.altKeys?.includes(key));
+    if (!f) continue;
+    f.offPage = e.offPage === null ? { words: [], by: "user", off: true } : { words: e.offPage.words.map((w) => w.trim()).filter(Boolean), wording: e.offPage.wording?.trim() || undefined, by: "user" };
+  }
   for (const [key, e] of Object.entries(edits)) {
     if (e.into || (!e.people && e.added === undefined)) continue;
     const facts = (st.facts ??= {});

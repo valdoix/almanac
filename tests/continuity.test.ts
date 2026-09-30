@@ -1,0 +1,261 @@
+// Continuity and detail accuracy (1.11): scripted scenes kept out of history, secrets kept off the
+// page, the check of each reply, the ledger lines models actually write, stale detail, fixed looks,
+// the player's own facts, and running bits. Fixtures are invented; shapes follow real replays.
+import { describe, expect, test } from "bun:test";
+import { LedgerRuntime, toPath, type RawChatMessage } from "../src/core/branch";
+import { injuriesIn, opWordOf, parseLine, parseMessage } from "../src/core/dsl";
+import type { FoldOptions } from "../src/core/state";
+import { classify, isScene, playbookPlayed, seedOverlays, weaverBook } from "../src/core/lore";
+import { buildCodex, emptyCodexStore } from "../src/core/codex";
+import { KeyIndex, cleanKeys, DEFAULT_STOP } from "../src/core/keys";
+import { recall } from "../src/core/recall";
+import { buildLedgerNote } from "../src/core/note";
+import { isOffPage, offPageFacts, redact } from "../src/core/offpage";
+import { checkReply } from "../src/core/audit";
+import { playerClock, playerOps } from "../src/core/player";
+import { traitsFromText, traitsStated } from "../src/core/traits";
+import { buildCalendar, dayOfDate, dateFor } from "../src/core/engines/calendar";
+import { runningBits } from "../src/core/chronicle";
+
+const OPTS: FoldOptions = { userName: "Wren", strictness: "strict", sealed: true, romance: "fast", playerFacts: "rules" };
+const msg = (i: number, content: string, isUser = false): RawChatMessage => ({ id: `m${i}`, index_in_chat: i, is_user: isUser, content, swipes: [content], swipe_id: 0 });
+const reply = (i: number, lines: string, prose = "Prose.") => msg(i, `${prose}\n<ledger>\n${lines}\nmode: social\n</ledger>`);
+const fold = (msgs: RawChatMessage[], opts: FoldOptions = OPTS) => new LedgerRuntime().fold(toPath(msgs), opts);
+
+describe("ledger lines as models write them", () => {
+  test("a meter reached with an arrow, a plus, words or in a list", () => {
+    expect(parseLine("body Mara: hunger 4→2 (fed at breakfast); hands steady")!.args.meters.hunger).toEqual({ v: 2, rel: false });
+    expect(parseLine("body Mara: fatigue 4+; wine-numbed")!.args.meters.fatigue).toEqual({ v: 4, rel: false });
+    expect(parseLine("body Mara: hunger 3 (eating, fed), arousal low, flushed")!.args.meters).toEqual({ hunger: { v: 3, rel: false }, arousal: { v: 1, rel: false } });
+    expect(parseLine("body Mara: fatigue +1")!.args.meters.fatigue).toEqual({ v: 1, rel: true });
+  });
+  test("injuries written in plain words become injuries, not flags", () => {
+    const a = parseLine("body Kael: concussion + scalp laceration; conscious")!.args;
+    expect(a.injuries.map((i: any) => i.where)).toEqual(["head", "scalp"]);
+    expect(a.flags).toEqual(["conscious"]);
+    expect(injuriesIn("self-stitched wound closed")[0]).toMatchObject({ where: "wound", treated: true });
+    expect(injuriesIn("no longer bleeding")).toEqual([]);
+    expect(injuriesIn("wound up tight")).toEqual([]);
+    expect(injuriesIn("right hand pressed to binding cloth over his wound")).toEqual([]);
+    expect(injuriesIn("blood from his wound on her fingers")).toEqual([]);
+    expect(injuriesIn("her own wound reopened")[0]).toMatchObject({ where: "wound" });
+    expect(parseLine("body Mara: hunger 4→2 (fed; real food); ears flushed")!.args.meters.hunger).toEqual({ v: 2, rel: false });
+  });
+  test("bond axes are whole words; an unknown axis is named, not guessed", () => {
+    expect(parseLine("bond A>B: self-resentment +2 — she let him think it")!.args).toEqual({ changes: [], unknownAxes: ["self-resentment"] });
+    expect(parseLine("bond A>B: comfort +1 (he leaned in) — fear +2")!.args.changes).toEqual([{ axis: "comfort", delta: 1 }]);
+    expect(parseLine("bond A>B: +1 — a kind word")!.args.changes).toEqual([{ axis: "affection", delta: 1 }]);
+  });
+  test("ladder rungs by number, arrow, name, a name opening the cause, or hold", () => {
+    const rung = (l: string) => parseLine(`ladder A>B: ${l}`)!.args;
+    expect(rung("tier 2 → tier 3 — touched his jaw")).toEqual({ tier: 3, rel: false });
+    expect(rung("Charged → Tested (the lie came out)")).toEqual({ tier: 4, named: true });
+    expect(rung("tier 2 — Charged — she heard him")).toEqual({ tier: 3, named: true });
+    expect(rung("tier 2 — she noticed him")).toEqual({ tier: 2, rel: false });
+    expect(rung("tier 3 holding — interrupted")).toEqual({ hold: true });
+    expect(rung("Name Said Bare — the trust gate")).toEqual({ unknown: "Name Said Bare" });
+  });
+  test("trait, appearance and motif lines", () => {
+    expect(parseLine("trait Daeron: violet eyes; silver hair cut short; 24")!.args.traits.map((t: any) => t.kind)).toEqual(["eyes", "hair", "age"]);
+    expect(parseLine("appearance Mara: green eyes, red hair")!.op).toBe("trait");
+    expect(parseLine("motif: the oil joke | Oberyn")!.args).toEqual({ text: "the oil joke", who: "Oberyn" });
+    expect(parseLine("secret #where: she was in Heaven | kept by Buffy · from Dawn · never say: Heaven, paradise")!.args.unsaid).toEqual(["Heaven", "paradise"]);
+  });
+  test("which lines name an op", () => {
+    expect(opWordOf("ladder A>B: Consent")).toBe("ladder");
+    expect(opWordOf("hunger went up")).toBeUndefined();
+  });
+});
+
+describe("state keeps what lasts and lets passing detail go", () => {
+  test("a new body line replaces passing states; conditions and the scene change", () => {
+    const st = fold([reply(0, "cast: Mara@spot\nbody Mara: dripping, on her back, limp in left leg"), reply(1, "body Mara: breathless")]).state;
+    expect(st.chars.mara.flags).toEqual(["limp in left leg", "breathless"]);
+    const moved = fold([reply(0, "cast: Mara@spot\nat: Inn\nbody Mara: dripping, blind in one eye"), reply(1, "at: Harbour")]).state;
+    expect(moved.chars.mara.flags).toEqual(["blind in one eye"]);
+  });
+  test("one wound, written two ways, is one injury and stays treated", () => {
+    const st = fold([reply(0, "cast: Kael@spot\nbody Kael: self-stitched wound closed"), reply(1, "body Kael: stitches loosening")]).state;
+    expect(st.chars.kael.injuries).toHaveLength(1);
+    expect(st.chars.kael.injuries[0].treated).toBe(true);
+  });
+  test("hunger written as an arrow brings the meter down", () => {
+    const st = fold([reply(0, "cast: Mara@spot\nbody Mara: hunger 4"), reply(1, "body Mara: hunger 4→1 (ate)")]).state;
+    expect(st.chars.mara.meters.hunger).toBe(1);
+  });
+  test("a line saying nothing changed is not reported", () => {
+    expect(fold([reply(0, "cast: Mara@spot\nwx: unchanged")]).state.lastDelta!.rejected).toEqual([]);
+  });
+  test("a line naming an op the Almanac can't read is reported", () => {
+    const { state } = fold([reply(0, "cast: Mara@spot\nladder Mara>Wren: +1 — a look\nladder Mara>Wren: Name Said Bare — the gate")]);
+    expect(state.lastDelta!.rejected.some((r) => /no rung called/.test(r.reason))).toBe(true);
+  });
+  test("a ladder line with no digit (a rung name) still moves the ladder", () => {
+    const st = fold([reply(0, "cast: Mara@spot\nladder Mara>Wren: 3 Charged — the dance"), reply(1, "ladder Mara>Wren: Charged → Tested — the lie came out")]).state;
+    expect(Object.values(st.ladders)[0].tier).toBe(4);
+  });
+  test("parts of a room are not items; an item worn comes to its wearer", () => {
+    const st = fold([reply(0, "cast: Mara@spot\nat: Market › Cobbler\nitem Fridge: → kitchen — empty\nitem Boots: → Cobbler — on the shelf"), reply(1, "look Mara: new boots, grey coat")]).state;
+    expect(st.items["item:fridge"]).toBeUndefined();
+    expect(st.items["item:boots"].holder).toBe("mara");
+  });
+  test("an item on someone is with them", () => {
+    const st = fold([reply(0, "cast: Mara@spot · Kael@spot\nitem Jacket: → on Mara, Kael gripping it — lent")]).state;
+    expect(st.items["item:jacket"].holder).toBe("mara");
+  });
+});
+
+describe("fixed looks", () => {
+  test("read from prose, skipping someone else's", () => {
+    expect(traitsFromText("Buffy, twenty, with bright green eyes and blonde hair.", ["Buffy"])).toEqual([{ kind: "eyes", text: "bright green eyes" }, { kind: "hair", text: "blonde hair" }]);
+    expect(traitsFromText("She loves Gabriel's blue eyes. Her own are green eyes.", ["Buffy"])[0]).toEqual({ kind: "eyes", text: "green eyes" });
+  });
+  test("the player's word holds over the story's", () => {
+    const { state, events } = fold([reply(0, "cast: Daeron@spot"), msg(1, "((Daeron has violet eyes.))", true), reply(2, "trait Daeron: grey eyes; tall")]);
+    expect(state.chars.daeron.traits!.find((t) => t.kind === "eyes")!.text).toBe("violet eyes");
+    expect(state.chars.daeron.traits!.some((t) => t.kind === "height")).toBe(true);
+    expect(events.some((e) => e.verdict === "warned" && /player set violet eyes/.test(e.reason ?? ""))).toBe(true);
+  });
+  test("the note sends them every turn, with age and the appearance set on the Cast page", () => {
+    const st = fold([reply(0, "cast: Daeron@spot\ntrait Daeron: violet eyes; silver hair")], { ...OPTS, castEdits: { daeron: { age: "24" } } }).state;
+    const note = buildLedgerNote({ state: st, almanac: null, records: [], userName: "Wren", sealed: true, query: "" }).text;
+    expect(note).toContain("always: 24 years old, violet eyes, silver hair");
+  });
+  test("stated by the player about named people", () => {
+    expect(traitsStated("Daeron has violet eyes and Cersei has green eyes.", ["Daeron", "Cersei"]).map((t) => `${t.who}:${t.text}`)).toEqual(["Daeron:violet eyes", "Cersei:green eyes"]);
+  });
+});
+
+describe("the player's own facts", () => {
+  test("a day said outright moves the clock, even backwards", () => {
+    const { state } = fold([reply(0, "clock: Day 13 09:00"), msg(1, "THIS IS DAY 12 - FIRST MOON 27", true)]);
+    expect(state.time).toEqual({ day: 12, minute: 9 * 60 });
+  });
+  test("a story's 'day 12 of her captivity' is not a date", () => {
+    expect(playerClock("On day 12 of her captivity she sang.", { names: [], day: 3 })).toBeNull();
+  });
+  test("a calendar date names the nearest story day", () => {
+    const cal = buildCalendar({ calendar: "Westeros", startPoint: "1st day of the Second Moon, 115 AC" });
+    const d = dayOfDate(cal, "Second Moon 7", 3)!;
+    expect(dateFor(cal, d).dayOfMonth).toBe(7);
+    expect(d).toBe(7);
+  });
+  test("the next morning, in an aside", () => {
+    expect(playerClock("((The next morning.)) She wakes.", { names: [], day: 4 })!.args).toMatchObject({ day: 5, minute: 480 });
+  });
+  test("pinned truths and running bits from an aside", () => {
+    const ops = playerOps("((truth: Jaime and Cersei are strictly family)) ((bit: the oil joke))", { names: [], day: 1 });
+    expect(ops.map((o) => o.op)).toEqual(["canon", "motif"]);
+    const st = fold([reply(0, "cast: Mara@spot"), msg(1, "((truth: Jaime and Cersei are strictly family))", true)]).state;
+    const note = buildLedgerNote({ state: st, almanac: null, records: [], userName: "Wren", sealed: true, query: "", truths: ["Rhaegar wears a wig"] }).text;
+    expect(note).toContain("[TRUTHS] Rhaegar wears a wig · Jaime and Cersei are strictly family");
+  });
+});
+
+describe("secrets kept off the page", () => {
+  const secret = [reply(0, "cast: Buffy@spot · Dawn@spot\nsecret #where-she-was: Buffy was in Heaven | kept by Buffy · from Dawn · never say: Heaven")];
+  test("the model's never-say words keep it off the page until it comes out", () => {
+    const st = fold(secret).state;
+    expect(isOffPage(st.facts!["where-she-was"], true)).toBe(true);
+    expect(isOffPage(st.facts!["where-she-was"], false)).toBe(false);
+    const note = buildLedgerNote({ state: st, almanac: null, records: [], userName: "Wren", sealed: true, query: "" }).text;
+    expect(note).toContain('[OFF THE PAGE] #where-she-was (Buffy\'s secret): not on the page yet');
+    const out = fold([...secret, reply(1, 'reveal #where-she-was: Buffy was in Heaven | Buffy, aloud')]).state;
+    expect(isOffPage(out.facts!["where-she-was"], true)).toBe(false);
+  });
+  test("the player sets words and a wording; summaries are reworded", () => {
+    const st = fold(secret, { ...OPTS, factEdits: { "where-she-was": { offPage: { words: ["Heaven"], wording: "somewhere warm and finished" } } } }).state;
+    const list = offPageFacts(st, false);
+    expect(redact("She almost said Heaven, and it burned.", list)).toBe("She almost said somewhere warm and finished, and it burned.");
+  });
+  test("the check flags the word on the page, but not when the player said it first", () => {
+    const before = fold(secret).state;
+    const text = "She was in Heaven while the fridge sat empty.\n<ledger>\nmode: social\n</ledger>";
+    const base = { reply: text, parsed: parseMessage(text), before, after: before, events: [], offPage: offPageFacts(before, true), userName: "Wren" };
+    expect(checkReply({ ...base, player: "Where were you?" }).map((i) => i.kind)).toContain("offpage");
+    expect(checkReply({ ...base, player: "Were you in Heaven?" }).map((i) => i.kind)).not.toContain("offpage");
+  });
+});
+
+describe("the check of a reply", () => {
+  test("the dead speaking, a planning block, looks contradicted, a secret in the wrong mouth", () => {
+    const before = fold([
+      reply(0, "cast: Mara@spot · Kael@spot · Joss@spot\ntrait Kael: violet eyes\nsecret #cargo: the cargo was never Vance's | kept by Mara · from Joss"),
+      reply(1, "cast: Mara@dead"),
+    ]).state;
+    const text = `<weaver_deliberation>BEAT: …</weaver_deliberation>\n[spk=Mara#1]"I'm back."[/spk] Kael's grey eyes narrowed. [spk=Joss#3]"The cargo was never Vance's, was it?"[/spk]\n<ledger>\nmode: social\n</ledger>`;
+    const kinds = checkReply({ reply: text, parsed: parseMessage(text), before, after: before, events: [], offPage: [], player: "", userName: "Wren" }).map((i) => i.kind);
+    expect(kinds).toEqual(expect.arrayContaining(["dead", "planning", "trait", "leak"]));
+  });
+});
+
+describe("playbooks: scripted scenes are not history", () => {
+  const book = weaverBook({ name: "Buffy Summers depth book", metadata: { source: "weaver", weaver_role: "depth" } })!;
+  const scene = { id: "e1", world_book_id: "b1", comment: "The Word 'Heaven' Said Aloud — In Gabriel's Kitchen", content: "It happens in the kitchen, late, over something absurd. 'I was in Heaven, Gabriel.' She goes very still.", key: ["Heaven", "kitchen", "Ruth"] };
+  test("scene-shaped depth entries are playbooks; persona backstory is not", () => {
+    expect(classify(scene, book).kind).toBe("playbook");
+    expect(isScene("Seeing Gabriel Take a Hit", "If Buffy sees Gabriel take a hit, she feels fear.")).toBe(true);
+    expect(isScene("The wound: Maria", "He was raised mostly by his nanny Maria.", "persona")).toBe(false);
+    expect(isScene("Rhaenyra's Performed Desire", "Rhaenyra forces herself to be attracted to Daemon.")).toBe(false);
+    const huddle = { id: "e2", world_book_id: "b1", comment: "Dawn's Questions: The Half-Truth and the Huddle", content: "Dawn's questions hit differently. So Buffy says 'It wasn't Hell' and stops there.", key: ["huddle"] };
+    expect(classify(huddle, book).kind).toBe("playbook");
+  });
+  const setup = () => {
+    const st = fold([reply(0, "cast: Buffy@spot · Ruth@peri")]).state;
+    const store = emptyCodexStore();
+    Object.assign(store.overlays, seedOverlays([classify(scene, book)]));
+    const records = buildCodex(st, store);
+    const castNames = Object.values(st.chars).map((c) => c.name);
+    for (const r of records) r.keys = cleanKeys(r.keys, { name: r.name, aliases: r.aliases, castNames, stop: new Set(DEFAULT_STOP), max: 12 });
+    return { st, records, index: new KeyIndex(records) };
+  };
+  const ask = (playerMsg: string, extra: Partial<Parameters<typeof recall>[0]> = {}) => {
+    const { st, records, index } = setup();
+    return recall({ state: st, records, index, playerMsg, lastReply: "", recent: [], tier: "routine", budget: 2000, allowNarratorOnly: true, userName: "Wren", ...extra });
+  };
+  test("not sent for one everyday word; sent framed as not history when the scene is near", () => {
+    expect(ask("She fed Ruth in the kitchen.").items.some((i) => i.record.kind === "playbook")).toBe(false);
+    const r = ask("In the kitchen she wonders about Heaven.");
+    const pb = r.items.find((i) => i.record.kind === "playbook");
+    expect(pb?.text).toContain("[Playbook, not history]");
+  });
+  test("never when it would spoil a secret the player hasn't named", () => {
+    const off = [{ key: "where", statement: "Buffy was in Heaven", words: ["Heaven"], keepers: ["buffy"], by: "auto" as const }];
+    expect(ask("In the kitchen she wonders about heaven.", { offPage: off, playerMsg: "In the kitchen she stares at the soup." }).items.some((i) => i.record.kind === "playbook")).toBe(false);
+  });
+  test("retired once a chapter shows it happened", () => {
+    expect(playbookPlayed({ name: scene.comment, keys: ["heaven", "kitchen"] }, "In Gabriel's kitchen Buffy said aloud that she had been in Heaven.")).toBe(true);
+    expect(playbookPlayed({ name: scene.comment, keys: ["heaven", "kitchen"] }, "Gabriel made soup in the kitchen.")).toBe(false);
+  });
+});
+
+describe("stale archivist notes", () => {
+  test("an old situational note is left out; lasting traits stay; live fields win", () => {
+    const st = fold([reply(0, "cast: Dawn@spot\nlook Dawn: new sweater")]).state;
+    const store = emptyCodexStore();
+    store.overlays["char:dawn"] = { id: "char:dawn", summary: "Dawn sleeps in the next guest room.", body: { role: "Buffy's sister", routine: "asleep in next guest room", look: "Gabriel's jacket", notes: "saw it all" }, provenance: { source: "archivist" } };
+    const dawn = buildCodex(st, store).find((r) => r.id === "char:dawn")!;
+    expect(dawn.body.archivist).toBeUndefined();
+    expect(dawn.body.role).toBe("Buffy's sister");
+    expect(dawn.body.routine).toBeUndefined();
+    expect(dawn.body.notes).toBeUndefined();
+    expect(dawn.body.look).toBe("new sweater");
+  });
+});
+
+describe("running bits and the romance line", () => {
+  test("a summary's running bits are kept", () => {
+    expect(runningBits("What happened: …\nRunning bits: \"Gabe-o\" (Gabriel) · alrighty-lefty · Ruth's operatic yowling\n")).toEqual(['"Gabe-o" (Gabriel)', "alrighty-lefty", "Ruth's operatic yowling"]);
+    expect(runningBits("Running bits: none")).toEqual([]);
+  });
+  test("the note offers bits not used lately, and rungs by number", () => {
+    const msgs = [reply(0, "cast: Mara@spot\nmotif: thieves don't give things back | Mara\nladder Mara>Wren: 3 Charged — the dance")];
+    for (let i = 1; i < 9; i++) msgs.push(msg(i, "…", i % 2 === 1));
+    const st = fold(msgs).state;
+    const note = buildLedgerNote({ state: st, almanac: null, records: [], userName: "Wren", sealed: true, query: "" }).text;
+    expect(note).toContain("[CALLBACKS]");
+    expect(note).toContain("thieves don't give things back (Mara)");
+    // The fast pace allows two rungs a step: 0 → 2.
+    expect(note).toContain("Interested (2/7)");
+  });
+});

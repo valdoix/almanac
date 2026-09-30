@@ -148,6 +148,8 @@ export interface DrawerInput {
   trackers?: string[];
   latest: boolean;
   unverified?: boolean;
+  /** What the check of this reply found. */
+  checks?: { kind: string; level: "warn" | "info"; text: string; quote?: string }[];
 }
 
 export function renderDrawer(inp: DrawerInput): string {
@@ -162,9 +164,12 @@ export function renderDrawer(inp: DrawerInput): string {
   const show = (k: string) => !inp.trackers || inp.trackers.includes(k);
   const delta = inp.delta;
   const count = delta?.count ?? 0;
-  const summary = `<summary><span class="alm-pill">🕰 ${e(clock)}${delta?.elapsed ? ` <small>+${e(fmtSpan(delta.elapsed))}</small>` : ""}</span>${wx ? `<span class="alm-pill">${e(wx.glyph ?? "")} ${e(wx.condition)}</span>` : ""}${place ? `<span class="alm-pill">📍 ${e(place)}</span>` : ""}${present.length ? `<span class="alm-pill"><span class="alm-stack">${present.slice(0, 5).map((c) => mini(c, colors)).join("")}</span>${present.length} present</span>` : ""}${inp.unverified ? `<span class="alm-pill alm-pill--warn" title="This turn's ledger was repaired or extracted">unverified</span>` : ""}<span class="alm-caret">Δ ${count}</span></summary>`;
+  const summary = `<summary><span class="alm-pill">🕰 ${e(clock)}${delta?.elapsed ? ` <small>+${e(fmtSpan(delta.elapsed))}</small>` : ""}</span>${wx ? `<span class="alm-pill">${e(wx.glyph ?? "")} ${e(wx.condition)}</span>` : ""}${place ? `<span class="alm-pill">📍 ${e(place)}</span>` : ""}${present.length ? `<span class="alm-pill"><span class="alm-stack">${present.slice(0, 5).map((c) => mini(c, colors)).join("")}</span>${present.length} present</span>` : ""}${inp.unverified ? `<span class="alm-pill alm-pill--warn" title="This turn's ledger was repaired or extracted">unverified</span>` : ""}${(inp.checks ?? []).some((c) => c.level === "warn") ? `<span class="alm-pill alm-pill--warn" title="${e((inp.checks ?? []).filter((c) => c.level === "warn").map((c) => c.text).join("\n"))}">⚠ check</span>` : ""}<span class="alm-caret">Δ ${count}</span></summary>`;
 
   const parts: string[] = [];
+  // What the check of this reply found: a secret named, a leak, the dead speaking, a planning block…
+  const warns = (inp.checks ?? []).filter((c) => c.level === "warn");
+  if (inp.checks?.length) parts.push(`<div class="alm-check${warns.length ? "" : " alm-check--info"}"><b>${warns.length ? "⚠ The Almanac's check of this reply" : "ⓘ Noted by the Almanac's check"}</b>${inp.checks.slice(0, 5).map((c) => `<div>· ${e(c.text)}${c.quote && !c.text.includes(c.quote) ? ` <small>«${e(c.quote.slice(0, 90))}»</small>` : ""}</div>`).join("")}${warns.length ? `<small>The next turn is told. If it matters, swipe for a new take.</small>` : ""}</div>`);
   if (show("scene")) {
     const lines: string[] = [];
     if (state.time) lines.push(`<span class="alm-tag">🗓 ${e(al ? al.clock : fmtTime(state.time))}</span>`);
@@ -237,7 +242,9 @@ export function renderDrawer(inp: DrawerInput): string {
     parts.push(sub("🌦", "World", "forecast", `<div class="alm-fc">${hours.map((h) => `<div><small>${hhmm(h.abs % 1440)}</small><span>${h.glyph}</span><b>${Math.round(h.tempC)}°</b></div>`).join("")}</div>${rumors.length ? `<ul class="alm-list">${rumors.map((r) => `<li>🗣 ${e(r.text)}</li>`).join("")}</ul>` : ""}`));
   }
   const desk = inp.latest ? "[[alm-desk]]" : "";
-  return `<details data-alm-v="${VERSION}" class="alm-drawer alm-ledger"${inp.view === "inline" ? " open" : ""}>${summary}<div class="alm-drawer__body">${parts.join("")}${desk}</div></details>`;
+  // A slip on the latest reply opens the drawer, so it's seen before the next turn.
+  const openIt = inp.view === "inline" || (inp.latest && (inp.checks ?? []).some((c) => c.level === "warn"));
+  return `<details data-alm-v="${VERSION}" class="alm-drawer alm-ledger"${openIt ? " open" : ""}>${summary}<div class="alm-drawer__body">${parts.join("")}${desk}</div></details>`;
 }
 
 function ring(n: number, of: number, color: string, title: string, subText: string): string {

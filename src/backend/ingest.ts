@@ -12,6 +12,8 @@ import { archivistPrompt, extractJson, repairPrompt, rollupPrompt, simulatorProm
 import { craftReport } from "../core/telemetry";
 import { absMinutes, fmtTime, fromAbs, hash, plainProse, uid } from "../core/util";
 import { levelOf, seedFor } from "../core/engines/weather";
+import { offPageFacts, redact } from "../core/offpage";
+import { playbookPlayed } from "../core/lore";
 import type { ParsedOp } from "../core/types";
 import { debounce, debug, describe, has, host, serial, warn } from "./host";
 import { ledgerFor } from "./ledger";
@@ -23,6 +25,8 @@ import { isEnabled } from "./turn";
 import { pushState } from "./view";
 import { clearRenderCache } from "./hooks";
 import { scheduleClerk } from "./clerk";
+import { runCheck } from "./check";
+import { readPlayerFacts } from "./playerfacts";
 
 const busy = new Set<string>();
 
@@ -60,6 +64,12 @@ export async function onReply(chatId: string, messageId: string | undefined, con
   // The knowledge clerk reads the reply in the background; the next plan waits for it briefly.
   if (replyId && settings.knowledgeClerk !== "off") scheduleClerk(chatId, replyId, userId, () => afterChange(chatId, userId, { background: false }));
   afterChange(chatId, userId, { background: true });
+  // Check the reply for slips, and read facts the player stated, in the background.
+  if (replyId) {
+    const id = replyId;
+    runCheck(chatId, id, userId).then((issues) => issues && afterChange(chatId, userId, { background: false })).catch(() => undefined);
+    readPlayerFacts(chatId, id, userId).then((n) => n && onMutation(chatId, userId)).catch(() => undefined);
+  }
 }
 
 /** Swipe navigation, edits, deletes: refold and refresh everything that projects state. */
@@ -157,19 +167,22 @@ export async function runChronicle(chatId: string, userId?: string, force = fals
         const prev = files.chronicle.units.filter((u) => u.level === "chapter" && !u.stale).sort((a, b) => b.endIdx - a.endIdx)[0];
         const detail = settings.summaryDetail;
         const focus = settings.summaryFocus;
-        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, prior: prev ? `${prev.title}: ${prev.text.slice(0, summaryPriorChars(detail))}` : undefined });
+        const offPage = offPageFacts(L.state, settings.secretsOffPage !== false);
+        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, prior: prev ? `${prev.title}: ${prev.text.slice(0, summaryPriorChars(detail))}` : undefined });
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary" });
         const gaps = coverageGaps(text, L.events, L.state, job.startIdx, job.endIdx);
         if (gaps.length) {
           const [lo, hi] = summaryWords("chapter", detail);
-          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, words: [lo, hi + 30 + gaps.length * 15], mustInclude: gaps });
+          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, words: [lo, hi + 30 + gaps.length * 15], mustInclude: gaps });
           text = await quiet([sys(p2.system), usr(p2.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary (coverage)" }).catch(() => text);
         }
       } else {
-        const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}\n${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus);
+        const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}\n${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus, offPageFacts(L.state, settings.secretsOffPage !== false));
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: `${job.level} summary` });
       }
       if (!text || text.length < 40) break;
+      // A secret that hasn't come out stays out of the summary, whatever the summariser wrote.
+      text = redact(text, offPageFacts(L.state, settings.secretsOffPage !== false));
       const unit = makeUnit(job, text, path, L.state, files.chronicle);
       unit.detail = settings.summaryDetail;
       files.chronicle.units.push(unit);
@@ -180,7 +193,17 @@ export async function runChronicle(chatId: string, userId?: string, force = fals
         files.chronicle.hidden.push(...ids);
       }
       save(chatId, "chronicle", userId);
-      if (job.level === "chapter") await runArchivist(chatId, unit.text, job.startIdx, job.endIdx, userId).catch((err) => warn(`archivist: ${describe(err)}`));
+      if (job.level === "chapter") {
+        // A scripted scene the story has now played is retired: it would read as still to come.
+        let retired = 0;
+        for (const r of L.records.filter((x) => x.kind === "playbook" && x.status === "active")) {
+          if (!playbookPlayed({ name: r.name, keys: r.keys }, unit.text)) continue;
+          (files.codex.overlays[r.id] ??= { id: r.id }).status = "resolved";
+          retired++;
+        }
+        if (retired) save(chatId, "codex", userId);
+        await runArchivist(chatId, unit.text, job.startIdx, job.endIdx, userId).catch((err) => warn(`archivist: ${describe(err)}`));
+      }
       host.rpcPool?.sync?.("chapter_created", { chatId, level: unit.level, title: unit.title, text: unit.text, startIdx: unit.startIdx, endIdx: unit.endIdx });
     }
   } finally {
@@ -197,7 +220,15 @@ async function runArchivist(chatId: string, chapterText: string, startIdx: numbe
   const files = await loadChat(chatId, userId);
   const settings = await loadSettings(userId);
   const L = ledgerFor(chatId, userId);
-  const touched = L.records.filter((r) => (r.provenance.msgIndex ?? []).some((i) => i >= startIdx && i <= endIdx) && ["person", "place", "object", "group", "thread"].includes(r.kind)).slice(0, 24);
+  // Everyone and everything the chapter names or changed. (A person's provenance holds only their first and
+  // last message, so the main cast would never be revisited after the chapter they first appear in.)
+  const said = (r: (typeof L.records)[number]) => [r.name, ...r.aliases].filter((n) => n && n.length >= 3).some((n) => new RegExp(`(?<![\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "u").test(chapterText));
+  const changed = new Set(L.events.filter((e) => e.msgIndex >= startIdx && e.msgIndex <= endIdx && e.verdict !== "rejected").map((e) => (e.op.subject ?? "").toLowerCase()).filter(Boolean));
+  const touched = L.records
+    .filter((r) => ["person", "place", "object", "group", "thread"].includes(r.kind) && r.id !== "char:user")
+    .filter((r) => (r.provenance.msgIndex ?? []).some((i) => i >= startIdx && i <= endIdx) || changed.has(r.name.toLowerCase()) || said(r))
+    .sort((a, b) => (a.kind === "person" ? 0 : 1) - (b.kind === "person" ? 0 : 1))
+    .slice(0, 24);
   if (!touched.length) return;
   const locked = touched.filter((r) => r.locked).map((r) => r.id);
   const p = archivistPrompt({ chapter: chapterText, records: touched.map((r) => `${r.id} | ${r.kind} | ${r.name} | ${r.summary} | keys: ${r.keys.join(", ")}${r.body.archivist ? ` | notes: ${r.body.archivist}` : ""}`).join("\n"), locked });
@@ -209,6 +240,7 @@ async function runArchivist(chatId: string, chapterText: string, startIdx: numbe
     const ov = (files.codex.overlays[s.id] ??= { id: s.id });
     if (ov.locked) continue;
     if (s.summary) ov.summary = s.summary;
+    ov.at = endIdx;
     if (Array.isArray(s.keys)) ov.keys = s.keys.map(String);
     if (s.body && typeof s.body === "object") ov.body = { ...(ov.body ?? {}), ...s.body };
     ov.provenance = { ...(ov.provenance ?? { source: "archivist" }), source: ov.provenance?.source === "lore" ? "lore" : "archivist" };

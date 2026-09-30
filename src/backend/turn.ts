@@ -10,6 +10,9 @@ import { recall, tierGuess } from "../core/recall";
 import { genreNudge } from "../core/telemetry";
 import { absMinutes, fmtSpan, plainProse } from "../core/util";
 import { NOT_A_PERSON } from "../core/state";
+import { offPageFacts, redact } from "../core/offpage";
+import { chronicleBits } from "../core/chronicle";
+import { seedTraitsFor } from "./traitseed";
 import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels } from "../core/dsl";
 import { debug, describe, has, host, warn, within } from "./host";
 import { ledgerFor, type ChatLedger } from "./ledger";
@@ -40,6 +43,10 @@ export interface TurnPlan {
   formatExample?: string;
   /** Set when the last reply labelled speech as `Name#N|tone:` instead of using [spk] marks. */
   speechFix?: string;
+  /** Scripted scenes (playbook lore entries) kept from the host's keyword activation. */
+  playbookEntries: Set<string>;
+  /** Off-page secrets' words and wording, for rewording summaries in the prompt. */
+  offPage: ReturnType<typeof offPageFacts>;
 }
 
 const plans = new Map<string, TurnPlan>();
@@ -106,6 +113,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     state: st, records: L.records, index: L.index, playerMsg: player, lastReply, recent, semantic,
     heat: settings.keyHeat ? meta.heat : undefined, injectedHistory: meta.injected, usedLastTurn: new Set(meta.lastInjected),
     leadGenre: leadGenre(meta), tier, budget: Math.round(settings.recallBudget * 0.46), allowNarratorOnly: true, userName: L.names.user,
+    offPage: offPageFacts(st, settings.secretsOffPage !== false),
   });
 
   // Hybrid delivery: records that have a mirror entry are delivered by the host (forced + mutated);
@@ -129,6 +137,8 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     const le = it.record.provenance?.loreEntryId;
     const lb = it.record.provenance?.loreBookId;
     if (!le || !lb || !meta.lore.books[lb] || meta.lore.books[lb].mode === "native" || meta.lore.books[lb].pinned?.includes(le)) continue;
+    // A playbook goes in the recall block, framed as not history; its own lorebook entry stays out.
+    if (it.record.kind === "playbook") continue;
     if (mirrorPicks[it.record.id] && it.record.provenance.source !== "lore") loreFold[le] = it.record.id;
     else lorePicks.add(le);
   }
@@ -161,6 +171,11 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     returning, lastDelta, pressures: settings.pressures ? meta.pressures : {}, nsfw: !!meta.detected.nsfw && meta.detected.nsfw !== "off",
     budgets: scaleBudgets(settings.recallBudget, tier),
     notPeople: notPeople(meta),
+    seedTraits: seedTraitsFor(L, meta),
+    truths: meta.config.truths ?? [],
+    offPageAuto: settings.secretsOffPage !== false,
+    bits: chronicleBits(files.chronicle),
+    checks: exclude ? [] : (meta.checks?.[L.lastAssistant() ? `${L.lastAssistant()!.id}:${L.lastAssistant()!.swipe}` : ""]?.issues ?? []).filter((i) => i.level !== "info").map((i) => i.text),
   });
   let formatExample: string | undefined;
   if (settings.formatAid && lastReplyMsg) {
@@ -176,6 +191,9 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     speechFix = `Speech format: your last reply put a label in front of speech (${who}: "…"). The page can't draw that. Write every spoken line as [spk=${who}]"Words."[/spk], with no label before it.`;
   }
 
+  // Nothing that names an off-page secret reaches the model: mirror cards are reworded like the recall block.
+  const off = offPageFacts(st, settings.secretsOffPage !== false);
+  if (off.length) for (const k of Object.keys(mirrorPicks)) mirrorPicks[k] = redact(mirrorPicks[k], off);
   const plan: TurnPlan = {
     chatId, genType, createdAt: Date.now(), enabled: true, note: noteRes.text, recallText, chronicle, mirrorPicks,
     mirrorChronicle: new Set(Object.entries(meta.mirror.entries).filter(([id]) => id.startsWith("chron:")).map(([, v]) => v.entryId)),
@@ -187,6 +205,8 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
       chronicle: chronicle.map((id) => files.chronicle.units.find((u) => u.id === id)).filter((u) => !!u).map((u) => ({ id: u.id, name: `${u.level[0].toUpperCase()}${u.level.slice(1)} ${u.no}: ${u.title}` })),
     },
     firedKeys: rc.firedKeys, injectedIds: rc.items.map((i) => i.record.id), returning: !!returning, formatExample, speechFix,
+    playbookEntries: new Set(Object.values(meta.lore.books).filter((b) => b.mode !== "native").flatMap((b) => b.playbooks ?? [])),
+    offPage: off,
   };
   if (!opts.dryRun) {
     // Feedback bookkeeping for the next turn.

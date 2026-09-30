@@ -184,6 +184,14 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 .alm-deltas{margin:10px 0 0;padding-left:18px;font-size:13.5px;line-height:1.5;color:var(--alm-ink)}
 .alm-rejected{margin-top:10px;padding:8px 10px;border-radius:10px;background:color-mix(in oklab,var(--alm-danger) 8%,var(--alm-panel));color:var(--alm-danger);font-size:12.5px}
 .alm-rejected code{font:11px var(--alm-font-mono)}
+.alm-check{margin:8px 0;padding:8px 10px;border-radius:10px;background:color-mix(in oklab,var(--alm-danger) 9%,var(--alm-panel));color:var(--alm-ink);font-size:12.5px;border-left:3px solid var(--alm-danger)}
+.alm-check b{display:block;color:var(--alm-danger);margin-bottom:2px}
+.alm-check small{display:block;opacity:.75;margin-top:3px}
+.alm-check div small{display:inline;margin:0}
+.alm-check--info{background:color-mix(in oklab,var(--alm-accent) 8%,var(--alm-panel));border-left-color:var(--alm-accent)}
+.alm-check--info b{color:var(--alm-accent)}
+.almk-off{border:1px solid color-mix(in oklab,var(--alm-ink) 16%,transparent);border-radius:10px;padding:6px 10px 2px;margin:8px 0}
+.almk-off legend{font-size:12px;opacity:.8;padding:0 4px}
 .alm-list{margin:0;padding-left:18px;font-size:13.5px;line-height:1.55}
 .alm-list li.due{color:var(--alm-danger);font-weight:600}
 .alm-cast{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))!important;gap:12px}

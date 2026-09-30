@@ -7,12 +7,16 @@ import type { WorldState } from "./types";
 import { fmtTime, slug, uniq } from "./util";
 import { LADDER_NAMES, normFact, overlap } from "./state";
 import { factKind } from "./facts";
+import { traitLine } from "./traits";
 
 export type CodexKind =
   | "person" | "place" | "object" | "group" | "law" | "history" | "situation" | "belief" | "texture"
   | "boundary" | "meta" | "thread" | "document" | "forecast" | "consequence" | "fact" | "clue"
   // Always-on play rules for the model (a Dream Weaver rules book): read, never seeded as story.
-  | "directive";
+  | "directive"
+  // A scripted scene that hasn't happened ("When Buffy learns…", "It happens in the kitchen…"): how
+  // someone would act if the story gets there. Never history; sent only when the story is close.
+  | "playbook";
 
 export interface CodexRecord {
   id: string;
@@ -51,6 +55,8 @@ export interface CodexOverlay {
   links?: { rel: string; to: string }[];
   /** Records that exist only in the overlay (lore baselines, archivist-created). */
   standalone?: boolean;
+  /** The message the archivist's text describes (its chapter's last); older text is left out of the prompt. */
+  at?: number;
   divergedNote?: string;
 }
 
@@ -98,6 +104,8 @@ export function buildCodex(state: WorldState, store: CodexStore): CodexRecord[] 
         mood: c.mood, meters: c.meters, flags: c.flags, injuries: c.injuries, look: c.look, status: c.status,
         tier: c.tier, place: c.place, activity: c.activity, slot: c.slot, held: heldItems,
         journal: c.journal.slice(-3), pressure: c.pressure, isUser: c.isUser,
+        traits: c.traits, age: c.age, appearance: c.appearance,
+        fixed: traitLine(c.traits, { age: c.age, appearance: c.appearance }) || undefined,
       },
       links, scope: {}, provenance: { msgIndex: [c.firstSeen, c.lastSeen], source: "story" },
       salience: (c.tier === "spot" ? 0.9 : c.tier === "peri" ? 0.7 : 0.4) * recency(c.lastSeen) + (c.isUser ? 0.1 : 0),
@@ -241,9 +249,18 @@ export function buildCodex(state: WorldState, store: CodexStore): CodexRecord[] 
     };
     if (ov.name && (ov.locked || !base)) rec.name = ov.name;
     if (ov.aliases) rec.aliases = uniq([...rec.aliases, ...ov.aliases]);
+    const archived = !ov.locked && ov.provenance?.source === "archivist";
+    // The archivist's text describes one moment; after a while it reads as now when it isn't
+    // (Dawn "asleep in the next guest room" two days later). Older text is left out.
+    const fresh = !archived || (ov.at != null && state.msgCount - ov.at <= ARCHIVIST_FRESH);
     if (ov.summary && (ov.locked || !base || rec.provenance.source !== "story")) rec.summary = ov.summary;
-    else if (ov.summary && base) rec.body.archivist = ov.summary;
-    if (ov.body) rec.body = { ...rec.body, ...ov.body };
+    else if (ov.summary && base && fresh) rec.body.archivist = ov.summary;
+    if (ov.body) {
+      // A story record's live fields (mood, look, place, injuries…) always win over stored notes;
+      // the archivist only adds what lasts (role, traits, wants, fears, voice).
+      const extra = archived ? lasting(ov.body) : ov.body;
+      rec.body = base && !ov.locked ? { ...extra, ...defined(rec.body) } : { ...rec.body, ...extra };
+    }
     if (ov.scope) rec.scope = { ...rec.scope, ...ov.scope };
     if (ov.links) rec.links = [...rec.links, ...ov.links];
     if (ov.status) rec.status = ov.status;
@@ -266,6 +283,23 @@ export function buildCodex(state: WorldState, store: CodexStore): CodexRecord[] 
   }
   return [...out.values()];
 }
+
+/** How long (in messages) an archivist's description of someone is still sent as current. */
+export const ARCHIVIST_FRESH = 60;
+
+/** What an archivist may say about a record that stays true: never where someone is or what they're doing. */
+const LASTING_KEYS = new Set(["role", "traits", "want", "fear", "need", "voice", "appearance", "age", "members", "goal", "hours", "customs", "routes", "parent", "significance", "description"]);
+function lasting(body: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (!LASTING_KEYS.has(k) && !(k === "routine" && isSchedule(String(v)))) continue;
+    out[k] = v;
+  }
+  return out;
+}
+/** A routine is a schedule ("06:00–09:00 docks", "mornings at the market"), not one moment ("asleep in the guest room"). */
+export const isSchedule = (s: string) => /d{1,2}[:.]d{2}|(every|daily|each|mornings?|evenings?|nights?|weekdays?|weekends?|usually|always)/i.test(s);
+const defined = (o: Record<string, any>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && !(Array.isArray(v) && !v.length)));
 
 const norm = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[’`]/g, "'").replace(/\s+/g, " ").trim();
 // Titles and kin words: "Dr." is nobody's first name, and a story's "Mom" is not the lore's "Mom".

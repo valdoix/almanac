@@ -6,6 +6,7 @@
 // folded only when their message+swipe is on the path.
 
 import { parseLine, parseMessage } from "./dsl";
+import { playerOps } from "./player";
 import { Folder, type FoldOptions } from "./state";
 import type { EventSource, LedgerEvent, OpName, ParsedLedger, ParsedOp, WorldState } from "./types";
 import { deepClone, hash } from "./util";
@@ -30,6 +31,8 @@ export interface SideEvents {
   replacesOps?: OpName[];
   /** The message text they were written for; after an edit they no longer apply. */
   hash?: string;
+  /** Facts read from the player's own message (the player-facts reader). */
+  player?: boolean;
 }
 
 export type SideEventStore = Record<string, SideEvents[]>; // key: `${msgId}:${swipe}`
@@ -151,8 +154,16 @@ export class LedgerRuntime {
         const src: EventSource = replacing ? replacing.source : "model";
         events.push(...folder.applyMessage(m.index, m.id, m.swipe, base, src, extraOps, extras[0]?.source ?? "user"));
       } else {
-        const extraOps = sides.flatMap((s) => s.ops);
         const parsed = this.parse(m.content);
+        // What the player states outright (a date, someone's eyes, a pinned truth) is the player's word.
+        const said = opts.playerFacts && opts.playerFacts !== "off"
+          ? playerOps(m.content, {
+              names: [opts.userName, ...Object.values(folder.state.chars).flatMap((c) => (c.isUser ? [] : [c.name, ...c.aliases]))].filter(Boolean),
+              day: folder.state.time?.day ?? null,
+              dayOfDate: opts.dayOfDate,
+            })
+          : [];
+        const extraOps = [...said, ...sides.filter((s) => !s.player || !s.hash || s.hash === hash(m.content)).flatMap((s) => s.ops)];
         // Player messages only contribute speaker marks, what was said aloud, and extension-authored ops.
         events.push(...folder.applyMessage(m.index, m.id, m.swipe, { ops: [], unknown: [], format: "none", truncated: false, speakers: parsed.speakers, speech: parsed.speech, fromUser: true }, "user", extraOps, sides[0]?.source ?? "user"));
       }

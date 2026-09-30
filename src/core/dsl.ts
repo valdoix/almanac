@@ -3,6 +3,8 @@
 // bullet and misspell; we normalise first and keep what we can't read.
 
 import type { OpName, ParsedLedger, ParsedOp, SceneHeader, SpokenLine } from "./types";
+import { LADDER_NAMES, LADDER_WORDS } from "./types";
+import { splitTraits } from "./traits";
 import { unescapeHtml } from "./util";
 import { parseKnowRest, parseRevealRest, parseSecretRest, parseUnawareRest } from "./knowparse";
 
@@ -13,7 +15,9 @@ const OP_ALIASES: Record<string, OpName> = {
   cast: "cast", present: "cast", who: "cast",
   mood: "mood", emotion: "mood", feel: "mood",
   body: "body", state: "body", condition: "body",
-  look: "look", appearance: "look", outfit: "look",
+  look: "look", outfit: "look", clothes: "look", wearing: "look",
+  trait: "trait", traits: "trait", appearance: "trait", features: "trait", physical: "trait",
+  motif: "motif", motifs: "motif", bit: "motif", running: "motif", catchphrase: "motif", keepsake: "motif",
   bond: "bond", rel: "bond", relationship: "bond", regard: "bond",
   ladder: "ladder", romance: "ladder",
   know: "know", knows: "know", knowledge: "know", belief: "know",
@@ -45,8 +49,14 @@ const OP_ALIASES: Record<string, OpName> = {
 /** Ops whose name sits before the colon: `mood Mara: …`. */
 const SUBJECT_OPS = new Set<OpName>([
   "mood", "body", "look", "bond", "ladder", "know", "unaware", "item", "thread", "owe", "cons",
-  "clockf", "rep", "journal", "keys", "artifact", "status", "gauge", "deadline",
+  "clockf", "rep", "journal", "keys", "artifact", "status", "gauge", "deadline", "trait",
 ]);
+
+/** The op a line starts with, when it is one ("hunger 4→2" is not; "ladder A>B: …" is). */
+export function opWordOf(line: string): OpName | undefined {
+  const m = /^\s*(?:[-*•]\s+|\d+[.)]\s+)?([A-Za-z_]+)\b[^:\n]*:/.exec(line);
+  return m ? OP_ALIASES[m[1].toLowerCase()] : undefined;
+}
 
 export const SCENE_MODES = ["social", "intimacy", "conflict", "investigation", "travel", "stealth", "downtime", "crisis"] as const;
 
@@ -317,7 +327,8 @@ const PARSERS: Record<OpName, LineParser> = {
     const unflags: string[] = [];
     const injuries: any[] = [];
     const heals: string[] = [];
-    for (const seg0 of main.split(/\s*;\s*/)) {
+    // Split on ";" outside brackets: "hunger 4→2 (fed; real food)" is one meter.
+    for (const seg0 of main.split(/\s*;\s*(?![^()]*\))/)) {
       const seg = seg0.trim();
       if (!seg) continue;
       const inj = /^(?:injury|injured|wound|hurt)\s*:?\s*(.+)$/i.exec(seg);
@@ -339,17 +350,19 @@ const PARSERS: Record<OpName, LineParser> = {
         heals.push(heal[1].trim());
         continue;
       }
-      const mm = /^([a-zA-Z]+)\s*[:=]?\s*([+-]?\d+)(?:\s*\/\s*5)?$/.exec(seg);
-      if (mm && METER_ALIASES[mm[1].toLowerCase()]) {
-        meters[METER_ALIASES[mm[1].toLowerCase()]] = { v: parseInt(mm[2], 10), rel: /^[+-]/.test(mm[2]) };
-        continue;
-      }
-      for (const f of seg.split(/\s*,\s*/)) {
+      if (readMeter(seg, meters)) continue;
+      for (const f of seg.split(/\s*,\s*(?![^()]*\))/)) {
         const ff = f.trim();
         if (!ff) continue;
+        if (readMeter(ff, meters)) continue;
         if (ff.startsWith("-") || ff.startsWith("no longer ")) unflags.push(ff.replace(/^-|^no longer /, "").trim().toLowerCase());
         else if (/^(dead|died|killed)$/i.test(ff)) flags.push("dead");
-        else flags.push(ff.replace(/^\+/, "").toLowerCase());
+        else {
+          // "concussion + scalp laceration", "self-stitched wound closed": injuries written as words.
+          const hurt = injuriesIn(ff);
+          if (hurt.length) injuries.push(...hurt);
+          else flags.push(ff.replace(/^\+/, "").toLowerCase());
+        }
       }
     }
     p.args = { meters, flags, unflags, injuries, heals };
@@ -369,11 +382,18 @@ const PARSERS: Record<OpName, LineParser> = {
     const { main, cause } = splitCause(rest);
     p.cause = cause;
     const changes: { axis: string; delta: number }[] = [];
-    const re = /([a-zA-Z]+)\s*([+\-−]\s*\d+)/g;
+    const unknownAxes: string[] = [];
+    // Whole words only: "self-resentment +2" is not resentment of the other person.
+    const re = /(?<![\w-])([a-zA-Z][a-zA-Z-]*)\s*([+\-−]\s*\d+)/g;
     let m: RegExpExecArray | null;
+    let pairs = 0;
     while ((m = re.exec(main))) {
+      pairs++;
       const axis = AXIS_ALIASES[m[1].toLowerCase()];
-      if (!axis) continue;
+      if (!axis) {
+        unknownAxes.push(m[1].toLowerCase());
+        continue;
+      }
       changes.push({ axis, delta: parseInt(m[2].replace(/\s|−/g, (c) => (c === "−" ? "-" : "")), 10) });
     }
     // "bond A>B: +1 — cause" or "wary → steady | +1 — cause", with no axis (models write
@@ -381,7 +401,7 @@ const PARSERS: Record<OpName, LineParser> = {
     // before the cause, else affection ("fear-of-loss" in a cause is not fear of them);
     // a "from → to" before it becomes the label.
     let moved: string | undefined;
-    if (!changes.length) {
+    if (!pairs) {
       const bare = /(^|[\s|(])([+\-−]\s*\d)(?!\d)/.exec(main);
       if (bare) {
         const named = main.toLowerCase().split(/[\s|,;()]+/).map((w) => AXIS_ALIASES[w]).find(Boolean);
@@ -394,9 +414,10 @@ const PARSERS: Record<OpName, LineParser> = {
     const label = /label\s*[:=]\s*["“]?([^"”]+)["”]?/i.exec(main)?.[1] ?? moved;
     const tags = /tags?\s*[:=]\s*([\w ,-]+)/i.exec(main)?.[1]?.split(/\s*,\s*/).filter(Boolean);
     if (!changes.length && !label && !tags) {
-      if (main && !/\d/.test(main)) p.args = { label: main.replace(/^["“]|["”]$/g, "") };
+      if (unknownAxes.length) p.args = { changes: [], unknownAxes };
+      else if (main && !/\d/.test(main)) p.args = { label: main.replace(/^["“]|["”]$/g, "") };
       else return null;
-    } else p.args = { changes, label, tags };
+    } else p.args = { changes, label, tags, ...(unknownAxes.length ? { unknownAxes } : {}) };
     return p;
   },
   ladder(p, s, rest) {
@@ -406,9 +427,7 @@ const PARSERS: Record<OpName, LineParser> = {
     p.object = pair[1];
     const { main, cause } = splitCause(rest);
     p.cause = cause;
-    const t = /(?:tier|step|rung)?\s*([+-]?\d)/i.exec(main);
-    if (!t) return null;
-    p.args = { tier: parseInt(t[1], 10), rel: /^[+-]/.test(t[1]) };
+    p.args = readRung(main, cause);
     return p;
   },
   know(p, s, rest, oneFact) {
@@ -610,12 +629,109 @@ const PARSERS: Record<OpName, LineParser> = {
     p.args = { name: now.toLowerCase() };
     return p;
   },
+  trait(p, s, rest) {
+    if (!s || !rest) return null;
+    p.subject = s;
+    const traits = splitTraits(rest.replace(/\s[—–]\s.*$/, ""));
+    if (!traits.length) return null;
+    p.args = { traits };
+    return p;
+  },
+  motif(p, s, rest) {
+    // "motif: the oil joke | Oberyn" or "motif Oberyn: the oil joke"
+    const [text, who] = rest.split(/\s*\|\s*/);
+    if (!text?.trim()) return null;
+    p.subject = s || who?.trim() || undefined;
+    p.args = { text: text.replace(/^["“]|["”]$/g, "").trim().slice(0, 140), who: s || who?.trim() || undefined };
+    return p;
+  },
   forecast: () => null,
   pressure: () => null,
   diverge: () => null,
   entity: () => null,
   lock: () => null,
 };
+
+/**
+ * The rung a ladder line reaches: "+1", "tier 3", "tier 2 → tier 3" (the right side), "Spoken",
+ * "Charged → Tested (…)", or a rung named at the start of the cause ("tier 2 — Charged — …": the
+ * name the note shows wins over a miscounted number). "hold" keeps the rung. Anything else is
+ * returned as `unknown` so the Almanac can say which rungs exist.
+ */
+function readRung(main: string, cause?: string): Record<string, any> {
+  const plain = main.replace(/\([^)]*\)/g, " ").trim();
+  const arrow = splitArrow(plain);
+  // A bracket the cause split open ("Consent (she said yes") is not part of the rung.
+  const target = (arrow ? arrow[1] : plain).replace(/\s*\(.*$/, "").trim();
+  const rel = /^([+-]\d)\b/.exec(target);
+  if (rel) return { tier: parseInt(rel[1], 10), rel: true };
+  if (/\b(hold|holds|holding|held|same|unchanged|no change|steady)\b/i.test(target)) return { hold: true };
+  const num = /(?:\b(?:tier|step|rung)\s*)?\b([0-7])\b/i.exec(target);
+  const named = (s: string) => {
+    for (const x of s.toLowerCase().match(/[a-z]+/g) ?? []) {
+      const i = LADDER_NAMES.findIndex((n) => n.toLowerCase() === x);
+      if (i >= 0) return i;
+      if (LADDER_WORDS[x] != null) return LADDER_WORDS[x];
+    }
+    return -1;
+  };
+  let name = named(target);
+  // "tier 2 — Charged — …": only a rung's own name opening the cause counts, never a word inside it.
+  if (name < 0 && cause) name = LADDER_NAMES.findIndex((n) => n.toLowerCase() === (/^[A-Za-z]+/.exec(cause.trim())?.[0] ?? "").toLowerCase());
+  if (name >= 0) return { tier: name, named: true };
+  if (num) return { tier: parseInt(num[1], 10), rel: false };
+  if (/\b(hold|holds|holding|same|unchanged|no change|steady)\b/i.test(target)) return { hold: true };
+  return { unknown: target.slice(0, 40) };
+}
+
+const INJURY = /\b(wound(?:ed|s)?|cuts?|gash(?:es)?|lacerations?|concussion|stitch(?:es|ed)?|burns?|burned|bruis\w*|fractur\w*|broken\s+(?:arm|leg|ribs?|wrist|nose|hand|fingers?|ankle|jaw|collarbone)|sprain\w*|bites?|stab(?:bed)?|bullet|graze[sd]?|scrapes?|scraped|blisters?|welts?|slash(?:ed)?|puncture[sd]?|split lip|black eye)\b/i;
+const NOT_HURT = /^(no|not|healed|without|free of)\b|\bwound (?:up|tight)\b|\bhealed\b/i;
+const PART = /\b((?:left|right|lower|upper)\s+)?(head|scalp|temple|brow|face|cheek|lip|mouth|jaw|nose|eye|ear|neck|throat|shoulder|arm|forearm|elbow|wrist|hand|palm|knuckles?|fingers?|thumb|chest|ribs?|side|flank|back|spine|stomach|belly|abdomen|hip|leg|thigh|knee|shin|calf|ankle|foot|feet|sole|arch|toes?)\b/i;
+const MILD = /\b(bruis|scrape|graze|blister|welt|scratch|split lip)/i;
+const BAD = /\b(fractur|broken|stab|bullet|puncture)/i;
+
+const METER = /^([a-zA-Z]+)\s*[:=]?\s*(?:[+-]?\d+\s*(?:→|->|=>|to)\s*)?([+-]?\d+)\s*\+?\s*(?:\/\s*5)?\s*(?:\([^)]*\))?(?:\s+(?:from|after|because|due to|—|-)\s.*)?[.]?$/;
+
+/** "hunger 3", "fatigue +1", "hunger 4→2 (fed)", "fatigue 4+", "pain 3/5": the value it reaches. */
+function readMeter(seg: string, meters: Record<string, { v: number; rel: boolean }>): boolean {
+  const mm = METER.exec(seg.trim());
+  const k = mm ? METER_ALIASES[mm[1].toLowerCase()] : undefined;
+  if (!mm || !k) {
+    // "arousal low", "fatigue high": words for the level.
+    const w = /^([a-zA-Z]+)\s*[:=]?\s*(none|low|mild|moderate|medium|high|very high|max(?:imum)?)\b/i.exec(seg.trim());
+    const wk = w ? METER_ALIASES[w[1].toLowerCase()] : undefined;
+    if (!w || !wk) return false;
+    meters[wk] = { v: ({ none: 0, low: 1, mild: 1, moderate: 2, medium: 2, high: 4, "very high": 5, max: 5, maximum: 5 } as Record<string, number>)[w[2].toLowerCase()] ?? 2, rel: false };
+    return true;
+  }
+  const arrow = /→|->|=>|\bto\b/.test(seg);
+  meters[k] = { v: parseInt(mm[2], 10), rel: !arrow && /^[+-]/.test(mm[2]) };
+  return true;
+}
+
+/** Injuries named in plain words inside a body flag. */
+const NOUN: [RegExp, string][] = [[/^(wound|stitch)/, "wound"], [/^bruis/, "bruise"], [/^burn/, "burn"], [/^scrap/, "scrape"], [/^graz/, "graze"], [/^stab/, "stab wound"], [/^slash/, "slash"], [/^fractur/, "fracture"], [/^sprain/, "sprain"], [/^bite/, "bite"], [/^cut/, "cut"], [/^gash/, "gash"], [/^lacerat/, "laceration"], [/^blister/, "blister"], [/^welt/, "welt"], [/^punctur/, "puncture"]];
+
+export function injuriesIn(flag: string): { where: string; severity: 1 | 2 | 3 | 4; treated: boolean; note: string }[] {
+  // "injuries unchanged (…)" restates, it doesn't add.
+  if (NOT_HURT.test(flag.trim()) || /\bunchanged\b|\bno change\b|\bas before\b/i.test(flag)) return [];
+  const out: { where: string; severity: 1 | 2 | 3 | 4; treated: boolean; note: string }[] = [];
+  for (const part of flag.split(/\s*(?:\+|&|\band\b)\s*/)) {
+    const m = INJURY.exec(part);
+    if (!m) continue;
+    // "hand pressed over his wound", "blood from his wound on her fingers": someone else's wound.
+    const lead = part.slice(0, m.index);
+    if (/\b(?:his|their|its|[A-Z][\p{L}'’-]+['’]s)\s+(?:[\p{L}-]+\s+)?$/u.test(lead) || /\b(?:over|on|to|at|against|from|near|around|beside|into|onto|across)\s+(?:the\s+|a\s+|his\s+|her\s+|their\s+)?(?:[\p{L}-]+\s+)?$/iu.test(lead)) continue;
+    const p = PART.exec(part);
+    const raw = m[1].toLowerCase();
+    const noun = NOUN.find(([re]) => re.test(raw))?.[1] ?? raw.replace(/s$/, "");
+    const where = p ? `${(p[1] ?? "").toLowerCase()}${p[2].toLowerCase()}` : noun === "concussion" ? "head" : noun;
+    const severity = BAD.test(part) ? 3 : MILD.test(part) ? 1 : 2;
+    const treated = /stitch|bandag|treated|dressed|splint|closed|sutur|cleaned|gauze/i.test(part);
+    out.push({ where, severity, treated, note: part.trim().toLowerCase() });
+  }
+  return out;
+}
 
 function parseCons(p: ParsedOp, s: string, rest: string, kind: "owe" | "cons"): ParsedOp | null {
   if (!s) return null;

@@ -5,7 +5,9 @@
 import type { AlmanacReport } from "./engines/almanac";
 import type { CodexRecord } from "./codex";
 import type { CraftReport } from "./telemetry";
-import type { CharacterState, MessageDelta, WorldState } from "./types";
+import type { CharacterState, MessageDelta, Trait, WorldState } from "./types";
+import { mergeTraits, traitLine } from "./traits";
+import { offPageFacts, offPageLines } from "./offpage";
 import { absMinutes, estTokens, fmtSpan, fmtTime, truncateTokens } from "./util";
 import { LADDER_NAMES, normFact, overlap } from "./state";
 import { factsInPlay, gapsOf, lackOf, lackText, peopleHere, standsOn, stanceVerb } from "./facts";
@@ -31,6 +33,16 @@ export interface NoteInput {
   nsfw?: boolean;
   /** Names the player removed from the cast: forces, spells, things. */
   notPeople?: string[];
+  /** Traits read from the card, persona and lorebooks, by character id (the story's own win). */
+  seedTraits?: Record<string, Trait[]>;
+  /** Story truths the player pinned. */
+  truths?: string[];
+  /** Honour the model's own `never say` words on secrets. */
+  offPageAuto?: boolean;
+  /** Running bits from the chronicle (the ledger's own are in state). */
+  bits?: string[];
+  /** What the check of the last reply found, for the model to put right. */
+  checks?: string[];
 }
 
 const DEFAULT_BUDGETS = { now: 120, present: 330, constraints: 150, knowledge: 250, craft: 110 };
@@ -62,8 +74,17 @@ export function meterWord(k: string, v: number): string {
   return w || `${v >= 4 ? "very " : ""}${k === "cold" ? "cold" : `high ${k}`}`;
 }
 
-export function capsule(c: CharacterState, state: WorldState, opts: { sealed: boolean; nsfw?: boolean; pressure?: string; full: boolean }): string {
+/** The traits that hold for a person: the story's and the player's over the card's and the lore's. */
+export function fixedTraits(c: CharacterState, seed?: Trait[]): string {
+  const merged = mergeTraits(seed ?? [], c.traits ?? []).list;
+  return traitLine(merged, { age: c.age, appearance: c.appearance });
+}
+
+export function capsule(c: CharacterState, state: WorldState, opts: { sealed: boolean; nsfw?: boolean; pressure?: string; full: boolean; seed?: Trait[] }): string {
   const bits: string[] = [c.tier === "spot" ? "spotlight" : c.tier === "peri" ? "periphery" : "here"];
+  // Eyes, hair, age: sent every turn, even in the short form; they never change without a cause.
+  const fixed = fixedTraits(c, opts.seed);
+  if (fixed) bits.push(`always: ${fixed}`);
   if (c.activity) bits.push(c.activity);
   const inner = !(c.isUser && opts.sealed);
   if (inner && c.mood?.name) bits.push(`${c.mood.name}${vad(c)}`);
@@ -75,7 +96,7 @@ export function capsule(c: CharacterState, state: WorldState, opts: { sealed: bo
   const flags = c.flags.filter((f) => !f.startsWith("scar"));
   if (flags.length) bits.push(flags.slice(-3).join(", "));
   if (c.injuries.length) bits.push(c.injuries.map((i) => `${i.where} (${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? ", treated" : ""})`).join(", "));
-  if (opts.full && c.look) bits.push(`looks: ${c.look}`);
+  if (opts.full && c.look) bits.push(`wearing: ${c.look}`);
   const held = Object.values(state.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name);
   if (opts.full && held.length) bits.push(`holds ${held.slice(0, 4).join(", ")}`);
   let s = `${c.name} (${bits.join("; ")})`;
@@ -131,7 +152,7 @@ export function knowledgeBrief(state: WorldState, query: string, userName: strin
   return lines;
 }
 
-export function constraints(state: WorldState, records: CodexRecord[], userName: string): string[] {
+export function constraints(state: WorldState, records: CodexRecord[], userName: string, query = ""): string[] {
   const out: { t: string; w: number }[] = [];
   const now = state.time ? absMinutes(state.time) : null;
   const present = new Set(Object.values(state.chars).filter((c) => c.tier === "spot" || c.tier === "peri" || c.isUser).map((c) => c.id));
@@ -176,7 +197,9 @@ export function constraints(state: WorldState, records: CodexRecord[], userName:
   for (const t of Object.values(state.threads)) {
     if (t.status === "stalled" && t.stalls >= 2) out.push({ t: `Thread “${t.title}” has stalled ${t.stalls}× (blocker: ${t.blocker ?? "unnamed"}) — the next turn must change evidence, position, stakes or resolution`, w: 5 });
   }
-  const canonHere = state.canon.filter((c) => here && overlap(normFact(c.text), normFact(here)) > 0.4).slice(-2);
+  // World facts the story minted: the ones about this place, and the ones this turn talks about.
+  const talk = normFact(query);
+  const canonHere = state.canon.filter((c) => !c.pinned && ((here && overlap(normFact(c.text), normFact(here)) > 0.4) || (talk && overlap(normFact(c.text), talk) > 0.5))).slice(-3);
   for (const c of canonHere) out.push({ t: c.text, w: 3 });
   return out.sort((a, b) => b.w - a.w).map((x) => x.t);
 }
@@ -205,14 +228,30 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
   const user = state.chars.user;
   const caps = [...present].sort((a, b) => (a.tier === "spot" ? -1 : 1) - (b.tier === "spot" ? -1 : 1));
   if (caps.length || user) {
-    const full = caps.map((c) => capsule(c, state, { sealed: input.sealed, nsfw: input.nsfw, pressure: input.pressures?.[c.id], full: true }));
-    if (user && !caps.includes(user) && (user.injuries.length || user.flags.length || user.look)) full.push(capsule({ ...user, tier: "spot" }, state, { sealed: input.sealed, nsfw: input.nsfw, full: true }));
+    const seed = input.seedTraits ?? {};
+    const full = caps.map((c) => capsule(c, state, { sealed: input.sealed, nsfw: input.nsfw, pressure: input.pressures?.[c.id], full: true, seed: seed[c.id] }));
+    const userFixed = user ? fixedTraits(user, seed.user) : "";
+    const withUser = user && !caps.includes(user) && (user.injuries.length || user.flags.length || user.look || userFixed);
+    if (withUser) full.push(capsule({ ...user!, tier: "spot" }, state, { sealed: input.sealed, nsfw: input.nsfw, full: true, seed: seed.user }));
     let text = `[PRESENT] ${full.join(" · ") || "no one else"}`;
-    if (estTokens(text) > B.present) text = `[PRESENT] ${caps.map((c) => capsule(c, state, { sealed: input.sealed, nsfw: input.nsfw, full: false })).join(" · ")}`;
-    lanes.present = truncateTokens(text, B.present);
+    if (estTokens(text) > B.present) {
+      const short = caps.map((c) => capsule(c, state, { sealed: input.sealed, nsfw: input.nsfw, full: false, seed: seed[c.id] }));
+      if (withUser) short.push(capsule({ ...user!, tier: "spot" }, state, { sealed: input.sealed, nsfw: input.nsfw, full: false, seed: seed.user }));
+      text = `[PRESENT] ${short.join(" · ")}`;
+    }
+    lanes.present = truncateTokens(text, B.present + 60);
   }
 
-  const cons = constraints(state, input.records, input.userName);
+  // Story truths the player pinned: always sent, whatever the story says.
+  const truths = [...(input.truths ?? []), ...state.canon.filter((c) => c.pinned).map((c) => c.text)].map((t) => t.trim()).filter(Boolean);
+  if (truths.length) lanes.truths = truncateTokens(`[TRUTHS] ${[...new Set(truths)].join(" · ")} — these hold over anything in the source material or older chat.`, 160);
+
+  const nmAll = (id: string) => (id === "user" ? input.userName : state.chars[id]?.name ?? id);
+  const off = offPageFacts(state, input.offPageAuto ?? true);
+  if (off.length) lanes.offPage = truncateTokens(`[OFF THE PAGE] ${offPageLines(off, nmAll).join("\n  ")}`, 180);
+
+  const cons = constraints(state, input.records, input.userName, input.query);
+  if (input.checks?.length) cons.unshift(`The last reply was checked: ${input.checks.slice(0, 3).join("; ")}. Don't carry it forward.`);
   const rejected = input.lastDelta?.rejected ?? [];
   if (rejected.length) cons.unshift(`Last reply's ledger was corrected: ${rejected.slice(0, 2).map((r) => `“${r.raw.slice(0, 60)}” (${r.reason})`).join("; ")}. The verified state here stands.`);
   if (cons.length) lanes.constraints = truncateTokens(`[CONSTRAINTS] ${cons.join(" · ")}`, B.constraints);
@@ -225,8 +264,16 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
   const ladders = Object.values(state.ladders).filter((l) => present.some((c) => c.id === l.from || c.id === l.to) && l.tier > 0);
   if (ladders.length) {
     const nm = (id: string) => (id === "user" ? input.userName : state.chars[id]?.name ?? id);
-    lanes.romance = `[ROMANCE] ${ladders.slice(0, 3).map((l) => `${nm(l.from)} → ${nm(l.to)}: ${LADDER_NAMES[l.tier]}${l.evidence ? ` (${l.evidence})` : ""}`).join(" · ")}`;
+    // The rung as a number too, so the next ladder line can name it; an old reason is left out, it would read as now.
+    const fresh = (l: (typeof ladders)[number]) => state.msgCount - l.msgIndex <= 12 && l.evidence;
+    lanes.romance = `[ROMANCE] ${ladders.slice(0, 3).map((l) => `${nm(l.from)} → ${nm(l.to)}: ${LADDER_NAMES[l.tier]} (${l.tier}/7)${fresh(l) ? ` — ${truncateTokens(l.evidence!, 24)}` : ""}`).join(" · ")}`;
   }
+
+  // Running bits worth calling back: not used lately, most used first.
+  const recent = state.msgCount - 6;
+  const bitsFromState = (state.motifs ?? []).filter((m) => m.lastMsg < recent).sort((a, b) => b.uses - a.uses || a.lastMsg - b.lastMsg).map((m) => `${m.text}${m.who ? ` (${m.who})` : ""}`);
+  const allBits = [...new Set([...bitsFromState, ...(input.bits ?? [])])].slice(0, 5);
+  if (allBits.length) lanes.callbacks = truncateTokens(`[CALLBACKS] Running bits you may call back when it fits, never forced: ${allBits.join(" · ")}`, 110);
 
   if (input.craft && (input.craft.avoids.length || input.craft.agency.length)) {
     const parts: string[] = [];
@@ -240,7 +287,7 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
   if (input.returning) lanes.returning = `[RETURNING] ${input.returning}`;
   if (input.notPeople?.length) lanes.notPeople = `[NOT PEOPLE] ${input.notPeople.join(", ")}: not characters (a force, power or thing). Keep them out of cast, mood, bond, ladder and know lines.`;
 
-  const order = ["now", "present", "constraints", "knowledge", "romance", "arrived", "craft", "genre", "plants", "returning", "notPeople"];
+  const order = ["now", "truths", "present", "constraints", "offPage", "knowledge", "romance", "arrived", "callbacks", "craft", "genre", "plants", "returning", "notPeople"];
   const text = `<ledger-note>\n${order.filter((k) => lanes[k]).map((k) => lanes[k]).join("\n")}\n</ledger-note>`;
   return { text, tokens: estTokens(text), lanes };
 }

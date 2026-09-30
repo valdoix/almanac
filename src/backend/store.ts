@@ -73,7 +73,12 @@ export interface LoreBookState {
   kinds?: Record<string, number>;
   /** Always-on entries (Weaver rules and re-anchor) the Ledger never folds, forces or switches off. */
   pinned?: string[];
+  /** Scripted scenes (playbooks): kept from the host's keyword activation, framed as "not history" when sent. */
+  playbooks?: string[];
 }
+
+import type { CheckIssue } from "../core/audit";
+export type { CheckIssue };
 
 export interface ChatMeta {
   version: 1;
@@ -104,6 +109,10 @@ export interface ChatMeta {
   planError?: PlanError | null;
   /** Chronicle unit ids the last prompt carried. */
   chronicleShown?: string[];
+  /** What the check of each reply found (msgId:swipe → issues); the latest few replies only. */
+  checks?: Record<string, { at: number; hash: string; issues: CheckIssue[]; model?: boolean }>;
+  /** Player messages the player-facts reader has read (msgId:swipe → the text's hash). */
+  playerRead?: Record<string, string>;
   telemetry?: CraftReport | null;
   greetedReturn?: number;
 }

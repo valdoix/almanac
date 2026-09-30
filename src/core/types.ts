@@ -4,7 +4,7 @@ export type OpName =
   | "clock" | "wx" | "at" | "cast" | "mood" | "body" | "look" | "bond" | "ladder" | "know"
   | "item" | "thread" | "owe" | "cons" | "clockf" | "rumor" | "rep" | "journal" | "keys"
   | "canon" | "artifact" | "mode" | "status" | "gauge" | "clue" | "plant" | "payoff"
-  | "deadline" | "title" | "season" | "reveal" | "secret" | "unaware"
+  | "deadline" | "title" | "season" | "reveal" | "secret" | "unaware" | "trait" | "motif"
   // extension-only ops (never written by the model)
   | "forecast" | "pressure" | "diverge" | "entity" | "lock";
 
@@ -132,11 +132,48 @@ export interface CharacterState {
   castSeen?: number;
   lastDriftAbs?: number;
   pressure?: string; // hidden pressure (narrator-only)
+  /**
+   * What doesn't change from scene to scene: eyes, hair, build, scars, voice, age. One entry per
+   * kind (a newer "eyes" replaces the older one). `by: "user"` marks the player's word, which the
+   * story can't overwrite.
+   */
+  traits?: Trait[];
+}
+
+export type TraitKind = "eyes" | "hair" | "height" | "build" | "skin" | "face" | "scar" | "mark" | "voice" | "age" | "other";
+
+export interface Trait {
+  kind: TraitKind;
+  text: string;
+  by: "user" | "model" | "card" | "lore";
+  msgIndex: number;
+}
+
+/** A running bit the story can call back: a joke, a pet name, a catchphrase, a keepsake. */
+export interface MotifState {
+  id: string;
+  text: string;
+  /** Who it belongs to or who started it, as written. */
+  who?: string;
+  firstMsg: number;
+  lastMsg: number;
+  uses: number;
+  by: "model" | "user";
 }
 
 export type BondAxis =
   | "trust" | "affection" | "respect" | "familiarity" | "comfort"
   | "attraction" | "fear" | "resentment" | "obligation" | "rivalry";
+
+/** The romance ladder's rungs, 0–7. */
+export const LADDER_NAMES = ["Strangers", "Aware", "Interested", "Charged", "Tested", "Spoken", "Together", "Established"];
+
+/** Words models use for a rung, besides its name. */
+export const LADDER_WORDS: Record<string, number> = {
+  stranger: 0, strangers: 0, aware: 1, noticed: 1, interested: 2, curious: 2, drawn: 2, charged: 3, tension: 3, spark: 3,
+  tested: 4, test: 4, trial: 4, spoken: 5, confessed: 5, confession: 5, declared: 5, together: 6, committed: 6, promised: 6,
+  couple: 6, lovers: 6, dating: 6, established: 7, settled: 7, married: 7, bonded: 7,
+};
 
 export const BIPOLAR_AXES: BondAxis[] = ["trust", "affection", "respect", "comfort"];
 export const ALL_AXES: BondAxis[] = [
@@ -253,6 +290,11 @@ export interface FactState {
   hidden?: boolean;
   /** Normalised phrasings seen for it, for matching lines without a key. */
   aliases: string[];
+  /**
+   * Kept off the page: not named in narration, thoughts or summaries until it comes out.
+   * `words` never appear; `wording` is how the story may allude to it.
+   */
+  offPage?: { words: string[]; wording?: string; by: "user" | "auto"; off?: boolean };
   /** Other keys it has had (an automatic key replaced by the model's own). */
   altKeys?: string[];
   /** The key was made up from the wording, not written by the model. */
@@ -455,7 +497,9 @@ export interface WorldState {
   factions: Record<string, FactionState>;
   rumors: RumorState[];
   rep: Record<string, RepState>;
-  canon: { text: string; at: StoryTime | null; msgIndex: number }[];
+  canon: { text: string; at: StoryTime | null; msgIndex: number; by?: "user" | "model"; pinned?: boolean }[];
+  /** Running bits: jokes, pet names, catchphrases, keepsakes. */
+  motifs?: MotifState[];
   artifacts: Record<string, ArtifactState>;
   keys: Record<string, string[]>;
   gauges: Record<string, GaugeState>;
@@ -528,6 +572,13 @@ export interface Settings {
   fonts: boolean;
   narratorOnlyToTools: boolean;
   telemetry: boolean;
+  /** Check each reply after it is written: rules only, rules plus a quiet model read, or off. */
+  replyCheck: "off" | "rules" | "model";
+  replyCheckConnection: string;
+  /** Read facts the player states in their own messages (dates, looks, where things are). */
+  playerFacts: "off" | "rules" | "model";
+  /** Secrets stay off the page (narration, thoughts, summaries) until they come out. */
+  secretsOffPage: boolean;
   pressures: boolean;
   chekhov: boolean;
   debug: boolean;
@@ -579,6 +630,10 @@ export const DEFAULT_SETTINGS: Settings = {
   fonts: true,
   narratorOnlyToTools: false,
   telemetry: true,
+  replyCheck: "rules",
+  replyCheckConnection: "",
+  playerFacts: "rules",
+  secretsOffPage: true,
   pressures: true,
   chekhov: true,
   debug: false,
@@ -608,6 +663,8 @@ export interface ChatConfig {
   /** Player edits to the cast, by character id: a new name, age and appearance, or someone added by hand. */
   castEdits?: Record<string, CastEdit>;
   enabledOverride?: boolean;
+  /** Story truths the player pinned, always in the note ("Jaime and Cersei are strictly family"). */
+  truths?: string[];
 }
 
 export interface CastEdit {
@@ -634,4 +691,6 @@ export interface FactEdit {
   people?: Record<string, KnowStatus | "none">;
   /** A fact the player added: the message it was added at. */
   added?: number;
+  /** Keep it off the page: words never to use, and how the story may allude to it. null: the player turned it off. */
+  offPage?: { words: string[]; wording?: string } | null;
 }

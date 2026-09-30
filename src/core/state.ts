@@ -5,13 +5,14 @@
 
 import type {
   BondAxis, BondState, CastEdit, CharacterState, EventSource, FactEdit, KnowRow, LedgerEvent, MessageDelta,
-  ParsedLedger, ParsedOp, ThoughtState, WorldState,
+  ParsedLedger, ParsedOp, ThoughtState, Trait, WorldState,
 } from "./types";
 import { KNOW_OPS } from "./types";
 import { applyFactEdits, canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
-import { parseLine } from "./dsl";
+import { opWordOf, parseLine } from "./dsl";
+import { mergeTraits } from "./traits";
 import type { KnowArgs } from "./knowparse";
-import { ALL_AXES, BIPOLAR_AXES } from "./types";
+import { ALL_AXES, BIPOLAR_AXES, LADDER_NAMES } from "./types";
 import { absMinutes, addMinutes, clamp, fmtSpan, fromAbs, MIN_PER_DAY, slug, type StoryTime } from "./util";
 
 export interface FoldOptions {
@@ -29,6 +30,12 @@ export interface FoldOptions {
   factEdits?: Record<string, FactEdit>;
   /** Player edits to the cast (names, age, appearance, people added by hand). */
   castEdits?: Record<string, CastEdit>;
+  /** Read facts from the player's own messages (dates, looks, pinned truths). */
+  playerFacts?: "off" | "rules" | "model";
+  /** The story day a calendar date names ("Second Moon 7"), near a given day; set by the calendar engine. */
+  dayOfDate?: (text: string, nearDay: number) => number | null;
+  /** Identifies the calendar behind dayOfDate (functions don't survive the fold cache's key). */
+  calendarKey?: string;
 }
 
 /** "Gabriel#0|flat", "“Mara”", "Kael's" → the bare lower-case name. */
@@ -356,6 +363,15 @@ export class Folder {
     };
     for (const op of ops) run(op, source);
     for (const op of extra) run(op, extraSource);
+    // A line that names an op the Almanac couldn't read is reported, not dropped in silence.
+    for (const raw of parsed.unknown ?? []) {
+      const op = opWordOf(raw);
+      // "wx: unchanged", "ladder A>B: —": a line that says nothing changed is fine.
+      if (!op || /:\s*(?:unchanged|no change|same(?: as before)?|none|n\/a|—|-|holds?|steady)?\s*[.)]?\s*$/i.test(raw) || /:\s*(?:unchanged|no change|same)\b/i.test(raw)) continue;
+      const ev: LedgerEvent = { id: `${msgId}:${swipe}:${seq}`, msgId, swipe, msgIndex, seq: seq++, source, op: { op, args: {}, raw: raw.trim() }, confidence: CONFIDENCE[source], verdict: "rejected", reason: "couldn't read this line; see the ledger spec for its shape" };
+      events.push(ev);
+      delta.rejected.push({ raw: ev.op.raw, reason: ev.reason! });
+    }
 
     // Thoughts and artifacts in the prose.
     const thoughts: ThoughtState[] = [];
@@ -387,6 +403,8 @@ export class Folder {
       (parsed.title && parsed.title !== hadTitle && st.sceneStartMsg !== msgIndex) ||
       (st.mode === "downtime" && hadMode !== "downtime");
     if (boundary || st.sceneNo === 0) {
+      // A new scene: poses and passing states ("dripping", "on her back") end; conditions stay.
+      if (st.sceneNo > 0) for (const c of Object.values(st.chars)) c.flags = c.flags.filter(isLasting);
       st.sceneNo++;
       st.sceneStartMsg = msgIndex;
       st.sceneStartAbs = endAbs;
@@ -505,6 +523,7 @@ export class Folder {
     switch (op.op) {
       case "clock": {
         const cur = st.time;
+        if (a.kind === "abs" && a.minute == null) a.minute = cur?.minute ?? 8 * 60;
         if (a.kind === "rel") {
           if (a.minutes < 0) return reject("time cannot run backwards");
           if (!cur) {
@@ -536,6 +555,10 @@ export class Folder {
         }
         if (diff < 0) {
           if (a.fromHeader) return { verdict: "warned", reason: "header time is behind the verified clock; kept the clock" };
+          if (a.fromPlayer || src === "user") {
+            st.time = target;
+            return { verdict: "accepted", line: `🕰 you set Day ${day} ${fmtClock(a.minute)}` };
+          }
           return reject(`time cannot run backwards (${fmtClock(a.minute)} Day ${day} is before the current clock)`);
         }
         if (diff > 0) this.drift(absMinutes(cur), absMinutes(target));
@@ -636,6 +659,8 @@ export class Folder {
           c.meters[k] = clamp(v.rel ? before + v.v : v.v, 0, 5);
           bits.push(`${k} ${c.meters[k]}`);
         }
+        // A body line that lists states replaces the passing ones from before; lasting conditions stay.
+        if ((a.flags as string[]).some((f) => f !== "dead")) c.flags = c.flags.filter(isLasting);
         for (const f of a.flags as string[]) {
           if (f === "dead") {
             c.dead = true;
@@ -651,7 +676,8 @@ export class Folder {
         for (const f of a.unflags as string[]) c.flags = c.flags.filter((x) => x !== f && !x.startsWith(f));
         for (const inj of a.injuries as any[]) {
           const ex = c.injuries.find((i) => i.where.toLowerCase() === inj.where.toLowerCase());
-          if (ex) Object.assign(ex, inj, { since: ex.since });
+          // A later word on the same wound keeps it treated once it was (stitches loosening are still stitches).
+          if (ex) Object.assign(ex, inj, { since: ex.since, treated: inj.treated || ex.treated, severity: Math.max(ex.severity, inj.severity) });
           else c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null });
           bits.push(`injury: ${inj.where}`);
           if (inj.severity >= 3) this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
@@ -663,6 +689,16 @@ export class Folder {
       case "look": {
         const id = this.charId(op.subject!, mi)!;
         st.chars[id].look = a.text;
+        // "new boots, his jacket": an item left at a shop or a place that the outfit now names is on them.
+        const low = String(a.text).toLowerCase();
+        for (const it of Object.values(st.items)) {
+          if (it.gone || it.holder === id || !(it.holder?.startsWith("loc:") ?? true)) continue;
+          const base = it.name.replace(/\s*\([^)]*\)/g, "").trim().toLowerCase();
+          if (base.length < 3 || !new RegExp(`(?<![\\p{L}])${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "u").test(low)) continue;
+          it.custody.push({ from: it.holder, to: id, how: "wearing or carrying it", at: st.time ? { ...st.time } : null, msgIndex: mi });
+          it.holder = id;
+          it.where = "worn";
+        }
         return { verdict: "accepted", line: `👗 ${st.chars[id].name}: ${a.text}` };
       }
       case "status": {
@@ -681,6 +717,7 @@ export class Folder {
         st.bonds[key] = b;
         if (a.label) b.label = a.label;
         if (a.tags) b.tags = [...new Set([...b.tags, ...a.tags])];
+        if (!a.changes?.length && a.unknownAxes?.length) return reject(`no bond axis called ${a.unknownAxes.join(", ")} (axes: ${ALL_AXES.join(", ")})`);
         if (!a.changes?.length) return { verdict: "accepted", line: a.label ? `🕸 ${this.nm(from)} → ${this.nm(to)}: “${a.label}”` : undefined };
         if (strict && !op.cause) return reject("bond change without a cause");
         const lines: string[] = [];
@@ -700,6 +737,7 @@ export class Folder {
           if (Math.abs(d) >= 2) this.milestone(mi, "bond", `${this.nm(from)} → ${this.nm(to)}: ${ch.axis} ${d > 0 ? "+" : ""}${d}${op.cause ? ` (${op.cause})` : ""}`);
         }
         if (b.history.length > 60) b.history = b.history.slice(-60);
+        if (a.unknownAxes?.length) warned = `${warned ? `${warned}; ` : ""}no axis called ${a.unknownAxes.join(", ")} (skipped)`;
         const line = `🕸 ${this.nm(from)} → ${this.nm(to)}: ${lines.join(", ")}`;
         return warned ? { verdict: "warned", reason: warned, line } : { verdict: "accepted", line };
       }
@@ -709,6 +747,11 @@ export class Folder {
         if (from === "user" && this.opts.sealed && src !== "user") return reject("the player's side of a ladder moves only by the player's words");
         const key = `${from}>${to}`;
         const cur = st.ladders[key]?.tier ?? (this.opts.romance === "established" ? 7 : 0);
+        if (a.unknown) return reject(`no rung called "${a.unknown}"; the rungs are ${LADDER_NAMES.map((n, i) => `${i} ${n}`).join(" · ")} (now ${LADDER_NAMES[cur]})`);
+        if (a.hold) {
+          if (st.ladders[key] && op.cause) st.ladders[key].evidence = op.cause;
+          return { verdict: "accepted" };
+        }
         let tier = clamp(a.rel ? cur + a.tier : a.tier, 0, 7);
         const maxStep = this.opts.romance === "fast" ? 2 : 1;
         let warned: string | undefined;
@@ -717,7 +760,7 @@ export class Folder {
         if (tier < cur && src !== "user") {
           const why = op.cause ?? "";
           if (!LADDER_FALL.test(why)) {
-            if (!a.rel && a.tier > 0 && LADDER_WARM.test(why)) {
+            if (!a.rel && !a.named && a.tier > 0 && LADDER_WARM.test(why)) {
               warned = `"tier ${a.tier}" after a warm beat read as a step up (+${a.tier}), not a fall from ${LADDER_NAMES[cur]}`;
               tier = clamp(cur + a.tier, 0, 7);
             } else {
@@ -793,6 +836,7 @@ export class Folder {
       }
       case "item": {
         const iid = `item:${slug(op.subject!)}`;
+        if (!st.items[iid] && FIXTURE.test(op.subject!.trim())) return reject(`${op.subject} is part of the place, not something anyone carries`);
         const it = st.items[iid] ?? { id: iid, name: op.subject!, custody: [] };
         st.items[iid] = it;
         if (a.condition) {
@@ -922,7 +966,7 @@ export class Folder {
       }
       case "canon": {
         if (st.canon.some((c) => normFact(c.text) === normFact(a.text))) return { verdict: "accepted" };
-        st.canon.push({ text: a.text, at: st.time ? { ...st.time } : null, msgIndex: mi });
+        st.canon.push({ text: a.text, at: st.time ? { ...st.time } : null, msgIndex: mi, ...(src === "user" ? { by: "user" as const } : {}), ...(a.pinned ? { pinned: true } : {}) });
         return { verdict: "accepted", line: `📜 ${a.text}` };
       }
       case "artifact": {
@@ -968,6 +1012,11 @@ export class Folder {
         const t = normFact(a.text);
         const best = st.plants.filter((p) => p.paidAt == null).map((p) => ({ p, s: overlap(normFact(p.text), t) })).sort((x, y) => y.s - x.s)[0];
         if (best && best.s > 0.25) best.p.paidAt = mi;
+        const bit = (st.motifs ?? []).map((m) => ({ m, s: overlap(normFact(m.text), t) })).sort((x, y) => y.s - x.s)[0];
+        if (bit && bit.s > 0.4) {
+          bit.m.lastMsg = mi;
+          bit.m.uses++;
+        }
         st.genreHits.comedy = mi;
         return { verdict: "accepted", line: `🎯 payoff: ${a.text}` };
       }
@@ -991,6 +1040,36 @@ export class Folder {
         const prev = st.season?.name;
         st.season = { name: a.name, setAt: st.time ? { ...st.time } : null };
         return prev === a.name ? { verdict: "accepted" } : { verdict: "accepted", line: `🍂 ${prev ? prev + " → " : ""}${a.name}` };
+      }
+      case "trait": {
+        const id = this.charId(op.subject!, mi);
+        if (!id) return reject(`${op.subject} is not a person`);
+        const c = st.chars[id];
+        const by: Trait["by"] = src === "user" ? "user" : src === "lore" ? "lore" : "model";
+        const add: Trait[] = (a.traits as { kind: Trait["kind"]; text: string }[]).map((t) => ({ ...t, by, msgIndex: mi }));
+        const res = mergeTraits(c.traits ?? [], add);
+        c.traits = res.list;
+        const kept = add.filter((t) => !res.refused.includes(t));
+        const line = kept.length ? `🪞 ${c.name}: ${kept.map((t) => t.text).join(", ")}` : undefined;
+        if (res.refused.length) {
+          const mine = res.refused.map((t) => c.traits!.find((x) => x.kind === t.kind)?.text).filter(Boolean);
+          return { verdict: kept.length ? "warned" : "rejected", reason: `the player set ${mine.join(", ")}; kept it`, line };
+        }
+        return { verdict: "accepted", line };
+      }
+      case "motif": {
+        const text = String(a.text);
+        const list = (st.motifs ??= []);
+        const ex = list.find((m) => overlap(normFact(m.text), normFact(text)) > 0.6);
+        if (ex) {
+          ex.lastMsg = mi;
+          ex.uses++;
+          if (a.who && !ex.who) ex.who = a.who;
+          return { verdict: "accepted" };
+        }
+        list.push({ id: `bit${mi}_${list.length}`, text, who: a.who, firstMsg: mi, lastMsg: mi, uses: 1, by: src === "user" ? "user" : "model" });
+        if (list.length > 40) list.splice(0, list.length - 40);
+        return { verdict: "accepted", line: `🔁 ${text}` };
       }
       case "pressure": {
         const id = this.charId(op.subject!, mi, false);
@@ -1044,10 +1123,12 @@ export class Folder {
     const spot = (w?: string) => w?.replace(/^(?:in|on|at|inside|under|in the|on the)\s+/i, "").trim() || undefined;
     const tail = (w?: string) => spot(w?.replace(/^(?:in|on|at|inside|under|within|tucked in|hidden in)\s+/i, ""));
     // "held by Buffy in jacket pocket", "with Mara", "given to Kael"
-    const by = /^(?:held|carried|kept|worn|owned|taken|pocketed|hidden|stashed)?\s*(?:by|with|to)\s+(.+?)(?:\s+(?:in|on|at|inside|under|around|behind)\s+(.+))?$/i.exec(s);
+    // "held by Buffy in jacket pocket", "with Mara", "given to Kael", "on Buffy, Dawn gripping it", "bought by Dawn"
+    const by = /^(?:held|carried|kept|worn|owned|taken|pocketed|hidden|stashed|bought|purchased|paid for)?\s*(?:by|with|to|on)\s+(.+?)(?:\s+(?:in|on|at|inside|under|around|behind)\s+(.+))?$/i.exec(s);
     if (by) {
-      const id = known(by[1]) ?? (this.looksLikeName(by[1]) ? this.charId(by[1], mi) ?? undefined : undefined);
-      if (id) return { id, where: tail(by[2]) };
+      const who = by[1].split(/\s*[,;]\s*/)[0];
+      const id = known(who) ?? (this.looksLikeName(who) ? this.charId(who, mi) ?? undefined : undefined);
+      if (id) return { id, where: tail(by[2]) ?? (/^on\b|^worn/i.test(s) ? "worn" : undefined) };
     }
     // "in Buffy's jacket pocket", "Mara's satchel", "your coat"
     const pos = /^(?:(?:in|on|at|inside|under|around|behind|tucked in|hidden in)\s+)?(?:the\s+)?([A-Z\u00C0-\u00DE][\w\u00C0-\u024F'’-]*(?:\s+[A-Z\u00C0-\u00DE][\w\u00C0-\u024F'’-]*){0,3})['’]s?\s+(.+)$/.exec(s);
@@ -1148,12 +1229,19 @@ const LADDER_FALL_HARD = /betray|cheat|abandon|\bhit\b|struck|violen|unforgivabl
 /** Causes that read as a warm beat: a lower rung here is almost always a mis-written step up. */
 const LADDER_WARM = /\bheld\b|\bhold|hug|embrac|kiss|smil|laugh|comfort|warm|tender|gentle|\bsafe\b|protect|saved|rescued|confess|\bstayed\b|didn't (pull|let) (away|go)|leaned|touch|\bhand\b|close|trust|open(ed)? up|let (him|her|them) (in|hold)|blush|flirt|charm|spark|linger/i;
 
-export const LADDER_NAMES = ["Strangers", "Aware", "Interested", "Charged", "Tested", "Spoken", "Together", "Established"];
+export { LADDER_NAMES };
 
 export function fmtClock(minute: number): string {
   const m = ((minute % MIN_PER_DAY) + MIN_PER_DAY) % MIN_PER_DAY;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
+
+/** States that last beyond a scene: conditions, not poses. */
+const LASTING = /\bscar|pregnan|\bblind\b|\bdeaf\b|\bmute\b|\blimp(?:s|ing)?\b|\bmissing\b|amputat|\blame\b|\bsick\b|\bill\b|fever|poison|infect|curse|tattoo|pierc|\bbound\b|chained|shackl|collared|disguis|vampir|possess|comatose|hungover|wheelchair|crutch|\bcast\b|\bsling\b|splint|glasses|concuss|recovering|\bweak\b|frail|malnourish/i;
+export const isLasting = (f: string) => LASTING.test(f);
+
+/** Parts of a place that a ledger sometimes files as items. */
+const FIXTURE = /^(?:the\s+)?(?:fridge|refrigerator|freezer|oven|stove|sink|counter(?:top)?|table|desk|bed|sofa|couch|chair|door|window|wall|floor|ceiling|stairs?|fireplace|hearth|bathtub|shower|toilet|cupboard|cabinet|wardrobe|shelf|shelves)$/i;
 
 /** The merge target that marks a name as not a person (removed from the cast). */
 export const NOT_A_PERSON = "-";

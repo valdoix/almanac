@@ -8,12 +8,14 @@ import { extractLedgerBlock, fixSpeakerLabels, rewriteKnowledgeLines } from "../
 import { renderDrawer, plateSuffix, fillHeader } from "../core/render";
 import { sidecarPrompt } from "../core/prompts";
 import { hash, plainProse } from "../core/util";
+import { redact } from "../core/offpage";
 import { debug, describe, has, host, rememberUser, userFor, warn, within } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings, save, type Detected } from "./store";
 import { isEnabled, lastPlan, notePlanError, safePlan } from "./turn";
 import { pushMacros } from "./macros";
 import { quiet, sys } from "./llm";
+import { checksFor } from "./check";
 
 // ---------------------------------------------------------------------------
 // Context handler: refresh + plan before assembly
@@ -89,6 +91,11 @@ export function registerWorldInfoInterceptor() {
           disabled.push(e.id);
           continue;
         }
+        // A scripted scene that hasn't happened: never sent as lore (Recall frames it when the story is close).
+        if (plan.playbookEntries?.has(e.id)) {
+          disabled.push(e.id);
+          continue;
+        }
         if (plan.divergence[e.id]) mutated.push({ id: e.id, content: withHistory(e) });
         if (book.mode === "native") continue;
         if (plan.lorePicks.has(e.id) || into) {
@@ -110,6 +117,7 @@ export function registerWorldInfoInterceptor() {
 // ---------------------------------------------------------------------------
 
 const CONFIG_RE = /<almanac-config\b([^>]*)\/?>(?:\s*<\/almanac-config>)?\s*/i;
+const PLANNING_BLOCK = /<(weaver_[a-z_]+|deliberation|scratchpad)\b[^>]*>[\s\S]*?<\/\1>\s*/gi;
 
 function parseConfig(attrs: string): Detected {
   const get = (k: string) => new RegExp(`\\b${k}\\s*=\\s*"([^"]*)"`, "i").exec(attrs)?.[1]?.trim();
@@ -185,11 +193,12 @@ export function registerPromptInterceptor() {
       }
       if (!isEnabled(meta, settings)) return msgs;
       // Speech labelled `Name#N|tone:` in earlier replies teaches the model the
-      // wrong shape (and outlives the [spk] marks thinned from older turns).
+      // wrong shape (and outlives the [spk] marks thinned from older turns). A planning block
+      // another system left in a reply (<weaver_deliberation>) is dropped: the model would copy it.
       for (let i = 0; i < msgs.length; i++) {
         if (msgs[i].role !== "assistant") continue;
         const t = textOf(msgs[i]);
-        const f = fixSpeakerLabels(t);
+        const f = fixSpeakerLabels(t).replace(PLANNING_BLOCK, "");
         if (f !== t) msgs[i] = setText(msgs[i], f);
       }
       if (genType === "impersonate") return msgs;
@@ -218,7 +227,9 @@ export function registerPromptInterceptor() {
       if (settings.chronicle && files.chronicle.units.length) {
         validateUnits(files.chronicle, L.path);
         const idToIndex = new Map(L.path.map((m) => [m.id, m.index]));
-        const units = (plan.chronicle ?? []).map((id) => files.chronicle.units.find((u) => u.id === id && !u.stale && !u.ghost)).filter((u) => !!u);
+        const units = (plan.chronicle ?? []).map((id) => files.chronicle.units.find((u) => u.id === id && !u.stale && !u.ghost)).filter((u) => !!u)
+          // Summaries written before a secret was kept off the page are reworded on the way in.
+          .map((u) => (plan!.offPage?.length ? { ...u, text: redact(u.text, plan!.offPage) } : u));
         const res = splice(msgs as any[], files.chronicle, idToIndex, units);
         msgs = res.messages as LlmMessageDTO[];
         for (const inj of res.injected) breakdown.push({ messageIndex: inj.index, name: inj.name });
@@ -309,7 +320,7 @@ export function registerRenderProcessor() {
       const fixed = labelled ? fixSpeakerLabels(ctx.content) : ctx.content;
       if (!/<ledger\b|🗓/u.test(fixed)) return fixed !== ctx.content ? { content: fixed } : undefined;
       const L = ledgerFor(ctx.chatId, ctx.userId);
-      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}:${files.meta.detected.header ?? ""}`;
+      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}:${files.meta.detected.header ?? ""}:${hash(JSON.stringify(Object.entries(files.meta.checks ?? {}).filter(([k]) => k.startsWith(`${ctx.messageId}:`))))}`;
       const hit = renderCache.get(key);
       if (hit != null) return { content: hit };
       if (!L.raw.some((m) => m.id === ctx.messageId)) await L.refresh();
@@ -332,6 +343,7 @@ export function registerRenderProcessor() {
           view: view.startsWith("hud") ? "hud" : view.startsWith("inline") ? "inline" : "drawer",
           trackers: files.meta.detected.trackers, latest: lastAssistant?.id === ctx.messageId,
           unverified: state.unverified.includes(L.path[msgIdx]?.index ?? -1),
+          checks: L.path[msgIdx] ? checksFor(files.meta, ctx.messageId, L.path[msgIdx].swipe, L.path[msgIdx].content) : [],
         });
         content = content.replace(/<ledger\b[^>]*>[\s\S]*?(<\/ledger>|$)/i, `\n\n${html}\n`);
       }

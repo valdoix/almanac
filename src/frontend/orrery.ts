@@ -98,13 +98,14 @@ function dueCount(v: any): number {
 
 /** The Engine's findings, one key each: unverified turns and rejected or corrected ledger lines. */
 export function engineKeys(v: any): string[] {
-  return [...(v?.unverifiedIdx ?? []).map((i: number) => `u${i}`), ...(v?.rejected ?? []).map((r: any) => `r${r.msgIndex}:${r.raw}`)];
+  const checks = (v?.checks?.issues ?? []).filter((x: any) => x.level === "warn").map((x: any) => `c${v.checks.msg}:${x.text}`);
+  return [...(v?.unverifiedIdx ?? []).map((i: number) => `u${i}`), ...(v?.rejected ?? []).map((r: any) => `r${r.msgIndex}:${r.raw}`), ...checks];
 }
 
 /** Engine findings the player hasn't looked at yet: each new unverified turn, plus one for any new rejected lines. */
 export function engineNew(v: any, seen: ReadonlySet<string> = new Set()): number {
   const fresh = engineKeys(v).filter((k) => !seen.has(k));
-  return fresh.filter((k) => k[0] === "u").length + (fresh.some((k) => k[0] === "r") ? 1 : 0);
+  return fresh.filter((k) => k[0] === "u").length + (fresh.some((k) => k[0] === "r") ? 1 : 0) + (fresh.some((k) => k[0] === "c") ? 1 : 0);
 }
 
 /** Things that want a look, per group: shown as a glow and a count on the planet. */
@@ -131,7 +132,9 @@ export function attentionNote(g: Group["id"], v: any, seen?: ReadonlySet<string>
     const fresh = engineKeys(v).filter((k) => !seen?.has(k));
     const u = fresh.filter((k) => k[0] === "u").length;
     const r = fresh.filter((k) => k[0] === "r").length;
+    const c = fresh.filter((k) => k[0] === "c").length;
     return [
+      c ? `the check found ${n(c, "slip", "slips")} in the last reply (see Recall)` : "",
       u ? `${n(u, "reply", "replies")} whose ledger had to be repaired or guessed (see the counts on Now)` : "",
       r ? `${n(r, "ledger line")} rejected or corrected (listed on Recall)` : "",
     ].filter(Boolean).join("; ");

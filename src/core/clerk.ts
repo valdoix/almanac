@@ -69,8 +69,8 @@ reveal #key: the fact | Source → listeners, how · true/false
   It came out in the scene: said, shown, or written. "aloud" reaches everyone present who can hear, so name listeners only for whispers, letters and private talk: reveal #debt: the spell left an unpaid price | Valeria, aloud
 know Name: #key the fact | how they came to it · knows/believes/suspects/doubts/wrong · true/false
   One person's own stance with no scene event: a deduction, a guess, a wrong belief, a thought in the register, news that reached them off-screen.
-secret #key: the fact | kept by Name · from Name, Name
-  Someone is hiding it.
+secret #key: the fact | kept by Name · from Name, Name · never say: word
+  Someone is hiding it. Keep a "never say:" part the writer gave (the words the page must not use until it comes out).
 unaware Name: what they don't know · …
   Only for gaps that matter; a tracked fact they lack can be written as #key.
 

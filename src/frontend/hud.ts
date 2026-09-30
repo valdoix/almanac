@@ -160,8 +160,11 @@ const h6 = (t: string, right = "") => `<h6><span>${t}</span>${right ? `<span>${r
 
 function paneChanged(v: any): string {
   const rows = v.changes?.rows ?? [];
-  if (!rows.length) return h6("Since the last reply") + empty("The last reply didn't change anything the Almanac tracks.");
-  return h6("Since the last reply", `${rows.length} change${rows.length === 1 ? "" : "s"}`) + rows.map((r: any, i: number) => {
+  // What the check of the last reply found comes first: a slip is worth a swipe.
+  const warns = (v.checks?.issues ?? []).filter((x: any) => x.level === "warn");
+  const check = warns.length ? h6("The check found", `${warns.length}`) + warns.slice(0, 4).map((x: any) => `<div class="alm-hudc__row"><span class="alm-hudc__ic">⚠</span><div><span>${e(x.text)}</span>${x.quote && !x.text.includes(x.quote) ? `<small>«${e(x.quote.slice(0, 90))}»</small>` : ""}</div></div>`).join("") : "";
+  if (!rows.length) return check + h6("Since the last reply") + empty("The last reply didn't change anything the Almanac tracks.");
+  return check + h6("Since the last reply", `${rows.length} change${rows.length === 1 ? "" : "s"}`) + rows.map((r: any, i: number) => {
     const delta = r.bond ? `<span class="alm-hudc__d ${r.bond.delta > 0 ? "up" : "dn"}">${r.bond.delta > 0 ? "▲ +" : "▼ "}${r.bond.delta}</span>` : r.tone === "due" ? `<span class="alm-hudc__d due">due</span>` : "";
     const body = r.bond
       ? `<b>${e(r.text)}</b>${track(r.bond.to, r.bond.from, r.bond.color, r.bond.lo)}${r.sub ? `<small>${e(r.sub)}</small>` : ""}`

@@ -13,6 +13,7 @@ import { pushMacros } from "./macros";
 import type { ChatConfig } from "../core/types";
 import { clearRenderCache } from "./hooks";
 import { clerkWholeChat, stopClerk } from "./clerk";
+import { runCheck } from "./check";
 
 type Msg = { type: string; [k: string]: any };
 
@@ -133,6 +134,7 @@ export function registerBridge() {
           if (Array.isArray(p.keys)) ov.userKeys = p.keys.map(String);
           if (p.body && typeof p.body === "object") ov.body = { ...(ov.body ?? {}), ...p.body };
           if (p.locked != null) ov.locked = !!p.locked;
+          if (p.status === "active" || p.status === "resolved") ov.status = p.status;
           if (p.narratorOnly != null) ov.scope = { ...(ov.scope ?? {}), narratorOnly: !!p.narratorOnly };
           if (p.delete && ov.standalone) delete files.codex.overlays[m.id];
           if (p.create) Object.assign(ov, { standalone: true, kind: p.kind ?? "texture", name: p.name ?? m.id, provenance: { source: "user" } });
@@ -232,6 +234,19 @@ export function registerBridge() {
           await rebuild(m.chatId, userId);
           toast(userId, "success", "Rebuilt the story state from the transcript.");
           return;
+        case "recheck": {
+          const L = ledgerFor(m.chatId, userId);
+          await L.refresh();
+          const last = L.lastAssistant();
+          if (last) {
+            const files = await loadChat(m.chatId, userId);
+            delete files.meta.checks?.[`${last.id}:${last.swipe}`];
+            await runCheck(m.chatId, last.id, userId);
+            clearRenderCache();
+            pushState(m.chatId, userId);
+          }
+          return;
+        }
         case "repairLast": {
           const L = ledgerFor(m.chatId, userId);
           await L.refresh();

@@ -428,6 +428,23 @@ function seasonPhase(frac: number): string {
   return p < 0.33 ? "early" : p < 0.67 ? "mid" : "late";
 }
 
+/**
+ * The story day a calendar date names ("Second Moon 7", "the 17th of October", "Day 3 of Thaw"),
+ * the one closest to `nearDay`. Null when the text names no date of this calendar.
+ */
+export function dayOfDate(cal: CalendarConfig, text: string, nearDay: number): number | null {
+  const f = findDate(cal, text);
+  if (!f) return null;
+  const want = cal.months[f.month]?.name;
+  let best: number | null = null;
+  for (let d = Math.max(1, nearDay - 420); d <= nearDay + 420; d++) {
+    const x = dateFor(cal, d);
+    if (x.month !== want || x.dayOfMonth !== f.day || (f.year != null && x.year != null && x.year !== f.year)) continue;
+    if (best == null || Math.abs(d - nearDay) < Math.abs(best - nearDay)) best = d;
+  }
+  return best;
+}
+
 export function ordinal(n: number): string {
   const t = n % 100;
   const s = t >= 11 && t <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";

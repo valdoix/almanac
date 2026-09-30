@@ -12,6 +12,11 @@ import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings } from "./store";
 import { isEnabled, lastPlan, onPlanErrorChange } from "./turn";
 import { clerkRunning, unreadReplies } from "./clerk";
+import { checksFor } from "./check";
+import { chronicleBits } from "../core/chronicle";
+import { fixedTraits } from "../core/note";
+import { isOffPage } from "../core/offpage";
+import { seedTraitsFor } from "./traitseed";
 
 export interface UIView {
   version: string;
@@ -52,6 +57,12 @@ export interface UIView {
   thoughts: { msg: number; innerVoice: string; list: { name: string; color: string; isUser: boolean; cue?: string; text: string; kind: string }[] };
   /** Present people certain of something false (narrator-only). */
   irony: { name: string; color: string; statement: string }[];
+  /** What the check of the latest reply found. */
+  checks: { msg: number; issues: { kind: string; level: string; text: string; quote?: string }[] };
+  /** Scripted scenes read from depth books, and whether the story has played them. */
+  playbooks: { id: string; name: string; subject: string; played: boolean; summary: string }[];
+  /** Running bits: the ledger's own and the chronicle's. */
+  bits: { text: string; who?: string; uses: number; by: string }[];
 }
 
 const AUTO_THEME: Record<string, string> = {
@@ -90,6 +101,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
   const inPlay = new Set(factsInPlay(st, "", 8).map((f) => f.key));
   const facts = allFacts.filter((f) => !f.hidden).sort((a, b) => b.lastMsg - a.lastMsg).map((f) => ({
     key: f.key, statement: f.statement, truth: f.truth, locked: !!f.locked, lastMsg: f.lastMsg, kind: factKind(f), inPlay: inPlay.has(f.key), added: !!f.added,
+    offPage: f.offPage && !f.offPage.off ? { words: f.offPage.words, wording: f.offPage.wording ?? "", by: f.offPage.by, live: isOffPage(f, settings.secretsOffPage !== false) } : null,
     stances: Object.values(f.stances).filter((s) => s.status !== "unaware").sort((a, b) => a.msgIndex - b.msgIndex).map((s) => ({
       id: s.holder, name: nm(s.holder), status: s.status, how: s.how, verb: stanceVerb(s, nm), version: s.version, derived: s.derived ?? null, when: storyStamp(s.at),
     })),
@@ -99,6 +111,8 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     history: f.history.map((h) => ({ id: h.holder, name: nm(h.holder), verb: stanceVerb(h, nm), how: h.how, version: h.version, note: h.note, derived: h.derived ?? null, when: storyStamp(h.at) || `message ${h.msgIndex + 1}` })),
   }));
   const hiddenFacts = allFacts.filter((f) => f.hidden).map((f) => ({ key: f.key, statement: f.statement }));
+  const seed = seedTraitsFor(L, meta);
+  const lastReply = L.lastAssistant();
   // Per person: what they don't know, in words.
   const gaps = Object.entries(st.gaps ?? {}).filter(([, g]) => g.length).map(([id, g]) => ({ id, name: nm(id), gaps: [...g].sort((a, b) => b.lastMsg - a.lastMsg).map((x) => ({ text: x.text, stale: st.msgCount - x.lastMsg > 40 })) }));
   const knowers = people.map((c) => ({ id: c.id, name: nm(c.id), here: isHere(c) }));
@@ -158,7 +172,8 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       id: c.id, name: c.name, aliases: c.aliases, slot: c.slot, color: voiceColor(c, colors), tier: c.tier ?? "off", activity: c.activity, place: c.place,
       mood: c.mood ?? null, meters: c.meters, flags: c.flags, injuries: c.injuries, look: c.look, status: c.status, pressure: meta.pressures[c.id] ?? null,
       journal: c.journal.slice(-5), dead: !!c.dead, isUser: c.isUser, lastSeen: c.lastSeen,
-      age: c.age ?? loreAge(L.records, c.name, c.aliases), ageSet: !!c.age, appearance: c.appearance, edit: meta.config.castEdits?.[c.id] ?? null,
+      age: c.age ?? c.traits?.find((t) => t.kind === "age")?.text ?? loreAge(L.records, c.name, c.aliases), ageSet: !!c.age, appearance: c.appearance, edit: meta.config.castEdits?.[c.id] ?? null,
+      fixed: fixedTraits(c, seed[c.id]), traits: (c.traits ?? []).map((t) => ({ kind: t.kind, text: t.text, by: t.by })),
       held: Object.values(st.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name),
       moodFresh: !!c.mood?.prev && c.mood.prev !== c.mood.name && c.mood.msg != null && c.mood.msg === st.replyDelta?.msgIndex,
       toYou: bondToUser(st, c.id),
@@ -196,6 +211,12 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       list: (st.thoughts?.list ?? []).map((t) => ({ name: t.name, color: colorOf(t.who), isUser: t.who === "user", cue: t.cue, text: t.text, kind: t.kind })),
     },
     irony: facts.flatMap((f) => f.stances.filter((s) => s.status === "wrong" && st.chars[s.id] && isHere(st.chars[s.id]) && !st.chars[s.id].isUser).map((s) => ({ name: s.name, color: colorOf(s.id), statement: f.statement }))).slice(0, 4),
+    checks: { msg: lastReply?.index ?? -1, issues: lastReply ? checksFor(meta, lastReply.id, lastReply.swipe, lastReply.content) : [] },
+    playbooks: L.records.filter((r) => r.kind === "playbook").map((r) => ({ id: r.id, name: r.name, subject: String(r.body.subject ?? ""), played: r.status !== "active", summary: r.summary })),
+    bits: [
+      ...(st.motifs ?? []).map((m) => ({ text: m.text, who: m.who, uses: m.uses, by: m.by })),
+      ...chronicleBits(files.chronicle).map((t) => ({ text: t, uses: 0, by: "chronicle" })),
+    ].slice(0, 30),
   };
 }
 

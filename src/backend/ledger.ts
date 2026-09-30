@@ -3,7 +3,8 @@
 
 import { LedgerRuntime, toPath, type PathMessage, type RawChatMessage } from "../core/branch";
 import { buildCodex, type CodexRecord } from "../core/codex";
-import { almanacFor, type AlmanacConfig, type AlmanacReport } from "../core/engines/almanac";
+import { almanacFor, calendarFor, type AlmanacConfig, type AlmanacReport } from "../core/engines/almanac";
+import { dayOfDate } from "../core/engines/calendar";
 import { KeyIndex, cleanKeys, DEFAULT_STOP } from "../core/keys";
 import { parseMessage } from "../core/dsl";
 import type { FoldOptions } from "../core/state";
@@ -19,6 +20,9 @@ export interface Names {
   personaId?: string;
   /** The persona came from the global active one, not this chat's own binding. */
   personaGuessed?: boolean;
+  /** The card's and the persona's descriptions (their fixed looks are read from these). */
+  charText?: string;
+  personaText?: string;
   chatName?: string;
 }
 
@@ -68,7 +72,10 @@ export class ChatLedger {
         this.names.characterId = chat.character_id;
         if (has("characters") && chat.character_id) {
           const ch = await host.characters.get(chat.character_id, this.userId).catch(() => null);
-          if (ch) this.names.char = ch.name;
+          if (ch) {
+            this.names.char = ch.name;
+            this.names.charText = [ch.description, (ch as any).personality].filter(Boolean).join("\n").slice(0, 8000);
+          }
         }
         const pid = chatPersonaId(chat);
         if (has("personas")) {
@@ -77,6 +84,7 @@ export class ChatLedger {
           if (p) {
             this.names.user = p.name;
             this.names.personaId = p.id;
+            this.names.personaText = String((p as any).description ?? "").slice(0, 6000);
             this.names.personaGuessed = !own;
           }
         }
@@ -101,6 +109,15 @@ export class ChatLedger {
       merges: meta.config.merges,
       factEdits: meta.config.factEdits,
       castEdits: meta.config.castEdits,
+      playerFacts: settings.playerFacts ?? "rules",
+      calendarKey: `${meta.config.calendar || settings.calendar || ""}|${meta.config.startPoint ?? ""}`,
+      dayOfDate: (text, near) => {
+        try {
+          return dayOfDate(calendarFor(this.almanacConfig(meta, settings)), text, near);
+        } catch {
+          return null;
+        }
+      },
       startTime: start ? { day: startDay ? parseInt(startDay[1], 10) : 1, minute: parseInt(start[1], 10) * 60 + parseInt(start[2], 10) } : null,
     };
   }

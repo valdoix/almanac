@@ -374,7 +374,7 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
 }
 
 // src/core/version.ts
-var VERSION = "1.10.4";
+var VERSION = "1.11.0";
 
 // src/frontend/skins.ts
 var SKIN_LIST = [
@@ -952,6 +952,13 @@ var STOP = new Set(("the a an of to in on at is was be and or for with by from t
 var SPEECH_STOP = new Set("said says told tells asked calls called named know knows like just really very yes yeah okay ok well now then here there what who how why when where".split(" "));
 var WH = new Set("who whom whose what which why how when where whether if".split(" "));
 
+// src/core/traits.ts
+var COLOUR = "(?:(?:pale|light|dark|deep|bright|clear|cold|warm|steel|ice|storm|sea|ocean|sky|forest|bottle|moss|grey|gray|blue|green|brown|hazel|amber|gold(?:en)?|violet|purple|lilac|indigo|amethyst|black|silver|white|red|auburn|copper|chestnut|honey|ash|platinum|strawberry|dirty|sandy|mousy|jet|raven|emerald|jade|sapphire|blonde|blond|fair|ginger|mahogany|salt-and-pepper)[- ]?){1,3}";
+var HAIR_SHAPE = "(?:(?:short|long|cropped|shoulder-length|waist-length|curly|wavy|straight|thick|thin|messy|tousled|braided|close-cropped|shaved|greying|graying|silvering|streaked)[ ,-]*){0,3}";
+var EYES = new RegExp(`\\b(${COLOUR})[- ]?eyed\\b|\\b(${COLOUR})\\s+eyes\\b|\\beyes\\s+(?:are|were|of)\\s+(?:a\\s+)?(${COLOUR})\\b`, "i");
+var HAIR = new RegExp(`\\b(${HAIR_SHAPE}${COLOUR})[- ]haired\\b|\\b(${HAIR_SHAPE}${COLOUR})\\s+(?:hair|curls|locks|braids?)\\b|\\bhair\\s+(?:is|was)\\s+(${HAIR_SHAPE}${COLOUR})\\b`, "i");
+var NUM_WORDS = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ");
+
 // src/core/dsl.ts
 var SUBJECT_OPS = new Set([
   "mood",
@@ -972,7 +979,8 @@ var SUBJECT_OPS = new Set([
   "artifact",
   "status",
   "gauge",
-  "deadline"
+  "deadline",
+  "trait"
 ]);
 
 // src/core/state.ts
@@ -1081,11 +1089,12 @@ function dueCount(v) {
   return (w.cons ?? []).filter((c) => c.status === "due").length + (w.deadlines ?? []).filter((d) => d.passed && !d.done).length;
 }
 function engineKeys(v) {
-  return [...(v?.unverifiedIdx ?? []).map((i) => `u${i}`), ...(v?.rejected ?? []).map((r) => `r${r.msgIndex}:${r.raw}`)];
+  const checks = (v?.checks?.issues ?? []).filter((x) => x.level === "warn").map((x) => `c${v.checks.msg}:${x.text}`);
+  return [...(v?.unverifiedIdx ?? []).map((i) => `u${i}`), ...(v?.rejected ?? []).map((r) => `r${r.msgIndex}:${r.raw}`), ...checks];
 }
 function engineNew(v, seen = new Set) {
   const fresh = engineKeys(v).filter((k) => !seen.has(k));
-  return fresh.filter((k) => k[0] === "u").length + (fresh.some((k) => k[0] === "r") ? 1 : 0);
+  return fresh.filter((k) => k[0] === "u").length + (fresh.some((k) => k[0] === "r") ? 1 : 0) + (fresh.some((k) => k[0] === "c") ? 1 : 0);
 }
 function attention(g, v, seen) {
   if (!v)
@@ -1113,7 +1122,9 @@ function attentionNote(g, v, seen) {
     const fresh = engineKeys(v).filter((k) => !seen?.has(k));
     const u = fresh.filter((k) => k[0] === "u").length;
     const r = fresh.filter((k) => k[0] === "r").length;
+    const c = fresh.filter((k) => k[0] === "c").length;
     return [
+      c ? `the check found ${n(c, "slip", "slips")} in the last reply (see Recall)` : "",
       u ? `${n(u, "reply", "replies")} whose ledger had to be repaired or guessed (see the counts on Now)` : "",
       r ? `${n(r, "ledger line")} rejected or corrected (listed on Recall)` : ""
     ].filter(Boolean).join("; ");
@@ -1189,7 +1200,7 @@ var WEAVER_BOOK = {
   governance: ["rules book", "Always-on rules and the re-anchor that keep the character on spec. Left to Lumiverse: the Ledger never folds, forces or switches these entries off."],
   lore: ["lore book", "The world's deep lore, surfacing when relevant."],
   npc: ["NPC book", "The people the narrator can voice, one entry per person."],
-  depth: ["depth book", "More about the card's character, surfacing when relevant."],
+  depth: ["depth book", `More about the card's character. Entries that script a scene ("When she learns…", "It happens in the kitchen…") are read as playbooks: never sent as lore, and sent as "not history" only when a turn comes close.`],
   persona: ["persona depth", "More about your persona, surfacing when relevant."]
 };
 var LORE_KINDS = [
@@ -1205,6 +1216,7 @@ var LORE_KINDS = [
   ["forecast", "upcoming event", "upcoming events"],
   ["boundary", "canon point", "canon points"],
   ["texture", "custom or detail", "customs & detail"],
+  ["playbook", "scripted scene", "scripted scenes"],
   ["meta", "instruction", "instructions"]
 ];
 function worldPanel(w, simulator) {
@@ -1376,7 +1388,7 @@ ${v.recall ? `<details><summary class="muted">Recall block</summary><pre>${escap
 <div class="alm-cc__bd"><div class="alm-cc__nm">${escapeHtml(c.name)}</div>${c.mood?.name ? `<div class="alm-cc__em">${escapeHtml(c.mood.name)}</div>` : ""}${vad}
 ${meters.length ? `<div class="alm-meters">${meters.map(([k, x]) => `<span>${escapeHtml(k)}</span>${seg(x)}`).join("")}</div>` : ""}
 <div class="alm-tags">${(c.flags ?? []).slice(-4).map((f) => `<span class="alm-tag">${escapeHtml(f)}</span>`).join("")}${(c.injuries ?? []).map((i) => `<span class="alm-tag warn">${escapeHtml(i.where)}</span>`).join("")}${(c.held ?? []).slice(0, 3).map((h) => `<span class="alm-tag">holds: ${escapeHtml(h)}</span>`).join("")}</div>
-${c.activity ? `<div class="alm-cc__row"><b>doing</b>${escapeHtml(c.activity)}</div>` : ""}${!compact && c.age ? `<div class="alm-cc__row"><b>age</b>${escapeHtml(c.age)}${c.ageSet ? "" : ` <small class="muted" title="From the lore">(lore)</small>`}</div>` : ""}${!compact && c.appearance ? `<div class="alm-cc__row"><b>appearance</b>${escapeHtml(c.appearance)}</div>` : ""}${!compact && c.look ? `<div class="alm-cc__row"><b>look</b>${escapeHtml(c.look)}</div>` : ""}${!compact && c.place ? `<div class="alm-cc__row"><b>where</b>${escapeHtml(c.place)}</div>` : ""}
+${c.fixed ? `<div class="alm-cc__row" title="Sent to the model every turn while they're present: eyes, hair, age and the appearance you set"><b>always</b>${escapeHtml(c.fixed)}</div>` : ""}${c.activity ? `<div class="alm-cc__row"><b>doing</b>${escapeHtml(c.activity)}</div>` : ""}${!compact && c.age ? `<div class="alm-cc__row"><b>age</b>${escapeHtml(c.age)}${c.ageSet ? "" : ` <small class="muted" title="From the lore">(lore)</small>`}</div>` : ""}${!compact && c.appearance ? `<div class="alm-cc__row"><b>appearance</b>${escapeHtml(c.appearance)}</div>` : ""}${!compact && c.look ? `<div class="alm-cc__row"><b>wearing</b>${escapeHtml(c.look)}</div>` : ""}${!compact && c.place ? `<div class="alm-cc__row"><b>where</b>${escapeHtml(c.place)}</div>` : ""}
 </div></article>`;
   }
   tab_cast(v) {
@@ -1395,7 +1407,8 @@ ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8
     const name = c?.isUser ? `<p class="muted"><small>Your persona's name comes from Lumiverse.</small></p>` : `<label class="f">Name<input type="text" id="almCharName" value="${escapeHtml(c?.name ?? "")}" placeholder="${c ? "" : "Walter Hale"}"></label>${c ? `<p class="muted"><small>The old name keeps working in the story's lines.</small></p>` : ""}`;
     return `<div class="card almk--edit">${name}
 <label class="f">Age<input type="text" id="almCharAge" value="${escapeHtml(c?.ageSet ? c.age : "")}" placeholder="${escapeHtml(c?.age && !c.ageSet ? `${c.age} (from the lore)` : "e.g. 24, early fifties, ageless")}"></label>
-<label class="f">Appearance<textarea id="almCharLook" placeholder="Build, hair, eyes, what people notice first">${escapeHtml(c?.appearance ?? "")}</textarea></label>
+<label class="f">Appearance<textarea id="almCharLook" placeholder="${escapeHtml(c?.fixed && !c?.appearance ? `Now: ${c.fixed}` : "Build, hair, eyes, what people notice first")}">${escapeHtml(c?.appearance ?? "")}</textarea></label>
+<p class="muted"><small>What you set here is sent with them every turn and holds whatever the story writes.</small></p>
 <div class="row"><button class="btn primary" data-act="charSave" data-id="${escapeHtml(id)}">${c ? "Save" : "Add"}</button><button class="btn" data-act="charCancel">Cancel</button></div></div>`;
   }
   removedRow(v) {
@@ -1456,7 +1469,7 @@ ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8
       const truth = f.truth !== "unknown" ? `<span class="pill${f.truth === "false" ? " warn" : ""}" title="Whether the fact is true">${f.truth === "true" ? "true" : f.truth === "false" ? "false" : "partly true"}</span>` : "";
       const hist = f.history.map((h) => `<li><time>${escapeHtml(h.when)}</time> <b>${escapeHtml(h.name)}</b> ${escapeHtml(h.verb)}${h.version ? `: “${escapeHtml(h.version)}”` : ""}${h.how && !h.derived && !h.verb.toLowerCase().includes(h.how.toLowerCase()) ? ` <span class="muted">— ${escapeHtml(h.how)}</span>` : ""}${h.note ? `<small class="almk-note">${escapeHtml(h.note)}</small>` : ""}</li>`).join("");
       const kept = f.keepers.length ? `<div class="almk-un">\uD83E\uDD2B Kept by ${escapeHtml(f.keepers.map((k) => k.name).join(", "))}${f.keptFrom.length ? ` from ${escapeHtml(f.keptFrom.map((k) => k.name).join(", "))}` : ""}</div>` : "";
-      return `<div class="card flat almk almk--${escapeHtml(f.kind)}"><div class="almk-top"><span class="almk-key" title="The model refers to this fact as #${escapeHtml(f.key)}">#${escapeHtml(f.key)}</span><span class="pill almk-kind" title="${escapeHtml(KIND_HELP[f.kind] ?? "")}">${escapeHtml(KIND[f.kind] ?? f.kind)}</span>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}<span class="grow"></span><button class="btn" data-act="factEdit" data-id="${escapeHtml(f.key)}" title="Rename, set the truth, set who knows it, or merge">edit</button><button class="btn danger" data-act="factDelete" data-id="${escapeHtml(f.key)}" title="Delete this fact from the page and the model's note (you can restore it below)">delete</button></div>
+      return `<div class="card flat almk almk--${escapeHtml(f.kind)}"><div class="almk-top"><span class="almk-key" title="The model refers to this fact as #${escapeHtml(f.key)}">#${escapeHtml(f.key)}</span><span class="pill almk-kind" title="${escapeHtml(KIND_HELP[f.kind] ?? "")}">${escapeHtml(KIND[f.kind] ?? f.kind)}</span>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}${f.offPage ? `<span class="pill${f.offPage.live ? " warn" : ""}" title="${escapeHtml(f.offPage.live ? `Kept off the page${f.offPage.words.length ? `: never "${f.offPage.words.join('", "')}"` : ""}${f.offPage.wording ? `; alluded to as "${f.offPage.wording}"` : ""}` : "It has come out; no longer kept off the page")}">${f.offPage.live ? "\uD83D\uDD12 off the page" : "off the page · out now"}</span>` : ""}<span class="grow"></span><button class="btn" data-act="factEdit" data-id="${escapeHtml(f.key)}" title="Rename, set the truth, set who knows it, or merge">edit</button><button class="btn danger" data-act="factDelete" data-id="${escapeHtml(f.key)}" title="Delete this fact from the page and the model's note (you can restore it below)">delete</button></div>
 <b class="almk-stmt">${escapeHtml(f.statement)}</b>
 <div class="almk-st">${f.stances.map(chip).join("") || `<div class="muted">No one has it yet.</div>`}${f.lacks.map(lackChip).join("")}</div>
 ${kept}
@@ -1500,6 +1513,9 @@ ${kept}
     const cur = fact ? v.config?.factEdits?.[f.key] ?? {} : {};
     return `<div class="card almk almk--edit"><label class="f">The fact, in a few words<input type="text" id="almFactStmt" value="${escapeHtml(f.statement)}" placeholder="${fact ? "" : "Walter is Gabriel's Watcher"}"></label>
 <label class="f">Is it true?<select id="almFactTruth">${truthOpts.map(([k, l]) => `<option value="${k}"${(cur.truth ?? "") === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+<fieldset class="almk-off"><legend>Off the page</legend><label class="chk"><input type="checkbox" id="almFactOffOn"${fact?.offPage && cur.offPage !== null || cur.offPage ? " checked" : ""}> Keep it out of the narration, thoughts and summaries until it comes out</label>
+<label class="f">Words never to use yet<input type="text" id="almFactOffWords" value="${escapeHtml((cur.offPage?.words ?? fact?.offPage?.words ?? []).join(", "))}" placeholder="Heaven, paradise"></label>
+<label class="f">How the story may allude to it<input type="text" id="almFactOffAs" value="${escapeHtml(cur.offPage?.wording ?? fact?.offPage?.wording ?? "")}" placeholder="somewhere warm and finished"></label></fieldset>
 ${others.length ? `<label class="f">Same fact as…<select id="almFactInto"><option value="">— a separate fact —</option>${others.map((o) => `<option value="${escapeHtml(o.key)}">#${escapeHtml(o.key)} ${escapeHtml(o.statement)}</option>`).join("")}</select></label>` : ""}
 <h4>Who knows it</h4><div class="list">${(v.knowers ?? []).map((p) => {
       const now = f.stances.find((s) => s.id === p.id);
@@ -1588,6 +1604,7 @@ ${w.rep.length ? `<h4>Reputation</h4>${w.rep.map((r) => `<span class="pill">${es
 ${w.gauges.length ? `<h4>Gauges</h4><div class="alm-clocks">${w.gauges.map((g) => `<div class="alm-clock">${ring(g.cur, g.max, "var(--alm-accent)")}<div><strong>${escapeHtml(g.name)}</strong><span>${escapeHtml(g.cause ?? "")}</span></div></div>`).join("")}</div>` : ""}
 ${w.clues.length ? `<h4>Clue board</h4><ul class="alm-list">${w.clues.map((c) => `<li>\uD83D\uDD0E ${escapeHtml(c.text)}${c.pointsTo ? ` → ${escapeHtml(c.pointsTo)}` : ""}${c.reliability ? ` <small class="muted">(${escapeHtml(c.reliability)})</small>` : ""}</li>`).join("")}</ul>` : ""}
 ${w.plants.length ? `<h4>Plants &amp; payoffs</h4><ul class="alm-list">${w.plants.map((p) => `<li>${p.paidAt != null ? "✓" : "○"} ${escapeHtml(p.text)}${p.payoff ? ` <small class="muted">(${escapeHtml(p.payoff)})</small>` : ""}</li>`).join("")}</ul>` : ""}
+${(v.bits ?? []).length ? `<h4>Running bits</h4><p class="muted">Jokes, pet names, catchphrases and keepsakes. The note offers a few not used lately as callbacks.</p><ul class="alm-list">${v.bits.map((b) => `<li>\uD83D\uDD01 ${escapeHtml(b.text)}${b.who ? ` <small class="muted">(${escapeHtml(b.who)})</small>` : ""}${b.uses > 1 ? ` <small class="muted">×${b.uses}</small>` : ""}${b.by === "chronicle" ? ` <small class="muted" title="From a chapter summary">· chronicle</small>` : ""}</li>`).join("")}</ul>` : ""}
 ${w.canon.length ? `<h4>Minted canon</h4><ul class="alm-list">${w.canon.map((c) => `<li>${escapeHtml(c.text)}</li>`).join("")}</ul>` : ""}
 <div class="row" style="margin-top:10px"><button class="btn" data-act="simulate">⏭ Run the off-screen world now</button></div>`;
   }
@@ -1600,6 +1617,7 @@ ${worldPanel(v.lore.world, !!v.settings?.simulator)}
 ${loreKinds(b.kinds)}
 <div class="row"><label class="f grow">Activation<select data-lore-mode="${escapeHtml(id)}">${["native", "assisted", "managed"].map((m) => `<option value="${m}"${m === b.mode ? " selected" : ""}>${m}</option>`).join("")}</select></label><label class="f grow">Permission<select data-lore-perm="${escapeHtml(id)}">${["read", "overlay", "write"].map((m) => `<option value="${m}"${m === b.permission ? " selected" : ""}>${m === "read" ? "read-only" : m}</option>`).join("")}</select></label></div></div>`).join("") || `<div class="empty">No lorebooks are attached to this chat.</div>`}</div>
 <p class="muted"><b>Native</b>: your keywords decide; the Ledger only annotates lore the story has moved past. <b>Assisted</b>: plus the entries Recall picks. <b>Managed</b>: the Ledger is the only retrieval owner for that book.</p>
+${(v.playbooks ?? []).length ? `<h4>Playbooks</h4><p class="muted">Scripted scenes from depth books: how someone would act if the story reaches a moment. They are never sent as lore, because the model took them for things that had happened. When a turn comes close to one, it goes in once, marked "not history". Mark one played once the story has had that scene.</p><div class="list">${v.playbooks.map((p) => `<div class="rec"><div class="hd"><b class="grow">${escapeHtml(p.name)}</b>${p.subject ? `<span class="pill">${escapeHtml(p.subject)}</span>` : ""}<button class="btn" data-act="playbookPlayed" data-id="${escapeHtml(p.id)}" data-played="${p.played ? "1" : ""}">${p.played ? "✓ played · undo" : "mark played"}</button></div><details><summary class="muted">The scene</summary><div class="muted">${escapeHtml(p.summary)}</div></details></div>`).join("")}</div>` : ""}
 ${v.lore.review?.length ? `<h4>Review queue</h4><ul class="alm-list">${v.lore.review.slice(0, 40).map((r) => `<li>${escapeHtml(r.title)} — read as <b>${escapeHtml(r.kind)}</b> (${Math.round(r.confidence * 100)}%)</li>`).join("")}</ul>` : ""}`;
   }
   tab_creator(v) {
@@ -1608,7 +1626,9 @@ ${v.lore.review?.length ? `<h4>Review queue</h4><ul class="alm-list">${v.lore.re
   tab_recall(v) {
     const f = v.feed?.[0];
     const via = (i) => !i.injected ? "" : i.via === "mirror" ? ` <span class="pill" title="Sent as a forced entry of the chat's mirror lorebook: the Prompt Breakdown lists it under World Info, not under ALMANAC · Recall">lorebook</span>` : i.via === "recall" ? ` <span class="pill" title="Sent inside the ALMANAC · Recall block">recall</span>` : "";
-    return `<p class="muted">What Recall considered for the latest generation, with scores and reasons. Green = injected. Records the chat's mirror lorebook holds go in as its entries (the Prompt Breakdown shows them under World Info); the rest go in the ALMANAC · Recall block.</p>
+    const ck = v.checks?.issues ?? [];
+    const checkCard = `<div class="card flat"><div class="row"><b class="grow">Check of the latest reply</b><button class="btn" data-act="recheck" title="Run the check again on the latest reply">Check again</button></div>${ck.length ? `<ul class="alm-list">${ck.map((i) => `<li class="${i.level === "warn" ? "due" : ""}">${i.level === "warn" ? "⚠" : "ⓘ"} ${escapeHtml(i.text)}${i.quote && !i.text.includes(i.quote) ? ` <small class="muted">«${escapeHtml(i.quote)}»</small>` : ""}</li>`).join("")}</ul><p class="muted"><small>The next turn's note tells the model about the ⚠ ones. If a slip matters, swipe for a new take.</small></p>` : `<p class="muted">${v.settings?.replyCheck === "off" ? "The reply check is off (Settings › Knowledge)." : "Nothing found."}</p>`}</div>`;
+    return `${checkCard}<p class="muted">What Recall considered for the latest generation, with scores and reasons. Green = injected. Records the chat's mirror lorebook holds go in as its entries (the Prompt Breakdown shows them under World Info); the rest go in the ALMANAC · Recall block.</p>
 ${f ? `<div class="card flat"><div class="row"><span class="pill">tier: ${escapeHtml(f.tier)}</span><span class="pill">≈ ${f.tokens} tokens injected</span><span class="pill">${new Date(f.at).toLocaleTimeString()}</span></div>
 ${f.chronicle?.length ? `<p class="muted"><small>Story so far in this prompt: ${f.chronicle.map((c) => escapeHtml(c.name)).join(" · ")}</small></p>` : ""}
 <div class="feed">${f.items.map((i) => `<div class="it${i.injected ? " in" : ""}"><span class="sc">${i.score}</span><div><b>${escapeHtml(i.name)}</b>${via(i)} <small class="muted">${escapeHtml(i.id)}</small><br><small class="muted">${escapeHtml(i.reasons.join(" · "))}</small></div></div>`).join("")}</div></div>` : `<div class="empty">No retrieval yet.</div>`}
@@ -1629,11 +1649,16 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
     const num = (k, min = 0, max = 99999) => `<input type="number" data-setting="${k}" value="${s[k]}" min="${min}" max="${max}">`;
     const chk = (k, lab) => `<label class="chk"><input type="checkbox" data-setting="${k}"${s[k] ? " checked" : ""}> ${lab}</label>`;
     const txt = (k, ph = "") => `<input type="text" data-setting="${k}" value="${escapeHtml(s[k] ?? "")}" placeholder="${escapeHtml(ph)}">`;
-    return `<h3>This chat</h3><div class="card flat"><div class="row"><span class="grow">Ledger in this chat: <b>${v.enabled ? "on" : "off"}</b>${v.config.enabledOverride == null ? " (automatic)" : ""}</span><button class="btn" data-act="enable">On</button><button class="btn" data-act="disable">Off</button><button class="btn" data-act="auto">Automatic</button></div></div>
+    return `<h3>This chat</h3><div class="card flat"><div class="row"><span class="grow">Ledger in this chat: <b>${v.enabled ? "on" : "off"}</b>${v.config.enabledOverride == null ? " (automatic)" : ""}</span><button class="btn" data-act="enable">On</button><button class="btn" data-act="disable">Off</button><button class="btn" data-act="auto">Automatic</button></div>
+<label class="f">Story truths <small class="muted">— one a line; sent every turn and held over the source material and older chat</small><textarea id="almTruths" rows="3" placeholder="Jaime and Cersei are strictly family.&#10;Rhaegar is bald and wears a wig.">${escapeHtml((v.config.truths ?? []).join(`
+`))}</textarea></label><div class="row"><span class="grow muted"><small>You can also pin one from a message: <code>((truth: …))</code>.</small></span><button class="btn" data-act="saveTruths">Save truths</button></div></div>
 <h3>Core</h3><div class="card flat"><label class="f">Enable<select data-setting="enabled"><option value="auto"${s.enabled === "auto" ? " selected" : ""}>automatic (ALMANAC chats)</option><option value="on"${s.enabled === "on" ? " selected" : ""}>every chat</option><option value="off"${s.enabled === "off" ? " selected" : ""}>off</option></select></label>
 <label class="f">Validation${sel("strictness", [["strict", "strict — reject impossible changes"], ["lenient", "lenient — warn only"]])}</label>${chk("autoRepair", "Repair missing ledgers automatically")}${chk("formatAid", "Show the model last turn's ledger as a format example")}${chk("debug", "Debug logging")}</div>
 <h3>Chronicle</h3><div class="card flat">${chk("chronicle", "Summarise old turns into chapters, arcs and volumes")}${chk("hideCovered", "Hide covered turns")}<label class="f">Summaries in the prompt${sel("chronicleInject", [["all", "the whole story, every turn"], ["relevant", "only when relevant"]])}</label><p class="muted"><b>The whole story</b> puts every stretch before the raw tail in each prompt, once, at its most compact level (volumes, then arcs, then chapters), and brings back a folded chapter in full when a turn touches it. <b>Only when relevant</b> sends the latest chapter, which leads into the turns the model sees, and up to three earlier chapters that share names, places or other distinctive words with the turn. It costs fewer tokens, but the model forgets what isn't picked.</p><label class="f">Raw tail (messages)${num("rawTail", 6, 400)}</label><label class="f">Raw tail cap (tokens)${num("rawTailTokens", 1000)}</label><label class="f">Chapter size (tokens)${num("chapterThresholdTokens", 1000)}</label><label class="f">Fan-in (chapters per arc, arcs per volume)${num("fanIn", 2, 12)}</label><label class="f">Summary detail${sel("summaryDetail", [["brief", "brief — the essentials (≈100–200 words a chapter)"], ["standard", "standard — facts and changes (≈150–350)"], ["detailed", "detailed — scene by scene, where things stand (≈350–650)"], ["exhaustive", "exhaustive — beats, texture, voices (≈700–1200)"]])}</label><label class="f">Always keep in summaries (optional)${txt("summaryFocus", "outfits, injuries, Buffy's lies, pet names…")}</label><p class="muted">More detail keeps more of the story in memory, at the cost of prompt tokens. New chapters use the new setting; <b>Rewrite all</b> on the Chronicle page redoes the old ones.</p><label class="f">Summariser connection id (empty = your default)${txt("summarizerConnection")}</label></div>
-<h3>Knowledge</h3><div class="card flat"><label class="f">Knowledge clerk${sel("knowledgeClerk", [["auto", "when a reply's lines need it (bundled, untagged, diary-like)"], ["always", "every reply"], ["off", "off"]])}</label><p class="muted">After a reply, a quiet call rewrites its knowledge lines cleanly: one fact a line, the #keys in play, information rather than what someone noticed. It runs in the background; the next turn waits for it up to 8 seconds.</p><label class="f">Clerk connection id (empty = the summariser's)${txt("clerkConnection")}</label></div>
+<h3>Knowledge</h3><div class="card flat"><label class="f">Knowledge clerk${sel("knowledgeClerk", [["auto", "when a reply's lines need it (bundled, untagged, diary-like)"], ["always", "every reply"], ["off", "off"]])}</label><p class="muted">After a reply, a quiet call rewrites its knowledge lines cleanly: one fact a line, the #keys in play, information rather than what someone noticed. It runs in the background; the next turn waits for it up to 8 seconds.</p><label class="f">Clerk connection id (empty = the summariser's)${txt("clerkConnection")}</label>
+${chk("secretsOffPage", "Keep secrets off the page when the model names words to avoid (<code>secret … | never say: …</code>)")}<p class="muted">A secret you mark on the Knowledge page is always kept off the page until it comes out.</p>
+<label class="f">Check each reply${sel("replyCheck", [["rules", "rules: secrets named, leaks, the dead or absent speaking, looks contradicted"], ["model", "rules, plus a quiet model read for past events the record doesn't hold"], ["off", "off"]])}</label><label class="f">Check connection id (empty = the summariser's)${txt("replyCheckConnection")}</label>
+<label class="f">Facts in your own messages${sel("playerFacts", [["rules", `rules: dates ("it's day 12"), looks ("X has violet eyes"), ((truth: …))`], ["model", "rules, plus a quiet model read of what you state"], ["off", "off"]])}</label><p class="muted">What you state is your word: the story can't overwrite a look you set, and a date you give moves the clock, even backwards.</p></div>
 <h3>Recall</h3><div class="card flat"><label class="f">Injection budget (tokens)${num("recallBudget", 400, 20000)}</label><label class="f">Recall placement${sel("recallPlacement", [["before_history", "before chat history"], ["depth4", "4 messages from the end"]])}</label>${chk("keyHeat", "Demote keys that fire without being used")}<label class="f">Max keys per record${num("maxKeys", 4, 24)}</label></div>
 <h3>Storage (hybrid)</h3><div class="card flat"><p class="muted">The extension's storage is the source of truth (branch-safe, rebuildable). The mirror lorebook is a readable, editable projection attached to this chat only.</p><label class="f">Mirror lorebook${sel("mirror", [["off", "off"], ["summaries", "summaries"], ["full", "full records"]])}</label>${chk("mirrorVectorize", "Vectorise mirror entries (semantic recall; needs an embedding provider)")}</div>
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
@@ -1877,6 +1902,13 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
           next.people = people;
         else
           delete next.people;
+        const offOn = this.root.querySelector("#almFactOffOn")?.checked;
+        const offWords = val("#almFactOffWords").split(/\s*,\s*/).filter(Boolean);
+        const offAs = val("#almFactOffAs");
+        if (offOn)
+          next.offPage = { words: offWords, ...offAs ? { wording: offAs } : {} };
+        else if (f?.offPage || next.offPage)
+          next.offPage = null;
         if (id === "__new")
           next.statement = stmt;
         edits[key] = next;
@@ -1979,6 +2011,16 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
         break;
       case "loreScan":
         this.send({ type: "lore", action: "scan" });
+        break;
+      case "playbookPlayed":
+        this.send({ type: "codexEdit", id, patch: { status: t.closest("button")?.dataset.played ? "active" : "resolved" } });
+        break;
+      case "recheck":
+        this.send({ type: "recheck" });
+        break;
+      case "saveTruths":
+        this.send({ type: "config", patch: { truths: val("#almTruths").split(`
+`).map((s) => s.trim()).filter(Boolean) } });
         break;
       case "loreClassify":
         this.send({ type: "lore", action: "classify" });
@@ -2228,6 +2270,14 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
 .alm-deltas{margin:10px 0 0;padding-left:18px;font-size:13.5px;line-height:1.5;color:var(--alm-ink)}
 .alm-rejected{margin-top:10px;padding:8px 10px;border-radius:10px;background:color-mix(in oklab,var(--alm-danger) 8%,var(--alm-panel));color:var(--alm-danger);font-size:12.5px}
 .alm-rejected code{font:11px var(--alm-font-mono)}
+.alm-check{margin:8px 0;padding:8px 10px;border-radius:10px;background:color-mix(in oklab,var(--alm-danger) 9%,var(--alm-panel));color:var(--alm-ink);font-size:12.5px;border-left:3px solid var(--alm-danger)}
+.alm-check b{display:block;color:var(--alm-danger);margin-bottom:2px}
+.alm-check small{display:block;opacity:.75;margin-top:3px}
+.alm-check div small{display:inline;margin:0}
+.alm-check--info{background:color-mix(in oklab,var(--alm-accent) 8%,var(--alm-panel));border-left-color:var(--alm-accent)}
+.alm-check--info b{color:var(--alm-accent)}
+.almk-off{border:1px solid color-mix(in oklab,var(--alm-ink) 16%,transparent);border-radius:10px;padding:6px 10px 2px;margin:8px 0}
+.almk-off legend{font-size:12px;opacity:.8;padding:0 4px}
 .alm-list{margin:0;padding-left:18px;font-size:13.5px;line-height:1.55}
 .alm-list li.due{color:var(--alm-danger);font-weight:600}
 .alm-cast{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))!important;gap:12px}
@@ -3325,9 +3375,11 @@ var empty = (t) => `<p class="alm-hudc__empty">${t}</p>`;
 var h6 = (t, right = "") => `<h6><span>${t}</span>${right ? `<span>${right}</span>` : ""}</h6>`;
 function paneChanged(v) {
   const rows = v.changes?.rows ?? [];
+  const warns = (v.checks?.issues ?? []).filter((x) => x.level === "warn");
+  const check = warns.length ? h6("The check found", `${warns.length}`) + warns.slice(0, 4).map((x) => `<div class="alm-hudc__row"><span class="alm-hudc__ic">⚠</span><div><span>${escapeHtml(x.text)}</span>${x.quote && !x.text.includes(x.quote) ? `<small>«${escapeHtml(x.quote.slice(0, 90))}»</small>` : ""}</div></div>`).join("") : "";
   if (!rows.length)
-    return h6("Since the last reply") + empty("The last reply didn't change anything the Almanac tracks.");
-  return h6("Since the last reply", `${rows.length} change${rows.length === 1 ? "" : "s"}`) + rows.map((r, i) => {
+    return check + h6("Since the last reply") + empty("The last reply didn't change anything the Almanac tracks.");
+  return check + h6("Since the last reply", `${rows.length} change${rows.length === 1 ? "" : "s"}`) + rows.map((r, i) => {
     const delta = r.bond ? `<span class="alm-hudc__d ${r.bond.delta > 0 ? "up" : "dn"}">${r.bond.delta > 0 ? "▲ +" : "▼ "}${r.bond.delta}</span>` : r.tone === "due" ? `<span class="alm-hudc__d due">due</span>` : "";
     const body = r.bond ? `<b>${escapeHtml(r.text)}</b>${track(r.bond.to, r.bond.from, r.bond.color, r.bond.lo)}${r.sub ? `<small>${escapeHtml(r.sub)}</small>` : ""}` : `<span>${escapeHtml(r.text)}</span>${r.sub ? `<small>${escapeHtml(r.sub)}</small>` : ""}`;
     return `<div class="alm-hudc__row" style="--i:${i}"><span class="alm-hudc__ic">${escapeHtml(r.icon)}</span><div>${body}</div>${delta}</div>`;

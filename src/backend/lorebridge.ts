@@ -81,6 +81,7 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
       state.count = entries.length;
       state.kinds = {};
       state.pinned = [];
+      state.playbooks = [];
       for (const e of entries) {
         if (e.disabled) continue;
         entryCount++;
@@ -90,6 +91,7 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
         state.entryHashes[e.id] = h;
         state.kinds[c.kind] = (state.kinds[c.kind] ?? 0) + 1;
         if (c.pinned) state.pinned.push(e.id);
+        if (c.kind === "playbook") state.playbooks.push(e.id);
       }
     }
     for (const id of Object.keys(meta.lore.books)) if (!liveBooks.has(id)) delete meta.lore.books[id];
@@ -113,12 +115,15 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
     // Seed overlays (never over locked user edits, never over story-derived fields)
     const seeded = seedOverlays(classified, { userName: L.names.user });
     const liveEntryIds = new Set(classified.map((c) => c.entryId));
+    // An entry now read under a different record (a depth scene once filed as a custom, now a playbook): drop the old reading.
+    const seededFor = new Map(Object.values(seeded).map((o) => [o.provenance?.loreEntryId, o.id]));
     // Entries now read as instructions, or read exactly (Weaver rules and re-anchors), whose older
     // readings are stale: an earlier scan or the model filed them as story texture or a person "Weaver".
     const rules = new Set(classified.filter((c) => c.kind === "directive" || c.kind === "meta" || c.pinned).map((c) => c.entryId));
     for (const [id, ov] of Object.entries(files.codex.overlays)) {
       if (ov.provenance?.source !== "lore" || !ov.provenance.loreEntryId || ov.locked || seeded[id]) continue;
       if (!liveEntryIds.has(ov.provenance.loreEntryId) || rules.has(ov.provenance.loreEntryId)) delete files.codex.overlays[id];
+      else if (seededFor.has(ov.provenance.loreEntryId) && seededFor.get(ov.provenance.loreEntryId) !== id && ov.standalone) delete files.codex.overlays[id];
     }
     for (const [id, ov] of Object.entries(seeded)) {
       const cur = files.codex.overlays[id];
@@ -129,7 +134,8 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
         cur.body = { ...(ov.body ?? {}), ...(cur.body ?? {}) };
         continue;
       }
-      files.codex.overlays[id] = { ...ov, keys: cur?.keys, userKeys: cur?.userKeys };
+      // A playbook already played keeps its status across rescans.
+      files.codex.overlays[id] = { ...ov, keys: ov.keys ?? cur?.keys, userKeys: cur?.userKeys, ...(ov.kind === "playbook" && cur?.status ? { status: cur.status } : {}) };
     }
     meta.lore.review = classified.filter((c) => c.confidence < 0.5).map((c) => ({ entryId: c.entryId, bookId: c.bookId, title: c.name, kind: c.kind, confidence: c.confidence })).slice(0, 200);
     meta.lore.lastScan = Date.now();

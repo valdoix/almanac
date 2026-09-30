@@ -28,6 +28,8 @@ export interface ChronicleUnit {
   stale?: boolean;
   /** The summary detail setting it was written at. */
   detail?: string;
+  /** Running bits the summary listed (jokes, pet names, keepsakes), kept for the note's callbacks. */
+  bits?: string[];
 }
 
 export interface ChronicleStore {
@@ -184,6 +186,7 @@ export function makeUnit(job: ChronicleJob, text: string, path: PathMessage[], s
   const firstAbs = sceneStarts.find((s) => s.startAbs != null)?.startAbs;
   const lastAbs = [...sceneStarts].reverse().find((s) => s.startAbs != null)?.startAbs;
   const titleLine = /^\s*(?:title|#)\s*:?\s*(.+)$/im.exec(text)?.[1]?.trim();
+  const bits = runningBits(text);
   return {
     id: uid(job.level[0]),
     level: job.level,
@@ -199,7 +202,30 @@ export function makeUnit(job: ChronicleJob, text: string, path: PathMessage[], s
     place: sceneStarts[0]?.place,
     children: job.children.map((c) => c.id),
     createdAt: Date.now(),
+    ...(bits.length ? { bits } : {}),
   };
+}
+
+/** The "Running bits:" line of a summary, as single items. */
+export function runningBits(text: string): string[] {
+  const line = /^\s*Running bits\s*:\s*(.+)$/im.exec(text)?.[1] ?? "";
+  if (/^\s*(none|n\/a|—|-)\s*\.?\s*$/i.test(line)) return [];
+  return line.split(/\s+·\s+|\s*;\s*/).map((x) => x.trim().replace(/\.$/, "")).filter((x) => x.length >= 3 && x.length <= 120).slice(0, 12);
+}
+
+/** Running bits across the chronicle, newest first, each once. */
+export function chronicleBits(store: ChronicleStore): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of [...store.units].filter((x) => !x.stale).sort((a, b) => b.endIdx - a.endIdx)) {
+    for (const b of u.bits ?? []) {
+      const k = b.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").slice(0, 40);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(b);
+    }
+  }
+  return out;
 }
 
 function cap(s: string) {

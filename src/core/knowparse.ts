@@ -428,6 +428,8 @@ export interface SecretArgs {
   truth: KnowTruth;
   keepers: string[];
   from: string[];
+  /** Words the page must not use until it comes out: `never say: Heaven`. */
+  unsaid?: string[];
 }
 
 const names = (s: string) => splitTop(s, /\s*,\s*|\s+and\s+|\s*&\s*/g).map(clean).filter(Boolean);
@@ -449,7 +451,13 @@ export function parseSecretRest(subject: string, rest: string): SecretArgs | nul
   const keepers: string[] = named ? [named] : [];
   const from: string[] = [];
   let truth: KnowTruth = "true";
+  const unsaid: string[] = [];
   for (const bit of splitTop(meta, /\s*[·;]\s*/g)) {
+    const ns = /^(?:never\s+(?:say|name|write|use)|don['’]?t\s+(?:say|name|write)|unsaid|off[- ]?page)\s*:?\s*(.+)$/i.exec(bit);
+    if (ns) {
+      unsaid.push(...ns[1].split(/\s*(?:,|\bor\b|\/)\s*/).map((w) => w.replace(/^["“'‘]|["”'’]$/g, "").trim()).filter((w) => w.length >= 2 && w.length <= 40));
+      continue;
+    }
     if (TRUTH_WORD.test(bit)) {
       truth = normTruth(bit);
       continue;
@@ -476,7 +484,7 @@ export function parseSecretRest(subject: string, rest: string): SecretArgs | nul
       from.push(...names(kf[2]));
     }
   }
-  return { statement: r.item.statement, key, truth, keepers, from };
+  return { statement: r.item.statement, key, truth, keepers, from, ...(unsaid.length ? { unsaid } : {}) };
 }
 
 /** `unaware Name: thing · thing` → the things (a #key names a tracked fact). */
