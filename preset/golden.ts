@@ -43,7 +43,7 @@ function ledgerProblems(reply: string): string[] {
 
 const prose = (reply: string) => reply.replace(/<(ledger|plan|unspoken)>[\s\S]*?<\/\1>/gi, "");
 const speechOf = (reply: string, name: string) =>
-  [...reply.matchAll(new RegExp(String.raw`\[spk=${name}(?:#\d+)?(?:\|[a-z]+)?\]([\s\S]*?)(?:\[\/spk\]|$)`, "gi"))].map((m) => m[1]).join(" ");
+  [...reply.matchAll(new RegExp(String.raw`\[spk=${name}(?:#\d+)?(?:\|[^\]\n]*)?\]([\s\S]*?)(?:\[\/spk\]|$)`, "gi"))].map((m) => m[1]).join(" ");
 
 export const GOLDEN: Golden[] = [
   {

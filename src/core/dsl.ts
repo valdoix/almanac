@@ -886,7 +886,7 @@ export function parseThoughts(text: string): { who: string; slot?: number; cue?:
 /** Thoughts written inline in the prose (inner voice "prose"): `[thk=Name#N]the thought[/thk]`, ending like the display regex does. */
 export function parseInlineThoughts(text: string): { who: string; slot?: number; text: string; kind: "inline" }[] {
   const out: { who: string; slot?: number; text: string; kind: "inline" }[] = [];
-  const re = /\[thk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*[a-z]+)?\]([\s\S]*?)(?:\[\/thk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)/gi;
+  const re = /\[thk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*[a-z]+[^\]\n]*)?\]([\s\S]*?)(?:\[\/thk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     const body = m[3].replace(/\[\/?(?:spk|txt)[^\]]*\]/g, "").trim();

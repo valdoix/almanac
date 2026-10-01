@@ -145,6 +145,19 @@ describe("emphasis inside speech", () => {
   });
 });
 
+describe("speech marks with a stage note", () => {
+  test("[spk=Buffy#1|muffled, into his chest] still becomes a voice card, toned by its first word", async () => {
+    const { REGEX } = await import("../preset/src/regex");
+    const ungate = (f: string) => f.replace(/^\{\{if::[\s\S]*?\}\}\{\{else\}\}\(\?!\)\{\{\/if\}\}/, "");
+    const line = `[spk=Buffy#1|muffled, into his chest]"Don't let go."[/spk]`;
+    for (const id of ["alm-show-speech-block", "alm-show-speech-chip", "alm-show-speech-tint"]) {
+      const r = REGEX.find((x) => x.id === id)!;
+      const m = new RegExp(ungate(r.find), r.flags ?? "g").exec(line);
+      expect(m?.slice(1, 6).filter(Boolean)).toContain("muffled");
+    }
+  });
+});
+
 describe("meters and summaries", () => {
   test("the note names meters in words, never 'fatigue 4'", async () => {
     const { meterWord } = await import("../src/core/note");

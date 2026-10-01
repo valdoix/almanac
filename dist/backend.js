@@ -2225,7 +2225,7 @@ function parseThoughts(text) {
 }
 function parseInlineThoughts(text) {
   const out = [];
-  const re = /\[thk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*[a-z]+)?\]([\s\S]*?)(?:\[\/thk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)/gi;
+  const re = /\[thk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*[a-z]+[^\]\n]*)?\]([\s\S]*?)(?:\[\/thk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)/gi;
   let m;
   while (m = re.exec(text)) {
     const body = m[3].replace(/\[\/?(?:spk|txt)[^\]]*\]/g, "").trim();
@@ -2402,7 +2402,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.12.3";
+var VERSION = "1.12.4";
 
 // src/core/facts.ts
 var STOP2 = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));

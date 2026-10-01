@@ -93,7 +93,8 @@ const LABEL_FIXES: RegexDef[] = [
 ];
 
 // Speaker mark: [spk=Name#N|tone]"…"[/spk]  (closing tag optional up to the next mark/blank line)
-const SPK = R`\[spk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*([a-z]+))?\]`;
+// A tone can carry a stage note ("|muffled, into his chest"): its first word is the tone, the rest is dropped.
+const SPK = R`\[spk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*([a-z]+)[^\]\n]*)?\]`;
 const SPK_BODY = R`([\s\S]*?)(?:\[\/spk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)`;
 const SPK_BODY_LINE = R`([^\n]*?)(?:\[\/spk\]|(?=\[(?:spk|thk)=)|(?=\n)|$)`;
 
@@ -156,7 +157,7 @@ export const REGEX: RegexDef[] = [
   },
   {
     id: "alm-spk-prefix", name: "Speaker tags · drop a duplicate name label", layer: "response", target: ["response"], order: 22,
-    find: R`(^|\n)[ \t]*(?:\*\*|__)?([^\n\[\]*_:]{1,60}?)(?:\*\*|__)?[ \t]*[:—–-][ \t]*(?=\[spk=\2(?:#\d{1,2})?(?:\|[a-z]+)?\])`, rep: "$1",
+    find: R`(^|\n)[ \t]*(?:\*\*|__)?([^\n\[\]*_:]{1,60}?)(?:\*\*|__)?[ \t]*[:—–-][ \t]*(?=\[spk=\2(?:#\d{1,2})?(?:\|[^\]\n]*)?\])`, rep: "$1",
   },
 
   // Prompt: what never returns, and what thins out with depth
@@ -300,7 +301,7 @@ export const REGEX: RegexDef[] = [
   },
   {
     id: "alm-show-thought", name: "Inline thoughts", layer: "display", target: ["display"], order: 66, macros: "raw",
-    find: R`\[thk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*([a-z]+))?\]([\s\S]*?)(?:\[\/thk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)`,
+    find: R`\[thk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*([a-z]+)[^\]\n]*)?\]([\s\S]*?)(?:\[\/thk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)`,
     rep: `<span class="alm-thk alm-v" data-spk="$1" style="--c:${pal("$2")};display:block;width:fit-content;max-width:88%;margin:12px 0 16px 40px;padding:9px 18px 11px;border-radius:26px;border:1.5px dashed color-mix(in oklab,${pal("$2")} 45%,transparent);background:color-mix(in oklab,${pal("$2")} 6%,transparent);font:500 1.12em/1.35 'Caveat','Segoe Print','Bradley Hand',cursive;color:color-mix(in oklab,${pal("$2")} 70%,currentColor)"><span class="alm-thk__lab" style="display:block;font:500 9.5px/1.6 ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:${pal("$2")}">$1 · thinking</span>$4</span>`,
   },
   {
