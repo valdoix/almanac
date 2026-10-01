@@ -5,7 +5,8 @@ import { describe, has, host, log, setDebug, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings, save, saveSettings } from "./store";
 import { buildView, pushState } from "./view";
-import { addUserOps, onMutation, rebuild, removeUserOps, repair, runChronicle, runSimulator, scheduleWeather, syncHidden } from "./ingest";
+import { addUserOps, onMutation, rebuild, removeUserOps, repair, runChronicle, scheduleWeather, syncHidden } from "./ingest";
+import { elsewhereAction, runElsewhere } from "./elsewhere";
 import { classifyReview, scanLore } from "./lorebridge";
 import { syncMirror } from "./mirror";
 import { bookHealth, creatorExport, creatorGenerate, creatorPlan, creatorReport, creatorSimulate, creatorWrite, listBooks } from "./creator";
@@ -336,9 +337,38 @@ export function registerBridge() {
           await scheduleWeather(m.chatId, m.spec, userId);
           return;
         case "simulate":
-          await runSimulator(m.chatId, userId, true).catch((err) => toast(userId, "error", `Off-screen simulator: ${describe(err)}`));
+          await runElsewhere(m.chatId, userId, { force: true }).catch((err) => toast(userId, "error", `Elsewhere: ${describe(err)}`));
           pushState(m.chatId, userId);
           return;
+        case "elsewhere": {
+          // The player's controls on the Elsewhere page.
+          if (m.action === "person") {
+            const files = await loadChat(m.chatId, userId);
+            const cfg = files.meta.config.elsewhere ?? {};
+            const people = { ...(cfg.people ?? {}) };
+            const k = String(m.name ?? "").toLowerCase();
+            if (!k) return;
+            const cur = { ...(people[k] ?? {}) } as Record<string, unknown>;
+            for (const f of ["out", "wake", "offPage"]) if (f in (m.patch ?? {})) cur[f] = !!m.patch[f] || undefined;
+            if ("standing" in (m.patch ?? {})) cur.standing = m.patch.standing || undefined;
+            if ("where" in (m.patch ?? {})) cur.where = String(m.patch.where ?? "").trim() || undefined;
+            people[k] = cur;
+            await applyChatConfig(m.chatId, { elsewhere: { ...cfg, people } }, userId);
+            onMutation(m.chatId, userId);
+            return;
+          }
+          if (m.action === "mode") {
+            const files = await loadChat(m.chatId, userId);
+            const mode = ["off", "quiet", "living", "restless"].includes(m.value) ? m.value : undefined;
+            await applyChatConfig(m.chatId, { elsewhere: { ...(files.meta.config.elsewhere ?? {}), mode } }, userId);
+            pushState(m.chatId, userId);
+            return;
+          }
+          const err = await elsewhereAction(m.chatId, { action: m.action, id: m.id, name: m.name, premise: m.premise, want: m.want, fear: m.fear, decision: m.decision }, userId);
+          if (err) toast(userId, "warning", err);
+          onMutation(m.chatId, userId);
+          return;
+        }
         case "mirrorSync":
           await syncMirror(m.chatId, userId);
           toast(userId, "success", "Mirror book synced.");

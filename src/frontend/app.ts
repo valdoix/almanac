@@ -504,6 +504,59 @@ ${w.canon.length ? `<h4>Minted canon</h4><ul class="alm-list">${w.canon.map((c: 
 <div class="row" style="margin-top:10px"><button class="btn" data-act="simulate">⏭ Run the off-screen world now</button></div>`;
   }
 
+  tab_elsewhere(v: any): string {
+    const x = v.elsewhere;
+    if (!x) return `<div class="empty">Elsewhere starts after the next reply.</div>`;
+    const director = x.view !== "surprise";
+    const KIND: Record<string, string> = { pursuit: "Pursuit", scheme: "Scheme", rivalry: "Rivalry", courtship: "Courtship", rift: "Rift", debt: "Debt", secret: "Secret", decline: "Decline", investigation: "Investigation", threat: "Threat", return: "Return", duty: "Duty", life: "Life", loss: "Loss", world: "World" };
+    const ROUTE: Record<string, string> = { carrier: "🗣", signal: "☎", ambient: "📻", trace: "⌂", entrance: "🚪" };
+    const RES: Record<string, string> = { win: "win", cost: "cost", loss: "loss" };
+    const ring = (n: number, of: number, c: string) => `<div class="alm-clock__face"><div class="alm-ring" style="--n:${n};--of:${Math.max(1, of)};--rc:${c}"></div><b>${n}/${of}</b></div>`;
+    const modeBtn = (m: string, lab: string) => `<button class="btn${(x.chatMode ?? "") === m ? " primary" : ""}" data-act="ewMode" data-id="${m}">${lab}</button>`;
+    const head = `<div class="card flat"><div class="row"><span class="grow">The world off the page: <b>${e(x.mode)}</b>${x.chatMode ? " (this chat)" : " (from Settings)"}${x.town ? ` · ${e(x.town)}` : ""}</span>
+<button class="btn${director ? " primary" : ""}" data-act="ewView" data-id="director" title="Everything: subplots, dice, grounds">Director</button><button class="btn${director ? "" : " primary"}" data-act="ewView" data-id="surprise" title="Only what has reached your story">Surprise me</button></div>
+<div class="row" style="margin-top:6px"><small class="muted grow">This chat:</small>${modeBtn("", "as Settings")}${modeBtn("off", "off")}${modeBtn("quiet", "quiet")}${modeBtn("living", "living")}${modeBtn("restless", "restless")}</div>
+${x.ticks[0] ? `<p class="muted"><small>Last step: ${e(x.ticks[0].from)} → ${e(x.ticks[0].to)} (${x.ticks[0].hours} h) · ${x.ticks[0].beats} beat${x.ticks[0].beats === 1 ? "" : "s"} · ${x.ticks[0].seeds} new · ${x.ticks[0].hops} news · ${e(x.ticks[0].status)}${x.ticks[0].tokens ? ` · ${Math.round(x.ticks[0].tokens / 100) / 10}K tokens` : ""}</small></p>` : `<p class="muted"><small>Nothing has moved yet: the world steps forward when story time moves ${x.step} minutes or more.</small></p>`}
+<div class="row"><button class="btn" data-act="simulate">⏭ Move the world a step now</button></div></div>`;
+    if (!director) {
+      const reached = x.arrivals.filter((a: any) => a.status === "used");
+      return `${head}<h4>What has reached you</h4>${reached.length ? `<ul class="alm-list">${reached.map((a: any) => `<li>${ROUTE[a.kind] ?? "•"} ${e(a.text)} <small class="muted">${e(a.at)}</small></li>`).join("")}</ul>` : `<div class="empty">Nothing from off the page has reached the story yet.</div>`}
+<p class="muted"><small>${x.arcs.filter((a: any) => a.status === "running").length} subplots are moving where you can't see them. Switch to Director to look.</small></p>`;
+    }
+    const fates = x.arcs.filter((a: any) => a.status === "fate");
+    const arcCard = (a: any) => {
+      const live = a.status === "running" || a.status === "held";
+      const editing = this.editing === `ew:${a.id}`;
+      return `<div class="rec"><div class="hd">${ring(a.clock.cur, a.clock.max, a.kind === "threat" ? "var(--alm-danger)" : "var(--alm-accent)")}<b class="grow">${e(a.lead)} · ${KIND[a.kind] ?? e(a.kind)}</b><span class="pill">${e(a.status === "running" ? a.stage : a.status)}</span><span class="pill" title="Who could learn of it">${e(a.secrecy)}</span>${a.crossed ? `<span class="pill" title="It has reached the story">crossed</span>` : ""}${a.by === "player" ? `<span class="pill">yours</span>` : ""}</div>
+<div class="muted">${e(a.premise)}</div>
+<div class="alm-cc__row"><b>wants</b>${e(a.want)}</div><div class="alm-cc__row"><b>fears</b>${e(a.fear)}</div>${a.cast.length ? `<div class="alm-cc__row"><b>with</b>${e(a.cast.join(", "))}</div>` : ""}
+${a.beats.length ? `<ul class="alm-list">${a.beats.map((b: any) => `<li><small class="muted">${e(b.at)} · ${b.roll[0]}+${b.roll[1]}${b.mod ? (b.mod > 0 ? "+" : "") + b.mod : ""} ${RES[b.result] ?? e(b.result)}${b.twist ? ` · twist` : ""}${b.told === "template" ? " · engine's words" : ""}</small><br>${e(b.text)}</li>`).join("")}</ul>` : ""}
+${a.reaches.length ? `<div class="alm-cc__row"><b>reaches you</b>${a.reaches.map((r: any) => `${ROUTE[r.kind] ?? ""} ${e(r.text)}${r.at ? ` <small class="muted">(${e(r.at)})</small>` : ""}`).join("<br>")}</div>` : ""}
+${a.ending ? `<div class="alm-cc__row"><b>ended</b>${e(a.ending.text)} <small class="muted">${e(a.ending.at)}</small></div>` : ""}${a.note ? `<div class="alm-cc__row"><b>note</b>${e(a.note)}</div>` : ""}
+<div class="muted"><small>grounds: ${a.grounds.map((g: any) => e(g.name)).join(" · ")}</small></div>
+${editing ? `<label class="f">Premise<input type="text" id="almEwPremise" value="${e(a.premise)}"></label><label class="f">Wants<input type="text" id="almEwWant" value="${e(a.want)}"></label><label class="f">Fears<input type="text" id="almEwFear" value="${e(a.fear)}"></label><div class="row"><button class="btn primary" data-act="ewSave" data-id="${e(a.id)}">Save</button><button class="btn" data-act="cancelEdit">Cancel</button></div>`
+  : live ? `<div class="row">${a.status === "held" ? `<button class="btn" data-act="ewArc" data-id="${e(a.id)}" data-what="resume">resume</button>` : `<button class="btn" data-act="ewArc" data-id="${e(a.id)}" data-what="hold" title="Freeze it">hold</button><button class="btn" data-act="ewArc" data-id="${e(a.id)}" data-what="nudge" title="Its next beat sooner">nudge</button><button class="btn" data-act="ewArc" data-id="${e(a.id)}" data-what="bring" title="Offer it to the next turn">bring in</button>`}<button class="btn" data-act="edit" data-id="ew:${e(a.id)}">edit</button><button class="btn danger" data-act="ewArc" data-id="${e(a.id)}" data-what="drop">drop</button></div>` : ""}</div>`;
+    };
+    const live = x.arcs.filter((a: any) => a.status === "running" || a.status === "held");
+    const done = x.arcs.filter((a: any) => a.status === "resolved" || a.status === "dropped");
+    const grp = (f: (p: any) => boolean) => x.people.filter(f);
+    const person = (p: any) => `<span class="pill" title="${e(`${p.ring} · ${p.standing}${p.where ? ` · ${p.where}` : ""} · ${p.reach}`)}">${e(p.name)}${p.arc ? " ✦" : ""}${p.flags.out ? " (out)" : ""}${p.flags.wake ? " (awake)" : ""} <a href="#" data-act="ewPerson" data-name="${e(p.name)}" data-what="${p.flags.out ? "in" : "out"}" title="${p.flags.out ? "Back in the simulation" : "Leave them out of it"}">${p.flags.out ? "＋" : "×"}</a>${!p.flags.out && !p.awake ? ` <a href="#" data-act="ewPerson" data-name="${e(p.name)}" data-what="wake" title="Wake them next step">☀</a>` : ""}</span>`;
+    const can = (p: any) => !["dead", "changed", "companion"].includes(p.standing);
+    return `${head}
+${fates.length ? `<h4>Waiting on you</h4><p class="muted">An ending that can't be undone. Accept it, soften it, or keep it for a scene on the page.</p>${fates.map((a: any) => `<div class="rec alm-warnbox"><b>${e(a.lead)} · ${KIND[a.kind] ?? e(a.kind)}</b><div>${e(a.fate?.text ?? a.fear)}</div><div class="row"><button class="btn primary" data-act="ewFate" data-id="${e(a.id)}" data-what="accept">Accept</button><button class="btn" data-act="ewFate" data-id="${e(a.id)}" data-what="soften">Soften</button><button class="btn" data-act="ewFate" data-id="${e(a.id)}" data-what="page">Keep it for the page</button></div></div>`).join("")}` : ""}
+<h4>Subplots</h4>${live.length ? `<div class="list">${live.map(arcCard).join("")}</div>` : `<div class="empty">No subplots yet. They begin when story time moves, from threads, debts, secrets, the lorebooks and what drives people.</div>`}
+<h4>Give someone a story</h4><div class="card flat"><div class="row"><select id="almEwWho">${x.people.filter((p: any) => can(p) && p.ring !== "onstage").map((p: any) => `<option>${e(p.name)}</option>`).join("")}</select><input type="text" id="almEwText" class="grow" placeholder="Spike wants the chip out and is asking the wrong people"></div><div class="row"><span class="grow muted"><small>Your words stand; the engine moves it with the same dice.</small></span><button class="btn" data-act="ewAuthor">Start it</button></div></div>
+<h4>In the wings</h4><div class="card flat">
+<div><small class="muted">awake</small> ${grp((p: any) => p.awake).map(person).join(" ") || "—"}</div>
+<div><small class="muted">on the page</small> ${grp((p: any) => p.ring === "onstage").map((p: any) => `<span class="pill">${e(p.name)}</span>`).join(" ") || "—"}</div>
+<div><small class="muted">asleep</small> ${grp((p: any) => !p.awake && p.ring !== "onstage" && can(p)).map(person).join(" ") || "—"}</div>
+<div><small class="muted">can't act</small> ${grp((p: any) => !can(p)).map((p: any) => `<span class="pill">${e(p.name)} · ${e(p.standing)}</span>`).join(" ") || "—"}</div>
+<p class="muted"><small>✦ has a subplot. Hover a name for where they are; × leaves someone out of it, ☀ wakes them for the next step.</small></p></div>
+${x.arrivals.length ? `<h4>On the way, and arrived</h4><ul class="alm-list">${x.arrivals.map((a: any) => `<li>${ROUTE[a.kind] ?? "•"} <small class="muted">${e(a.status)}${a.at ? ` · ${e(a.at)}` : ""}${a.carrier ? ` · via ${e(a.carrier)}` : ""}${a.why ? ` · ${e(a.why)}` : ""}</small><br>${e(a.text)}</li>`).join("")}</ul>` : ""}
+${done.length ? `<details><summary class="muted">Ended (${done.length})</summary><div class="list">${done.map(arcCard).join("")}</div></details>` : ""}
+${x.ticks.length ? `<details><summary class="muted">The engine's log</summary>${x.ticks.map((t: any) => `<div class="rec"><b>${e(t.from)} → ${e(t.to)}</b> <small class="muted">${e(t.status)}${t.rejected.length ? ` · ${t.rejected.length} told by the engine instead` : ""}</small><ul class="alm-list">${t.log.map((l: string) => `<li><small>${e(l)}</small></li>`).join("")}${t.rejected.map((l: string) => `<li><small class="muted">kept to the engine's words: ${e(l)}</small></li>`).join("")}</ul></div>`).join("")}</details>` : ""}`;
+  }
+
   tab_lore(v: any): string {
     const books = Object.entries(v.lore.books ?? {});
     return `<p class="muted">The Lore Bridge reads the character, persona, chat and global lorebooks into the Codex. Your books are never edited unless you allow it.</p>
@@ -572,7 +625,7 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
 <h3>Recall</h3><div class="card flat"><label class="f">Note and recall budget (tokens)${num("recallBudget", 400, 20000)}</label><label class="f">Recall placement${sel("recallPlacement", [["before_history", "before chat history"], ["depth4", "4 messages from the end"]])}</label>${chk("keyHeat", "Demote keys that fire without being used")}<label class="f">Max keys per record${num("maxKeys", 4, 24)}</label><label class="f">Words never used as keys <small class="muted">— comma-separated</small><input type="text" data-list-setting="stopList" value="${e((s.stopList ?? []).join(", "))}" placeholder="house, door, tea"></label></div>
 <h3>Storage (hybrid)</h3><div class="card flat"><p class="muted">The extension's storage is the source of truth (branch-safe, rebuildable). The mirror lorebook is a readable, editable projection attached to this chat only.</p><label class="f">Mirror lorebook${sel("mirror", [["off", "off"], ["summaries", "summaries"], ["full", "full records"]])}</label>${chk("mirrorVectorize", "Vectorise mirror entries (semantic recall; needs an embedding provider)")}</div>
 <h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><p class="muted">Your lorebooks are only read, never written to.</p></div>
-<h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "Westeros · Roshar · Harptos · Shire Reckoning · or months: Name (30), …; weekdays: …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 10000)}</label><label class="f">Simulator connection${conn("simConnection", "your default connection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
+<h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "Westeros · Roshar · Harptos · Shire Reckoning · or months: Name (30), …; weekdays: …")}</label><label class="f">Elsewhere: the world off the page${sel("elsewhere", [["off", "off"], ["quiet", "quiet: a little, mostly on time jumps"], ["living", "living: subplots move, one crossing a scene"], ["restless", "restless: more subplots, more crossings"]])}</label><label class="f">Telling${sel("elsewhereTelling", [["model", "the model tells each step (one quiet call)"], ["engine", "the engine's own words (no model calls)"]])}</label><label class="f">Canon gravity${sel("canonGravity", [["light", "light: a lore forecast may ground a subplot"], ["strong", "strong: forecasts run toward canon unless the story diverged"], ["off", "off: only the chat and the lore"]])}</label><label class="f">Irreversible endings off the page${sel("fates", [["ask", "ask me first"], ["page", "only on the page"], ["allow", "allow"]])}</label><label class="f">Step (minutes of story time)${num("simStep", 30, 10000)}</label><label class="f">Elsewhere connection${conn("simConnection", "your default connection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
 <h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection${conn("sidecarConnection", "your default connection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label></div>
 <p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${e(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ...SKIN_LIST])}</label><label class="f">Light or dark${sel("skinMode", [["auto", "Auto (follow Lumiverse)"], ["light", "Light"], ["dark", "Dark"]])}</label>${this.skinColors(v)}${chk("fonts", "Load the skins' web fonts from Google Fonts (your browser contacts Google)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${e(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
   }
@@ -854,6 +907,24 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
       case "loreClassify": this.send({ type: "lore", action: "classify" }); break;
       case "mirrorSync": this.send({ type: "mirrorSync" }); break;
       case "simulate": this.send({ type: "simulate" }); break;
+      case "ewView": this.send({ type: "settings", patch: { elsewhereView: id === "surprise" ? "surprise" : "director" } }); if (this.view?.elsewhere) this.view.elsewhere.view = id; this.render(); break;
+      case "ewMode": this.send({ type: "elsewhere", action: "mode", value: id || null }); break;
+      case "ewArc": this.send({ type: "elsewhere", action: (t.closest("[data-what]") as HTMLElement | null)?.dataset.what, id }); break;
+      case "ewFate": this.send({ type: "elsewhere", action: "fate", id, decision: (t.closest("[data-what]") as HTMLElement | null)?.dataset.what }); break;
+      case "ewSave": this.send({ type: "elsewhere", action: "edit", id, premise: val("#almEwPremise"), want: val("#almEwWant"), fear: val("#almEwFear") }); this.editing = null; break;
+      case "ewAuthor": {
+        const who = (this.root.querySelector("#almEwWho") as HTMLSelectElement | null)?.value ?? "";
+        const text = val("#almEwText").trim();
+        if (who && text) this.send({ type: "elsewhere", action: "author", name: who, premise: text });
+        break;
+      }
+      case "ewPerson": {
+        ev.preventDefault();
+        const d = (t.closest("[data-what]") as HTMLElement | null)?.dataset;
+        const what = d?.what;
+        this.send({ type: "elsewhere", action: "person", name: d?.name, patch: what === "out" ? { out: true } : what === "in" ? { out: false } : { wake: true } });
+        break;
+      }
       case "scheduleWx": {
         const day = parseInt(val("#almWxDay"), 10);
         const hour = parseInt(val("#almWxHour"), 10);

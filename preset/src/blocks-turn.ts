@@ -95,7 +95,7 @@ SEAL — The player's verbs only: SAID / DID / ATTEMPTED / INTENDS / ASKED-OOC. 
 GNOSIS — Each fact this beat touches → who holds it and how, or UNKNOWN. What comes out this beat, and who is in earshot. The single most tempting leak right now, and how to avoid it.
 MINDS — Spotlight: want · fear · tactic · named emotion (VAD) · mask vs feeling · least-used facet · what they misread · what they'd do without {{user}}. Periphery: one line each.
 WEB — An exchange between others that changes information, leverage, a bond or a plan — or none. Bond deltas (who → whom, axis, ±, cause).
-WORLD — Ambient pressure or none · consequence due · off-screen arrival and its route{{if::{{getvar::alm_linked}}}} (only what [ARRIVED] says){{/if}} · faction clock tick?
+WORLD — Ambient pressure or none · consequence due · off-screen arrival and its route{{if::{{getvar::alm_linked}}}} (only what [ELSEWHERE] says; an offered entrance is yours to take or leave){{/if}} · faction clock tick?
 MOVE — Three candidates: (a) the obvious, (b) the one only this cast would choose, (c) the sideways consequence. Gate each by Motive, Knowledge, Access, Means, Time. What the lead genre ({{getvar::alm_lead}}) needs now. Choose one{{if::{{eq::{{getvar::alm_route}}::variant}}}} — never the rejected take's{{/if}}. The pressure the reply ends on.
 PREMORTEM — Grade the last reply A–F in three words. The likeliest way THIS reply fails (voicing {{user}}, a leak, an echo, a softened enemy, a spotlight hazard, a clock running backward) → the prevention.
 VOICE — POV and tense · length · dialogue density and speaker cap · a first line unlike the last reply's · the spotlight hazards.

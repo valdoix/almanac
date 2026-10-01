@@ -2,7 +2,8 @@
 
 import { VERSION } from "../core/version";
 import { voiceColor, speakerCss } from "../core/render";
-import { absMinutes, estTokens, fmtSpan, fmtTime, hhmm, partyName } from "../core/util";
+import { absMinutes, estTokens, fmtSpan, fmtTime, fromAbs, hhmm, partyName } from "../core/util";
+import { elsewhereView } from "./elsewhere";
 import { coverageMap, finestUnits, storySoFar } from "../core/chronicle";
 import { factKind, factsInPlay, isHere, isKnower, lackOf, lackText, stanceVerb, storyStamp } from "../core/facts";
 import type { WorldState } from "../core/types";
@@ -73,6 +74,8 @@ export interface UIView {
   hiddenTurns: number;
   /** The user's Lumiverse connection profiles, for the connection pickers in Settings (null when they couldn't be read). */
   connections: { id: string; name: string; model: string; isDefault: boolean }[] | null;
+  /** Elsewhere: the world off the page (subplots, the roster, arrivals, ticks). */
+  elsewhere: ReturnType<typeof elsewhereView>;
 }
 
 const AUTO_THEME: Record<string, string> = {
@@ -255,6 +258,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     corrections: corrections(files.side),
     hiddenTurns: files.chronicle.hidden.length,
     connections,
+    elsewhere: elsewhereView({ state: st, records: L.records, userName: L.names.user, meta, settings, fmt: (abs) => fmtTime(fromAbs(abs)) }),
   };
 }
 

@@ -233,7 +233,7 @@ describe("settings and chat setup survive a restart or update", () => {
   test("a read before any user is known caches nothing and overwrites nothing", async () => {
     const { loadSettings, saveSettings, loadChat, forget } = await import("../src/backend/store");
     const { DEFAULT_SETTINGS } = await import("../src/core/types");
-    files.set("settings.json", JSON.stringify({ ...DEFAULT_SETTINGS, recallBudget: 5000, theme: "candy", simulator: true }));
+    files.set("settings.json", JSON.stringify({ ...DEFAULT_SETTINGS, recallBudget: 5000, theme: "candy", simulator: true, elsewhere: undefined }));
     files.set("chats/boot-chat/meta.json", JSON.stringify({ version: 1, config: { genres: ["horror"], sessionZeroDone: true } }));
 
     // Boot: no user.
@@ -244,12 +244,14 @@ describe("settings and chat setup survive a restart or update", () => {
     const RESTARTED = "user-after-restart"; // nothing cached for them yet, as after an update
     const s = await loadSettings(RESTARTED);
     expect([s.recallBudget, s.theme, s.simulator]).toEqual([5000, "candy", true]);
+    // The old simulator switch carries over: on means a living world elsewhere.
+    expect(s.elsewhere).toBe("living");
     const chat = await loadChat("boot-chat", RESTARTED);
     expect([chat.meta.config.genres, chat.meta.config.sessionZeroDone]).toEqual([["horror"], true]);
 
     // Changing one setting keeps every other saved one.
     await saveSettings({ fanIn: 6 }, RESTARTED);
-    expect(JSON.parse(files.get("settings.json")!)).toMatchObject({ recallBudget: 5000, theme: "candy", simulator: true, fanIn: 6 });
+    expect(JSON.parse(files.get("settings.json")!)).toMatchObject({ recallBudget: 5000, theme: "candy", simulator: true, elsewhere: "living", fanIn: 6 });
     // A save that can't read the file refuses rather than writing defaults.
     await expect(saveSettings({ fanIn: 7 })).rejects.toThrow();
     expect(JSON.parse(files.get("settings.json")!).fanIn).toBe(6);
@@ -444,5 +446,40 @@ describe("release fixes against the host (1.13)", () => {
     } finally {
       Object.assign(spindle, saved);
     }
+  });
+});
+
+describe("Elsewhere against the host (1.14)", () => {
+  test("a step of the world off the page anchors its lines; a failed telling keeps the engine's words", async () => {
+    const EC = "elsewhere-chat";
+    files.set(`chats/${EC}/meta.json`, JSON.stringify({ version: 1, enabled: true, config: { genres: [], sessionZeroDone: true, colors: {} }, detected: {}, pressures: {}, heat: {}, injected: {}, lastInjected: [], feed: [], mirror: { entries: {} }, lore: { books: {}, review: [] }, arrivals: [], repaired: {} }));
+    const { runElsewhere } = await import("../src/backend/elsewhere");
+    const { loadChat, noteProblem } = await import("../src/backend/store");
+    const { ledgerFor } = await import("../src/backend/ledger");
+    const rec = await runElsewhere(EC, USER, { force: true });
+    expect(rec).not.toBeNull();
+    expect(rec!.id).toMatch(/^w\d+f1$/);
+    const f = await loadChat(EC, USER);
+    const anchored = Object.entries(f.side).find(([k]) => k.startsWith("@"));
+    if (rec!.beats + rec!.seeds + rec!.hops > 0) expect(anchored?.[1].some((s) => s.id === `ew:${rec!.id}` && s.source === "sim")).toBe(true);
+    // The tests' host has no model: the telling fails, and the beats stand in the engine's words.
+    await new Promise((r) => setTimeout(r, 50));
+    const after = (f.meta as any).elsewhere.ticks[rec!.id];
+    expect(["engine", "failed", "telling"]).toContain(after.status);
+    const st = (await ledgerFor(EC, USER).refresh()).state;
+    for (const a of Object.values(st.arcs ?? {})) expect(a.grounds.length).toBeGreaterThan(0);
+    void noteProblem;
+    // The page draws in both views from the real view.
+    const { buildView } = await import("../src/backend/view");
+    const view: any = await buildView(EC, USER);
+    expect(view.elsewhere.ticks[0].id).toBe(rec!.id);
+    const { AlmanacApp } = await import("../src/frontend/app");
+    const draw = (AlmanacApp.prototype as any).tab_elsewhere;
+    const director = draw.call({ editing: null }, view);
+    expect(director).toContain("In the wings");
+    expect(director).toContain("Move the world a step now");
+    const surprise = draw.call({ editing: null }, { ...view, elsewhere: { ...view.elsewhere, view: "surprise" } });
+    expect(surprise).toContain("What has reached you");
+    expect(surprise).not.toContain("In the wings");
   });
 });

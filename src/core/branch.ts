@@ -167,7 +167,8 @@ export class LedgerRuntime {
           base = { ...base, ops: [...kept.slice(0, cut), ...ops, ...kept.slice(cut)] };
         }
         const extras = sides.filter((s) => !s.replaces && !s.replacesOps?.length);
-        const extraOps = extras.flatMap((s) => s.ops);
+        // Each entry keeps its own source (a correction and the simulator can share an anchor).
+        const extraOps = extras.flatMap((s) => s.ops.map((o) => ({ ...o, src: s.source })));
         const src: EventSource = replacing ? replacing.source : "model";
         events.push(...folder.applyMessage(m.index, m.id, m.swipe, base, src, extraOps, extras[0]?.source ?? "user"));
       } else {
@@ -180,7 +181,7 @@ export class LedgerRuntime {
               dayOfDate: opts.dayOfDate,
             })
           : [];
-        const extraOps = [...said, ...sides.filter((s) => !s.player || !s.hash || s.hash === hash(m.content)).flatMap((s) => s.ops)];
+        const extraOps = [...said, ...sides.filter((s) => !s.player || !s.hash || s.hash === hash(m.content)).flatMap((s) => s.ops.map((o) => ({ ...o, src: s.source })))];
         // Player messages only contribute speaker marks, what was said aloud, and extension-authored ops.
         events.push(...folder.applyMessage(m.index, m.id, m.swipe, { ops: [], unknown: [], format: "none", truncated: false, speakers: parsed.speakers, speech: parsed.speech, fromUser: true }, "user", extraOps, sides[0]?.source ?? "user"));
       }

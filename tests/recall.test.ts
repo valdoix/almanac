@@ -180,7 +180,7 @@ describe("recall and note", () => {
     expect(note.text).toContain("[PRESENT] Mara (spotlight; by the fire; guarded V-1 A2 D+1");
     expect(note.text).toContain("Mara → Wren: a favour (due in 1 h 20 min)");
     expect(note.text).toContain("[KNOWLEDGE]");
-    expect(note.text).toContain("[ARRIVED] (none");
+    expect(note.text).toContain("[ELSEWHERE] (nothing from off the page");
     expect(tierGuess("I draw my sword", state)).toBe("pivotal");
   });
 });

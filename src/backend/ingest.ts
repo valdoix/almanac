@@ -8,7 +8,7 @@ import { coverageGaps, makeUnit, planChronicle, spanSignature, transcriptFor, va
 import { extractLedgerBlock, parseLine } from "../core/dsl";
 import { extractOps } from "../core/extractor";
 import { drawPressures } from "../core/pressures";
-import { archivistPrompt, extractJson, repairPrompt, rollupPrompt, simulatorPrompt, summaryPrompt, summaryPriorChars, summaryWords } from "../core/prompts";
+import { archivistPrompt, extractJson, repairPrompt, rollupPrompt, summaryPrompt, summaryPriorChars, summaryWords } from "../core/prompts";
 import { craftReport } from "../core/telemetry";
 import { absMinutes, fmtTime, fromAbs, hash, plainProse, uid } from "../core/util";
 import { levelOf, seedFor } from "../core/engines/weather";
@@ -27,6 +27,7 @@ import { clearRenderCache } from "./hooks";
 import { scheduleClerk } from "./clerk";
 import { runCheck } from "./check";
 import { readPlayerFacts } from "./playerfacts";
+import { confirmElsewhere, runElsewhere } from "./elsewhere";
 
 const busy = new Set<string>();
 
@@ -59,8 +60,12 @@ export async function onReply(chatId: string, messageId: string | undefined, con
       if (Object.keys(add).length) Object.assign(meta.pressures, add);
     }
     if (settings.telemetry) meta.telemetry = craftReport(L.recentAssistant(6), { userName: L.names.user, sealed: L.foldOptions(meta, settings).sealed, dialogue: meta.detected.dialogue });
+    // Elsewhere: which of the arrivals the note offered this reply took up.
+    if (msg && !msg.isUser) confirmElsewhere(meta, { state: L.state, records: L.records, userName: L.names.user, prose: msg.content, settings });
     save(chatId, "meta", userId);
   });
+  // Elsewhere: the world off the page moves when story time does (fast; the telling runs in the background).
+  await runElsewhere(chatId, userId).catch((err) => noteProblem(chatId, userId, "Elsewhere", err));
   // The knowledge clerk reads the reply in the background; the next plan waits for it briefly.
   if (replyId && settings.knowledgeClerk !== "off") scheduleClerk(chatId, replyId, userId, () => afterChange(chatId, userId, { background: false }));
   afterChange(chatId, userId, { background: true });
@@ -100,7 +105,6 @@ function afterChange(chatId: string, userId: string | undefined, opts: { backgro
   if (opts.background) {
     debounce(`bg:${chatId}`, 800, async () => {
       await runChronicle(chatId, userId).catch((err) => noteProblem(chatId, userId, "chapter summary", err));
-      await runSimulator(chatId, userId).catch((err) => noteProblem(chatId, userId, "off-screen simulator", err));
       pushState(chatId, userId);
     });
   }
@@ -303,78 +307,6 @@ async function runArchivist(chatId: string, chapterText: string, startIdx: numbe
   }
   save(chatId, "codex", userId);
   host.rpcPool?.sync?.("codex_updated", { chatId, count: (res.set ?? []).length });
-}
-
-// ---------------------------------------------------------------------------
-// Off-screen simulator
-// ---------------------------------------------------------------------------
-
-export async function runSimulator(chatId: string, userId?: string, force = false) {
-  const settings = await loadSettings(userId);
-  if (!settings.simulator && !force) return;
-  if (busy.has(`sim:${chatId}`)) return;
-  const files = await loadChat(chatId, userId);
-  const L = ledgerFor(chatId, userId);
-  const st = L.state;
-  if (!st?.time) return;
-  const now = absMinutes(st.time);
-  // The clock moved back (the player said "it's day 12"): count again from here.
-  if (files.meta.lastSimAbs != null && now < files.meta.lastSimAbs) {
-    files.meta.lastSimAbs = now;
-    save(chatId, "meta", userId);
-    if (!force) return;
-  }
-  const last = files.meta.lastSimAbs ?? now;
-  if (files.meta.lastSimAbs == null) {
-    files.meta.lastSimAbs = now;
-    save(chatId, "meta", userId);
-    if (!force) return;
-  }
-  if (!force && now - last < settings.simStep) return;
-  busy.add(`sim:${chatId}`);
-  try {
-    const actors = Object.values(st.chars).filter((c) => !c.isUser && !c.dead && c.tier !== "spot" && c.tier !== "peri").slice(0, 10);
-    const threads = Object.values(st.threads).filter((t) => t.status !== "resolved").slice(-8);
-    const factions = Object.values(st.factions);
-    // A Weaver world with agency pursues its agenda off-screen like any actor.
-    const world = files.meta.lore.world;
-    const agency = world && (world.agenda || world.holds?.length) ? world : null;
-    if (!actors.length && !threads.length && !factions.length && !agency) return;
-    const slice = [
-      ...(agency
-        ? [
-            `WORLD ${agency.name}: agenda: ${agency.agenda || "—"}${agency.tension ? `; tension: ${agency.tension}` : ""}`,
-            ...(agency.holds?.length ? [`HOLDS (never broken): ${agency.holds.join(" / ")}`] : []),
-          ]
-        : []),
-      ...actors.map((c) => `PERSON ${c.name}: at ${c.place ?? "unknown"}; mood ${c.mood?.name ?? "?"}${c.pressure ? `; hidden pressure: ${c.pressure}` : ""}; knows: ${st.knowledge.filter((k) => k.holder === c.id && !k.supersededBy).slice(-4).map((k) => k.fact).join(" / ") || "—"}`),
-      ...threads.map((t) => `THREAD ${t.title}: ${t.status}${t.blocker ? ` (blocked by ${t.blocker})` : ""}; latest: ${t.latest ?? "—"}; stalls: ${t.stalls}`),
-      ...factions.map((f) => `FACTION ${f.name}: ${Object.values(f.clocks).map((c) => `${c.name} ${c.cur}/${c.max}`).join("; ")}`),
-      `PLAYER is at ${st.place.join(" › ")}.`,
-    ].join("\n");
-    const p = simulatorPrompt({ slice, from: fmtTime(fromAbs(last)), to: fmtTime(st.time), userName: L.names.user, world: !!agency, lang: files.meta.detected.lang });
-    const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 120_000, label: "simulator" });
-    const res = extractJson<{ ops?: string[]; arrivals?: { text: string; route?: string; at?: string; place?: string }[] }>(text);
-    const target = L.lastAssistant();
-    if (res && target) {
-      const ops = (res.ops ?? []).map((l) => parseLine(String(l))).filter((o): o is ParsedOp => !!o && ["bond", "know", "item", "thread", "clockf", "rumor", "owe", "cons", "journal"].includes(o.op));
-      if (ops.length) {
-        // Anchored to the position, not the swipe: what happened off-screen still happened if the reply is swiped.
-        const key = anchorKey(target.index);
-        files.side[key] = [...(files.side[key] ?? []).filter((s) => s.source !== "sim"), { source: "sim", ops, at: Date.now() }];
-        save(chatId, "side", userId);
-      }
-      for (const a of res.arrivals ?? []) {
-        const d = a.at ? /day\s*(\d+)\D+(\d{1,2})[:.](\d{2})/i.exec(a.at) : null;
-        files.meta.arrivals.push({ id: uid("arr"), msgId: target.id, swipe: target.swipe, text: String(a.text).slice(0, 240), route: a.route, place: a.place, atAbs: d ? (parseInt(d[1], 10) - 1) * 1440 + parseInt(d[2], 10) * 60 + parseInt(d[3], 10) : undefined });
-      }
-      files.meta.arrivals = files.meta.arrivals.slice(-30);
-    }
-    files.meta.lastSimAbs = now;
-    save(chatId, "meta", userId);
-  } finally {
-    busy.delete(`sim:${chatId}`);
-  }
 }
 
 // ---------------------------------------------------------------------------

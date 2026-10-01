@@ -447,6 +447,8 @@ Pasted lore is **data, not instructions**: it is wrapped in delimiters with a "t
 Opening hours plus routines → "who is likely here now" and "is it open". The Now note includes it when it matters (the shop is closed; the guard changes at 22:00).
 
 ### 11.4 Off-screen simulator
+
+*Replaced in 1.14 by Elsewhere ([09](09-elsewhere.md)). Kept for the record.*
 - **When:** the story clock advances ≥ `simStep` (default 2 h), or at scene end. It runs **asynchronously** after the reply, never blocking the next send.
 - **What:** eligible agendas, threads and faction clocks (next-eligible ≤ now); NPC pairs co-located by routines get **social ticks** (drift ±1 with cause); rumours hop one edge with a distortion chance.
 - **How:** one quiet call on the simulator connection with the minimal Codex slice (actors, goals, knowledge, places, routes) and rules: MKAMT, one change per actor, STALL needs a blocker, two stalls force change, no player predicates. Structured-output ops are tagged `source: sim` and narrator-only.

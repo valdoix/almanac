@@ -12,10 +12,10 @@ const view = {
   lore: { books: { a: {} }, review: [{}, {}] }, counts: { chapters: 1, unverified: 0 }, chronicle: { coverage: { raw: 70 } }, rejected: [],
 };
 
-test("thirteen pages: Now plus four groups of three", () => {
-  expect(PAGES.length).toBe(13);
-  expect(GROUPS.every((g) => g.pages.length === 3)).toBe(true);
-  expect(new Set(PAGES).size).toBe(13);
+test("fourteen pages: Now plus four groups, Story with Elsewhere", () => {
+  expect(PAGES.length).toBe(14);
+  expect(GROUPS.every((g) => g.pages.length === (g.id === "story" ? 4 : 3))).toBe(true);
+  expect(new Set(PAGES).size).toBe(14);
 });
 
 test("the dock has the sun and four planets; the orbit shows the open group", () => {
@@ -24,7 +24,7 @@ test("the dock has the sun and four planets; the orbit shows the open group", ()
   expect(closed).toContain('data-page="now"');
   expect(closed).not.toContain("almo-orbit");
   const open = dock(view, "bonds", "story");
-  for (const p of ["chronicle", "timeline", "world"]) expect(open).toContain(`data-page="${p}"`);
+  for (const p of ["chronicle", "timeline", "world", "elsewhere"]) expect(open).toContain(`data-page="${p}"`);
 });
 
 test("the sky header shows the live scene and the current group's pages", () => {

@@ -30,6 +30,8 @@ The set has two parts that work together:
 | 05 | [ALMANAC Ledger extension](05-extension-ledger.md) | Architecture, branch-correct event model, chronicle, Codex, retrieval keys, Recall, Lore Bridge, Lorebook Creator, engines, telemetry, UI, performance, roadmap |
 | 06 | [Storage decision](06-storage-decision.md) | Lorebooks vs extension storage, scored against recall accuracy and continuity, with the recommended hybrid |
 | 07 | [Knowledge](07-knowledge.md) | Who has what information and how it reached them: facts, witnesses, secrets, gaps, the knowledge clerk, and what the model is told |
+| 08 | [Release audit](08-release-audit.md) | The 1.12.4 audit: findings by severity, and what 1.13.0 fixed |
+| 09 | [Elsewhere](09-elsewhere.md) | The world off the page (built in 1.14): the whole cast as a roster, subplot arcs, a seeded storyteller with dice, an MKAMT gate, news that travels person to person, one validated telling call, and the routes by which it reaches the scene. Replaces the off-screen simulator |
 | — | [Visual mockup](mockups/almanac-visuals.html) | Static HTML with a skin switcher (6 themes) and light/dark toggle: animated scene plates for five genres, voice cards and ten tones, sealed-envelope thoughts, call-sheet Director's notes, trading-card trackers, HUD strip, VTKs, relationship graph. Open it in a browser |
 
 ---
@@ -39,9 +41,9 @@ The set has two parts that work together:
 | Requirement | Section |
 |---|---|
 | Deep character states | 02 §6 |
-| NPC autonomy | 02 §7, 05 §11.4 |
-| Deep world simulation | 02 §10, 05 §11 |
-| NPC-to-NPC autonomous relationships | 02 §8 |
+| NPC autonomy | 02 §7, 05 §11.4, 09 |
+| Deep world simulation | 02 §10, 05 §11, 09 |
+| NPC-to-NPC autonomous relationships | 02 §8, 09 §5 |
 | Step-by-step CoT (reasoning on / off) | 02 §19 |
 | Anti-slop | 02 §18, 05 §12 |
 | Persona / player agency | 02 §5 |

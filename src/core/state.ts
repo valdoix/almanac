@@ -11,6 +11,7 @@ import { KNOW_OPS } from "./types";
 import { applyFactEdits, canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
 import { careIn, hasPart, isBareWound, opWordOf, parseLine, sameSpot } from "./dsl";
 import { mergeTraits } from "./traits";
+import { applyArcOp, applyWhereabouts } from "./elsewhere/fold";
 import type { KnowArgs } from "./knowparse";
 import { ALL_AXES, BIPOLAR_AXES, LADDER_NAMES } from "./types";
 import { absMinutes, addMinutes, clamp, fmtSpan, fromAbs, MIN_PER_DAY, slug, type StoryTime } from "./util";
@@ -362,18 +363,19 @@ export class Folder {
           ev.verdict = res.verdict;
           ev.reason = res.reason;
         }
-        if (res?.line && ev.verdict !== "rejected") delta.lines.push(res.line);
+        // What happens off the page (Elsewhere) isn't news in the reply's change list.
+        if (res?.line && ev.verdict !== "rejected" && src !== "sim") delta.lines.push(res.line);
       } catch (e) {
         ev.verdict = "rejected";
         ev.reason = `error: ${(e as Error).message}`;
       }
-      if (ev.verdict === "rejected") delta.rejected.push({ raw: op.raw, reason: ev.reason ?? "rejected" });
+      if (ev.verdict === "rejected" && src !== "sim") delta.rejected.push({ raw: op.raw, reason: ev.reason ?? "rejected" });
       else delta.count++;
       ev.at = st.time ? { ...st.time } : null;
       events.push(ev);
     };
     for (const op of ops) run(op, source);
-    for (const op of extra) run(op, extraSource);
+    for (const op of extra) run(op, op.src ?? extraSource);
     // Care named anywhere in the reply's ledger reaches the wound, whichever line came first.
     for (const { id, marks } of this.care) {
       const c = st.chars[id];
@@ -951,6 +953,11 @@ export class Folder {
       }
       case "thread": {
         const tid = `thread:${slug(op.subject!)}`;
+        // A restatement with nothing new ("no change overnight") moves nothing.
+        if (a.op === "note") {
+          if (st.threads[tid]) st.threads[tid].lastMsg = mi;
+          return { verdict: "accepted" };
+        }
         const t = st.threads[tid] ?? { id: tid, title: op.subject!, status: "open" as const, stalls: 0, history: [], lastMsg: mi };
         const isNew = !st.threads[tid];
         st.threads[tid] = t;
@@ -995,7 +1002,10 @@ export class Folder {
         const fid = `fac:${slug(op.subject!)}`;
         const f = st.factions[fid] ?? { id: fid, name: op.subject!, clocks: {} };
         st.factions[fid] = f;
-        const pk = slug(a.project);
+        // The same project under a looser name ("raid Sunnydale", "the raid"), or no name at all for a faction with one clock.
+        const existing = Object.entries(f.clocks);
+        const near = existing.find(([, c]) => overlap(normFact(c.name), normFact(a.project)) >= 0.5)?.[0];
+        const pk = f.clocks[slug(a.project)] ? slug(a.project) : near ?? (existing.length === 1 && (a.project === "project" || !normFact(a.project)) ? existing[0][0] : slug(a.project));
         const clk = f.clocks[pk] ?? { name: a.project, cur: 0, max: a.max ?? 6, history: [] };
         if (a.max) clk.max = a.max;
         clk.cur = clamp(a.cur != null ? a.cur : clk.cur + (a.inc ?? 1), 0, clk.max);
@@ -1151,6 +1161,11 @@ export class Folder {
         if (id) st.chars[id].pressure = a.text;
         return { verdict: "accepted" };
       }
+      // Elsewhere's lines carry no delta line: what happens off the page isn't news in the drawer.
+      case "arc":
+        return applyArcOp(st, op, mi) ? { verdict: "accepted" } : reject("unknown subplot");
+      case "whereabouts":
+        return applyWhereabouts(st, op, mi) ? { verdict: "accepted" } : reject("whereabouts without a place");
       default:
         return { verdict: "accepted" };
     }

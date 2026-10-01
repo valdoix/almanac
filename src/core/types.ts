@@ -6,7 +6,9 @@ export type OpName =
   | "canon" | "artifact" | "mode" | "status" | "gauge" | "clue" | "plant" | "payoff"
   | "deadline" | "title" | "season" | "reveal" | "secret" | "unaware" | "trait" | "motif"
   // extension-only ops (never written by the model)
-  | "forecast" | "pressure" | "diverge" | "entity" | "lock";
+  | "forecast" | "pressure" | "diverge" | "entity" | "lock"
+  // Elsewhere (the world off the page): written by the engine or the player's controls
+  | "arc" | "whereabouts";
 
 /** The ops that carry knowledge (the clerk replaces these for a message). */
 export const KNOW_OPS: OpName[] = ["know", "reveal", "secret", "unaware"];
@@ -16,6 +18,8 @@ export type EventSource = "model" | "repair" | "extractor" | "archivist" | "user
 /** One parsed ledger line, before validation. */
 export interface ParsedOp {
   op: OpName;
+  /** Who wrote it, when an anchored entry mixes sources (set while folding). */
+  src?: EventSource;
   /** Primary name as written (character, item, thread, faction…). */
   subject?: string;
   /** Secondary name (bond target, item receiver…). */
@@ -518,6 +522,10 @@ export interface WorldState {
   genreHits: Record<string, number>; // instrument -> last msg index
   msgCount: number;
   ledgerCount: number;
+  /** Elsewhere: the subplots running off the page (see core/elsewhere). */
+  arcs?: Record<string, ArcState>;
+  /** Elsewhere: where people off the page are (lower-case name → place). */
+  whereabouts?: Record<string, { name: string; place: string; since: number | null; msgIndex: number }>;
   unverified: number[]; // msg indexes whose ledger came from repair/extractor
 }
 
@@ -555,7 +563,18 @@ export interface Settings {
   latitude: string;
   calendar: string;
   simStep: number; // minutes
+  /** Legacy switch (before Elsewhere); read once to set `elsewhere`. */
   simulator: boolean;
+  /** Elsewhere: how lively the world off the page is. */
+  elsewhere: "off" | "quiet" | "living" | "restless";
+  /** Elsewhere: the model tells the beats, or the engine's own sentences do (no model calls). */
+  elsewhereTelling: "model" | "engine";
+  /** How much the source canon may pull: forecasts as grounds (light) or as a course (strong). */
+  canonGravity: "off" | "light" | "strong";
+  /** Irreversible outcomes off the page: only on the page, ask first, or allow. */
+  fates: "page" | "ask" | "allow";
+  /** The Elsewhere page shows everything (director) or only what has reached the story (surprise). */
+  elsewhereView: "director" | "surprise";
   simConnection: string;
   sidecarConnection: string;
   sidecarTimeout: number;
@@ -615,6 +634,11 @@ export const DEFAULT_SETTINGS: Settings = {
   calendar: "",
   simStep: 120,
   simulator: false,
+  elsewhere: "off",
+  elsewhereTelling: "model",
+  canonGravity: "light",
+  fates: "ask",
+  elsewhereView: "director",
   simConnection: "",
   sidecarConnection: "",
   sidecarTimeout: 20,
@@ -664,6 +688,8 @@ export interface ChatConfig {
   enabledOverride?: boolean;
   /** Story truths the player pinned, always in the note ("Jaime and Cersei are strictly family"). */
   truths?: string[];
+  /** Elsewhere, per chat: a mode of its own, and the player's word on people. */
+  elsewhere?: ElsewhereConfig;
 }
 
 export interface CastEdit {
@@ -692,4 +718,77 @@ export interface FactEdit {
   added?: number;
   /** Keep it off the page: words never to use, and how the story may allude to it. null: the player turned it off. */
   offPage?: { words: string[]; wording?: string } | null;
+}
+
+// ---------------------------------------------------------------------------
+// Elsewhere: the world off the page (design/09)
+// ---------------------------------------------------------------------------
+
+export type ArcKind =
+  | "pursuit" | "scheme" | "rivalry" | "courtship" | "rift" | "debt" | "secret" | "decline"
+  | "investigation" | "threat" | "return" | "duty" | "life" | "loss" | "world";
+export type ArcStage = "setup" | "rising" | "crisis" | "aftermath";
+export type BeatResult = "win" | "cost" | "loss";
+export type ArcStatus = "running" | "held" | "fate" | "resolved" | "dropped";
+
+export interface ArcBeat {
+  atAbs: number;
+  roll: [number, number];
+  mod: number;
+  result: BeatResult;
+  twist?: string;
+  text: string;
+  told: "model" | "template";
+  msgIndex: number;
+  tick?: string;
+  place?: string;
+}
+
+export interface ArcState {
+  id: string;
+  kind: ArcKind;
+  /** The lead's name (a person, a group, or "the world"). */
+  lead: string;
+  cast: string[];
+  premise: string;
+  want: string;
+  fear: string;
+  /** Record ids, #fact keys and thread ids it rests on: never empty. */
+  grounds: string[];
+  secrecy: "public" | "private" | "secret";
+  clock: { cur: number; max: number };
+  tally: { win: number; cost: number; loss: number };
+  heat: number;
+  stage: ArcStage;
+  beats: ArcBeat[];
+  /** Older beats, folded into a line. */
+  earlier?: string;
+  nextAbs: number;
+  status: ArcStatus;
+  /** It has reached the player's story (an entrance used, a carrier's news taken up). */
+  crossed?: boolean;
+  thread?: string;
+  by: "engine" | "player" | "lore";
+  /** The player's own words; the engine never rewrites them. */
+  locked?: boolean;
+  place?: string;
+  startedAbs: number;
+  startedMsg: number;
+  lastBeatAbs?: number;
+  /** The player asked for a crossing next turn. */
+  bring?: boolean;
+  /** A faction clock it moves (the Hellions' raid). */
+  faction?: { name: string; project: string };
+  /** An irreversible outcome waiting on the player, and their word on it. */
+  fate?: { text: string; decision?: "accept" | "soften" | "page" };
+  ending?: { result: string; text: string; atAbs: number };
+  note?: string;
+}
+
+export type Standing = "here" | "away" | "captive" | "changed" | "dead" | "companion" | "construct";
+
+export interface ElsewhereConfig {
+  mode?: Settings["elsewhere"];
+  /** The player's word on people, by lower-case name. */
+  people?: Record<string, { out?: boolean; wake?: boolean; offPage?: boolean; standing?: Standing; where?: string }>;
 }

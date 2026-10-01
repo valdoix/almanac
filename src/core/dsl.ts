@@ -44,6 +44,8 @@ const OP_ALIASES: Record<string, OpName> = {
   deadline: "deadline", countdown: "deadline",
   title: "title",
   season: "season",
+  arc: "arc", subplot: "arc",
+  whereabouts: "whereabouts",
 };
 
 /** Ops whose name sits before the colon: `mood Mara: …`. */
@@ -488,7 +490,16 @@ const PARSERS: Record<OpName, LineParser> = {
   thread(p, s, rest) {
     if (!s) return null;
     p.subject = s;
+    // The simulator's old shape: "open; latest: …; stalls: 0" (the state, restated), or "closed; latest: …".
+    rest = rest.replace(/;?\s*stalls?:\s*\d+\b[^;|]*$/i, "").trim();
+    const state = /^(open|opened|closed|resolved|stalled)\s*;\s*(?:latest:\s*)?([\s\S]*)$/i.exec(rest);
+    if (state) rest = `${/^(closed|resolved)/i.test(state[1]) ? "resolve" : /^stalled/i.test(state[1]) ? "stall" : "advance"} ${state[2]}`.trim();
     const { main, cause } = splitCause(rest);
+    // A line that says nothing moved is a restatement, not an advance (it would reset the stall rule).
+    if (/^(?:advance\s+)?(?:(?:no change|unchanged|no action(?: taken)?|not pursued|no new (?:evidence|development)s?|no progress)\b|[^;]*;\s*no change\b)/i.test(main) || /\b(?:no change|not pursued|no action taken)(?: overnight)?\s*$/i.test(main)) {
+      p.args = { op: "note", detail: main.replace(/^advance\s+/i, "") };
+      return p;
+    }
     const m = /^(new|open(?:s|ed)?|advanc(?:e|es|ed)|complicat(?:e|es|ed)|bridg(?:e|es|ed)|resolv(?:e|es|ed)|clos(?:e|es|ed)|stall(?:s|ed)?)\b\s*(?:\((.*)\))?\s*(.*)$/i.exec(main);
     if (!m) {
       p.args = { op: "advance", detail: main || cause };
@@ -509,9 +520,19 @@ const PARSERS: Record<OpName, LineParser> = {
   },
   clockf(p, s, rest) {
     if (!s) return null;
+    // "Hellions 3/6 → 4/6: daylight scouting": the count sits with the name, the rest is the cause.
+    const inSubject = /^(.*?)\s+(?:\d+\s*\/\s*\d+\s*)?(?:→|->|=>)?\s*(\d+\s*\/\s*\d+)\s*$/.exec(s);
+    if (inSubject && inSubject[1]) {
+      s = inSubject[1].trim();
+      rest = `${inSubject[2]} — ${rest}`;
+    }
     p.subject = s;
-    const { main, cause } = splitCause(rest);
+    const split = splitCause(rest);
+    let main = split.main;
+    const cause = split.cause;
     p.cause = cause;
+    // "2/6 → 3/6" or "→ 3/6": the count it reaches, not the one it left.
+    main = main.replace(/(?:\d+\s*\/\s*\d+\s*)?(?:→|->|=>)\s*(?=\d+\s*\/\s*\d+)/, "").replace(/\s*(?:→|->|=>)\s*$/, "").replace(/\s{2,}/g, " ").trim();
     const frac = /(\d+)\s*\/\s*(\d+)/.exec(main);
     const inc = /(^|\s)([+-]\d+)(\s|$)/.exec(main);
     const project = main.replace(/\(?\d+\s*\/\s*\d+\)?/, "").replace(/(^|\s)[+-]\d+(\s|$)/, " ").trim() || "project";
@@ -647,6 +668,31 @@ const PARSERS: Record<OpName, LineParser> = {
   diverge: () => null,
   entity: () => null,
   lock: () => null,
+  arc(p, s, rest) {
+    // arc <verb> #id: head | key: value | key: value   (written by the engine and the player's controls)
+    const m = /^(new|beat|stage|cross|end|set|drop)\s+#?([\w:.-]+)$/i.exec(s.trim());
+    if (!m) return null;
+    const parts = rest.split(/\s+\|\s+/);
+    const fields: Record<string, string> = {};
+    let head = "";
+    parts.forEach((part, i) => {
+      const kv = /^([a-z]+):\s?([\s\S]*)$/.exec(part.trim());
+      if (kv && (i > 0 || /^(lead|text|status|next|thread|reason)$/.test(kv[1]))) fields[kv[1]] = kv[2].trim();
+      else if (i === 0) head = part.trim();
+    });
+    p.subject = m[2].replace(/^arc:/, "");
+    p.args = { verb: m[1].toLowerCase(), id: m[2].replace(/^arc:/, ""), head, fields };
+    return p;
+  },
+  whereabouts(p, s, rest) {
+    if (!s) return null;
+    const [place, ...more] = rest.split(/\s+\|\s+/);
+    if (!place?.trim()) return null;
+    p.subject = s.trim();
+    const since = more.map((x) => /^since:\s*(-?\d+)/.exec(x.trim())?.[1]).find(Boolean);
+    p.args = { place: place.trim(), since: since != null ? parseInt(since, 10) : undefined };
+    return p;
+  },
 };
 
 /**

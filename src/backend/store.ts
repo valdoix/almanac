@@ -62,16 +62,9 @@ export interface PlanError {
   stack: string;
 }
 
-export interface Arrival {
-  id: string;
-  msgId: string;
-  swipe: number;
-  text: string;
-  route?: string;
-  atAbs?: number;
-  place?: string;
-  delivered?: boolean;
-}
+export type { Arrival } from "../core/elsewhere/crossings";
+import type { Arrival } from "../core/elsewhere/crossings";
+import type { ElsewhereMeta } from "./elsewhere";
 
 export interface LoreBookState {
   name: string;
@@ -117,6 +110,8 @@ export interface ChatMeta {
   lore: { books: Record<string, LoreBookState>; review: { entryId: string; bookId: string; title: string; kind: string; confidence: number }[]; lastScan?: number; world?: WeaverWorld };
   arrivals: Arrival[];
   lastSimAbs?: number;
+  /** Elsewhere: tick records, profiles, and what the note last showed. */
+  elsewhere?: ElsewhereMeta;
   repaired: Record<string, "repair" | "extractor" | "failed">;
   /** Replies the knowledge clerk has read (msgId:swipe → the text's hash and the outcome). */
   clerked?: Record<string, { hash: string; result: "ok" | "none" | "failed" | "clean" }>;
@@ -297,6 +292,8 @@ export async function loadSettings(userId?: string): Promise<Settings> {
     return { ...DEFAULT_SETTINGS };
   }
   const out = { ...DEFAULT_SETTINGS, ...s };
+  // Before Elsewhere there was one switch: the off-screen simulator on or off.
+  if (s.elsewhere === undefined) out.elsewhere = s.simulator ? "living" : "off";
   settingsCache.set(userId ?? "", out);
   return out;
 }
@@ -306,7 +303,7 @@ export function saveSettings(patch: Partial<Settings>, userId?: string): Promise
   // One at a time per user: two quick changes would otherwise read the same file and the second write lose the first.
   return serial(`settings:${userId ?? ""}`, async () => {
     const onDisk = await readJson<Partial<Settings>>("settings.json", {}, userId); // throws rather than guess
-    const next = { ...DEFAULT_SETTINGS, ...onDisk, ...cleanSettings(patch) };
+    const next = { ...DEFAULT_SETTINGS, ...(onDisk.elsewhere === undefined ? { elsewhere: onDisk.simulator ? "living" as const : "off" as const } : {}), ...onDisk, ...cleanSettings(patch) };
     await host.userStorage.setJson("settings.json", next, { indent: 2, userId });
     settingsCache.set(userId ?? "", next);
     return next;

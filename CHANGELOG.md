@@ -4,6 +4,24 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.14.0 — preset 1.0.12 (2026-10-01)
+
+**Elsewhere: the world off the page** ([design/09](design/09-elsewhere.md)). It replaces the off-screen simulator.
+- **The whole cast lives.** Everyone the story knows has a life off the page, including people from the card, the persona and the lorebooks who have never appeared. Each has a standing (here, away, captive, changed, dead, a pet), a whereabouts, a reach and ties to others.
+- **Subplots** in 15 kinds (return, scheme, decline, threat, rift, courtship, investigation…). Each grows from what the story or lore already holds, and names its grounds.
+- **Seeded dice** decide when a subplot moves and how it turns out, with twists drawn from what exists. A Motive · Knowledge · Access · Means · Time gate means nobody acts on news they haven't heard, at an hour they're asleep, or from a country away.
+- **News travels person to person** along ties, sometimes garbled, never from a secret's keeper.
+- **The engine writes the mechanics.** A model call (optional) only tells them, and a validator checks every sentence.
+- **Off-page events reach the scene by a route:** a carrier, a call, a sound, a trace, an entrance. The note's `[ELSEWHERE]` lane replaces `[ARRIVED]`. People back on the page carry what they did off it.
+- **A new Elsewhere page** (Story group), with Director and Surprise views. You can hold, nudge, bring in, edit or drop a subplot, give someone a story, leave someone out or wake them, and decide irreversible endings.
+- **Settings:** Elsewhere mode (off · quiet · living · restless; the old simulator switch carries over as living), Telling (model or engine), Canon gravity, and Irreversible endings.
+
+**Fixes found by replaying a real chat** (these broke the old simulator):
+- Arrivals at a nested place ("Winters Residence › kitchen") never reached the scene (11 of 12). Old arrivals now expire instead of all arriving at once.
+- Clock lines written with arrows (`2/6 → 3/6`, `Hellions 3/6 → 4/6:`) set the clock backwards or made a second clock. They now read as the count reached, on the same clock.
+- A thread restated with nothing new ("no change overnight", "open; latest: …; stalls: 0") counted as an advance and reset the stall rule.
+- Lines from the simulator and the player's corrections at the same anchor each keep their own source. Off-page lines stay out of the reply's change list and out of the model's "your ledger was corrected" note.
+
 ## 1.13.1 (2026-10-01)
 
 - Settings: the Summariser, Clerk, Check, Simulator and Planner connections are picked by name from your Lumiverse connections (name, model, default marked) instead of typed as ids Lumiverse never shows. Saved ids carry over; one whose connection is gone shows as missing. If the list can't be read, the id box comes back.

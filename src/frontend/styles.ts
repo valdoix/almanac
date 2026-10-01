@@ -503,6 +503,7 @@ export const PANEL_CSS = `
 .almo-orbit{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);width:280px;height:132px}
 .almo-orbit::before{content:"";position:absolute;left:8px;right:8px;top:22px;height:240px;border-radius:50%;border:1px dashed color-mix(in oklab,var(--pc) 45%,transparent);pointer-events:none}
 .almo-orbit__t{position:absolute;left:0;right:0;bottom:4px;text-align:center;font:700 10px/1 var(--alm-font-mono);letter-spacing:.2em;text-transform:uppercase;color:var(--pc);pointer-events:none}
+.almo-orbit.four .almo-moonb{width:70px}
 .almo-moonb{position:absolute;width:88px;display:grid;justify-items:center;gap:4px;text-align:center;animation:almo-rise .22s ease-out both}
 .almo-m{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--alm-panel);border:1.5px solid var(--pc);color:var(--pc);box-shadow:0 0 18px -4px var(--pc);transition:background .15s,color .15s}
 .almo-moonb:hover .almo-m,.almo-moonb:focus-visible .almo-m{background:var(--pc);color:#10132e}

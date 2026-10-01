@@ -1,11 +1,11 @@
 // Orrery navigation for the Almanac drawer: a live sky header (clock, date,
 // moon, weather, place) with a switcher for the current group's pages, and a
 // dock at the bottom — the sun goes to Now, and each planet opens its pages on
-// an orbit. Thirteen pages, never more than five buttons in a row.
+// an orbit. Fourteen pages, never more than five buttons in a row.
 
 import { escapeHtml as e } from "../core/util";
 
-export type Page = "now" | "cast" | "bonds" | "knowledge" | "chronicle" | "timeline" | "world" | "codex" | "lore" | "creator" | "recall" | "craft" | "settings";
+export type Page = "now" | "cast" | "bonds" | "knowledge" | "chronicle" | "timeline" | "world" | "elsewhere" | "codex" | "lore" | "creator" | "recall" | "craft" | "settings";
 
 export interface Group {
   id: "people" | "story" | "library" | "engine";
@@ -17,7 +17,7 @@ export interface Group {
 
 export const GROUPS: Group[] = [
   { id: "people", label: "People", color: "#ff8fa3", icon: "cast", pages: ["cast", "bonds", "knowledge"] },
-  { id: "story", label: "Story", color: "#5fcfc0", icon: "chronicle", pages: ["chronicle", "timeline", "world"] },
+  { id: "story", label: "Story", color: "#5fcfc0", icon: "chronicle", pages: ["chronicle", "timeline", "world", "elsewhere"] },
   { id: "library", label: "Library", color: "#a99bff", icon: "codex", pages: ["codex", "lore", "creator"] },
   { id: "engine", label: "Engine", color: "#ffc46b", icon: "settings", pages: ["recall", "craft", "settings"] },
 ];
@@ -25,7 +25,7 @@ export const GROUPS: Group[] = [
 export const PAGES: Page[] = ["now", ...GROUPS.flatMap((g) => g.pages)];
 
 export const LABEL: Record<Page, string> = {
-  now: "Now", cast: "Cast", bonds: "Bonds", knowledge: "Knowledge", chronicle: "Chronicle", timeline: "Timeline", world: "World",
+  now: "Now", cast: "Cast", bonds: "Bonds", knowledge: "Knowledge", chronicle: "Chronicle", timeline: "Timeline", world: "World", elsewhere: "Elsewhere",
   codex: "Codex", lore: "Lore", creator: "Creator", recall: "Recall", craft: "Craft", settings: "Settings",
 };
 
@@ -39,6 +39,7 @@ const IC: Record<Page, string> = {
   chronicle: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5Z"/><path d="M12 6.5v13"/>',
   timeline: '<path d="M7 3v18"/><circle cx="7" cy="7" r="2"/><circle cx="7" cy="16" r="2"/><path d="M11 7h9M11 16h6"/>',
   world: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5Z"/>',
+  elsewhere: '<path d="M15.5 4.5a8 8 0 1 0 4 11.2 6.5 6.5 0 0 1-4-11.2Z"/><path d="M4 19.5c3-1.5 5-1.5 8 0s5 1.5 8 0"/>',
   codex: '<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M9 8h6M9 12h6M9 16h3"/>',
   lore: '<path d="M7 4h11v13a3 3 0 0 1-3 3H6"/><path d="M7 4a2 2 0 0 0-2 2v2h2M6 20a2 2 0 0 0 2-2v-1h10"/><path d="M10 9h5M10 12.5h5"/>',
   creator: '<path d="M20 4c-7 1-12 6-13.5 13.5L5 20"/><path d="M20 4c-.5 5-3.5 9.5-9 11"/><path d="m9 13.5 3 3"/>',
@@ -74,6 +75,13 @@ export function summary(p: Page, v: any): string {
     case "world": {
       const due = dueCount(v);
       return `${n((w.threads ?? []).length, "thread")}${due ? ` · ${due} due` : ""}`;
+    }
+    case "elsewhere": {
+      const x = v.elsewhere;
+      if (!x || x.mode === "off") return "off";
+      const live = (x.arcs ?? []).filter((a: any) => a.status === "running" || a.status === "held" || a.status === "fate").length;
+      const fates = (x.arcs ?? []).filter((a: any) => a.status === "fate").length;
+      return `${n(live, "subplot")}${fates ? ` · ${fates} waiting on you` : ""}`;
     }
     case "codex": return n((v.codex ?? []).length, "record");
     case "lore": {
@@ -111,7 +119,7 @@ export function engineNew(v: any, seen: ReadonlySet<string> = new Set()): number
 /** Things that want a look, per group: shown as a glow and a count on the planet. */
 export function attention(g: Group["id"], v: any, seen?: ReadonlySet<string>): number {
   if (!v) return 0;
-  if (g === "story") return dueCount(v);
+  if (g === "story") return dueCount(v) + (v.elsewhere?.arcs ?? []).filter((a: any) => a.status === "fate").length;
   if (g === "library") return v.lore?.review?.length ?? 0;
   if (g === "engine") return engineNew(v, seen);
   return 0;
@@ -190,9 +198,10 @@ export function dock(v: any, page: Page, orbit: string, seen?: ReadonlySet<strin
     return `<button class="almo-pl${cur === g ? " on" : ""}${a ? " alert" : ""}" style="--pc:${g.color}" data-orbit="${g.id}" aria-expanded="${orbit === g.id}" aria-label="${e(g.label)}${why ? ` (${e(why)})` : ""}"${why ? ` title="${e(why)}"` : ""}><span class="almo-orb">${icon(g.icon)}${a ? `<b>${a > 9 ? "9+" : a}</b>` : ""}</span><span>${e(g.label)}</span></button>`;
   };
   const og = GROUPS.find((g) => g.id === orbit);
-  const pos = [[0, 50], [96, 0], [192, 50]];
+  // Three moons on an arc, or four (Story has Elsewhere too).
+  const pos = og && og.pages.length > 3 ? [[0, 56], [70, 4], [140, 4], [210, 56]] : [[0, 50], [96, 0], [192, 50]];
   const ring = og
-    ? `<div class="almo-orbit" style="--pc:${og.color}" role="menu" aria-label="${e(og.label)}">${og.pages.map((p, i) => `<button class="almo-moonb" role="menuitem" style="left:${pos[i][0]}px;top:${pos[i][1]}px;animation-delay:${i * 40}ms" data-page="${p}"><span class="almo-m">${icon(p)}</span><b>${LABEL[p]}</b><small>${e(v ? summary(p, v) : "")}</small></button>`).join("")}<div class="almo-orbit__t">${e(og.label)}</div></div>`
+    ? `<div class="almo-orbit${og.pages.length > 3 ? " four" : ""}" style="--pc:${og.color}" role="menu" aria-label="${e(og.label)}">${og.pages.map((p, i) => `<button class="almo-moonb" role="menuitem" style="left:${pos[i][0]}px;top:${pos[i][1]}px;animation-delay:${i * 40}ms" data-page="${p}"><span class="almo-m">${icon(p)}</span><b>${LABEL[p]}</b><small>${e(v ? summary(p, v) : "")}</small></button>`).join("")}<div class="almo-orbit__t">${e(og.label)}</div></div>`
     : "";
   return `<div class="almo-dockwrap">${ring}<nav class="almo-dock" aria-label="Almanac pages">${planet(GROUPS[0])}${planet(GROUPS[1])}<button class="almo-sun${page === "now" ? " on" : ""}" data-page="now" aria-label="Now"><span>${icon("now")}<small>NOW</small></span></button>${planet(GROUPS[2])}${planet(GROUPS[3])}</nav></div>`;
 }

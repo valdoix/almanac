@@ -1,5 +1,5 @@
 // The <ledger-note>: verified story state placed just before the player's
-// message. Lanes: NOW · PRESENT · CONSTRAINTS · KNOWLEDGE · ARRIVED · CRAFT ·
+// message. Lanes: NOW · PRESENT · CONSTRAINTS · KNOWLEDGE · ELSEWHERE · CRAFT ·
 // GENRE · PLANTS · RETURNING. Each lane has a token budget and a minimum.
 
 import type { AlmanacReport } from "./engines/almanac";
@@ -25,7 +25,8 @@ export interface NoteInput {
   craft?: CraftReport | null;
   genreNudge?: string | null;
   plants?: string[];
-  arrivals?: string[];
+  /** Elsewhere: the [ELSEWHERE] lane (what reaches the scene from off the page). */
+  elsewhere?: string;
   returning?: string | null;
   lastDelta?: MessageDelta | null;
   pressures?: Record<string, string>;
@@ -259,7 +260,7 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
   const kb = knowledgeBrief(state, input.query, input.userName, 5, input.player ?? "");
   if (kb.length) lanes.knowledge = truncateTokens(`[KNOWLEDGE] ${kb.join("\n  ")}`, B.knowledge);
 
-  lanes.arrived = `[ARRIVED] ${input.arrivals?.length ? input.arrivals.join(" · ") + " — render these arrivals and invent no others." : "(none from off-screen this turn)"}`;
+  lanes.arrived = input.elsewhere || "[ELSEWHERE] (nothing from off the page reaches this scene; invent no off-screen news)";
 
   // A sealed persona's side of a ladder is the player's to show; the story can't move it, so it would only go stale here.
   const ladders = Object.values(state.ladders).filter((l) => present.some((c) => c.id === l.from || c.id === l.to) && l.tier > 0 && !(input.sealed && l.from === "user"));

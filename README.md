@@ -17,7 +17,7 @@ In Lumiverse (1.2.4 or newer), open **Extensions → Install from GitHub** and p
 | Permission | Used for |
 |---|---|
 | interceptor, context_handler | Planning the turn and injecting the ledger note, recall and chapters |
-| generation | Chapter summaries, ledger repair, the knowledge clerk, the off-screen simulator, the sidecar planner (all optional) |
+| generation | Chapter summaries, ledger repair, the knowledge clerk, Elsewhere's telling, the sidecar planner (all optional) |
 | chats, chat_mutation | Reading the transcript, hiding summarised turns, drawing the tracker drawer as of each message |
 | world_books | The per-chat mirror lorebook and the lore bridge |
 | characters, personas | Names, per-character defaults, colours |
@@ -78,10 +78,27 @@ The preset leaves sampling (temperature, top P) to your connection: newer models
 - **What the model writes, read as meant.** `hunger 4→2 (fed; real food)` sets hunger to 2. `fatigue 4+` is 4. `concussion + scalp laceration` is two injuries, not two flags. Bond axes are whole words ("self-resentment" is not resentment of the other person). Ladder rungs can be given by number or name ("tier 2 → tier 3", "Charged → Tested"), and the note shows them as `Charged (3/7)`. A line the Almanac can't read ("ladder A>B: Name Said Bare") is reported with the right shape instead of being dropped. A body line with new states replaces the passing ones (lasting conditions stay), and a new scene clears poses. Parts of a room ("fridge") aren't items, and an item someone is now wearing comes to them.
 - **No stale cards.** The archivist records only what lasts about someone (role, traits, wants, fears, voice, looks), and it revisits everyone a chapter names, not only people first seen in it. What it wrote about where someone is or what they were doing is left out of the prompt after 60 messages, and it never overrides the live state.
 
+### Elsewhere: the world off the page
+
+Everyone the story knows has a life off the page. That means the people from the card, your persona and the lorebooks, not only those who have spoken. Elsewhere (the Story group's fourth page) moves their subplots when story time moves. Design: [design/09](design/09-elsewhere.md).
+
+- **Grounded.** Every subplot rests on something the story or the lore already says, and the page shows it. It might be an open thread, a debt, a secret, a strained bond, a lore situation, a forecast, a faction's clock, or what someone wants.
+- **Random.** Dice decide when something happens and how it turns out: a win, a win at a cost, or a loss, with the odd twist. The dice are seeded by the story clock, so a swipe or a rebuild sees the same world.
+- **Who can act.** People act only on news that has reached them. News travels person to person along their ties, sometimes garbled. The dead, pets and the imprisoned don't act, and anyone away has to travel back.
+- **How it reaches the story.** Through a person who mentions it when they're next on the page, a call or letter (or raven), something heard around town, a sign left at a place, or an entrance the reply may take or leave. The note's `[ELSEWHERE]` lane carries only what has reached the scene. An arrival counts as delivered only when the reply uses it, and stale news expires.
+- **Back on the page.** When someone returns, the note tells the model what they did off the page, as theirs to tell or hide.
+- **Your controls.**
+  - Choose a mode, globally (Settings › World engines) or per chat (on the page): off · quiet · living · restless.
+  - Switch between *Director* (everything, with dice and grounds) and *Surprise me* (only what has reached you).
+  - For any subplot: hold, nudge, bring in, edit, or drop it. You can also give anyone a story of your own.
+  - Leave someone out of it, or wake them.
+  - An ending that can't be undone (a death, say) waits for your word: accept it, soften it, or keep it for a scene on the page.
+- **Cost.** After each reply the engine works without any model call. *Telling: model* makes one quiet call per step, on the Elsewhere connection, to put the step into the story's own words; a validator rejects new names, decisions for your character and spoilers. *Telling: engine* makes no calls at all.
+
 ### Prompt size and cost
 
 - **Ceiling** (Settings › Prompt size): everything the Almanac adds to one prompt (the ledger note, recall, the mirror lorebook's cards and the chapter summaries) stays under this many tokens. The default is 24,000; 0 means no ceiling. Over it, the summaries narrow to the ones the turn touches, then the oldest of those are left out, then the lowest-ranked recall. The note and the latest chapter always go in. Lumiverse fits the rest of the prompt to your model's context *before* the Almanac adds its part, so leave room: with a 32K model, try 8,000. The Recall page shows what the last turn cost and what was cut. On a 250-message chat with *exhaustive* summaries, the whole story runs to about 21,500 tokens; the preset itself is about 6,500.
-- **Background calls.** These are quiet model calls on your summariser connection (or the one set for each job): chapter, arc and volume summaries and the archivist (now and then), ledger repair (only when a reply has no ledger), the knowledge clerk (*auto*: only when a reply's lines need it), the reply check's model read, the player-facts read and the off-screen simulator (each only when switched to it). With everything on, expect three to five extra calls per reply. Point them at a cheaper connection in Settings to save cost.
+- **Background calls.** These are quiet model calls on your summariser connection (or the one set for each job): chapter, arc and volume summaries and the archivist (now and then), ledger repair (only when a reply has no ledger), the knowledge clerk (*auto*: only when a reply's lines need it), the reply check's model read, the player-facts read and Elsewhere's telling (each only when switched to it). With everything on, expect three to five extra calls per reply. Point them at a cheaper connection in Settings to save cost.
 
 ### Privacy
 
@@ -138,7 +155,7 @@ The extension's own storage is the source of truth: an event log keyed to messag
 ## Troubleshooting
 
 - **A warning says the last turn went out without the Almanac.** Planning failed; the error is in the warning. It clears on the next turn that works.
-- **"Something in the background didn't work."** A summary, the knowledge clerk, the reply check, the simulator, the mirror lorebook or hiding turns failed. The story carries on. Check the connection set for that job in Settings.
+- **"Something in the background didn't work."** A summary, the knowledge clerk, the reply check, Elsewhere, the mirror lorebook or hiding turns failed. The story carries on. Check the connection set for that job in Settings.
 - **The drawer says the background process runs another version.** Turn the extension off and on (or press Update) and reload the page.
 - **The chat forgot older story after switching something off.** Run **ALMANAC: Release hidden turns**.
 - **Nothing happens in a chat.** Settings › This chat shows whether the Ledger is on there and why. It arms itself only with the ALMANAC preset; press **On** to pin it.
@@ -179,7 +196,7 @@ Lumiverse installs from a branch head, so every push to the branch users install
     - The world's re-anchor becomes the Codex record of the place itself, with the card's full premise and its central tension. If the lore book has an entry about the place, the re-anchor adds to it.
     - Chapter summaries call the card's replies the Narrator's, not a person called "Saltmere".
     - The Lore tab shows the world's premise, tension, and, when it has agency, its agenda and holds.
-    - **Agency.** The agenda counts only while the rules book's `Weaver agency · agenda and holds` entry is on (the Weaver hub's on/off switch). While it is on, the off-screen simulator treats the world as an actor: between scenes it moves the agenda through consequences, never by announcing it, and never breaks a hold.
+    - **Agency.** The agenda counts only while the rules book's `Weaver agency · agenda and holds` entry is on (the Weaver hub's on/off switch). While it is on, Elsewhere treats the world as an actor: between scenes it moves the agenda through consequences, never by announcing it, and never breaks a hold.
     - The NPC book's people, the Weaver's extras and fully woven profiles alike, are Codex people. A character promoted to their own card carries the world's lore book, which is read as above.
   - Before 1.9.0, rules-book entries were filed as story "customs" (and the model classifier could create a person called "Weaver"). The mirror lorebook then carried those instructions a second time. The next lore scan removes those records, and the next mirror sync removes their copies.
 - Settings and each chat's setup survive updates and restarts. When the extension is installed for the whole server (operator scope), Lumiverse only opens its storage with a user id, and there is none at startup. Before 1.9.0 that failed read was taken for "no settings yet": the defaults were cached, shown in Settings, and saved over the real file on the next change. The same went for the open chat's setup. Now a read with no user caches nothing, the real files load as soon as a user is known, and a settings change is merged into the file on disk.

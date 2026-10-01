@@ -17,6 +17,7 @@ import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels, hasUnmarkedSpeech 
 import { debug, describe, has, host, warn, within } from "./host";
 import { ledgerFor, type ChatLedger } from "./ledger";
 import { waitForClerk } from "./clerk";
+import { elsewhereNote } from "./elsewhere";
 import { loadChat, save, type ChatMeta } from "./store";
 import type { Settings } from "../core/types";
 
@@ -143,7 +144,8 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   const assistantIdx = L.path.filter((m) => !m.isUser).map((m) => m.index);
   const genres = meta.detected.genres ?? meta.config.genres ?? [];
   const now = st.time ? absMinutes(st.time) : null;
-  const arrivals = meta.arrivals.filter((a) => !a.delivered && L.path.some((m) => m.id === a.msgId) && (a.atAbs == null || (now != null && a.atAbs <= now)) && (!a.place || st.place.some((p) => p.toLowerCase().includes(a.place!.toLowerCase()))));
+  const onPath = new Set(L.path.map((m) => m.id));
+  const elsewhere = elsewhereNote({ state: st, records: L.records, userName: L.names.user, meta, settings, tier, onPath: (id) => onPath.has(id), dryRun: !!opts.dryRun });
   let returning: string | null = null;
   // Time away is measured from the last message before the player's new one(s): the message
   // they just sent is seconds old, so measuring from it never finds an absence.
@@ -162,7 +164,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   const noteRes = buildLedgerNote({
     state: st, almanac: al, records: L.records, userName: L.names.user, sealed: L.foldOptions(meta, settings).sealed,
     query: `${player} ${lastReply}`, player, craft: settings.telemetry ? meta.telemetry : null, genreNudge: genreNudge(st, leadGenre(meta), assistantIdx),
-    plants: settings.chekhov ? chekhovNudges(st, genres) : [], arrivals: arrivals.map((a) => `${a.text}${a.route ? ` (via ${a.route})` : ""}`),
+    plants: settings.chekhov ? chekhovNudges(st, genres) : [], elsewhere,
     returning, lastDelta, pressures: settings.pressures ? meta.pressures : {}, nsfw: !!meta.detected.nsfw && meta.detected.nsfw !== "off",
     budgets: scaleBudgets(settings.recallBudget, tier),
     notPeople: notPeople(meta),
@@ -288,7 +290,8 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     meta.chronicleShown = chronicle;
     if (plan.feed) meta.feed = [plan.feed, ...meta.feed].slice(0, 4);
     if (returning) meta.greetedReturn = L.path.length;
-    for (const a of arrivals) a.delivered = true;
+    // What the note offered from off the page, and whom it showed returning.
+    save(chatId, "meta", userId);
   }
   plans.set(chatId, plan);
   debug(`plan ${chatId}: note ${noteRes.tokens}t, recall ${rc.tokens}t, chronicle ${chronicle.length} (${chronMode}), mirror ${Object.keys(mirrorPicks).length}, lore ${lorePicks.size}`);

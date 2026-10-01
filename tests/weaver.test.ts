@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { classify, parseAgency, seedOverlays, weaverBook, weaverEntry, weaverWorldCard, type LoreEntry } from "../src/core/lore";
 import { transcriptFor } from "../src/core/chronicle";
-import { simulatorPrompt } from "../src/core/prompts";
+import { tellingPrompt } from "../src/core/elsewhere/telling";
+import { buildRoster } from "../src/core/elsewhere/roster";
+import { emptyState } from "../src/core/state";
 
 // Shapes as Lumiverse's Dream Weaver writes them (services/weaver/*).
 const ANCHOR = {
@@ -172,7 +174,12 @@ describe("Dream Weaver worlds", () => {
   });
 
   test("the off-screen simulator treats the world's agenda as an actor and its holds as unbreakable", () => {
-    expect(simulatorPrompt({ slice: "", from: "a", to: "b", userName: "Ada", world: true }).system).toContain("Lines under HOLDS never break");
-    expect(simulatorPrompt({ slice: "", from: "a", to: "b", userName: "Ada" }).system).not.toContain("WORLD");
+    const roster = buildRoster({ state: emptyState(), records: [], userName: "Ada" });
+    const ctx = { userName: "Ada", roster, offPage: [], truths: [], recent: [], places: [], objects: [], holds: ["the river never floods the old town"] };
+    const card = (kind: any) => ({ id: "b1", arcId: "x", kind, lead: "the world", cast: [], result: "win" as const, roll: [5, 6] as [number, number], mod: 0, stage: "rising" as const, clock: "2/8", atAbs: 600, premise: "p", want: "to w", fear: "f", leadText: "", knows: [], noRoute: [], grounds: ["world"], template: "t", line: 0 });
+    const withWorld = tellingPrompt([card("world")], ctx).system;
+    expect(withWorld).toContain("Lines under HOLDS never break");
+    expect(withWorld).toContain("the river never floods the old town");
+    expect(tellingPrompt([card("pursuit")], ctx).system).not.toContain("HOLDS");
   });
 });
