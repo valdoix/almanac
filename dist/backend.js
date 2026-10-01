@@ -2477,7 +2477,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.14.0";
+var VERSION = "1.15.0";
 
 // src/core/facts.ts
 function stem(w) {
@@ -5166,6 +5166,2688 @@ var init_render = __esm(() => {
   ];
 });
 
+// src/core/plate/art.ts
+function rng2(seed) {
+  let s = seed * 2654435761 >>> 0 || 1;
+  return () => {
+    s ^= s << 13;
+    s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    s >>>= 0;
+    return s % 1000003 / 1000003;
+  };
+}
+function svgUrl(body, w = W, h = H, stretch = false) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${w} ${h}'${stretch ? " preserveAspectRatio='none'" : ""}>${body}</svg>`;
+  return `url("data:image/svg+xml,${svg.replace(/%/g, "%25").replace(/#/g, "%23").replace(/</g, "%3C").replace(/>/g, "%3E").replace(/"/g, "'")}")`;
+}
+
+class Layer {
+  fill = [];
+  odd = [];
+  strokes = new Map;
+  path(d) {
+    this.fill.push(d);
+    return this;
+  }
+  hole(d) {
+    this.odd.push(d);
+    return this;
+  }
+  poly(p) {
+    return this.path(`M${pts(p)}Z`);
+  }
+  rect(x, y, w, h) {
+    return this.path(`M${n(x)} ${n(y)}h${n(w)}v${n(h)}h${n(-w)}Z`);
+  }
+  circle(cx, cy, r) {
+    return this.path(`M${n(cx - r)} ${n(cy)}a${n(r)} ${n(r)} 0 1 0 ${n(2 * r)} 0a${n(r)} ${n(r)} 0 1 0 ${n(-2 * r)} 0Z`);
+  }
+  ellipse(cx, cy, rx, ry) {
+    return this.path(`M${n(cx - rx)} ${n(cy)}a${n(rx)} ${n(ry)} 0 1 0 ${n(2 * rx)} 0a${n(rx)} ${n(ry)} 0 1 0 ${n(-2 * rx)} 0Z`);
+  }
+  line(w, d) {
+    const k = Math.round(w * 2) / 2;
+    if (!this.strokes.has(k))
+      this.strokes.set(k, []);
+    this.strokes.get(k).push(d);
+    return this;
+  }
+  get empty() {
+    return !this.fill.length && !this.odd.length && !this.strokes.size;
+  }
+  svg() {
+    let s = "";
+    if (this.fill.length)
+      s += `<path d='${this.fill.join("")}'/>`;
+    if (this.odd.length)
+      s += `<path fill-rule='evenodd' d='${this.odd.join("")}'/>`;
+    for (const [w, ds] of this.strokes)
+      s += `<path fill='none' stroke='#000' stroke-width='${w}' stroke-linecap='round' d='${ds.join("")}'/>`;
+    return s;
+  }
+  url(w = W, h = H, stretch = false) {
+    return svgUrl(this.svg(), w, h, stretch);
+  }
+}
+function wrap(x, half, draw) {
+  draw(x);
+  if (x - half < 0)
+    draw(x + W);
+  if (x + half > W)
+    draw(x - W);
+}
+function profile(r, k, lo, hi) {
+  const ys = Array.from({ length: k }, () => between(r, lo, hi));
+  ys.push(ys[0]);
+  return ys.map((y, i) => [i * W / k, y]);
+}
+function smoothPath(p, base = H) {
+  let d = `M0 ${n(base)}L${n(p[0][0])} ${n(p[0][1])}`;
+  for (let i = 1;i < p.length - 1; i++) {
+    const mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2;
+    d += `Q${n(p[i][0])} ${n(p[i][1])} ${n(mx)} ${n(my)}`;
+  }
+  const last = p[p.length - 1];
+  return d + `L${n(last[0])} ${n(last[1])}L${W} ${n(base)}Z`;
+}
+function hills(L, r, k, lo, hi) {
+  L.path(smoothPath(profile(r, k, lo, hi)));
+  return L;
+}
+function ridge(L, r, lo, hi, rough = 0.55, depth = 7) {
+  const N = 2 ** depth;
+  const ys = new Array(N + 1).fill(0);
+  ys[0] = ys[N] = between(r, lo + (hi - lo) * 0.35, hi);
+  let step = N, amp = (hi - lo) * 0.95;
+  while (step > 1) {
+    const h = step / 2;
+    for (let i = h;i < N; i += step)
+      ys[i] = (ys[i - h] + ys[i + h]) / 2 + (r() - 0.5) * amp;
+    amp *= rough;
+    step = h;
+  }
+  const p = ys.map((y, i) => [i * W / N, Math.min(hi + 6, Math.max(lo, y))]);
+  L.path(`M0 ${H}L${pts(p)}L${W} ${H}Z`);
+  return p;
+}
+function mesas(L, r, count, top, base = H) {
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 0, W), w = between(r, 40, 180), t = between(r, top[0], top[1]);
+    wrap(x, w / 2 + 30, (cx) => {
+      const l = cx - w / 2, rr = cx + w / 2, s1 = between(r, 6, 16), s2 = between(r, 8, 22), ledge = t + (base - t) * between(r, 0.3, 0.55);
+      L.poly([[l - s2 - 10, base], [l - s2, ledge + 4], [l - s1 * 0.4, ledge], [l, t + 3], [l + 4, t], [rr - 4, t], [rr, t + 2], [rr + s1 * 0.5, ledge], [rr + s2, ledge + 3], [rr + s2 + 12, base]]);
+    });
+  }
+}
+function pine(L, x, base, h, w, r) {
+  const tiers = h > 40 ? 4 : h > 18 ? 3 : 2;
+  const p = [[x, base - h]];
+  for (let i = 1;i <= tiers; i++) {
+    const y = base - h + h * 0.88 * i / tiers, ww = w / 2 * (0.45 + 0.55 * i / tiers) * between(r, 0.85, 1.15);
+    p.push([x + ww, y], [x + ww * 0.42, y - h * 0.06]);
+  }
+  p.pop();
+  const right = p.slice(1);
+  const left = right.map(([px, py]) => [2 * x - px, py]).reverse();
+  L.poly([p[0], ...right, [x + w * 0.06, base - h * 0.12], [x + w * 0.06, base], [x - w * 0.06, base], [x - w * 0.06, base - h * 0.12], ...left]);
+}
+function cypress(L, x, base, h, w) {
+  L.path(`M${n(x)} ${n(base - h)}Q${n(x + w * 0.62)} ${n(base - h * 0.55)} ${n(x + w * 0.18)} ${n(base)}H${n(x - w * 0.18)}Q${n(x - w * 0.62)} ${n(base - h * 0.55)} ${n(x)} ${n(base - h)}Z`);
+}
+function roundTree(L, x, base, h, w, r) {
+  const tw = Math.max(1.5, w * 0.08);
+  L.rect(x - tw / 2, base - h * 0.45, tw, h * 0.45);
+  const cr = w / 2;
+  L.circle(x, base - h + cr, cr);
+  for (let i = 0;i < 3; i++)
+    L.circle(x + between(r, -cr * 0.8, cr * 0.8), base - h + cr * between(r, 0.9, 1.6), cr * between(r, 0.5, 0.78));
+}
+function birch(L, x, base, h, w, r) {
+  L.line(Math.max(1, w * 0.06), `M${n(x)} ${n(base)}L${n(x + between(r, -2, 2))} ${n(base - h * 0.9)}`);
+  for (let i = 0;i < 5; i++)
+    L.ellipse(x + between(r, -w * 0.35, w * 0.35), base - h * between(r, 0.55, 0.9), w * between(r, 0.18, 0.3), h * between(r, 0.1, 0.18));
+}
+function deadTree(L, x, base, h, r, wd = 2.5) {
+  const branch = (x0, y0, ang, len, w, d) => {
+    const x1 = x0 + Math.cos(ang) * len, y1 = y0 - Math.sin(ang) * len;
+    L.line(w, `M${n(x0)} ${n(y0)}Q${n((x0 + x1) / 2 + between(r, -3, 3))} ${n((y0 + y1) / 2)} ${n(x1)} ${n(y1)}`);
+    if (d > 0) {
+      const k = d > 2 ? 2 : pick(r, [1, 1, 2, 2]);
+      for (let i = 0;i < k; i++)
+        branch(x1, y1, ang + between(r, -0.75, 0.75), len * between(r, 0.5, 0.78), Math.max(0.5, w * 0.62), d - 1);
+    }
+  };
+  branch(x, base, Math.PI / 2 + between(r, -0.1, 0.1), h * 0.42, wd, h > 50 ? 4 : 3);
+}
+function palm(L, x, base, h, r, lean = between(r, -0.35, 0.35)) {
+  const tx = x + h * lean, ty = base - h, cx = x + h * lean * 0.2;
+  L.path(`M${n(x - 2.4)} ${n(base)}Q${n(cx - 1.5)} ${n(base - h * 0.5)} ${n(tx - 1)} ${n(ty)}L${n(tx + 1)} ${n(ty)}Q${n(cx + 1.5)} ${n(base - h * 0.5)} ${n(x + 2.4)} ${n(base)}Z`);
+  const fronds = 7;
+  for (let i = 0;i < fronds; i++) {
+    const a = Math.PI * (0.05 + 0.9 * i / (fronds - 1)) + between(r, -0.12, 0.12), len = h * between(r, 0.32, 0.46);
+    const ex = tx + Math.cos(a) * len, ey = ty - Math.sin(a) * len * 0.45 + len * 0.42;
+    const mx = tx + Math.cos(a) * len * 0.5, my = ty - Math.sin(a) * len * 0.62;
+    L.path(`M${n(tx)} ${n(ty)}Q${n(mx)} ${n(my - 4)} ${n(ex)} ${n(ey)}Q${n(mx)} ${n(my + 2)} ${n(tx)} ${n(ty)}Z`);
+  }
+  L.circle(tx, ty + 1.5, 2.2);
+}
+function willow(L, x, base, h, w, r) {
+  L.rect(x - 1.5, base - h * 0.6, 3, h * 0.6);
+  L.ellipse(x, base - h * 0.72, w * 0.45, h * 0.3);
+  for (let i = 0;i < 9; i++) {
+    const sx = x + between(r, -w * 0.45, w * 0.45);
+    L.line(0.8, `M${n(sx)} ${n(base - h * 0.75)}Q${n(sx + between(r, -3, 3))} ${n(base - h * 0.35)} ${n(sx + between(r, -2, 2))} ${n(base - h * between(r, 0.02, 0.2))}`);
+  }
+}
+function bush(L, x, base, w, r) {
+  for (let i = 0;i < 4; i++)
+    L.circle(x + between(r, -w / 2, w / 2), base - between(r, 0, w * 0.2), w * between(r, 0.2, 0.35));
+}
+function forest(L, r, kind, count, base, h, ground = 4) {
+  L.path(smoothPath(profile(r, 6, base - ground, base), H));
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 0, W), th = between(r, h[0], h[1]), b = base - between(r, 0, ground) + 1;
+    const k = kind === "mixed" ? pick(r, ["pine", "round", "pine", "cypress"]) : kind;
+    const w = k === "pine" ? th * between(r, 0.42, 0.55) : k === "cypress" ? th * 0.3 : th * between(r, 0.6, 0.85);
+    wrap(x, w, (cx) => {
+      if (k === "pine")
+        pine(L, cx, b, th, w, r);
+      else if (k === "cypress")
+        cypress(L, cx, b, th, w);
+      else if (k === "round")
+        roundTree(L, cx, b, th, w, r);
+      else if (k === "birch")
+        birch(L, cx, b, th, w * 0.7, r);
+      else if (k === "palm")
+        palm(L, cx, b, th, r);
+      else if (k === "willow")
+        willow(L, cx, b, th, w * 1.3, r);
+      else
+        deadTree(L, cx, b, th, r, Math.max(1, th / 18));
+    });
+  }
+  return L;
+}
+function skyline(L, win, r, style, base, h, density = 1) {
+  let x = between(r, -10, 10);
+  L.rect(0, base - 2, W, H - base + 2);
+  while (x < W) {
+    const w = between(r, 18, 46) * (style === "old" ? 0.8 : 1), bh = between(r, h[0], h[1]) * (r() < 0.12 ? 1.35 : 1);
+    const top = base - bh;
+    const build = (x0) => {
+      if (style === "deco" && bh > h[0] * 1.2) {
+        L.rect(x0, top + bh * 0.2, w, bh * 0.8);
+        L.rect(x0 + w * 0.15, top + bh * 0.08, w * 0.7, bh * 0.15);
+        L.rect(x0 + w * 0.3, top, w * 0.4, bh * 0.1);
+        L.line(1, `M${n(x0 + w / 2)} ${n(top)}V${n(top - bh * 0.18)}`);
+      } else if (style === "future") {
+        const tw = w * between(r, 0.5, 0.9);
+        L.path(`M${n(x0)} ${n(base)}V${n(top + 8)}Q${n(x0 + tw / 2)} ${n(top - 6)} ${n(x0 + tw)} ${n(top + 8)}V${n(base)}Z`);
+        if (r() < 0.4) {
+          L.rect(x0 - 4, top + bh * 0.3, tw + 8, 2.5);
+          L.line(0.8, `M${n(x0 + tw / 2)} ${n(top)}V${n(top - 16)}`);
+        }
+      } else {
+        L.rect(x0, top, w, bh + 2);
+        const roof = style === "gothic" ? pick(r, ["spire", "gable", "flat", "spire"]) : style === "eastern" ? pick(r, ["pagoda", "flat", "pagoda"]) : style === "old" ? pick(r, ["gable", "gable", "dome", "flat", "tower"]) : pick(r, ["flat", "flat", "antenna", "step", "slant"]);
+        if (roof === "spire")
+          L.poly([[x0 - 1, top], [x0 + w / 2, top - bh * between(r, 0.4, 0.8)], [x0 + w + 1, top]]);
+        else if (roof === "gable")
+          L.poly([[x0 - 2, top + 1], [x0 + w / 2, top - w * 0.42], [x0 + w + 2, top + 1]]);
+        else if (roof === "dome") {
+          L.ellipse(x0 + w / 2, top, w * 0.42, w * 0.38);
+          L.line(1, `M${n(x0 + w / 2)} ${n(top - w * 0.38)}v-7`);
+        } else if (roof === "tower") {
+          L.rect(x0 + w * 0.3, top - bh * 0.35, w * 0.4, bh * 0.36);
+          L.poly([[x0 + w * 0.25, top - bh * 0.35], [x0 + w / 2, top - bh * 0.55], [x0 + w * 0.75, top - bh * 0.35]]);
+        } else if (roof === "antenna") {
+          L.line(1, `M${n(x0 + w * 0.6)} ${n(top)}v${n(-bh * 0.3)}`);
+          L.rect(x0 + w * 0.15, top - 4, w * 0.3, 4);
+        } else if (roof === "step") {
+          L.rect(x0 + w * 0.15, top - bh * 0.12, w * 0.7, bh * 0.13);
+          L.rect(x0 + w * 0.32, top - bh * 0.2, w * 0.36, bh * 0.1);
+        } else if (roof === "slant")
+          L.poly([[x0, top + 1], [x0, top - w * 0.4], [x0 + w, top + 1]]);
+        else if (roof === "pagoda") {
+          const tiers = 2 + Math.floor(r() * 3);
+          for (let t = 0;t < tiers; t++) {
+            const ty = top - t * 9, ww = w * (1 - t * 0.17);
+            const l = x0 + (w - ww) / 2;
+            L.path(`M${n(l - 7)} ${n(ty - 1)}Q${n(l + ww / 2)} ${n(ty - 9)} ${n(l + ww + 7)} ${n(ty - 1)}L${n(l + ww - 2)} ${n(ty + 2)}H${n(l + 2)}Z`);
+            if (t < tiers - 1)
+              L.rect(l + 4, ty - 9, ww - 8, 9);
+          }
+          L.line(1, `M${n(x0 + w / 2)} ${n(top - tiers * 9)}v-8`);
+        }
+      }
+      if (win) {
+        const cols = Math.max(1, Math.floor(w / 7)), rows = Math.floor((bh - 6) / 7);
+        for (let i = 0;i < cols; i++)
+          for (let j = 0;j < rows; j++)
+            if (r() < 0.28 * density)
+              win.rect(x0 + 3 + i * ((w - 6) / cols), top + 4 + j * 7, 2.6, 3.2);
+      }
+    };
+    wrap(x + w / 2, w / 2 + 6, (cx) => build(cx - w / 2));
+    x += w + between(r, -6, 4);
+  }
+}
+function houses(L, win, r, base, h, opts = {}) {
+  L.rect(0, base - 1, W, H - base + 1);
+  let x = between(r, 0, 20);
+  const steepleAt = opts.steeple != null ? opts.steeple * W : -1;
+  while (x < W) {
+    const w = between(r, 22, 42), bh = between(r, h[0], h[1]), top = base - bh, pitch = w * between(r, 0.38, 0.6);
+    const isSteeple = steepleAt >= 0 && x <= steepleAt && x + w > steepleAt;
+    const draw = (x0) => {
+      L.rect(x0, top, w, bh + 1);
+      if (opts.thatch)
+        L.path(`M${n(x0 - 4)} ${n(top + 2)}Q${n(x0 + w / 2)} ${n(top - pitch * 1.25)} ${n(x0 + w + 4)} ${n(top + 2)}Z`);
+      else
+        L.poly([[x0 - 3, top + 1], [x0 + w / 2, top - pitch], [x0 + w + 3, top + 1]]);
+      if (r() < 0.7)
+        L.rect(x0 + w * between(r, 0.15, 0.7), top - pitch * 0.9, 4, pitch * 0.6);
+      if (isSteeple) {
+        const sw = 12, sx = x0 + w / 2 - sw / 2;
+        L.rect(sx, top - pitch - 30, sw, 40);
+        L.poly([[sx - 1, top - pitch - 30], [sx + sw / 2, top - pitch - 62], [sx + sw + 1, top - pitch - 30]]);
+        L.line(1, `M${n(sx + sw / 2)} ${n(top - pitch - 62)}v-7M${n(sx + sw / 2 - 3)} ${n(top - pitch - 66)}h6`);
+      }
+      if (win && r() < 0.8) {
+        const k = Math.max(1, Math.floor(w / 11));
+        for (let i = 0;i < k; i++)
+          if (r() < 0.55)
+            win.rect(x0 + 4 + i * ((w - 8) / k), top + bh * 0.3, 3.5, 4.5);
+      }
+    };
+    wrap(x + w / 2, w / 2 + 6, (cx) => draw(cx - w / 2));
+    x += w + between(r, ...opts.gap ?? [-4, 10]);
+  }
+}
+function castle(L, win, r, cx, base, scale) {
+  const s = scale;
+  const merlons = (x0, x1, y, m = 4 * s) => {
+    for (let x = x0;x < x1 - m * 0.5; x += m * 2)
+      L.rect(x, y - m, Math.min(m, x1 - x), m + 0.5);
+  };
+  const wallW = between(r, 150, 230) * s, wallH = 26 * s, l = cx - wallW / 2;
+  L.rect(l, base - wallH, wallW, wallH + 1);
+  merlons(l, l + wallW, base - wallH);
+  const towers = 2 + Math.floor(r() * 3);
+  for (let i = 0;i < towers; i++) {
+    const tx = l + wallW * i / (towers - 1), tw = between(r, 16, 24) * s, th = wallH + between(r, 14, 34) * s;
+    L.rect(tx - tw / 2, base - th, tw, th + 1);
+    if (r() < 0.5) {
+      L.poly([[tx - tw / 2 - 3 * s, base - th], [tx, base - th - tw * 1.3], [tx + tw / 2 + 3 * s, base - th]]);
+      L.line(1, `M${n(tx)} ${n(base - th - tw * 1.3)}v-9`);
+      L.poly([[tx, base - th - tw * 1.3 - 9], [tx + 8, base - th - tw * 1.3 - 6.5], [tx, base - th - tw * 1.3 - 4]]);
+    } else {
+      L.rect(tx - tw / 2 - 2 * s, base - th - 2, tw + 4 * s, 4);
+      merlons(tx - tw / 2 - 2 * s, tx + tw / 2 + 2 * s, base - th - 2, 3.4 * s);
+    }
+    if (win)
+      win.rect(tx - 1, base - th + 8 * s, 2.2, 5 * s);
+  }
+  const kx = cx + between(r, -wallW * 0.2, wallW * 0.2), kw = between(r, 34, 50) * s, kh = wallH + between(r, 34, 50) * s;
+  L.rect(kx - kw / 2, base - kh, kw, kh);
+  merlons(kx - kw / 2, kx + kw / 2, base - kh);
+  L.rect(kx + kw * 0.12, base - kh - 16 * s, kw * 0.3, 16 * s + 1);
+  merlons(kx + kw * 0.12, kx + kw * 0.42, base - kh - 16 * s, 3 * s);
+  L.line(1, `M${n(kx + kw * 0.27)} ${n(base - kh - 20 * s)}v-14`);
+  L.path(`M${n(kx + kw * 0.27)} ${n(base - kh - 20 * s - 14)}q6 2 12 0q-2 3 0 6q-6 2 -12 0Z`);
+  if (win)
+    for (let i = 0;i < 3; i++)
+      win.rect(kx - kw / 2 + 6 + i * (kw / 3), base - kh + 12 * s, 2.5, 6 * s);
+}
+function ruins(L, r, base, scale) {
+  L.path(smoothPath(profile(r, 5, base - 6, base), H));
+  let x = between(r, 0, 40);
+  while (x < W) {
+    const kind = pick(r, ["arch", "arch", "column", "wall", "tower", "column"]);
+    const s = scale * between(r, 0.8, 1.2);
+    const draw = (x0) => {
+      if (kind === "arch") {
+        const w = 46 * s, h = 52 * s, ar = 12 * s;
+        const jag = [[x0, base], [x0, base - h * 0.8], [x0 + w * 0.15, base - h], [x0 + w * 0.3, base - h * 0.88], [x0 + w * 0.45, base - h * 0.95], [x0 + w * 0.62, base - h * 0.7], [x0 + w * 0.8, base - h * 0.78], [x0 + w, base - h * 0.55], [x0 + w, base]];
+        let d = `M${pts(jag)}Z`;
+        for (const ax of [0.27, 0.73])
+          d += `M${n(x0 + w * ax - ar)} ${n(base)}V${n(base - h * 0.45)}a${n(ar)} ${n(ar)} 0 0 1 ${n(2 * ar)} 0V${n(base)}Z`;
+        L.hole(d);
+      } else if (kind === "column") {
+        const cw = 7 * s, ch = between(r, 24, 58) * s;
+        L.rect(x0 - cw / 2 - 2, base - 4, cw + 4, 4);
+        L.poly([[x0 - cw / 2, base], [x0 - cw / 2, base - ch], [x0 - cw / 4, base - ch - 3], [x0 + cw / 5, base - ch + 1], [x0 + cw / 2, base - ch - 2], [x0 + cw / 2, base]]);
+        if (r() < 0.35)
+          L.rect(x0 - cw / 2 - 3, base - ch - 7, cw + 6, 4);
+      } else if (kind === "wall") {
+        const w = between(r, 30, 70) * s, h = between(r, 12, 26) * s;
+        const p = [[x0, base]];
+        for (let i = 0;i <= 6; i++)
+          p.push([x0 + w * i / 6, base - h * between(r, 0.4, 1)]);
+        p.push([x0 + w, base]);
+        L.poly(p);
+      } else {
+        const w = 20 * s, h = between(r, 50, 76) * s;
+        L.hole(`M${pts([[x0, base], [x0, base - h], [x0 + w * 0.35, base - h - 6], [x0 + w * 0.55, base - h + 8], [x0 + w, base - h * 0.7], [x0 + w, base]])}ZM${n(x0 + w * 0.4)} ${n(base - h * 0.6)}h3v8h-3Z`);
+      }
+      for (let i = 0;i < 3; i++)
+        L.rect(x0 + between(r, -14, 40), base - between(r, 2, 5), between(r, 3, 8), 6);
+    };
+    wrap(x + 25, 40, (cx) => draw(cx - 25));
+    x += between(r, 60, 130);
+  }
+}
+function graves(L, r, base, count) {
+  L.path(smoothPath(profile(r, 4, base - 5, base), H));
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 0, W), s = between(r, 0.7, 1.3), b = base - between(r, 0, 4) + 2;
+    wrap(x, 14, (cx) => {
+      const k = pick(r, ["stone", "stone", "cross", "obelisk", "angel", "stone"]);
+      if (k === "stone") {
+        const w = 9 * s, h = 13 * s;
+        L.path(`M${n(cx - w / 2)} ${n(b)}V${n(b - h + w / 2)}a${n(w / 2)} ${n(w / 2)} 0 0 1 ${n(w)} 0V${n(b)}Z`);
+      } else if (k === "cross") {
+        L.rect(cx - 1.5 * s, b - 22 * s, 3 * s, 22 * s);
+        L.rect(cx - 6 * s, b - 17 * s, 12 * s, 3 * s);
+      } else if (k === "obelisk")
+        L.poly([[cx - 4 * s, b], [cx - 3 * s, b - 26 * s], [cx, b - 31 * s], [cx + 3 * s, b - 26 * s], [cx + 4 * s, b]]);
+      else {
+        L.rect(cx - 6 * s, b - 8 * s, 12 * s, 8 * s);
+        L.ellipse(cx, b - 16 * s, 3.2 * s, 7 * s);
+        L.circle(cx, b - 25 * s, 2.6 * s);
+        L.path(`M${n(cx - 2)} ${n(b - 19 * s)}q-10 -6 -12 -14q8 3 12 8Z M${n(cx + 2)} ${n(b - 19 * s)}q10 -6 12 -14q-8 3 -12 8Z`);
+      }
+    });
+  }
+}
+function fence(L, base, gap, h, spikes = true) {
+  let d = `M0 ${n(base - h * 0.75)}H${W}M0 ${n(base - h * 0.2)}H${W}`;
+  for (let x = gap / 2;x < W; x += gap)
+    d += `M${n(x)} ${n(base)}V${n(base - h)}`;
+  L.line(1.2, d);
+  if (spikes)
+    for (let x = gap / 2;x < W; x += gap)
+      L.poly([[x - 1.6, base - h], [x, base - h - 4], [x + 1.6, base - h]]);
+}
+function tents(L, r, base, count, s = 1) {
+  L.rect(0, base - 2, W, H - base + 2);
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 0, W), w = between(r, 30, 60) * s, h = w * between(r, 0.5, 0.75);
+    wrap(x, w / 2 + 4, (cx) => {
+      if (r() < 0.35) {
+        L.path(`M${n(cx - w / 2)} ${n(base)}Q${n(cx - w * 0.45)} ${n(base - h * 0.9)} ${n(cx)} ${n(base - h * 1.3)}Q${n(cx + w * 0.45)} ${n(base - h * 0.9)} ${n(cx + w / 2)} ${n(base)}Z`);
+        L.line(1, `M${n(cx)} ${n(base - h * 1.3)}v-12`);
+        L.poly([[cx, base - h * 1.3 - 12], [cx + 9, base - h * 1.3 - 9], [cx, base - h * 1.3 - 6]]);
+      } else
+        L.hole(`M${pts([[cx - w / 2, base], [cx, base - h], [cx + w / 2, base]])}ZM${pts([[cx - w * 0.08, base], [cx, base - h * 0.42], [cx + w * 0.1, base]])}Z`);
+    });
+  }
+  for (let i = 0;i < 4; i++) {
+    const x = between(r, 0, W), h = between(r, 20, 34) * s;
+    L.line(1, `M${n(x)} ${n(base)}v${n(-h)}`);
+    L.path(`M${n(x)} ${n(base - h)}h12l-3 4l3 4h-12Z`);
+  }
+}
+function ship(L, r, cx, base, s, masts = 3) {
+  const len = 70 * s;
+  L.path(`M${n(cx - len / 2)} ${n(base - 9 * s)}L${n(cx + len / 2 + 8 * s)} ${n(base - 11 * s)}Q${n(cx + len / 2)} ${n(base)} ${n(cx + len * 0.3)} ${n(base + 1)}H${n(cx - len * 0.36)}Q${n(cx - len / 2)} ${n(base - 3 * s)} ${n(cx - len / 2)} ${n(base - 9 * s)}Z`);
+  L.rect(cx - len / 2, base - 14 * s, 14 * s, 6 * s);
+  for (let i = 0;i < masts; i++) {
+    const mx = cx - len * 0.3 + len * 0.62 * i / Math.max(1, masts - 1), mh = (i === Math.floor(masts / 2) ? 64 : 52) * s;
+    L.line(1.2, `M${n(mx)} ${n(base - 9 * s)}V${n(base - 9 * s - mh)}`);
+    for (let k = 0;k < 3; k++) {
+      const y = base - 14 * s - mh * (0.2 + k * 0.27), sw = (15 - k * 3.5) * s;
+      L.path(`M${n(mx - sw)} ${n(y - 12 * s)}H${n(mx + sw)}Q${n(mx + sw + 3 * s)} ${n(y - 5 * s)} ${n(mx + sw)} ${n(y)}H${n(mx - sw)}Q${n(mx - sw + 3 * s)} ${n(y - 5 * s)} ${n(mx - sw)} ${n(y - 12 * s)}Z`);
+    }
+  }
+  L.line(0.6, `M${n(cx - len / 2)} ${n(base - 12 * s)}L${n(cx - len * 0.3)} ${n(base - 9 * s - 52 * s)}M${n(cx + len / 2 + 8 * s)} ${n(base - 11 * s)}L${n(cx + len * 0.32)} ${n(base - 9 * s - 52 * s)}`);
+}
+function sailboat(L, cx, base, s) {
+  L.path(`M${n(cx - 14 * s)} ${n(base - 4 * s)}H${n(cx + 16 * s)}Q${n(cx + 10 * s)} ${n(base)} ${n(cx - 10 * s)} ${n(base)}Z`);
+  L.poly([[cx, base - 5 * s], [cx, base - 34 * s], [cx + 13 * s, base - 6 * s]]);
+  L.poly([[cx - 1.5 * s, base - 7 * s], [cx - 1.5 * s, base - 28 * s], [cx - 11 * s, base - 7 * s]]);
+}
+function lighthouse(L, cx, base, s) {
+  L.poly([[cx - 8 * s, base], [cx - 5 * s, base - 46 * s], [cx + 5 * s, base - 46 * s], [cx + 8 * s, base]]);
+  L.rect(cx - 7 * s, base - 49 * s, 14 * s, 3 * s);
+  L.hole(`M${n(cx - 5 * s)} ${n(base - 49 * s)}v${n(-9 * s)}h${n(10 * s)}v${n(9 * s)}ZM${n(cx - 3 * s)} ${n(base - 50 * s)}v${n(-6 * s)}h${n(6 * s)}v${n(6 * s)}Z`);
+  L.poly([[cx - 6 * s, base - 58 * s], [cx, base - 64 * s], [cx + 6 * s, base - 58 * s]]);
+}
+function windmill(L, cx, base, s) {
+  L.poly([[cx - 9 * s, base], [cx - 6 * s, base - 36 * s], [cx + 6 * s, base - 36 * s], [cx + 9 * s, base]]);
+  L.path(`M${n(cx - 7 * s)} ${n(base - 36 * s)}Q${n(cx)} ${n(base - 46 * s)} ${n(cx + 7 * s)} ${n(base - 36 * s)}Z`);
+  const hx = cx, hy = base - 38 * s;
+  for (let i = 0;i < 4; i++) {
+    const a = Math.PI / 4 + i * Math.PI / 2, ex = hx + Math.cos(a) * 30 * s, ey = hy - Math.sin(a) * 30 * s;
+    const px = -Math.sin(a) * 4 * s, py = -Math.cos(a) * 4 * s;
+    L.line(1.2, `M${n(hx)} ${n(hy)}L${n(ex)} ${n(ey)}`);
+    L.poly([[hx + Math.cos(a) * 9 * s, hy - Math.sin(a) * 9 * s], [ex, ey], [ex + px, ey + py], [hx + Math.cos(a) * 9 * s + px, hy - Math.sin(a) * 9 * s + py]]);
+  }
+}
+function barn(L, cx, base, s) {
+  L.path(`M${n(cx - 20 * s)} ${n(base)}V${n(base - 18 * s)}L${n(cx - 14 * s)} ${n(base - 30 * s)}L${n(cx)} ${n(base - 36 * s)}L${n(cx + 14 * s)} ${n(base - 30 * s)}L${n(cx + 20 * s)} ${n(base - 18 * s)}V${n(base)}Z`);
+  L.rect(cx + 22 * s, base - 40 * s, 9 * s, 40 * s);
+  L.ellipse(cx + 26.5 * s, base - 40 * s, 4.5 * s, 4 * s);
+}
+function waterTower(L, cx, base, s) {
+  L.line(1, `M${n(cx - 7 * s)} ${n(base)}L${n(cx - 5 * s)} ${n(base - 16 * s)}M${n(cx + 7 * s)} ${n(base)}L${n(cx + 5 * s)} ${n(base - 16 * s)}M${n(cx - 6 * s)} ${n(base - 8 * s)}H${n(cx + 6 * s)}`);
+  L.rect(cx - 7 * s, base - 30 * s, 14 * s, 14 * s);
+  L.poly([[cx - 8 * s, base - 30 * s], [cx, base - 36 * s], [cx + 8 * s, base - 30 * s]]);
+}
+function pyramid(L, cx, base, w) {
+  L.poly([[cx - w / 2, base], [cx, base - w * 0.62], [cx + w / 2, base]]);
+}
+function cactus(L, cx, base, h) {
+  const w = h * 0.14;
+  L.path(`M${n(cx - w / 2)} ${n(base)}V${n(base - h + w / 2)}a${n(w / 2)} ${n(w / 2)} 0 0 1 ${n(w)} 0V${n(base)}Z`);
+  L.path(`M${n(cx - w / 2)} ${n(base - h * 0.42)}H${n(cx - w * 1.7)}V${n(base - h * 0.75)}a${n(w * 0.38)} ${n(w * 0.38)} 0 0 1 ${n(w * 0.76)} 0V${n(base - h * 0.55)}H${n(cx - w / 2)}Z`);
+  L.path(`M${n(cx + w / 2)} ${n(base - h * 0.55)}H${n(cx + w * 1.6)}V${n(base - h * 0.82)}a${n(w * 0.36)} ${n(w * 0.36)} 0 0 0 ${n(-w * 0.72)} 0V${n(base - h * 0.66)}H${n(cx + w / 2)}Z`);
+}
+function camel(L, cx, base, s) {
+  L.path(`M${n(cx - 12 * s)} ${n(base - 12 * s)}Q${n(cx - 9 * s)} ${n(base - 22 * s)} ${n(cx - 4 * s)} ${n(base - 15 * s)}Q${n(cx + 1 * s)} ${n(base - 22 * s)} ${n(cx + 6 * s)} ${n(base - 14 * s)}L${n(cx + 12 * s)} ${n(base - 21 * s)}L${n(cx + 15 * s)} ${n(base - 19 * s)}L${n(cx + 9 * s)} ${n(base - 11 * s)}L${n(cx - 12 * s)} ${n(base - 10 * s)}Z`);
+  L.line(1.1 * s, `M${n(cx - 10 * s)} ${n(base - 11 * s)}V${n(base)}M${n(cx - 7 * s)} ${n(base - 11 * s)}V${n(base)}M${n(cx + 4 * s)} ${n(base - 11 * s)}V${n(base)}M${n(cx + 7 * s)} ${n(base - 11 * s)}V${n(base)}`);
+}
+function reeds(L, r, base, count, h) {
+  let d = "";
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 0, W), hh = between(r, h[0], h[1]), bend = between(r, -6, 6);
+    d += `M${n(x)} ${n(base)}Q${n(x + bend * 0.2)} ${n(base - hh * 0.6)} ${n(x + bend)} ${n(base - hh)}`;
+    if (r() < 0.25)
+      L.ellipse(x + bend * 0.85, base - hh * 0.88, 1.6, 4.5);
+  }
+  L.line(1, d);
+}
+function ferns(L, r, base, count, s = 1) {
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 0, W);
+    for (let k = 0;k < 4; k++) {
+      const a = Math.PI * (0.18 + k * 0.21) + between(r, -0.1, 0.1), len = between(r, 18, 30) * s;
+      const ex = x + Math.cos(a) * len, ey = base - Math.sin(a) * len * 0.8;
+      L.path(`M${n(x)} ${n(base)}Q${n(x + Math.cos(a) * len * 0.5 - 3)} ${n(base - Math.sin(a) * len)} ${n(ex)} ${n(ey)}Q${n(x + Math.cos(a) * len * 0.5 + 3)} ${n(base - Math.sin(a) * len * 0.6)} ${n(x)} ${n(base)}Z`);
+    }
+  }
+}
+function vines(L, r, count, len) {
+  let d = "";
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 0, W), l = between(r, len[0], len[1]);
+    d += `M${n(x)} 0Q${n(x + between(r, -8, 8))} ${n(l * 0.5)} ${n(x + between(r, -4, 4))} ${n(l)}`;
+    for (let k = 0;k < 3; k++)
+      L.ellipse(x + between(r, -3, 3), l * between(r, 0.3, 1), 2.5, 1.4);
+  }
+  L.line(1, d);
+}
+function canopy(L, r, depth) {
+  let d = `M0 0H${W}V${n(depth * 0.4)}`;
+  for (let x = W;x > 0; x -= between(r, 20, 50))
+    d += `Q${n(x - 10)} ${n(depth * between(r, 0.6, 1.1))} ${n(x - 25)} ${n(depth * between(r, 0.3, 0.6))}`;
+  L.path(d + `L0 ${n(depth * 0.4)}Z`);
+}
+function stalactites(L, r, depth, up = false) {
+  let d = up ? `M0 ${H}` : "M0 0";
+  let x = 0;
+  const y0 = up ? H - depth * 0.35 : depth * 0.35;
+  d += `L0 ${n(y0)}`;
+  while (x < W) {
+    const w = between(r, 6, 24), len = depth * between(r, 0.4, 1);
+    d += `L${n(x + w * 0.4)} ${n(up ? H - len : len)}L${n(x + w)} ${n(y0 + between(r, -4, 4))}`;
+    x += w;
+  }
+  return L.path(d + `L${W} ${n(y0)}L${W} ${up ? H : 0}Z`);
+}
+function crystals(L, r, base, count) {
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 0, W), k = 2 + Math.floor(r() * 3);
+    for (let j = 0;j < k; j++) {
+      const a = between(r, -0.5, 0.5), h = between(r, 10, 30), w = h * 0.22, bx = x + j * 4 - k * 2;
+      const tx = bx + Math.sin(a) * h, ty = base - Math.cos(a) * h;
+      L.poly([[bx - w / 2, base], [tx - w / 2, ty + w], [tx, ty], [tx + w / 2, ty + w], [bx + w / 2, base]]);
+    }
+  }
+}
+function topiary(L, r, base) {
+  L.rect(0, base - 1, W, H - base + 1);
+  let x = between(r, 5, 30);
+  while (x < W) {
+    const k = pick(r, ["hedge", "ball", "cone", "arch", "hedge", "ball"]);
+    const draw = (x0) => {
+      if (k === "hedge") {
+        const w = between(r, 40, 90), h = between(r, 10, 16);
+        L.path(`M${n(x0)} ${n(base)}V${n(base - h + 4)}Q${n(x0)} ${n(base - h)} ${n(x0 + 4)} ${n(base - h)}H${n(x0 + w - 4)}Q${n(x0 + w)} ${n(base - h)} ${n(x0 + w)} ${n(base - h + 4)}V${n(base)}Z`);
+      } else if (k === "ball") {
+        L.rect(x0 - 1, base - 16, 2, 16);
+        L.circle(x0, base - 22, 8);
+        L.circle(x0, base - 37, 5);
+      } else if (k === "cone")
+        L.path(`M${n(x0)} ${n(base - 44)}Q${n(x0 + 12)} ${n(base - 14)} ${n(x0 + 9)} ${n(base)}H${n(x0 - 9)}Q${n(x0 - 12)} ${n(base - 14)} ${n(x0)} ${n(base - 44)}Z`);
+      else {
+        L.line(2.2, `M${n(x0 - 14)} ${n(base)}V${n(base - 24)}A14 14 0 0 1 ${n(x0 + 14)} ${n(base - 24)}V${n(base)}`);
+        for (let i = 0;i < 8; i++)
+          L.circle(x0 + between(r, -16, 16), base - between(r, 18, 40), between(r, 2, 4));
+      }
+    };
+    wrap(x, 50, draw);
+    x += between(r, 30, 80);
+  }
+}
+function fountain(L, cx, base, s) {
+  L.path(`M${n(cx - 26 * s)} ${n(base)}V${n(base - 6 * s)}H${n(cx + 26 * s)}V${n(base)}Z`);
+  L.rect(cx - 2.5 * s, base - 22 * s, 5 * s, 16 * s);
+  L.ellipse(cx, base - 22 * s, 13 * s, 2.5 * s);
+  L.rect(cx - 1.5 * s, base - 32 * s, 3 * s, 10 * s);
+  L.ellipse(cx, base - 32 * s, 6 * s, 1.6 * s);
+  L.line(0.8, `M${n(cx)} ${n(base - 33 * s)}q-4 -10 -10 4M${n(cx)} ${n(base - 33 * s)}q4 -10 10 4M${n(cx - 12 * s)} ${n(base - 22 * s)}q-6 4 -8 15M${n(cx + 12 * s)} ${n(base - 22 * s)}q6 4 8 15`);
+}
+function lampPosts(L, base, gap, h, start = 40) {
+  for (let x = start;x < W; x += gap) {
+    L.line(1.4, `M${n(x)} ${n(base)}V${n(base - h)}q0 -4 5 -4`);
+    L.path(`M${n(x + 2)} ${n(base - h - 4)}h7l-1.5 5h-4Z`);
+  }
+}
+function archBridge(L, r, base, deck, arches) {
+  const span = W / arches;
+  let d = `M0 ${n(deck - 4)}H${W}V${n(base)}H0Z`;
+  for (let i = 0;i < arches; i++) {
+    const cx = span * (i + 0.5), ar = span * 0.38, top = deck + 4;
+    d += `M${n(cx - ar)} ${n(base)}V${n(top + ar * 0.55)}A${n(ar)} ${n(ar * 0.7)} 0 0 1 ${n(cx + ar)} ${n(top + ar * 0.55)}V${n(base)}Z`;
+  }
+  L.hole(d);
+  let p = "";
+  for (let x = 4;x < W; x += 9)
+    p += `M${n(x)} ${n(deck - 4)}v-6`;
+  L.line(1.4, p + `M0 ${n(deck - 10)}H${W}`);
+}
+function suspension(L, base, deck) {
+  L.rect(0, deck, W, 4);
+  const tw = [W * 0.28, W * 0.72];
+  for (const tx of tw) {
+    L.rect(tx - 4, deck - 52, 8, base - deck + 52);
+    L.rect(tx - 6, deck - 40, 12, 3);
+    L.rect(tx - 6, deck - 20, 12, 3);
+  }
+  let d = `M0 ${n(deck - 22)}Q${n(tw[0] * 0.6)} ${n(deck - 6)} ${n(tw[0])} ${n(deck - 52)}Q${W / 2} ${n(deck + 4)} ${n(tw[1])} ${n(deck - 52)}Q${n(W - tw[0] * 0.6)} ${n(deck - 6)} ${W} ${n(deck - 22)}`;
+  L.line(1.4, d);
+  let h = "";
+  for (let x = 10;x < W; x += 14)
+    h += `M${n(x)} ${n(deck)}V${n(deck - 8)}`;
+  L.line(0.5, h);
+}
+function volcano(L, r, cx, base, w, h) {
+  const cr = w * 0.07;
+  L.path(`M${n(cx - w / 2)} ${n(base)}Q${n(cx - w * 0.18)} ${n(base - h * 0.5)} ${n(cx - cr * 1.4)} ${n(base - h)}L${n(cx - cr * 0.4)} ${n(base - h + 3)}L${n(cx + cr * 0.5)} ${n(base - h + 2)}L${n(cx + cr * 1.4)} ${n(base - h + between(r, -2, 2))}Q${n(cx + w * 0.2)} ${n(base - h * 0.5)} ${n(cx + w / 2)} ${n(base)}Z`);
+}
+function station(L, r, cx, cy, s) {
+  L.hole(`M${n(cx - 40 * s)} ${n(cy)}a${n(40 * s)} ${n(14 * s)} 0 1 0 ${n(80 * s)} 0a${n(40 * s)} ${n(14 * s)} 0 1 0 ${n(-80 * s)} 0ZM${n(cx - 34 * s)} ${n(cy)}a${n(34 * s)} ${n(10 * s)} 0 1 0 ${n(68 * s)} 0a${n(34 * s)} ${n(10 * s)} 0 1 0 ${n(-68 * s)} 0Z`);
+  L.rect(cx - 3 * s, cy - 26 * s, 6 * s, 52 * s);
+  L.rect(cx - 8 * s, cy - 6 * s, 16 * s, 12 * s);
+  L.line(1, `M${n(cx - 36 * s)} ${n(cy)}H${n(cx + 36 * s)}`);
+  for (const sx of [-1, 1]) {
+    L.rect(cx + sx * 50 * s - 9 * s, cy - 18 * s, 18 * s, 6 * s);
+    L.rect(cx + sx * 50 * s - 9 * s, cy + 12 * s, 18 * s, 6 * s);
+    L.line(1, `M${n(cx + sx * 40 * s)} ${n(cy)}H${n(cx + sx * 50 * s)}V${n(cy - 12 * s)}M${n(cx + sx * 50 * s)} ${n(cy)}V${n(cy + 12 * s)}`);
+  }
+}
+function asteroids(L, r, count, y, size) {
+  for (let i = 0;i < count; i++) {
+    const cx = between(r, 0, W), cy = between(r, y[0], y[1]), s = between(r, size[0], size[1]);
+    const p = [];
+    for (let k = 0;k < 7; k++) {
+      const a = k / 7 * Math.PI * 2;
+      p.push([cx + Math.cos(a) * s * between(r, 0.7, 1.15), cy + Math.sin(a) * s * between(r, 0.6, 1)]);
+    }
+    L.poly(p);
+  }
+}
+function birds(L, r, count, w, h) {
+  let d = "";
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 6, w - 6), y = between(r, 4, h - 4), s = between(r, 0.6, 1.2);
+    d += `M${n(x - 5 * s)} ${n(y - 1)}q${n(2.5 * s)} ${n(-3 * s)} ${n(5 * s)} ${n(1 * s)}q${n(2.5 * s)} ${n(-4 * s)} ${n(5 * s)} ${n(-1 * s)}`;
+  }
+  L.line(1.2, d);
+}
+function bats(L, r, count, w, h) {
+  for (let i = 0;i < count; i++) {
+    const x = between(r, 6, w - 6), y = between(r, 4, h - 4), s = between(r, 0.6, 1.1);
+    L.path(`M${n(x)} ${n(y)}q${n(-3 * s)} ${n(-4 * s)} ${n(-8 * s)} ${n(-2 * s)}q${n(2 * s)} ${n(1 * s)} ${n(1 * s)} ${n(3 * s)}q${n(2 * s)} ${n(-1 * s)} ${n(3 * s)} ${n(1 * s)}q${n(1 * s)} ${n(-1.5 * s)} ${n(4 * s)} ${n(0)}q${n(3 * s)} ${n(-1.5 * s)} ${n(4 * s)} ${n(0)}q${n(1 * s)} ${n(-2 * s)} ${n(3 * s)} ${n(-1 * s)}q${n(-1 * s)} ${n(-2 * s)} ${n(1 * s)} ${n(-3 * s)}q${n(-5 * s)} ${n(-2 * s)} ${n(-8 * s)} ${n(2 * s)}Z`);
+  }
+}
+function balloon(L, cx, cy, s) {
+  L.path(`M${n(cx)} ${n(cy - 14 * s)}a${n(11 * s)} ${n(12 * s)} 0 0 1 ${n(9 * s)} ${n(18 * s)}L${n(cx + 3 * s)} ${n(cy + 9 * s)}H${n(cx - 3 * s)}L${n(cx - 9 * s)} ${n(cy + 4 * s)}a${n(11 * s)} ${n(12 * s)} 0 0 1 ${n(9 * s)} ${n(-18 * s)}Z`);
+  L.rect(cx - 2.5 * s, cy + 12 * s, 5 * s, 4 * s);
+  L.line(0.5, `M${n(cx - 3 * s)} ${n(cy + 9 * s)}l0.5 3M${n(cx + 3 * s)} ${n(cy + 9 * s)}l-0.5 3`);
+}
+function cornerBranch(L, r) {
+  const branch = (x0, y0, ang, len, w, d) => {
+    const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len;
+    L.line(w, `M${n(x0)} ${n(y0)}Q${n((x0 + x1) / 2 + between(r, -4, 4))} ${n((y0 + y1) / 2 + between(r, -4, 4))} ${n(x1)} ${n(y1)}`);
+    if (d > 0)
+      for (let i = 0;i < 2; i++)
+        branch(x1, y1, ang + between(r, -0.7, 0.7), len * between(r, 0.55, 0.75), Math.max(0.6, w * 0.6), d - 1);
+  };
+  branch(-6, 6, 0.18, 70, 6, 5);
+  return L;
+}
+function floatingIsle(L, r, cx, cy, w) {
+  let d = `M${n(cx - w / 2)} ${n(cy)}Q${n(cx)} ${n(cy - w * 0.08)} ${n(cx + w / 2)} ${n(cy)}`;
+  const steps = 9;
+  for (let i = 1;i <= steps; i++) {
+    const t = i / steps, x = cx + w / 2 - w * t, depth = Math.sin(Math.PI * t) * w * 0.55 * between(r, 0.7, 1.1);
+    d += `L${n(x + between(r, -3, 3))} ${n(cy + depth)}`;
+  }
+  L.path(d + "Z");
+  for (let i = 0;i < 7; i++) {
+    const x = cx + between(r, -w * 0.4, w * 0.4), h = between(r, 8, 20);
+    pine(L, x, cy - w * 0.03, h, h * 0.5, r);
+  }
+  let roots = "";
+  for (let i = 0;i < 6; i++) {
+    const x = cx + between(r, -w * 0.25, w * 0.25), y = cy + w * between(r, 0.2, 0.4);
+    roots += `M${n(x)} ${n(y)}q${n(between(r, -4, 4))} ${n(w * 0.12)} ${n(between(r, -3, 3))} ${n(w * 0.22)}`;
+  }
+  L.line(0.8, roots);
+}
+var W = 800, H = 100, between = (r, a, b) => a + (b - a) * r(), pick = (r, xs) => xs[Math.floor(r() * xs.length)], n = (v) => {
+  const x = Math.round(v);
+  return String(x === 0 ? 0 : x);
+}, pts = (p) => p.map(([x, y]) => `${n(x)} ${n(y)}`).join(" ");
+
+// src/core/plate/kinds.ts
+function cityVariants(styles, extra = () => {}) {
+  return [0, 1, 2, 3].map((v) => (r) => {
+    const far = L(), mid = L(), near = L(), win = L();
+    skyline(far, null, r, styles[0], 100, [30, 70]);
+    skyline(mid, win, r, styles[1], 100, [24, 62], 1.1);
+    skyline(near, null, r, styles[2], 100, [14, 40]);
+    const css = extra(r, far, mid, near, v) || "";
+    return { far, mid, near, win, winOn: "mid", vars: `--hf:${[64, 70, 58, 66][v]}%;--hm:${[48, 52, 44, 50][v]}%;--hn:${[26, 22, 30, 24][v]}%;`, css };
+  });
+}
+function waves(r, count) {
+  const l = L();
+  let d = "M0 100V70";
+  const k = count * 2;
+  for (let i = 0;i < k; i++) {
+    const x0 = i * W / k, x1 = (i + 1) * W / k;
+    d += `Q${x0 + (x1 - x0) * 0.3} ${between2(r, 40, 52)} ${x1} 70`;
+  }
+  l.path(d + `V100Z`);
+  return l;
+}
+function banks(r, tree) {
+  const l = L();
+  l.path(`M0 100V40Q60 46 120 64Q170 80 200 100Z`);
+  l.path(`M800 100V44Q740 50 690 66Q640 84 610 100Z`);
+  for (const x of [30, 90, 730, 770]) {
+    if (tree === "willow")
+      willow(l, x, 50, 60, 70, r);
+    else if (tree === "cypress")
+      cypress(l, x, 50, 50, 16);
+    else
+      roundTree(l, x, 54, between2(r, 40, 56), 36, r);
+  }
+  return l;
+}
+function ANCHOR(x, el = ".kx") {
+  return `&.p ${el}{inset:auto;bottom:calc(var(--b${x},0px) + var(--g));height:var(--h${x});aspect-ratio:8;--A:calc((1 - var(--fl)) / 2 + var(--fl) * var(--a${x}));left:calc(var(--A) * 100% + var(--fl) * var(--ox) * var(--k${x}));translate:calc(var(--A) * -100%) 0;transform:scaleX(var(--fl))}`;
+}
+function BEAM(x, lx, ly) {
+  const at = `left:${(lx / 8).toFixed(2)}%;top:${ly.toFixed(1)}%`;
+  return ANCHOR(x) + `&.p .kx{opacity:calc(.25 + var(--lit) * .75)}&.p .kx:before{content:"";position:absolute;${at};margin-top:-14px;width:520px;height:28px;transform-origin:0 50%;background:linear-gradient(90deg,rgba(255,240,190,.75),rgba(255,240,190,0) 80%);clip-path:polygon(0 45%,100% 0,100% 100%,0 55%);filter:blur(2px)}&.p .kx:after{content:"";position:absolute;${at};margin:-6px 0 0 -6px;width:12px;height:12px;border-radius:50%;background:#fff6d0;box-shadow:0 0 18px 8px rgba(255,230,160,.8)}@media (prefers-reduced-motion:no-preference){&.p .kx:before{animation:beam 7s linear infinite}}`;
+}
+function mullions(l, x, y, w, h, cols, rows, wd = 3) {
+  let d = "";
+  for (let i = 1;i < cols; i++)
+    d += `M${x + w * i / cols} ${y}V${y + h}`;
+  for (let j = 1;j < rows; j++)
+    d += `M${x} ${y + h * j / rows}H${x + w}`;
+  l.line(wd, d);
+}
+function windowSet(shape, count, cols, rows, frame = 7) {
+  const mask = new Layer, fr = new Layer;
+  const gap = 40, w = (WB - gap * (count - 1)) / count;
+  for (let i = 0;i < count; i++) {
+    const x = i * (w + gap), y = 0, h = HB;
+    const draw = (l, inset) => {
+      const X = x + inset, Y = y + inset, Wd = w - 2 * inset, Hd = h - 2 * inset;
+      if (shape === "arch")
+        arch(l, X, Y, Wd, Hd);
+      else if (shape === "lancet")
+        lancet(l, X, Y, Wd, Hd);
+      else if (shape === "round")
+        rectW(l, X, Y, Wd, Hd, Math.min(Wd, Hd) * 0.18);
+      else if (shape === "tri")
+        l.poly([[X + Wd / 2, Y], [X + Wd, Y + Hd], [X, Y + Hd]]);
+      else if (shape === "circle")
+        l.ellipse(X + Wd / 2, Y + Hd / 2, Wd / 2, Hd / 2);
+      else if (shape === "trap")
+        l.path(`M${X + Wd * 0.08} ${Y + Hd}L${X} ${Y + Hd * 0.12}Q${X + Wd / 2} ${Y - Hd * 0.06} ${X + Wd} ${Y + Hd * 0.12}L${X + Wd * 0.92} ${Y + Hd}Z`);
+      else
+        rectW(l, X, Y, Wd, Hd);
+    };
+    draw(mask, frame);
+    const outer = new Layer, inner = new Layer;
+    draw(outer, 0);
+    draw(inner, frame);
+    fr.hole(outer.fill.join("") + inner.fill.join(""));
+    if (cols > 1 || rows > 1)
+      mullions(fr, x + frame, y + frame, w - 2 * frame, h - 2 * frame, cols, rows);
+    if (shape === "lancet")
+      fr.line(3, `M${x + w / 2} ${y + 10}V${y + h}M${x + frame} ${y + h * 0.42}Q${x + w / 2} ${y + h * 0.3} ${x + w - frame} ${y + h * 0.42}`);
+  }
+  return { mask, frame: fr };
+}
+function roomProp2(id, r) {
+  const l = L();
+  if (id === "greenhouse") {
+    for (let x = 10;x < W; x += between2(r, 40, 70)) {
+      const len = between2(r, 30, 80);
+      l.line(1, `M${x} 0V${len * 0.5}`);
+      for (let k = 0;k < 6; k++)
+        l.ellipse(x + between2(r, -14, 14), len * between2(r, 0.4, 1), between2(r, 4, 8), between2(r, 2, 4));
+    }
+    return l.url();
+  }
+  return "none";
+}
+function roomProp(id, r) {
+  const l = L();
+  if (id === "kitchen") {
+    l.line(2, "M0 6H800");
+    for (let x = 30;x < W; x += between2(r, 50, 80)) {
+      const s = between2(r, 0.7, 1.2);
+      l.line(1.2, `M${x} 6V${30 * s}`);
+      l.ellipse(x, 30 * s + 14 * s, 16 * s, 14 * s);
+      l.rect(x + 14 * s, 30 * s + 10 * s, 26 * s, 4 * s);
+    }
+    return l.url();
+  }
+  if (id === "office") {
+    l.rect(0, 40, 300, 8);
+    l.rect(10, 48, 10, 52);
+    l.rect(280, 48, 10, 52);
+    l.rect(180, 48, 90, 40);
+    l.path("M60 100V70Q60 60 70 60H120Q130 60 130 70V100Z");
+    l.rect(70, 30, 50, 34);
+    return l.url(300, 100, true);
+  }
+  if (id === "classroom") {
+    for (let x = 20;x < W; x += 110) {
+      l.rect(x, 50, 70, 8);
+      l.rect(x + 4, 58, 4, 42);
+      l.rect(x + 62, 58, 4, 42);
+      l.path(`M${x + 20} 100V70H${x + 50}V100ZM${x + 20} 70V40H${x + 26}V70Z`);
+    }
+    return l.url();
+  }
+  if (id === "bath") {
+    l.path("M10 30H290Q296 30 290 40Q270 90 200 92H100Q30 90 10 40Q4 30 10 30Z");
+    l.path("M40 90l-10 10h14l6-8ZM260 90l10 10h-14l-6-8Z");
+    return l.url(300, 100, true);
+  }
+  if (id === "ward") {
+    l.rect(10, 40, 280, 30);
+    l.rect(10, 10, 14, 90);
+    l.rect(276, 30, 10, 70);
+    l.path("M30 40Q30 26 50 26H100Q110 26 110 40Z");
+    l.rect(20, 70, 6, 30);
+    l.rect(270, 70, 6, 30);
+    return l.url(300, 100, true);
+  }
+  if (id === "cellar") {
+    for (let x = 10;x < W; x += 64) {
+      l.ellipse(x + 30, 60, 30, 26);
+      l.ellipse(x + 30, 24, 26, 22);
+    }
+    l.rect(0, 84, W, 16);
+    return l.url();
+  }
+  if (id === "greenhouse") {
+    for (let x = 0;x < W; x += between2(r, 30, 60)) {
+      const h = between2(r, 50, 95);
+      for (let k = 0;k < 5; k++) {
+        const a = -1 + k * 0.5 + between2(r, -0.2, 0.2), len = h * between2(r, 0.6, 1);
+        l.path(`M${x} 100Q${x + Math.sin(a) * len * 0.5 - 10} ${100 - len * 0.6} ${x + Math.sin(a) * len} ${100 - Math.cos(a) * len}Q${x + Math.sin(a) * len * 0.5 + 10} ${100 - len * 0.4} ${x} 100Z`);
+      }
+    }
+    return l.url();
+  }
+  if (id === "shop") {
+    for (let x = 6;x < W; x += between2(r, 14, 26)) {
+      const h = between2(r, 40, 80), w = between2(r, 8, 14);
+      if (r() < 0.5)
+        l.path(`M${x} 100V${100 - h + 10}Q${x} ${100 - h} ${x + w / 2} ${100 - h}Q${x + w} ${100 - h} ${x + w} ${100 - h + 10}V100Z`);
+      else {
+        l.rect(x, 100 - h * 0.7, w, h * 0.7);
+        l.rect(x + w * 0.3, 100 - h, w * 0.4, h * 0.3);
+      }
+    }
+    return l.url();
+  }
+  if (id === "tavern") {
+    l.rect(0, 92, W, 8);
+    for (let x = 20;x < W; x += between2(r, 22, 40)) {
+      const h = between2(r, 30, 60), w = between2(r, 10, 16);
+      l.path(`M${x} 92V${92 - h * 0.6}Q${x} ${92 - h * 0.75} ${x + w * 0.35} ${92 - h * 0.8}V${92 - h}H${x + w * 0.65}V${92 - h * 0.8}Q${x + w} ${92 - h * 0.75} ${x + w} ${92 - h * 0.6}V92Z`);
+    }
+  } else if (id === "bedroom") {
+    l.path("M6 100V22Q6 6 24 6Q42 6 42 22V100Z");
+    l.path("M42 62H292Q298 62 298 70V86H42Z");
+    l.path("M60 62Q60 50 74 50H112Q124 50 124 62ZM128 62Q128 52 140 52H170Q180 52 180 62Z");
+    l.path("M150 64Q220 58 296 66L298 92Q230 98 150 94Z");
+    l.rect(48, 86, 5, 14);
+    l.rect(288, 86, 5, 14);
+    return l.url(300, 100, true);
+  } else if (id === "hall") {
+    l.line(4, "M400 0V40");
+    l.path("M300 50Q400 90 500 50Q480 66 400 70Q320 66 300 50Z");
+    for (let i = 0;i < 9; i++) {
+      const x = 300 + i * 25;
+      l.rect(x - 2, 40, 4, 12);
+      l.ellipse(x, 38, 2.5, 5);
+    }
+  } else if (id === "home") {
+    for (let i = 0;i < 7; i++) {
+      const a = -1.2 + i * 0.4, len = between2(r, 40, 70);
+      l.path(`M400 100Q${400 + Math.sin(a) * len * 0.5 - 14} ${100 - len * 0.6} ${400 + Math.sin(a) * len} ${100 - Math.cos(a) * len}Q${400 + Math.sin(a) * len * 0.5 + 14} ${100 - len * 0.5} 400 100Z`);
+    }
+    l.rect(370, 84, 60, 16);
+  } else
+    return "none";
+  return l.url();
+}
+function varChunk(sel, v) {
+  let vars = "";
+  const set = (name, l) => {
+    if (l && !l.empty)
+      vars += `--m${name}:${l.url()};`;
+  };
+  set("f", v.far);
+  set("m", v.mid);
+  set("n", v.near);
+  set("g", v.fg);
+  if (v.win && !v.win.empty) {
+    const on = v.winOn ?? "mid", k = on[0] === "f" ? "f" : on[0] === "m" ? "m" : "n";
+    vars += `--mw:${v.win.url()};--hw:var(--h${k});--bw:var(--b${k},0px);--kw:var(--k${k});--aw:var(--a${k});`;
+  }
+  return `${sel}{${vars}${v.vars ?? ""}}`;
+}
+function kindChunks() {
+  const out = [];
+  for (const k of KINDS3) {
+    k.variants.forEach((make, v) => {
+      const key = `${k.id}-${v}`, sel = `[data-k=${key}]`;
+      const vr = make(rng2(hash2(key)));
+      out.push({ key, css: `${sel}.p{${k.vars ?? ""}}` + varChunk(`${sel}.p`, vr) + scope((k.css ?? "") + (vr.css ?? ""), sel) });
+    });
+  }
+  for (const room of ROOMS) {
+    for (let v = 0;v < 4; v++) {
+      const key = `r_${room.id}-${v}`, sel = `[data-k=${key}]`;
+      const r = rng2(hash2(key));
+      const view = room.view(r), win = room.windows(v), prop = roomProp(room.id, r), prop2 = roomProp2(room.id, r);
+      const wx = win.wx ?? "50%", shx = win.shx ?? "-100%";
+      const box = `${sel}.p :is(.scene,.wf){inset:auto;bottom:auto;top:13%;${win.box}}`;
+      out.push({
+        key,
+        css: varChunk(`${sel}.p`, view) + `${sel}.p{--mwin:${win.mask.url(WB, HB, true)};--mfr:${win.frame.url(WB, HB, true)};--sh:${prop};--sh2:${prop2};--wx:${wx};--shx:${shx}}` + box + scope(room.css + (view.css ?? ""), sel)
+      });
+    }
+  }
+  return out;
+}
+var L = () => new Layer, hash2 = (s) => [...s].reduce((h, c) => Math.imul(h, 31) + c.charCodeAt(0) >>> 0, 7), between2 = (r, a, b) => a + (b - a) * r(), SNOWCAP = `&.p .far{background:linear-gradient(180deg,color-mix(in oklab,#f4f8fc 82%,var(--s3)) 0 16%,color-mix(in oklab,var(--F),var(--s3) 30%) 34%,var(--F))}`, MIST = (bottom, h = "18%", a = ".45") => `&.p .kx{top:auto;bottom:${bottom};height:${h};background:linear-gradient(180deg,transparent,color-mix(in oklab,var(--s3) 70%,#fff) 50%,transparent);opacity:${a};filter:blur(4px)}`, VEG = "--va:22%;", WARM = "--kt:#c98a4a;--ka:38%;", ROCK = "--kt:#9a4a2a;--ka:42%;", ICE = "--kt:#dfe9f4;--ka:55%;", JUNGLE = "--kt:#1f5a3a;--ka:30%;", SWAMP = "--kt:#3c4a2a;--ka:35%;", water = (wl, extra = "") => `--wl:${wl};--bf:${wl};--rf:1;${extra}`, KINDS3, WB = 400, HB = 200, arch = (l, x, y, w, h) => l.path(`M${x} ${y + h}V${y + w / 2}A${w / 2} ${w / 2} 0 0 1 ${x + w} ${y + w / 2}V${y + h}Z`), lancet = (l, x, y, w, h) => l.path(`M${x} ${y + h}V${y + w * 0.8}Q${x} ${y} ${x + w / 2} ${y}Q${x + w} ${y} ${x + w} ${y + w * 0.8}V${y + h}Z`), rectW = (l, x, y, w, h, rr = 0) => rr ? l.path(`M${x + rr} ${y}H${x + w - rr}Q${x + w} ${y} ${x + w} ${y + rr}V${y + h - rr}Q${x + w} ${y + h} ${x + w - rr} ${y + h}H${x + rr}Q${x} ${y + h} ${x} ${y + h - rr}V${y + rr}Q${x} ${y} ${x + rr} ${y}Z`) : l.rect(x, y, w, h), BOXES, ROOMS, scope = (css, sel) => css.replaceAll("&", sel), ROOM_WORDS, KIND_WORDS;
+var init_kinds = __esm(() => {
+  KINDS3 = [
+    {
+      id: "forest",
+      vars: VEG,
+      css: MIST("16%"),
+      variants: [
+        (r) => ({ far: hills(forest(L(), r, "pine", 52, 96, [10, 24]), r, 5, 70, 90), mid: forest(L(), r, "pine", 26, 98, [22, 44]), near: forest(L(), r, "pine", 11, 100, [48, 92], 2), vars: "--hf:52%;--hm:44%;--hn:42%;" }),
+        (r) => ({ far: hills(forest(L(), r, "round", 34, 96, [12, 22]), r, 4, 60, 85), mid: forest(L(), r, "round", 18, 98, [22, 40]), near: (() => {
+          const l = forest(L(), r, "round", 7, 100, [40, 80], 3);
+          for (let i = 0;i < 6; i++)
+            bush(l, between2(r, 0, W), 100, 22, r);
+          return l;
+        })(), vars: "--hf:48%;--hm:40%;--hn:38%;" }),
+        (r) => ({ far: forest(L(), r, "mixed", 44, 96, [12, 26]), mid: forest(L(), r, "birch", 18, 99, [26, 50]), near: (() => {
+          const l = forest(L(), r, "birch", 7, 100, [60, 95], 2);
+          ferns(l, r, 100, 8);
+          return l;
+        })(), vars: "--hf:50%;--hm:46%;--hn:48%;" }),
+        (r) => {
+          const near = L(), fg = L();
+          for (let i = 0;i < 5; i++) {
+            const x = between2(r, 0, W), w = between2(r, 14, 30);
+            near.path(`M${x - w} 100Q${x - w * 0.4} 92 ${x - w * 0.45} 70V0H${x + w * 0.45}V70Q${x + w * 0.4} 92 ${x + w} 100Z`);
+          }
+          ferns(near, r, 100, 14, 1.2);
+          canopy(fg, r, 30);
+          vines(fg, r, 16, [20, 55]);
+          return { far: forest(L(), r, "pine", 44, 98, [16, 30]), mid: forest(L(), r, "cypress", 30, 99, [26, 50]), near, fg, vars: "--hf:46%;--hm:50%;--hn:100%;--hg:100%;", css: MIST("10%", "30%", ".55") };
+        }
+      ]
+    },
+    {
+      id: "jungle",
+      vars: VEG + JUNGLE,
+      css: MIST("22%", "22%", ".5"),
+      variants: [
+        (r) => {
+          const fg = L();
+          canopy(fg, r, 26);
+          vines(fg, r, 14, [20, 60]);
+          const near = L();
+          ferns(near, r, 100, 12, 1.4);
+          palm(near, between2(r, 270, 300), 100, 80, r, 0.3);
+          palm(near, between2(r, 500, 530), 100, 70, r, -0.3);
+          return { far: forest(L(), r, "round", 36, 96, [16, 30]), mid: forest(L(), r, "palm", 12, 99, [30, 56]), near, fg, vars: "--hf:56%;--hm:48%;--hn:60%;--hg:100%;" };
+        },
+        (r) => {
+          const far = forest(L(), r, "round", 28, 98, [12, 24]);
+          const tx = between2(r, 250, 550);
+          for (let t = 0;t < 5; t++)
+            far.rect(tx - 60 + t * 11, 98 - (t + 1) * 11, 120 - t * 22, 12);
+          far.rect(tx - 9, 98 - 66, 18, 12);
+          const near = L();
+          ferns(near, r, 100, 12, 1.3);
+          const fg = L();
+          vines(fg, r, 12, [16, 50]);
+          canopy(fg, r, 16);
+          return { far, mid: forest(L(), r, "palm", 14, 99, [26, 50]), near, fg, vars: "--hf:60%;--hm:44%;--hn:46%;--hg:100%;" };
+        },
+        (r) => {
+          const far = L();
+          ridge(far, r, 22, 58, 0.45);
+          return {
+            far,
+            mid: forest(L(), r, "round", 34, 99, [22, 40]),
+            near: (() => {
+              const l = L();
+              ferns(l, r, 100, 20, 1.3);
+              return l;
+            })(),
+            vars: "--hf:66%;--hm:40%;--hn:40%;",
+            css: `&.p .kx{left:44%;width:5%;top:30%;bottom:40%;background:repeating-linear-gradient(180deg,rgba(235,245,255,.75) 0 6px,rgba(200,225,245,.35) 6px 14px);filter:blur(1px);opacity:.85;border-radius:3px}&.p .kx2{left:38%;width:17%;top:auto;bottom:34%;height:12%;background:radial-gradient(50% 60% at 50% 50%,rgba(240,248,255,.7),transparent 70%);filter:blur(3px)}@media (prefers-reduced-motion:no-preference){&.p .kx{animation:fall 1.2s linear infinite}}`
+          };
+        },
+        (r) => {
+          const fg = L();
+          canopy(fg, r, 34);
+          vines(fg, r, 18, [30, 80]);
+          return { far: forest(L(), r, "round", 32, 98, [20, 34]), mid: forest(L(), r, "round", 20, 99, [26, 44]), near: (() => {
+            const l = L();
+            ferns(l, r, 100, 14, 1.5);
+            return l;
+          })(), fg, vars: "--hf:58%;--hm:52%;--hn:44%;--hg:100%;" };
+        }
+      ]
+    },
+    {
+      id: "swamp",
+      vars: VEG + SWAMP + water("20%"),
+      css: MIST("16%", "26%", ".6") + `&.p .water{filter:saturate(.5) brightness(.8)}`,
+      variants: [
+        (r) => ({ far: forest(L(), r, "dead", 14, 99, [20, 44]), mid: forest(L(), r, "willow", 6, 100, [30, 50], 0), near: (() => {
+          const l = L();
+          reeds(l, r, 100, 80, [10, 30]);
+          return l;
+        })(), vars: "--hf:40%;--hm:44%;--hn:30%;" }),
+        (r) => ({ far: forest(L(), r, "cypress", 40, 99, [14, 30]), mid: forest(L(), r, "dead", 7, 100, [36, 70], 0), near: (() => {
+          const l = L();
+          reeds(l, r, 100, 100, [12, 34]);
+          return l;
+        })(), vars: "--hf:38%;--hm:56%;--hn:34%;" }),
+        (r) => {
+          const mid = L();
+          for (let i = 0;i < 6; i++)
+            willow(mid, between2(r, 0, W), 100, between2(r, 40, 60), 50, r);
+          return { far: forest(L(), r, "round", 40, 99, [10, 22]), mid, near: (() => {
+            const l = L();
+            reeds(l, r, 100, 90, [8, 26]);
+            return l;
+          })(), vars: "--hf:34%;--hm:52%;--hn:28%;" };
+        },
+        (r) => {
+          const near = L();
+          deadTree(near, between2(r, 300, 360), 100, 90, r, 4);
+          reeds(near, r, 100, 90, [10, 30]);
+          const mid = L();
+          mid.rect(between2(r, 300, 500), 82, 46, 18);
+          mid.poly([[300, 82], [323, 66], [346, 82]]);
+          return { far: forest(L(), r, "dead", 16, 99, [14, 32]), mid, near, vars: "--hf:36%;--hm:38%;--hn:70%;" };
+        }
+      ]
+    },
+    {
+      id: "garden",
+      vars: VEG,
+      variants: [
+        (r) => {
+          const mid = L();
+          topiary(mid, r, 100);
+          const near = L();
+          fountain(near, 400, 100, 2.2);
+          lampPosts(near, 100, 260, 50, 120);
+          return { far: forest(L(), r, "round", 30, 98, [16, 30]), mid, near, vars: "--hf:46%;--hm:30%;--hn:42%;" };
+        },
+        (r) => {
+          const mid = L();
+          topiary(mid, r, 100);
+          const near = L();
+          for (let x = 30;x < W; x += 110) {
+            near.line(2, `M${x - 22} 100V58A22 22 0 0 1 ${x + 22} 58V100`);
+            for (let i = 0;i < 10; i++)
+              near.circle(x + between2(r, -26, 26), between2(r, 36, 70), between2(r, 2, 4.5));
+          }
+          return { far: forest(L(), r, "cypress", 30, 98, [20, 40]), mid, near, vars: "--hf:50%;--hm:30%;--hn:46%;" };
+        },
+        (r) => {
+          const far = L();
+          far.rect(0, 70, W, 30);
+          far.rect(260, 34, 280, 40);
+          far.poly([[250, 36], [400, 12], [550, 36]]);
+          for (let x = 280;x < 530; x += 26)
+            far.hole(`M${x} 100V50h12v50ZM${x + 3} 56h6v12h-6Z`);
+          const mid = L();
+          topiary(mid, r, 100);
+          return { far, mid, near: (() => {
+            const l = L();
+            fence(l, 100, 14, 22);
+            return l;
+          })(), win: (() => {
+            const w = L();
+            for (let x = 283;x < 530; x += 26)
+              w.rect(x, 56, 6, 12);
+            return w;
+          })(), winOn: "far", vars: "--hf:56%;--hm:28%;--hn:24%;" };
+        },
+        (r) => {
+          const near = L();
+          fountain(near, between2(r, 350, 450), 100, 2.8);
+          for (let i = 0;i < 12; i++)
+            bush(near, between2(r, 0, W), 100, 26, r);
+          return { far: forest(L(), r, "mixed", 40, 98, [16, 34]), mid: forest(L(), r, "cypress", 14, 99, [30, 54]), near, vars: "--hf:50%;--hm:44%;--hn:40%;" };
+        }
+      ]
+    },
+    {
+      id: "plains",
+      vars: VEG,
+      variants: [
+        (r) => {
+          const near = hills(L(), r, 3, 80, 96);
+          roundTree(near, between2(r, 400, 500), 88, 60, 50, r);
+          let d = "";
+          for (let x = 10;x < W; x += 34)
+            d += `M${x} 100V84`;
+          near.line(1.5, d + "M0 88H800");
+          return { far: hills(L(), r, 4, 50, 80), mid: hills(L(), r, 5, 60, 88), near, vars: "--hf:30%;--hm:24%;--hn:34%;" };
+        },
+        (r) => {
+          const mid = hills(L(), r, 4, 82, 94);
+          barn(mid, between2(r, 290, 340), 88, 1.1);
+          windmill(mid, between2(r, 450, 500), 86, 1.2);
+          return { far: hills(L(), r, 5, 60, 85), mid, near: hills(L(), r, 3, 70, 90), vars: "--hf:30%;--hm:38%;--hn:20%;", css: `&.p .near{background-image:repeating-linear-gradient(100deg,transparent 0 3px,rgba(255,220,140,.12) 3px 4px),linear-gradient(var(--N),var(--N))}` };
+        },
+        (r) => {
+          const far = hills(L(), r, 4, 70, 90);
+          houses(far, null, r, 92, [6, 10], { steeple: 0.5 });
+          const mid = hills(L(), r, 4, 80, 95);
+          for (let i = 0;i < 9; i++) {
+            const x = between2(r, 0, W), y = between2(r, 88, 96);
+            mid.path(`M${x - 9} ${y}a9 8 0 0 1 18 0Z`);
+          }
+          return { far, mid, near: hills(L(), r, 3, 78, 95), vars: "--hf:28%;--hm:30%;--hn:18%;" };
+        },
+        (r) => {
+          const mid = hills(L(), r, 3, 84, 96);
+          for (let i = 0;i < 7; i++) {
+            const x = 300 + i * 26 + between2(r, -5, 5), h = between2(r, 12, 24);
+            mid.rect(x, 90 - h, 9, h + 6);
+          }
+          mid.rect(318, 64, 70, 8);
+          return { far: (() => {
+            const l = L();
+            ridge(l, r, 40, 80, 0.5);
+            return l;
+          })(), mid, near: hills(L(), r, 3, 80, 96), vars: "--hf:44%;--hm:30%;--hn:18%;" };
+        }
+      ]
+    },
+    {
+      id: "mountain",
+      vars: "",
+      variants: [
+        (r) => {
+          const far = L();
+          ridge(far, r, 4, 60, 0.58);
+          const mid = L();
+          ridge(mid, r, 30, 75, 0.55);
+          return { far, mid, near: forest(L(), r, "pine", 26, 100, [24, 50], 6), vars: "--hf:76%;--hm:54%;--hn:36%;", css: SNOWCAP };
+        },
+        (r) => {
+          const far = L();
+          ridge(far, r, 20, 70, 0.4);
+          return { far, mid: hills(L(), r, 4, 40, 80), near: (() => {
+            const l = hills(L(), r, 3, 70, 92);
+            for (let i = 0;i < 6; i++) {
+              const x = between2(r, 0, W);
+              l.path(`M${x - 14} 100Q${x - 10} ${80 - i} ${x} ${78}Q${x + 12} 82 ${x + 16} 100Z`);
+            }
+            return l;
+          })(), vars: "--hf:64%;--hm:40%;--hn:26%;" };
+        },
+        (r) => {
+          const far = L();
+          ridge(far, r, 0, 70, 0.72);
+          const near = L();
+          near.path(`M0 100V20Q40 24 70 40L120 46Q160 70 190 100Z`);
+          pine(near, 60, 22, 24, 12, r);
+          pine(near, 92, 40, 18, 9, r);
+          return { far, mid: (() => {
+            const l = L();
+            ridge(l, r, 26, 80, 0.62);
+            return l;
+          })(), near, vars: "--hf:82%;--hm:58%;--hn:70%;--an:0;--kn:0;", css: SNOWCAP + MIST("30%", "20%", ".5") };
+        },
+        (r) => {
+          const far = L();
+          ridge(far, r, 6, 66, 0.55);
+          return { far, mid: forest(L(), r, "pine", 40, 99, [10, 22]), near: forest(L(), r, "pine", 8, 100, [40, 80], 2), vars: water("26%", "--hf:56%;--hm:16%;--hn:46%;--bm:26%;"), css: SNOWCAP };
+        }
+      ]
+    },
+    {
+      id: "tundra",
+      vars: ICE,
+      variants: [
+        (r) => {
+          const far = L();
+          ridge(far, r, 30, 80, 0.4);
+          return { far, mid: hills(L(), r, 6, 70, 92), near: forest(L(), r, "pine", 5, 100, [24, 46], 2), vars: "--hf:44%;--hm:26%;--hn:30%;" };
+        },
+        (r) => {
+          const mid = hills(L(), r, 4, 80, 95);
+          tents(mid, r, 94, 3, 0.7);
+          return { far: (() => {
+            const l = L();
+            ridge(l, r, 20, 70, 0.6);
+            return l;
+          })(), mid, near: hills(L(), r, 3, 82, 96), vars: "--hf:50%;--hm:30%;--hn:16%;", css: `&.p .kx{top:auto;left:46%;width:12%;bottom:6%;height:14%;background:radial-gradient(50% 60% at 50% 100%,rgba(255,170,80,.7),transparent 70%);opacity:var(--lit)}` };
+        },
+        (r) => {
+          const far = L();
+          for (let i = 0;i < 12; i++) {
+            const x = between2(r, 0, W), h = between2(r, 20, 60);
+            far.poly([[x - 16, 100], [x - 4, 100 - h], [x + 3, 100 - h * 0.8], [x + 18, 100]]);
+          }
+          return { far, mid: hills(L(), r, 5, 76, 94), near: hills(L(), r, 3, 84, 96), vars: water("18%", "--hf:40%;--hm:22%;--hn:14%;--bm:0px;") };
+        },
+        (r) => ({ far: hills(L(), r, 3, 60, 90), mid: forest(L(), r, "dead", 10, 100, [20, 40], 0), near: hills(L(), r, 4, 80, 96), vars: "--hf:30%;--hm:30%;--hn:18%;" })
+      ]
+    },
+    {
+      id: "desert",
+      vars: WARM,
+      variants: [
+        (r) => ({ far: hills(L(), r, 3, 50, 85), mid: hills(L(), r, 4, 55, 90), near: hills(L(), r, 3, 60, 92), vars: "--hf:36%;--hm:28%;--hn:20%;", css: `&.p .mid,&.p .near{background-image:repeating-linear-gradient(170deg,transparent 0 5px,rgba(255,230,190,.08) 5px 6px),linear-gradient(var(--M),var(--M))}` }),
+        (r) => {
+          const far = L();
+          mesas(far, r, 5, [30, 60]);
+          const near = hills(L(), r, 3, 86, 96);
+          for (let i = 0;i < 4; i++)
+            cactus(near, between2(r, 0, W), 92, between2(r, 30, 56));
+          return { far, mid: hills(L(), r, 4, 70, 92), near, vars: "--hf:46%;--hm:24%;--hn:40%;--kt:#b5562a;--ka:40%;" };
+        },
+        (r) => {
+          const far = hills(L(), r, 3, 80, 95);
+          pyramid(far, 300, 92, 120);
+          pyramid(far, 420, 94, 80);
+          pyramid(far, 505, 95, 46);
+          const mid = hills(L(), r, 3, 82, 96);
+          for (let i = 0;i < 5; i++)
+            camel(mid, 300 + i * 40, 90 + i * 0.4, 1.1);
+          return { far, mid, near: hills(L(), r, 3, 70, 94), vars: "--hf:40%;--hm:30%;--hn:16%;" };
+        },
+        (r) => {
+          const near = L();
+          for (let i = 0;i < 5; i++)
+            palm(near, between2(r, 260, 560), 100, between2(r, 50, 80), r);
+          bush(near, 400, 100, 40, r);
+          return { far: hills(L(), r, 3, 50, 85), mid: hills(L(), r, 4, 70, 90), near, vars: water("12%", "--hf:32%;--hm:22%;--hn:46%;") };
+        }
+      ]
+    },
+    {
+      id: "canyon",
+      vars: ROCK,
+      variants: [
+        (r) => {
+          const far = L();
+          mesas(far, r, 6, [10, 40]);
+          const mid = L();
+          mesas(mid, r, 4, [20, 50]);
+          return { far, mid, near: hills(L(), r, 3, 80, 96), vars: "--hf:60%;--hm:46%;--hn:20%;", css: `&.p .far,&.p .mid{background-image:repeating-linear-gradient(180deg,transparent 0 9px,rgba(0,0,0,.12) 9px 11px),linear-gradient(var(--F),var(--M))}` };
+        },
+        (r) => {
+          const near = L(), fg = L();
+          near.path("M0 100V0H90Q120 30 110 60Q140 80 170 100Z");
+          fg.path("M800 100V0H690Q660 40 680 64Q640 84 620 100Z");
+          const far = L();
+          mesas(far, r, 5, [20, 50]);
+          return { far, mid: hills(L(), r, 3, 60, 90), near, fg, vars: "--hf:56%;--hm:30%;--hn:100%;--hg:100%;--an:0;--kn:0;--ag:1;--kg:0;", css: `&.p .fg{background:var(--N)}` };
+        },
+        (r) => {
+          const mid = L();
+          mid.hole(`M200 100V30Q400 10 600 30V100H520V80A120 70 0 0 0 280 80V100Z`);
+          return { far: (() => {
+            const l = L();
+            mesas(l, r, 5, [30, 60]);
+            return l;
+          })(), mid, near: hills(L(), r, 3, 84, 96), vars: "--hf:46%;--hm:60%;--hn:16%;" };
+        },
+        (r) => {
+          const near = L(), fg = L();
+          near.path("M0 100V10Q60 20 120 50L200 70Q230 90 250 100Z");
+          fg.path("M800 100V20Q740 30 690 56L600 74Q580 92 560 100Z");
+          return { far: (() => {
+            const l = L();
+            mesas(l, r, 6, [20, 45]);
+            return l;
+          })(), mid: hills(L(), r, 4, 50, 85), near, fg, vars: water("10%", "--hf:54%;--hm:40%;--hn:100%;--hg:100%;--an:0;--kn:0;--ag:1;--kg:0;"), css: `&.p .fg{background:var(--N)}` };
+        }
+      ]
+    },
+    {
+      id: "volcano",
+      vars: "--kt:#3a2420;--ka:45%;",
+      css: ANCHOR("f") + `&.p .kx:before{content:"";position:absolute;left:calc(50% - 70px);width:140px;top:calc(var(--cy) - 14%);height:44%;background:radial-gradient(40% 34% at 50% 34%,rgba(255,140,50,.9),rgba(255,60,20,.3) 60%,transparent 75%);filter:blur(3px)}&.p .kx:after{content:"";position:absolute;left:calc(50% - 100px);width:200px;bottom:calc(100% - var(--cy));height:150%;background:radial-gradient(26% 30% at 50% 92%,rgba(60,55,60,.9),transparent 70%),radial-gradient(36% 30% at 42% 58%,rgba(80,72,78,.72),transparent 70%),radial-gradient(44% 26% at 60% 24%,rgba(90,84,90,.55),transparent 70%);filter:blur(6px);transform-origin:50% 100%}@media (prefers-reduced-motion:no-preference){&.p .kx:after{animation:plume 18s ease-in-out infinite alternate}&.p .kx:before{animation:flicker 3s ease-in-out infinite}}`,
+      variants: [0, 1, 2, 3].map((v) => (r) => {
+        const far = L();
+        volcano(far, r, 400, 100, [560, 640, 520, 700][v], [62, 70, 56, 66][v]);
+        const near = v === 2 ? forest(L(), r, "dead", 10, 100, [30, 60], 2) : hills(L(), r, 4, 70, 94);
+        const lava = L();
+        for (let i = 0;i < 4; i++) {
+          const x = between2(r, 300, 500);
+          lava.line(1.4, `M${x} ${between2(r, 40, 50)}Q${x + between2(r, -30, 30)} 70 ${x + between2(r, -60, 60)} 100`);
+        }
+        return { far, mid: hills(L(), r, 5, 60, 90), near, win: lava, winOn: "far", vars: `--hf:${[64, 70, 58, 66][v]}%;--hm:24%;--hn:${v === 2 ? 40 : 18}%;--cy:${100 - [62, 70, 56, 66][v]}%;--kf:0;`, css: `&.p .lit{background:linear-gradient(180deg,#ffd27a,#ff5a1a);opacity:.9}` };
+      })
+    },
+    {
+      id: "sea",
+      vars: water("62%", "--hn:18%;"),
+      css: `&.p .near{background:linear-gradient(180deg,color-mix(in oklab,var(--N),#fff 18%),var(--N))}&.p .near{-webkit-mask-size:800px 100%;mask-size:800px 100%}@media (prefers-reduced-motion:no-preference){&.p .near{animation:pan 26s linear infinite}}`,
+      variants: [
+        (r) => {
+          const mid = L();
+          ship(mid, r, 420, 96, 0.95);
+          return { mid, near: waves(r, 6), vars: "--hm:66%;--bm:30%;" };
+        },
+        (r) => {
+          const far = L();
+          for (let i = 0;i < 4; i++) {
+            const x = between2(r, 0, W), w = between2(r, 60, 160);
+            far.path(`M${x - w / 2} 100Q${x - w * 0.2} ${between2(r, 60, 80)} ${x} ${between2(r, 62, 80)}Q${x + w * 0.25} ${between2(r, 70, 84)} ${x + w / 2} 100Z`);
+          }
+          const mid = L();
+          sailboat(mid, between2(r, 200, 600), 98, 1.3);
+          return { far, mid, near: waves(r, 4), vars: "--hf:30%;--hm:30%;--bm:30%;" };
+        },
+        (r) => {
+          const far = L();
+          for (let i = 0;i < 4; i++) {
+            const x = between2(r, 0, W), w = between2(r, 20, 50), h = between2(r, 40, 80);
+            far.poly([[x - w, 100], [x - w * 0.5, 100 - h], [x + w * 0.1, 100 - h - 5], [x + w * 0.6, 100 - h * 0.6], [x + w, 100]]);
+          }
+          lighthouse(far, 560, 70, 0.8);
+          return { far, near: waves(r, 7), vars: "--hf:42%;", css: BEAM("f", 560, 70 - 53.5 * 0.8) };
+        },
+        (r) => {
+          const far = L();
+          ship(far, r, between2(r, 200, 600), 98, 0.35);
+          const win = L();
+          win.rect(380, 90, 4, 3);
+          return { far, near: waves(r, 5), vars: "--hf:30%;" };
+        }
+      ]
+    },
+    {
+      id: "deck",
+      vars: water("62%"),
+      css: `&.p .fg{background:color-mix(in oklab,var(--N),#000 25%)}@media (prefers-reduced-motion:no-preference){&.p .scene{animation:sway 9s ease-in-out infinite alternate}}`,
+      variants: [0, 1, 2, 3].map((v) => (r) => {
+        const fg = L();
+        fg.rect(0, 86, W, 14);
+        let d = "M0 76H800";
+        for (let x = 6;x < W; x += 28)
+          d += `M${x} 86V76`;
+        fg.line(2.2, d);
+        const mx = [450, 330, 480, 360][v];
+        fg.rect(mx - 4, 0, 8, 86);
+        fg.line(1, `M${mx} 6L${mx - 260} 86M${mx} 6L${mx + 200} 86M${mx} 30L${mx - 180} 86M${mx} 30L${mx + 140} 86`);
+        fg.path(`M${mx - 90} 18H${mx + 90}Q${mx + 96} 36 ${mx + 90} 52H${mx - 90}Q${mx - 84} 36 ${mx - 90} 18Z`);
+        const far = L();
+        if (v % 2) {
+          for (let i = 0;i < 3; i++) {
+            const x = between2(r, 0, W);
+            far.path(`M${x - 70} 100Q${x} ${between2(r, 66, 80)} ${x + 70} 100Z`);
+          }
+        } else
+          sailboat(far, between2(r, 100, 700), 98, 0.7);
+        return { far, near: waves(r, 6), fg, vars: `--hf:20%;--hn:18%;--hg:100%;` };
+      })
+    },
+    {
+      id: "coast",
+      vars: water("34%", "--hn:20%;"),
+      variants: [
+        (r) => {
+          const mid = L();
+          mid.path("M0 100V50Q60 46 110 54Q150 62 170 76L200 88Q215 96 230 100Z");
+          lighthouse(mid, 70, 50, 0.6);
+          return { far: (() => {
+            const l = L();
+            for (let i = 0;i < 2; i++)
+              l.path(`M${between2(r, 300, 700)} 100q60 -26 120 0Z`);
+            return l;
+          })(), mid, near: waves(r, 6), vars: "--hf:20%;--hm:56%;--bm:0px;--am:0;--km:0;", css: BEAM("m", 70, 50 - 53.5 * 0.6) };
+        },
+        (r) => {
+          const mid = hills(L(), r, 3, 72, 90);
+          reeds(mid, r, 82, 80, [6, 16]);
+          return { far: (() => {
+            const l = L();
+            ridge(l, r, 50, 90, 0.5);
+            return l;
+          })(), mid, near: waves(r, 5), vars: "--hf:28%;--hm:22%;--bm:0px;" };
+        },
+        (r) => {
+          const far = L();
+          for (let i = 0;i < 5; i++) {
+            const x = between2(r, 0, W), w = between2(r, 14, 40), h = between2(r, 30, 90);
+            far.poly([[x - w, 100], [x - w * 0.4, 100 - h], [x + w * 0.3, 100 - h - 6], [x + w, 100]]);
+          }
+          const mid = L();
+          mid.path("M800 100V30Q740 30 700 50Q660 64 640 100Z");
+          return { far, mid, near: waves(r, 7), vars: "--hf:46%;--hm:70%;--bm:0px;--am:1;--km:0;" };
+        },
+        (r) => {
+          const mid = L(), win = L();
+          mid.path("M0 100V62H330Q360 80 380 100Z");
+          for (let x = 6;x < 300; x += between2(r, 30, 40)) {
+            const w = 26, y = 62;
+            mid.rect(x, y - 16, w, 18);
+            mid.poly([[x - 2, y - 15], [x + w / 2, y - 28], [x + w + 2, y - 15]]);
+            win.rect(x + 9, y - 10, 4, 5);
+          }
+          const boats = L();
+          sailboat(boats, 520, 98, 0.9);
+          sailboat(boats, 660, 99, 0.7);
+          return { far: boats, mid, win, winOn: "mid", near: waves(r, 5), vars: "--hf:16%;--hm:46%;--bm:0px;--am:0;--km:0;" };
+        }
+      ]
+    },
+    {
+      id: "harbour",
+      vars: water("24%", "--hn:14%;"),
+      variants: [0, 1, 2, 3].map((v) => (r) => {
+        const far = L(), mid = L(), win = L();
+        houses(far, win, r, 100, [14, 26], { steeple: v % 2 ? 0.7 : undefined });
+        for (let i = 0;i < 1 + v; i++)
+          ship(mid, r, 120 + i * 190 + between2(r, -30, 30), 98, 0.8 + i % 2 * 0.2, 2 + i % 2);
+        let d = "";
+        for (let x = 0;x < W; x += 16)
+          d += `M${x} 100V92`;
+        mid.line(1.6, d + "M0 92H800");
+        return { far, mid, win, winOn: "far", near: waves(r, 4), vars: "--hf:40%;--hm:56%;--bm:6%;" };
+      })
+    },
+    {
+      id: "lake",
+      vars: water("30%", "--hn:22%;"),
+      variants: [
+        (r) => {
+          const far = L();
+          ridge(far, r, 10, 70, 0.55);
+          return { far, mid: forest(L(), r, "pine", 50, 99, [8, 18]), near: (() => {
+            const l = L();
+            reeds(l, r, 100, 70, [14, 40]);
+            return l;
+          })(), vars: "--hf:52%;--hm:14%;--bm:30%;", css: SNOWCAP };
+        },
+        (r) => ({ far: hills(forest(L(), r, "round", 40, 96, [8, 16]), r, 4, 60, 88), mid: L(), near: (() => {
+          const l = L();
+          l.rect(300, 76, 300, 4);
+          for (let x = 310;x < 600; x += 40)
+            l.line(2, `M${x} 80V100`);
+          willow(l, 330, 100, 70, 60, r);
+          return l;
+        })(), vars: "--hf:34%;--hn:40%;" }),
+        (r) => {
+          const far = forest(L(), r, "mixed", 60, 99, [10, 24]);
+          const mid = L();
+          sailboat(mid, between2(r, 200, 600), 98, 0.6);
+          return { far, mid, near: (() => {
+            const l = L();
+            reeds(l, r, 100, 120, [10, 34]);
+            return l;
+          })(), vars: "--hf:26%;--hm:12%;--bm:24%;" };
+        },
+        (r) => {
+          const far = hills(L(), r, 5, 40, 80);
+          houses(far, far, r, 96, [5, 9], { steeple: 0.4 });
+          return { far, near: forest(L(), r, "birch", 6, 100, [50, 90], 0), vars: "--hf:30%;--hn:52%;" };
+        }
+      ]
+    },
+    {
+      id: "river",
+      vars: water("20%", "--hn:42%;") + VEG,
+      variants: [
+        (r) => ({ far: forest(L(), r, "round", 40, 99, [10, 22]), near: banks(r, "round"), vars: "--hf:30%;" }),
+        (r) => ({ far: hills(forest(L(), r, "pine", 50, 96, [8, 18]), r, 4, 60, 85), near: banks(r, "willow"), vars: "--hf:36%;" }),
+        (r) => {
+          const far = L();
+          houses(far, far, r, 100, [12, 22], { steeple: 0.3 });
+          return { far, near: banks(r, "cypress"), vars: "--hf:34%;" };
+        },
+        (r) => {
+          const mid = L();
+          windmill(mid, 470, 100, 1.4);
+          return { far: hills(L(), r, 4, 60, 90), mid, near: banks(r, "round"), vars: "--hf:28%;--hm:44%;--bm:20%;" };
+        }
+      ]
+    },
+    {
+      id: "bridge",
+      vars: water("22%", "--hn:30%;"),
+      variants: [1, 3, 2, 4].map((arches, v) => (r) => {
+        const mid = L();
+        if (v === 3)
+          suspension(mid, 100, 64);
+        else
+          archBridge(mid, r, 100, 56 + v * 4, arches);
+        const far = v % 2 ? forest(L(), r, "round", 40, 99, [10, 22]) : (() => {
+          const l = L();
+          houses(l, l, r, 100, [12, 24], { steeple: 0.6 });
+          return l;
+        })();
+        return { far, mid, near: banks(r, v === 0 ? "willow" : "round"), vars: `--hf:30%;--hm:${v === 3 ? 70 : 46}%;--bm:12%;` };
+      })
+    },
+    {
+      id: "tropic",
+      vars: water("30%", "--hn:58%;"),
+      css: `&.p .water{background:linear-gradient(180deg,color-mix(in oklab,var(--s3),#3fd0c9 30%),color-mix(in oklab,var(--s2),#1aa1a8 40%) 60%,color-mix(in oklab,var(--near),#0b6a78 30%))}`,
+      variants: [0, 1, 2, 3].map((v) => (r) => {
+        const near = L();
+        const side = v % 2 ? 620 : 120;
+        near.path(`M${side - 200} 100Q${side - 60} ${78} ${side + 160} 100Z`);
+        for (let i = 0;i < 2 + v; i++)
+          palm(near, side + between2(r, -90, 90), 96, between2(r, 50, 84), r, (v % 2 ? -1 : 1) * between2(r, 0.1, 0.35));
+        const far = L();
+        for (let i = 0;i < 2; i++) {
+          const x = between2(r, 200, 700);
+          far.path(`M${x - 70} 100Q${x} ${between2(r, 50, 70)} ${x + 70} 100Z`);
+          palm(far, x, 92, 14, r);
+        }
+        if (v === 2)
+          sailboat(far, between2(r, 100, 500), 99, 0.6);
+        return { far, near, vars: `--hf:24%;--an:${v % 2};--kn:0;` };
+      })
+    },
+    { id: "city_modern", variants: cityVariants(["modern", "modern", "modern"], (r, far, mid, near, v) => {
+      if (v === 1) {
+        suspension(near, 100, 76);
+      }
+      if (v === 3)
+        waterTower(near, 400, 76, 1.4);
+    }) },
+    { id: "city_deco", variants: cityVariants(["deco", "deco", "old"]) },
+    {
+      id: "city_old",
+      variants: [
+        cityVariants(["old", "old", "old"])[0],
+        cityVariants(["gothic", "gothic", "old"])[1],
+        cityVariants(["eastern", "eastern", "eastern"])[2],
+        cityVariants(["old", "old", "old"], (r, far) => {
+          castle(far, null, r, 400, 80, 1.1);
+        })[3]
+      ]
+    },
+    { id: "city_future", css: `&.p .lit{background:linear-gradient(90deg,#4ff0ff,#ff4fd8 50%,#ffd27a);opacity:calc(.35 + var(--lit) * .65)}`, variants: cityVariants(["future", "future", "modern"], (r, far, mid, near, v) => {
+      if (v % 2)
+        for (let i = 0;i < 3; i++)
+          far.rect(between2(r, 0, W), between2(r, 10, 40), between2(r, 60, 140), 2);
+    }) },
+    {
+      id: "town",
+      variants: [
+        (r) => {
+          const mid = L(), win = L();
+          houses(mid, win, r, 100, [18, 30], { steeple: 0.55 });
+          return { far: hills(L(), r, 4, 50, 85), mid, win, winOn: "mid", near: (() => {
+            const l = L();
+            houses(l, null, r, 100, [10, 18]);
+            return l;
+          })(), vars: "--hf:30%;--hm:46%;--hn:20%;" };
+        },
+        (r) => {
+          const mid = L(), win = L();
+          houses(mid, win, r, 100, [18, 28], {});
+          const cx = between2(r, 300, 500);
+          mid.rect(cx - 10, 30, 20, 70);
+          mid.poly([[cx - 13, 30], [cx, 8], [cx + 13, 30]]);
+          win.circle(cx, 40, 5);
+          return { far: forest(L(), r, "round", 30, 98, [10, 20]), mid, win, winOn: "mid", near: (() => {
+            const l = L();
+            lampPosts(l, 100, 180, 46);
+            l.rect(0, 96, W, 4);
+            return l;
+          })(), vars: "--hf:30%;--hm:50%;--hn:30%;" };
+        },
+        (r) => {
+          const mid = L(), win = L();
+          const prof = profile(r, 3, 40, 70);
+          mid.path(smoothPath(prof));
+          for (let x = 10;x < W; x += between2(r, 26, 40)) {
+            const y = 60 + Math.sin(x / 120) * 10, w = 24;
+            mid.rect(x, y - 14, w, 40);
+            mid.poly([[x - 2, y - 13], [x + w / 2, y - 26], [x + w + 2, y - 13]]);
+            if (r() < 0.6)
+              win.rect(x + 8, y - 6, 4, 5);
+          }
+          return { far: (() => {
+            const l = L();
+            ridge(l, r, 10, 60, 0.5);
+            return l;
+          })(), mid, win, winOn: "mid", near: forest(L(), r, "cypress", 10, 100, [30, 60], 2), vars: "--hf:56%;--hm:56%;--hn:34%;" };
+        },
+        (r) => {
+          const mid = L(), win = L();
+          houses(mid, win, r, 100, [24, 40], { gap: [-2, 2] });
+          return { mid, win, winOn: "mid", vars: water("16%", "--hm:58%;--bm:16%;") };
+        }
+      ]
+    },
+    {
+      id: "village",
+      vars: VEG,
+      variants: [
+        (r) => {
+          const mid = L(), win = L();
+          houses(mid, win, r, 100, [10, 16], { thatch: true, steeple: 0.4, gap: [6, 40] });
+          for (let i = 0;i < 6; i++)
+            roundTree(mid, between2(r, 0, W), 100, between2(r, 26, 40), 26, r);
+          return { far: hills(L(), r, 4, 50, 85), mid, win, winOn: "mid", near: (() => {
+            const l = hills(L(), r, 3, 86, 96);
+            fence(l, 96, 22, 10, false);
+            return l;
+          })(), vars: "--hf:34%;--hm:40%;--hn:22%;" };
+        },
+        (r) => {
+          const mid = L(), win = L();
+          houses(mid, win, r, 100, [10, 14], { thatch: true, gap: [20, 60] });
+          windmill(mid, between2(r, 430, 500), 100, 1.3);
+          return { far: forest(L(), r, "round", 40, 98, [10, 20]), mid, win, winOn: "mid", near: hills(L(), r, 3, 84, 96), vars: "--hf:34%;--hm:46%;--hn:16%;" };
+        },
+        (r) => {
+          const mid = L(), win = L();
+          houses(mid, win, r, 100, [12, 18], { gap: [10, 50] });
+          return { far: (() => {
+            const l = L();
+            ridge(l, r, 10, 60, 0.55);
+            return l;
+          })(), mid, win, winOn: "mid", near: forest(L(), r, "pine", 6, 100, [36, 70], 2), vars: "--hf:66%;--hm:36%;--hn:40%;", css: SNOWCAP };
+        },
+        (r) => {
+          const mid = L(), win = L();
+          houses(mid, win, r, 100, [10, 16], { thatch: true, steeple: 0.7, gap: [4, 30] });
+          return { far: hills(L(), r, 3, 60, 88), mid, win, winOn: "mid", vars: water("12%", "--hf:24%;--hm:40%;--bm:12%;") };
+        }
+      ]
+    },
+    {
+      id: "castle",
+      variants: [
+        (r) => {
+          const far = hills(L(), r, 3, 70, 90), win = L();
+          castle(far, win, r, 420, 74, 1);
+          return { far, mid: forest(L(), r, "round", 30, 99, [14, 26]), near: hills(L(), r, 3, 84, 96), win, winOn: "far", vars: "--hf:58%;--hm:30%;--hn:16%;" };
+        },
+        (r) => {
+          const mid = L();
+          castle(mid, null, r, 400, 100, 1.6);
+          return { far: hills(L(), r, 4, 50, 85), mid, near: forest(L(), r, "pine", 6, 100, [30, 60], 2), vars: "--hf:30%;--hm:70%;--hn:30%;" };
+        },
+        (r) => {
+          const far = L();
+          far.path("M800 100V36Q700 30 640 40Q580 60 560 100Z");
+          castle(far, null, r, 690, 38, 0.8);
+          return { far, near: waves(r, 6), vars: water("40%", "--hf:90%;--bf:0px;--hn:18%;--af:1;--kf:0;") };
+        },
+        (r) => {
+          const near = L();
+          near.rect(0, 40, W, 60);
+          for (let x = 0;x < W; x += 22)
+            near.rect(x, 30, 12, 11);
+          near.rect(80, 0, 60, 100);
+          near.rect(640, 0, 60, 100);
+          const far = L();
+          castle(far, null, r, 400, 100, 1.2);
+          return { far, near, vars: "--hf:56%;--hn:30%;", css: `&.p .far{background:linear-gradient(180deg,color-mix(in oklab,var(--F),var(--s3) 45%),var(--F))}` };
+        }
+      ]
+    },
+    {
+      id: "ruins",
+      vars: VEG,
+      variants: [
+        (r) => {
+          const mid = L();
+          ruins(mid, r, 100, 0.9);
+          return { far: hills(L(), r, 4, 50, 85), mid, near: hills(L(), r, 3, 86, 96), vars: "--hf:30%;--hm:52%;--hn:14%;" };
+        },
+        (r) => {
+          const mid = L();
+          ruins(mid, r, 100, 1.3);
+          return { far: forest(L(), r, "cypress", 24, 99, [16, 34]), mid, near: (() => {
+            const l = L();
+            ferns(l, r, 100, 10);
+            return l;
+          })(), vars: "--hf:40%;--hm:62%;--hn:22%;", css: MIST("12%") };
+        },
+        (r) => {
+          const mid = L();
+          ruins(mid, r, 100, 1);
+          return { far: forest(L(), r, "round", 26, 99, [16, 30]), mid, near: forest(L(), r, "dead", 2, 100, [60, 90], 0), fg: (() => {
+            const l = L();
+            vines(l, r, 10, [10, 40]);
+            return l;
+          })(), vars: "--hf:46%;--hm:54%;--hn:60%;--hg:100%;" };
+        },
+        (r) => {
+          const mid = L();
+          ruins(mid, r, 100, 1.1);
+          return { far: hills(L(), r, 3, 60, 90), mid, near: hills(L(), r, 3, 80, 96), vars: "--hf:30%;--hm:56%;--hn:16%;" + WARM };
+        }
+      ]
+    },
+    {
+      id: "graveyard",
+      css: MIST("8%", "22%", ".55"),
+      variants: [
+        (r) => {
+          const mid = L();
+          graves(mid, r, 100, 18);
+          return { far: (() => {
+            const l = L();
+            houses(l, null, r, 100, [10, 16], { steeple: 0.62, gap: [100, 200] });
+            return l;
+          })(), mid, near: (() => {
+            const l = L();
+            fence(l, 100, 12, 26);
+            return l;
+          })(), vars: "--hf:40%;--hm:26%;--hn:24%;" };
+        },
+        (r) => {
+          const mid = L();
+          graves(mid, r, 100, 14);
+          deadTree(mid, between2(r, 400, 470), 100, 90, r, 3.5);
+          return { far: forest(L(), r, "cypress", 20, 99, [16, 34]), mid, vars: "--hf:36%;--hm:54%;" };
+        },
+        (r) => {
+          const mid = L();
+          mid.hole("M330 100V50L400 20L470 50V100ZM386 100V70a14 14 0 0 1 28 0V100Z");
+          mid.rect(392, 4, 16, 18);
+          graves(mid, r, 100, 10);
+          return { far: forest(L(), r, "dead", 10, 99, [16, 30]), mid, near: (() => {
+            const l = L();
+            fence(l, 100, 10, 20);
+            return l;
+          })(), vars: "--hf:32%;--hm:48%;--hn:20%;" };
+        },
+        (r) => {
+          const mid = L();
+          graves(mid, r, 100, 22);
+          return { far: hills(L(), r, 3, 60, 90), mid, near: forest(L(), r, "dead", 2, 100, [70, 95], 0), vars: "--hf:26%;--hm:28%;--hn:80%;" };
+        }
+      ]
+    },
+    {
+      id: "camp",
+      css: `&.p .kx{top:auto;left:calc(50% - 50px);width:100px;bottom:0;height:34%;background:radial-gradient(40% 50% at 50% 100%,rgba(255,170,70,.75),rgba(255,110,40,.2) 60%,transparent 75%);opacity:calc(.3 + var(--lit) * .7)}@media (prefers-reduced-motion:no-preference){&.p .kx{animation:flicker 2.2s ease-in-out infinite}}`,
+      variants: [
+        (r) => ({ far: hills(L(), r, 4, 50, 85), mid: (() => {
+          const l = L();
+          tents(l, r, 100, 8);
+          return l;
+        })(), vars: "--hf:30%;--hm:40%;" }),
+        (r) => ({ far: forest(L(), r, "pine", 50, 98, [14, 30]), mid: (() => {
+          const l = L();
+          tents(l, r, 100, 4, 1.2);
+          return l;
+        })(), near: forest(L(), r, "pine", 4, 100, [60, 90], 0), vars: "--hf:44%;--hm:40%;--hn:46%;" }),
+        (r) => ({ far: hills(L(), r, 3, 60, 90), mid: (() => {
+          const l = L();
+          tents(l, r, 100, 5, 1);
+          return l;
+        })(), near: hills(L(), r, 3, 84, 96), vars: "--hf:26%;--hm:36%;--hn:12%;" + WARM }),
+        (r) => {
+          const far = L();
+          ridge(far, r, 10, 60, 0.6);
+          return { far, mid: (() => {
+            const l = L();
+            tents(l, r, 100, 6, 0.9);
+            return l;
+          })(), vars: "--hf:58%;--hm:36%;", css: SNOWCAP };
+        }
+      ]
+    },
+    {
+      id: "rooftop",
+      variants: [0, 1, 2, 3].map((v) => (r) => {
+        const far = L(), mid = L(), win = L(), near = L();
+        skyline(far, null, r, v === 3 ? "deco" : "modern", 100, [30, 70]);
+        skyline(mid, win, r, v === 3 ? "deco" : "modern", 100, [30, 66], 1.2);
+        near.rect(0, 80, W, 20);
+        near.rect(0, 74, W, 6);
+        waterTower(near, [460, 340, 420, 380][v], 74, 1.8);
+        let d = "";
+        for (let i = 0;i < 3; i++) {
+          const x = between2(r, 0, W);
+          d += `M${x} 74V${between2(r, 30, 50)}`;
+          near.rect(x - 2, 54, 12, 2);
+        }
+        near.line(1, d);
+        for (let i = 0;i < 4; i++)
+          near.rect(between2(r, 0, W), 64, between2(r, 14, 26), 10);
+        return { far, mid, win, winOn: "mid", near, vars: "--hf:70%;--hm:58%;--hn:40%;" };
+      })
+    },
+    {
+      id: "rooftop_old",
+      variants: [0, 1, 2, 3].map((v) => (r) => {
+        const far = L(), mid = L(), win = L(), near = L();
+        skyline(far, null, r, v === 2 ? "gothic" : "old", 100, [26, 60]);
+        houses(mid, win, r, 100, [20, 30], { steeple: v === 1 ? 0.5 : undefined });
+        near.path(`M0 100V64L${W / 2} 52L${W} 64V100Z`);
+        for (let i = 0;i < 4 + v; i++) {
+          const x = between2(r, 0, W);
+          near.rect(x, 34, 14, 30);
+          for (let k = 0;k < 3; k++)
+            near.rect(x + 1 + k * 4.5, 28, 3, 7);
+        }
+        return { far, mid, win, winOn: "mid", near, vars: "--hf:60%;--hm:46%;--hn:44%;" };
+      })
+    },
+    {
+      id: "underground",
+      css: `&.p .scene{background:#0a0808}`,
+      variants: [
+        (r) => {
+          const fg = L();
+          fg.hole(`M0 0H800V100H0ZM120 100Q140 20 400 14Q660 20 680 100Z`);
+          stalactites(fg, r, 26);
+          return { far: hills(L(), r, 4, 50, 85), mid: forest(L(), r, "pine", 20, 99, [14, 30]), vars: "--hf:30%;--hm:30%;--hg:100%;", css: `&.p{--mg:${fg.url(W, H, true)}}&.p .fg{background:linear-gradient(180deg,#1a1410,#0c0908);-webkit-mask-size:100% 100%;mask-size:100% 100%}` };
+        },
+        (r) => {
+          const fg = L();
+          stalactites(fg, r, 40);
+          stalactites(fg, r, 30, true);
+          const mid = L();
+          crystals(mid, r, 100, 9);
+          return { mid, fg, win: mid, winOn: "mid", vars: "--hm:46%;--hg:100%;", css: `&.p :is(.sky,.stars,.sun,.moon,.clouds,.clouds2,.rays,.fx,.fx2,.glow){display:none}&.p .fg{background:#0b0a12}&.p .lit{background:linear-gradient(180deg,#b7f3ff,#5ad1ff 50%,#9a6bff);opacity:.9}&.p .kx{background:radial-gradient(60% 50% at 50% 90%,rgba(90,200,255,.35),transparent 70%)}&.p .scene{background:radial-gradient(80% 70% at 50% 80%,#1d2a44,#07070d)}@media (prefers-reduced-motion:no-preference){&.p .lit{animation:breathe 5s ease-in-out infinite alternate}}` };
+        },
+        (r) => {
+          const fg = L();
+          fg.rect(0, 0, W, 12);
+          for (let x = 60;x < W; x += 260) {
+            fg.rect(x, 0, 14, 100);
+            fg.rect(x + 180, 0, 14, 100);
+            fg.rect(x - 6, 10, 206, 12);
+          }
+          fg.line(2, "M0 96H800M0 90H800");
+          let d = "";
+          for (let x = 0;x < W; x += 16)
+            d += `M${x} 100V90`;
+          fg.line(3, d);
+          return { fg, vars: "--hg:100%;", css: `&.p :is(.sky,.stars,.sun,.moon,.clouds,.clouds2,.rays,.fx,.fx2,.glow){display:none}&.p .scene{background:radial-gradient(40% 45% at 50% 52%,#3a2a1c,#120c08 60%,#050403)}&.p .fg{background:#1b130c}&.p .kx{background:radial-gradient(10% 18% at 33% 40%,rgba(255,180,90,.55),transparent 70%),radial-gradient(10% 18% at 66% 40%,rgba(255,180,90,.55),transparent 70%)}@media (prefers-reduced-motion:no-preference){&.p .kx{animation:flicker 3s ease-in-out infinite}}` };
+        },
+        (r) => {
+          const fg = L();
+          stalactites(fg, r, 36);
+          const mid = L();
+          stalactites(mid, r, 50, true);
+          return { mid, fg, vars: water("26%", "--hm:60%;--bm:20%;--hg:100%;"), css: `&.p :is(.sky,.stars,.sun,.moon,.clouds,.clouds2,.rays,.fx,.fx2,.glow){display:none}&.p .scene{background:radial-gradient(70% 60% at 50% 70%,#123040,#04080c)}&.p .fg{background:#060a0e}&.p .mid{background:#0b1820}&.p .water{background:linear-gradient(180deg,#1a5a6a,#06141a)}&.p .kx{background:radial-gradient(40% 30% at 50% 74%,rgba(90,230,220,.35),transparent 70%)}` };
+        }
+      ]
+    },
+    {
+      id: "space",
+      vars: "--g:0px;",
+      css: `&.p :is(.clouds,.clouds2,.rays,.sun,.moon,.glow,.ground){display:none}&.p .sky{background:radial-gradient(60% 50% at 70% 30%,rgba(120,60,180,.35),transparent 70%),radial-gradient(50% 40% at 20% 70%,rgba(40,120,200,.3),transparent 70%),#02030a}&.p .stars{opacity:1}`,
+      variants: [
+        () => ({ css: `&.p .kx{inset:auto;left:-20%;right:-20%;bottom:-160%;height:200%;border-radius:50%;background:radial-gradient(circle at 50% 30%,#3a6fb0,#123060 40%,#071430 60%);box-shadow:0 0 40px 10px rgba(120,190,255,.55),inset 0 12px 30px rgba(190,230,255,.45)}` }),
+        () => ({ css: `&.p .kx{inset:auto;left:58%;top:16%;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#f5d6a0,#c08850 50%,#5a3a20 80%);box-shadow:inset -18px -10px 30px rgba(0,0,0,.6)}&.p .kx2{inset:auto;left:calc(58% - 70px);top:calc(16% + 48px);width:260px;height:26px;border-radius:50%;border:3px solid rgba(240,210,160,.6);transform:rotate(-14deg);box-shadow:0 0 0 4px rgba(240,210,160,.15)}` }),
+        (r) => {
+          const mid = L();
+          station(mid, r, 400, 50, 1.6);
+          return { mid, win: (() => {
+            const w = L();
+            for (let i = 0;i < 9; i++)
+              w.rect(330 + i * 16, 49, 4, 2);
+            return w;
+          })(), winOn: "mid", vars: "--hm:70%;--bm:12%;", css: `&.p .mid{background:linear-gradient(180deg,#2a3346,#0c1018)}&.p .lit{background:#9ff3ff;opacity:1}&.p .kx{inset:0;background:radial-gradient(40% 50% at 30% 40%,rgba(255,80,160,.28),transparent 70%),radial-gradient(40% 40% at 70% 60%,rgba(80,200,255,.25),transparent 70%)}` };
+        },
+        (r) => {
+          const mid = L();
+          asteroids(mid, r, 30, [20, 95], [3, 12]);
+          const near = L();
+          asteroids(near, r, 6, [60, 100], [14, 26]);
+          return { mid, near, vars: "--hm:80%;--hn:60%;", css: `&.p .mid{background:#3a3436}&.p .near{background:#1a1718}&.p :is(.mid,.near){-webkit-mask-size:800px 100%;mask-size:800px 100%}@media (prefers-reduced-motion:no-preference){&.p .mid{animation:pan 120s linear infinite}&.p .near{animation:pan 60s linear infinite}}` };
+        }
+      ]
+    }
+  ];
+  BOXES = [
+    { box: "right:7%;left:auto;width:clamp(116px,26%,190px)", wx: "80%", shx: "6%" },
+    { box: "left:7%;right:auto;width:clamp(116px,26%,190px)", wx: "20%", shx: "64%" },
+    { box: "left:auto;right:6%;width:clamp(200px,42%,330px)", wx: "73%", shx: "5%" },
+    { box: "left:50%;right:auto;width:clamp(130px,30%,220px);transform:translateX(-50%)", wx: "50%", shx: "-100%" }
+  ];
+  ROOMS = [
+    {
+      id: "tavern",
+      css: `&.p .wall{background:repeating-linear-gradient(90deg,rgba(0,0,0,.18) 0 2px,transparent 2px 64px),linear-gradient(180deg,#4a2e1a,#26170d)}&.p .wain{height:26%;border-top:5px solid #5a3c25;background:repeating-linear-gradient(90deg,#231509 0 3px,transparent 3px 40px),linear-gradient(#2c1b10,#1a100a)}&.p .lamp{background:radial-gradient(34% 70% at 12% 100%,rgba(255,150,60,.65),transparent 70%),radial-gradient(10% 22% at 40% 18%,rgba(255,200,120,.55),transparent 70%)}&.p .ra{top:30%;bottom:auto;left:var(--shx);width:30%;height:20%;-webkit-mask:var(--sh) 0 100%/auto 100% repeat-x;mask:var(--sh) 0 100%/auto 100% repeat-x;background:linear-gradient(180deg,#3a5a3a,#5a2a1a 50%,#1a0f08)}`,
+      view: (r) => ({ far: (() => {
+        const l = L();
+        houses(l, l, r, 100, [24, 40], { steeple: 0.4 });
+        return l;
+      })(), vars: "--hf:46%;" }),
+      windows: (v) => ({ ...windowSet(v === 2 ? "rect" : "arch", v === 2 ? 2 : 1, 2, 3, 9), box: BOXES[v].box + (v === 2 ? ";top:13%;aspect-ratio:2/1.15" : ";top:13%;aspect-ratio:1/1.1"), wx: BOXES[v].wx, shx: BOXES[v].shx })
+    },
+    {
+      id: "library",
+      css: `&.p .wall{background:linear-gradient(180deg,#2c2218,#17110b)}&.p .ra,&.p .rb{top:0;bottom:0;width:30%;background:repeating-linear-gradient(180deg,transparent 0 calc(25% - 6px),#1a120a calc(25% - 6px) 25%),repeating-linear-gradient(90deg,#6b2d22 0 7px,#2c3e2a 7px 12px,#8a6a2a 12px 16px,#3a2a4a 16px 22px,#7a4a1c 22px 26px,#1e2e40 26px 33px,#5a1e1e 33px 37px);box-shadow:inset 0 0 40px rgba(0,0,0,.7);filter:brightness(calc(.55 + (1 - var(--lit)) * .3))}&.p .ra{left:0}&.p .rb{right:0;left:auto}&.p .lamp{background:radial-gradient(20% 40% at 50% 92%,rgba(140,230,150,.35),transparent 70%),radial-gradient(30% 50% at 50% 100%,rgba(255,200,120,.4),transparent 70%)}&.p .wain{height:14%;background:linear-gradient(#3a2416,#1c110a)}`,
+      view: (r) => ({ far: (() => {
+        const l = L();
+        skyline(l, l, r, "old", 100, [30, 60]);
+        return l;
+      })(), vars: "--hf:46%;" }),
+      windows: (v) => ({ ...windowSet(v === 1 ? "lancet" : "arch", v === 2 ? 2 : 1, 2, 4, 8), box: (v === 2 ? "left:50%;right:auto;width:clamp(160px,34%,260px);transform:translateX(-50%)" : "left:50%;right:auto;width:clamp(110px,22%,160px);transform:translateX(-50%)") + ";top:8%;bottom:16%" })
+    },
+    {
+      id: "bedroom",
+      css: `&.p .wall{background:radial-gradient(circle at 50% 50%,rgba(255,230,210,.07) 0 3px,transparent 4px) 0 0/34px 34px,linear-gradient(180deg,#3a2c38,#1e1620)}&.p .wain{height:18%;background:linear-gradient(#2a1d22,#140d10)}&.p .ra{left:var(--shx);width:44%;top:auto;bottom:10%;height:30%;-webkit-mask:var(--sh) 0 100%/100% 100%;mask:var(--sh) 0 100%/100% 100%;background:linear-gradient(180deg,#4a2c3a,#160c12 70%)}&.p .rb{inset:0;background:linear-gradient(90deg,transparent calc(var(--wx) - 12%),rgba(120,40,60,.85) calc(var(--wx) - 12%),rgba(70,20,35,.9) calc(var(--wx) - 6%),transparent calc(var(--wx) - 5.5%),transparent calc(var(--wx) + 5.5%),rgba(70,20,35,.9) calc(var(--wx) + 6%),rgba(120,40,60,.85) calc(var(--wx) + 12%),transparent calc(var(--wx) + 12%))}&.p .lamp{background:radial-gradient(18% 40% at 62% 72%,rgba(255,180,110,.6),transparent 70%)}`,
+      view: (r) => ({ far: (() => {
+        const l = L();
+        houses(l, l, r, 100, [26, 40]);
+        return l;
+      })(), vars: "--hf:40%;" }),
+      windows: (v) => ({ ...windowSet("rect", 1, 2, 2, 8), box: BOXES[v === 2 ? 0 : v].box + ";top:10%;aspect-ratio:1/1.2", wx: BOXES[v === 2 ? 0 : v].wx, shx: BOXES[v === 2 ? 0 : v].shx })
+    },
+    {
+      id: "chapel",
+      css: `&.p .wall{background:repeating-linear-gradient(0deg,rgba(0,0,0,.25) 0 2px,transparent 2px 22px),repeating-linear-gradient(90deg,rgba(0,0,0,.2) 0 2px,transparent 2px 44px),linear-gradient(180deg,#3a3640,#18161c)}&.p .wain{height:12%;background:linear-gradient(#26222a,#100e12)}&.p .scene:after{content:"";position:absolute;inset:0;background:conic-gradient(from 30deg at 50% 60%,rgba(200,40,60,.5),rgba(40,90,200,.5),rgba(230,180,40,.5),rgba(40,150,90,.5),rgba(140,50,170,.5),rgba(200,40,60,.5));mix-blend-mode:color;opacity:.8}&.p .lamp{background:radial-gradient(4% 10% at 20% 84%,rgba(255,200,110,.9),transparent 70%),radial-gradient(4% 10% at 28% 86%,rgba(255,200,110,.8),transparent 70%),radial-gradient(4% 10% at 72% 86%,rgba(255,200,110,.8),transparent 70%),radial-gradient(4% 10% at 80% 84%,rgba(255,200,110,.9),transparent 70%),radial-gradient(40% 40% at 50% 100%,rgba(255,180,90,.3),transparent 70%)}&.p .ra,&.p .rb{top:0;bottom:0;width:7%;background:linear-gradient(90deg,#141217,#3a3640 40%,#1a181e)}&.p .ra{left:12%}&.p .rb{right:12%;left:auto}&.p .spill{background:linear-gradient(170deg,transparent 30%,rgba(255,220,180,.12) 50%,transparent 70%)}`,
+      view: () => ({}),
+      windows: (v) => ({ ...windowSet("lancet", v === 2 ? 3 : 1, 2, 3, 8), box: `left:50%;right:auto;width:${v === 2 ? "clamp(180px,40%,300px)" : "clamp(90px,18%,130px)"};transform:translateX(-50%);top:6%;bottom:18%` })
+    },
+    {
+      id: "hall",
+      css: `&.p .wall{background:repeating-linear-gradient(90deg,rgba(255,215,140,.1) 0 2px,transparent 2px 90px),linear-gradient(180deg,#4a1820,#22080e)}&.p .wain{height:22%;border-top:3px solid #c9a45c;background:repeating-conic-gradient(#e8dcc6 0 25%,#1c1418 0 50%) 0 0/40px 40px;transform:perspective(200px) rotateX(38deg);transform-origin:50% 100%;filter:brightness(.7)}&.p .ra{left:calc(50% - 60px);width:120px;top:0;height:30%;-webkit-mask:var(--sh) 50% 0/100% 100%;mask:var(--sh) 50% 0/100% 100%;background:#c9a45c;filter:drop-shadow(0 0 6px #ffd27a)}&.p .lamp{background:radial-gradient(30% 34% at 50% 20%,rgba(255,220,150,.55),transparent 70%)}`,
+      view: (r) => ({ far: forest(L(), r, "cypress", 24, 99, [20, 40]), vars: "--hf:36%;" }),
+      windows: (v) => ({ ...windowSet("arch", v === 1 ? 2 : 3, 2, 4, 7), box: "left:8%;right:8%;top:8%;bottom:26%" })
+    },
+    {
+      id: "lab",
+      css: `&.p .wall{background:repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 30px),repeating-linear-gradient(90deg,rgba(255,255,255,.05) 0 1px,transparent 1px 30px),linear-gradient(180deg,#1c2a32,#0c1418)}&.p .wain{height:16%;background:linear-gradient(#1a2328,#0a0f12);border-top:2px solid rgba(120,240,255,.4)}&.p .lamp{background:linear-gradient(180deg,rgba(200,250,255,.25),transparent 30%),radial-gradient(6% 8% at 14% 70%,rgba(80,240,255,.7),transparent 70%),radial-gradient(6% 8% at 24% 72%,rgba(120,255,170,.6),transparent 70%)}&.p .ra{left:6%;width:26%;top:auto;bottom:16%;height:22%;background:repeating-linear-gradient(90deg,#0b1216 0 30%,rgba(80,240,255,.35) 30% 32%,#0b1216 32% 34%);border-radius:4px;box-shadow:0 0 20px rgba(80,240,255,.25)}`,
+      view: (r) => {
+        const l = L();
+        skyline(l, l, r, "future", 100, [30, 70]);
+        return { far: l, vars: "--hf:56%;" };
+      },
+      windows: (v) => ({ ...windowSet("round", 1, v + 2, 1, 6), box: "left:auto;right:5%;width:clamp(220px,52%,420px);top:10%;bottom:30%" })
+    },
+    {
+      id: "train",
+      css: `&.p .wall{background:linear-gradient(180deg,#3a2a24,#1c1210)}&.p .wain{height:22%;background:linear-gradient(#5a1e22,#2a0c10)}&.p .scene .land{-webkit-mask-size:800px 100%;mask-size:800px 100%}@media (prefers-reduced-motion:no-preference){&.p .scene .far{animation:pan 30s linear infinite}&.p .scene .mid{animation:pan 9s linear infinite}&.p .scene .near{animation:pan 2.6s linear infinite}&.p .scene{animation:rattle .5s steps(2) infinite}}&.p .lamp{background:radial-gradient(14% 30% at 12% 20%,rgba(255,200,120,.6),transparent 70%),radial-gradient(14% 30% at 88% 20%,rgba(255,200,120,.6),transparent 70%)}`,
+      view: (r) => {
+        const near = L();
+        let d = "";
+        for (let x = 20;x < W; x += 200) {
+          d += `M${x} 100V20M${x - 8} 26H${x + 8}`;
+        }
+        near.line(2.2, d);
+        near.line(0.8, "M0 30Q100 40 200 30Q300 40 400 30Q500 40 600 30Q700 40 800 30");
+        return { far: hills(L(), r, 4, 40, 80), mid: forest(L(), r, "mixed", 24, 99, [20, 40]), near, vars: "--hf:46%;--hm:40%;--hn:70%;" };
+      },
+      windows: (v) => ({ ...windowSet("round", v === 3 ? 1 : 2, 1, 1, 8), box: "left:6%;right:6%;top:14%;bottom:30%" })
+    },
+    {
+      id: "home",
+      css: `&.p .wall{background:linear-gradient(180deg,#3a3430,#1c1916)}&.p .wain{height:16%;background:linear-gradient(#2e2420,#16110e)}&.p .ra{left:auto;right:calc(100% - var(--wx) - 6%);width:20%;top:auto;bottom:30%;height:22%;-webkit-mask:var(--sh) 50% 100%/contain no-repeat;mask:var(--sh) 50% 100%/contain no-repeat;background:#141a12}&.p .rb{left:30%;width:40px;top:0;height:30%;background:linear-gradient(90deg,transparent 48%,#111 48% 52%,transparent 52%) 0 0/100% 70% no-repeat,radial-gradient(50% 40% at 50% 100%,#e8d3a0,#a07a3a 70%,transparent 72%) 0 100%/100% 34% no-repeat}&.p .lamp{background:radial-gradient(22% 46% at 33% 46%,rgba(255,210,140,.5),transparent 70%)}`,
+      view: (r) => {
+        const l = L();
+        skyline(l, l, r, "modern", 100, [30, 66]);
+        return { far: l, vars: "--hf:56%;" };
+      },
+      windows: (v) => ({ ...windowSet("rect", v === 2 ? 2 : 1, 3, 2, 6), box: BOXES[v].box + ";top:12%;bottom:32%", wx: BOXES[v].wx, shx: BOXES[v].shx })
+    },
+    {
+      id: "tent",
+      css: `&.p .wall{background:repeating-linear-gradient(100deg,rgba(0,0,0,.12) 0 18px,transparent 18px 60px),linear-gradient(180deg,#6a5434,#2e2214)}&.p .wain{height:14%;background:linear-gradient(#3a2c1a,#1a120a)}&.p .lamp{background:radial-gradient(14% 26% at 24% 34%,rgba(255,190,100,.75),transparent 70%)}&.p .ra{left:24%;width:2px;top:0;height:30%;background:#111}`,
+      view: (r) => ({ far: hills(L(), r, 4, 40, 80), mid: (() => {
+        const l = L();
+        tents(l, r, 100, 5, 1.2);
+        return l;
+      })(), vars: "--hf:46%;--hm:50%;" }),
+      windows: () => ({ ...windowSet("tri", 1, 1, 1, 4), box: "left:50%;right:auto;width:clamp(150px,32%,240px);transform:translateX(-50%);top:4%;bottom:14%" })
+    },
+    {
+      id: "kitchen",
+      css: `&.p .wall{background:linear-gradient(180deg,#4a4238,#2a241e)}&.p .rd{left:0;right:0;bottom:30%;height:22%;background:repeating-linear-gradient(0deg,rgba(0,0,0,.25) 0 1px,transparent 1px 14px),repeating-linear-gradient(90deg,rgba(0,0,0,.25) 0 1px,transparent 1px 14px),linear-gradient(#8f8676,#6a6252);filter:brightness(calc(.45 + (1 - var(--lit)) * .3))}&.p .rc{left:0;right:0;bottom:0;height:30%;border-top:6px solid #8a7a66;background:repeating-linear-gradient(90deg,#2c241c 0 2px,#4a3c2e 2px 24%);filter:brightness(calc(.6 + (1 - var(--lit)) * .3))}&.p .rb{left:0;right:0;top:0;height:13%;background:repeating-linear-gradient(90deg,#2c241c 0 2px,#5a4a38 2px 16%);box-shadow:0 6px 12px rgba(0,0,0,.4)}&.p .ra{left:var(--shx);top:14%;width:28%;height:24%;-webkit-mask:var(--sh) 0 0/auto 100% repeat-x;mask:var(--sh) 0 0/auto 100% repeat-x;background:linear-gradient(#8a8f96,#2a2c30)}&.p .wain{display:none}&.p .lamp{background:radial-gradient(18% 40% at var(--wx) 46%,rgba(255,226,170,.45),transparent 70%)}`,
+      view: (r) => ({ far: (() => {
+        const l = L();
+        houses(l, l, r, 100, [26, 40]);
+        return l;
+      })(), vars: "--hf:46%;" }),
+      windows: (v) => {
+        const b = BOXES[v === 3 ? 0 : v];
+        return { ...windowSet("rect", 1, 2, 2, 7), box: b.box + ";top:15%;bottom:48%", wx: b.wx, shx: b.shx };
+      }
+    },
+    {
+      id: "office",
+      css: `&.p .wall{background:linear-gradient(180deg,#2e343c,#171b20)}&.p .wf{background:linear-gradient(180deg,#c9ccd2,#7a7f88)}&.p .wain{height:14%;background:linear-gradient(#22262c,#111316)}&.p .rc{left:var(--shx);width:40%;bottom:14%;height:18%;-webkit-mask:var(--sh) 50% 100%/100% 100%;mask:var(--sh) 50% 100%/100% 100%;background:#0e1013}&.p .ra{left:calc(var(--shx) + 14%);width:12%;bottom:30%;height:12%;border-radius:3px;background:linear-gradient(160deg,#9fe3ff,#2a6aa0);box-shadow:0 0 24px 6px rgba(120,200,255,.35);opacity:calc(.5 + var(--lit) * .5)}&.p .lamp{background:linear-gradient(180deg,rgba(220,235,255,.18),transparent 22%),radial-gradient(16% 30% at calc(var(--shx) + 20%) 66%,rgba(140,210,255,.35),transparent 70%)}`,
+      view: (r) => {
+        const l = L(), w = L();
+        skyline(l, w, r, "modern", 100, [30, 70], 1.3);
+        return { far: l, win: w, winOn: "far", vars: "--hf:66%;" };
+      },
+      windows: (v) => ({ ...windowSet("rect", v === 2 ? 2 : 1, 1, 14, 6), box: BOXES[v].box + ";top:10%;bottom:34%", wx: BOXES[v].wx, shx: BOXES[v].shx })
+    },
+    {
+      id: "cafe",
+      css: `&.p .wall{background:linear-gradient(180deg,#3a2c22,#1e1610)}&.p .rb{left:0;right:0;top:0;height:11%;background:repeating-linear-gradient(90deg,#b8382e 0 26px,#efe4d0 26px 52px);-webkit-mask:radial-gradient(14px 10px at 13px 100%,transparent 98%,#000) 0 0/26px 100%;mask:radial-gradient(14px 10px at 13px 100%,transparent 98%,#000) 0 0/26px 100%;filter:brightness(calc(.55 + (1 - var(--lit)) * .4))}&.p .rd{left:var(--shx);top:20%;width:22%;height:32%;border:4px solid #5a3c22;border-radius:4px;background:repeating-linear-gradient(0deg,transparent 0 12px,rgba(240,240,230,.35) 12px 13px) 10px 10px/70% 80% no-repeat,#1e2a24}&.p .rc{left:0;right:0;bottom:0;height:24%;border-top:5px solid #6a4a2c;background:linear-gradient(#3a2a1c,#1a120a)}&.p .lamp{background:radial-gradient(5% 9% at 20% 20%,rgba(255,210,140,.95),transparent 70%),radial-gradient(5% 9% at 50% 20%,rgba(255,210,140,.95),transparent 70%),radial-gradient(5% 9% at 80% 20%,rgba(255,210,140,.95),transparent 70%),radial-gradient(60% 40% at 50% 30%,rgba(255,190,120,.25),transparent 70%)}&.p .wain{display:none}`,
+      view: (r) => ({ far: (() => {
+        const l = L();
+        houses(l, l, r, 100, [30, 46], { gap: [-2, 4] });
+        return l;
+      })(), near: (() => {
+        const l = L();
+        lampPosts(l, 100, 220, 60, 90);
+        return l;
+      })(), vars: "--hf:66%;--hn:64%;" }),
+      windows: (v) => ({ ...windowSet("rect", 1, 3, 1, 8), box: (v % 2 ? "left:4%;right:auto;width:58%" : "left:auto;right:4%;width:58%") + ";top:14%;bottom:26%", wx: v % 2 ? "33%" : "67%", shx: v % 2 ? "70%" : "6%" })
+    },
+    {
+      id: "club",
+      css: `&.p :is(.scene,.wf){display:none}&.p .wall{background:radial-gradient(70% 60% at 50% 0%,#2a0f3a,#07040c 70%)}&.p .walldim{opacity:0}&.p .rd{inset:9% 7% auto 7%;height:3px;border-radius:3px;background:#ff4fd8;box-shadow:0 0 10px 3px #ff4fd8,0 0 30px 8px rgba(255,79,216,.5)}&.p .rc{left:10%;right:10%;top:20%;height:20%;background:linear-gradient(90deg,#4ff0ff,#4ff0ff) 0 50%/100% 3px no-repeat;-webkit-mask:repeating-linear-gradient(90deg,#000 0 34px,transparent 34px 40px);mask:repeating-linear-gradient(90deg,#000 0 34px,transparent 34px 40px);filter:drop-shadow(0 0 6px #4ff0ff)}&.p .ra{left:calc(50% - 16px);top:4%;width:32px;height:32px;border-radius:50%;background:repeating-conic-gradient(#ddd 0 10deg,#666 10deg 20deg);box-shadow:0 0 30px 8px rgba(255,255,255,.35)}&.p .rb{inset:0;background:conic-gradient(from 160deg at 50% 6%,transparent 0 10deg,rgba(255,80,220,.22) 12deg 18deg,transparent 20deg 30deg,rgba(80,240,255,.2) 32deg 38deg,transparent 40deg);mix-blend-mode:screen;transform-origin:50% 6%}&.p .wain{height:22%;background:repeating-linear-gradient(90deg,rgba(255,79,216,.18) 0 2px,transparent 2px 40px),linear-gradient(#1a0a24,#050208)}&.p .lamp{opacity:1;background:radial-gradient(40% 30% at 50% 100%,rgba(255,79,216,.25),transparent 70%)}@media (prefers-reduced-motion:no-preference){&.p .rb{animation:sweep 6s ease-in-out infinite alternate}&.p .ra{animation:spin 8s linear infinite}&.p .rd{animation:flicker 2.4s ease-in-out infinite}}`,
+      view: () => ({}),
+      windows: () => ({ ...windowSet("rect", 1, 1, 1, 4), box: "left:0;width:0" })
+    },
+    {
+      id: "classroom",
+      css: `&.p .wall{background:linear-gradient(180deg,#3c4038,#20231e)}&.p .rd{left:var(--shx);width:44%;top:16%;height:36%;border:6px solid #6a4a2a;border-radius:3px;background:radial-gradient(40% 10% at 30% 30%,rgba(255,255,255,.18),transparent 70%),radial-gradient(30% 8% at 60% 60%,rgba(255,255,255,.14),transparent 70%),linear-gradient(170deg,#2e4a3a,#1a2e24)}&.p .rd:after{content:"";position:absolute;left:10%;top:22%;width:60%;height:50%;background:repeating-linear-gradient(0deg,transparent 0 10px,rgba(240,240,230,.45) 10px 11px);-webkit-mask:linear-gradient(90deg,#000 0 40%,transparent 40% 48%,#000 48% 80%,transparent 80%);mask:linear-gradient(90deg,#000 0 40%,transparent 40% 48%,#000 48% 80%,transparent 80%)}&.p .rc{left:0;right:0;bottom:0;height:20%;-webkit-mask:var(--sh) 0 100%/auto 100% repeat-x;mask:var(--sh) 0 100%/auto 100% repeat-x;background:#1a140e}&.p .ra{left:calc(var(--shx) + 20%);top:5%;width:22px;height:22px;border-radius:50%;background:#efe9dc;border:2px solid #222;box-shadow:inset 0 0 0 1px #999}&.p .wain{height:20%;background:linear-gradient(#3a2e22,#1c160e)}`,
+      view: (r) => ({ far: forest(L(), r, "round", 20, 99, [20, 40]), mid: hills(L(), r, 3, 70, 92), vars: "--hf:46%;--hm:24%;" }),
+      windows: (v) => ({ ...windowSet("rect", 3, 2, 3, 6), box: (v % 2 ? "left:4%;right:auto" : "left:auto;right:4%") + ";width:44%;top:10%;bottom:28%", wx: v % 2 ? "26%" : "74%", shx: v % 2 ? "52%" : "4%" })
+    },
+    {
+      id: "ward",
+      css: `&.p .wall{background:linear-gradient(180deg,#5a6e6a,#2e3a38)}&.p .rb{left:calc(var(--shx) - 4%);width:22%;top:4%;bottom:12%;background:repeating-linear-gradient(90deg,#9ab6b0 0 10px,#6e8a84 10px 16px,#9ab6b0 16px 24px);border-top:4px solid #ccc;opacity:.92}&.p .rc{left:calc(var(--shx) + 18%);width:38%;top:auto;bottom:10%;height:26%;-webkit-mask:var(--sh) 0 100%/100% 100%;mask:var(--sh) 0 100%/100% 100%;background:linear-gradient(#e8ecea,#9aa4a2)}&.p .ra{left:calc(var(--shx) + 46%);top:24%;width:14%;height:14%;border-radius:4px;border:3px solid #333;background:#071810;overflow:hidden}&.p .ra:after{content:"";position:absolute;inset:0;background:linear-gradient(#6aff9a,#6aff9a) center/100% 2px no-repeat,linear-gradient(#6aff9a,#6aff9a) 30% 30%/2px 40% no-repeat,linear-gradient(#6aff9a,#6aff9a) 34% 70%/2px 30% no-repeat;filter:drop-shadow(0 0 3px #6aff9a)}&.p .wain{height:12%;background:linear-gradient(#7a8a86,#3a4442)}&.p .lamp{background:linear-gradient(180deg,rgba(230,255,250,.25),transparent 30%)}@media (prefers-reduced-motion:no-preference){&.p .ra:after{animation:ecg 1.6s linear infinite}}`,
+      view: (r) => ({ far: (() => {
+        const l = L();
+        skyline(l, l, r, "modern", 100, [24, 60]);
+        return l;
+      })(), vars: "--hf:50%;" }),
+      windows: (v) => {
+        const b = BOXES[v === 3 ? 1 : v];
+        return { ...windowSet("rect", 1, 1, 10, 6), box: b.box + ";top:10%;bottom:36%", wx: b.wx, shx: b.shx };
+      }
+    },
+    {
+      id: "cell",
+      css: `&.p .wall{background:repeating-linear-gradient(0deg,rgba(0,0,0,.35) 0 2px,transparent 2px 30px),repeating-linear-gradient(90deg,rgba(0,0,0,.3) 0 2px,transparent 2px 60px),linear-gradient(180deg,#3a3834,#161512)}&.p .wf{background:#1a1a1c}&.p .rc{left:var(--shx);width:40%;bottom:8%;height:14%;background:linear-gradient(#4a4036,#1c1812);border-top:3px solid #6a5a48}&.p .ra{left:calc(var(--shx) + 6%);top:40%;width:2px;height:24%;background:repeating-linear-gradient(180deg,#555 0 5px,transparent 5px 7px)}&.p .wain{height:10%;background:#100f0d}&.p .lamp{background:none}&.p .spill{opacity:calc(.3 + (1 - var(--lit)) * .7);background:linear-gradient(160deg,transparent 30%,rgba(255,250,230,.14) 40%,transparent 56%)}`,
+      view: () => ({}),
+      windows: (v) => ({ ...windowSet("rect", 1, 4, 1, 10), box: (v % 2 ? "left:20%;right:auto" : "left:auto;right:20%") + ";width:clamp(80px,18%,130px);top:9%;aspect-ratio:2/1", wx: v % 2 ? "28%" : "72%", shx: v % 2 ? "52%" : "8%" })
+    },
+    {
+      id: "cabin",
+      css: `&.p .wall{background:repeating-linear-gradient(0deg,rgba(0,0,0,.3) 0 2px,transparent 2px 26px),linear-gradient(180deg,#5a3a22,#2a180c)}&.p .wf{background:radial-gradient(circle,#c9a45c,#7a5a2a)}&.p .ra{left:var(--shx);top:0;width:30px;height:40%;transform-origin:50% 0;background:linear-gradient(#222,#222) 50% 0/2px 70% no-repeat,radial-gradient(40% 18% at 50% 82%,#ffd27a,#c06a1a 60%,transparent 64%)}&.p .lamp{background:radial-gradient(24% 40% at calc(var(--shx) + 2%) 36%,rgba(255,190,100,.6),transparent 70%)}&.p .wain{height:16%;background:linear-gradient(#3a2414,#1a0e06)}@media (prefers-reduced-motion:no-preference){&.p .ra{animation:swing 4s ease-in-out infinite alternate}&.p .scene .land,&.p .scene .water{animation:sway 7s ease-in-out infinite alternate}}`,
+      view: (r) => {
+        const near = L();
+        let d = "M0 100V70";
+        for (let i = 0;i < 12; i++)
+          d += `Q${i * 66 + 20} ${between2(r, 52, 62)} ${(i + 1) * 66.7} 70`;
+        near.path(d + "V100Z");
+        return { near, vars: "--wl:52%;--hn:30%;" };
+      },
+      windows: (v) => ({ ...windowSet("circle", v === 2 ? 1 : 2, 1, 1, 12), box: (v === 2 ? "left:auto;right:12%;width:clamp(90px,20%,140px);aspect-ratio:1" : "left:auto;right:6%;width:clamp(200px,42%,300px);aspect-ratio:2.2/1") + ";top:14%", wx: "70%", shx: "12%" })
+    },
+    {
+      id: "bridge",
+      css: `&.p :is(.clouds,.clouds2,.sun,.rays,.glow,.ground,.moon,.rain,.snow,.fog,.windl,.heat,.flash,.fx,.fx2){display:none}&.p .sky{filter:none;background:radial-gradient(50% 50% at 70% 40%,rgba(120,60,200,.35),transparent 70%),#02030a}&.p .stars{opacity:1}&.p .scene .kx{inset:auto;left:58%;top:30%;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 34% 34%,#9fd3ff,#2a5aa0 50%,#0a1a3a 80%);box-shadow:0 0 30px 6px rgba(120,190,255,.4)}&.p .wall{background:linear-gradient(180deg,#1a1f28,#0a0d12)}&.p .wf{background:linear-gradient(180deg,#3a4250,#141820)}&.p .rc{left:0;right:0;bottom:0;height:24%;background:radial-gradient(3px 3px at 10% 40%,#ff5a5a,transparent),radial-gradient(3px 3px at 14% 40%,#5aff9a,transparent),radial-gradient(3px 3px at 18% 40%,#5ad1ff,transparent),radial-gradient(3px 3px at 82% 40%,#ffd25a,transparent),radial-gradient(3px 3px at 86% 40%,#5ad1ff,transparent),linear-gradient(90deg,transparent 30%,rgba(90,210,255,.3) 30% 70%,transparent 70%) 0 30%/100% 30% no-repeat,linear-gradient(#222a36,#0a0d12);border-top:2px solid rgba(90,210,255,.5)}&.p .lamp{opacity:1;background:radial-gradient(40% 30% at 50% 100%,rgba(90,210,255,.25),transparent 70%)}&.p .wain{display:none}@media (prefers-reduced-motion:no-preference){&.p .rc{animation:flicker 3s ease-in-out infinite}}`,
+      view: () => ({}),
+      windows: (v) => ({ ...windowSet("trap", 1, v + 2, 1, 8), box: "left:5%;right:5%;top:6%;bottom:30%" })
+    },
+    {
+      id: "car",
+      css: `&.p .wall{background:linear-gradient(180deg,#14161a,#0a0b0d)}&.p .wf{background:#0c0d10}&.p .rc{left:0;right:0;bottom:0;height:30%;border-radius:40% 40% 0 0/30% 30% 0 0;background:radial-gradient(5% 14% at 30% 40%,rgba(255,170,80,.7),transparent 70%),radial-gradient(5% 14% at 40% 40%,rgba(120,220,255,.6),transparent 70%),linear-gradient(#1c1e22,#08090a)}&.p .ra{left:calc(var(--shx) + 6%);bottom:-8%;width:24%;aspect-ratio:1;border-radius:50%;border:7px solid #050506;box-shadow:inset 0 0 0 2px #222}&.p .rb{left:calc(50% - 40px);top:6%;width:80px;height:14px;border-radius:6px;background:linear-gradient(#333,#111);border:2px solid #000}&.p .lamp{background:radial-gradient(30% 30% at 35% 75%,rgba(255,170,80,.2),transparent 70%)}&.p .wain{display:none}&.p .scene .land{-webkit-mask-size:800px 100%;mask-size:800px 100%}@media (prefers-reduced-motion:no-preference){&.p .scene .far,&.p .scene .lit{animation:pan 40s linear infinite}&.p .scene .near{animation:pan 3s linear infinite}}`,
+      view: (r) => {
+        const far = L(), win = L();
+        skyline(far, win, r, "modern", 100, [30, 70]);
+        const near = L();
+        lampPosts(near, 100, 200, 70, 60);
+        near.rect(0, 96, W, 4);
+        return { far, win, winOn: "far", near, vars: "--hf:56%;--hn:56%;" };
+      },
+      windows: (v) => ({ ...windowSet("trap", 1, 1, 1, 10), box: "left:3%;right:3%;top:5%;bottom:26%", wx: "50%", shx: v % 2 ? "52%" : "8%" })
+    },
+    {
+      id: "theater",
+      css: `&.p :is(.scene,.wf){display:none}&.p .wall{background:radial-gradient(50% 60% at 50% 40%,#3a1a14,#0c0505 70%)}&.p .walldim{opacity:0}&.p .ra,&.p .rb{top:0;bottom:0;width:24%;background:repeating-linear-gradient(90deg,#7a1018 0 12px,#3a0408 12px 22px,#9a1820 22px 30px);box-shadow:inset 0 0 30px rgba(0,0,0,.6)}&.p .ra{left:0;border-radius:0 0 60% 0}&.p .rb{right:0;left:auto;border-radius:0 0 0 60%}&.p .rc{left:0;right:0;top:0;height:14%;background:repeating-linear-gradient(90deg,#9a1820 0 30px,#5a0a10 30px 60px);-webkit-mask:radial-gradient(18px 12px at 15px 100%,transparent 98%,#000) 0 0/30px 100%;mask:radial-gradient(18px 12px at 15px 100%,transparent 98%,#000) 0 0/30px 100%;border-bottom:3px solid #c9a45c}&.p .rd{left:20%;right:20%;bottom:16%;height:6px;background:radial-gradient(6px 4px at 10% 50%,#ffe9a0,transparent),radial-gradient(6px 4px at 30% 50%,#ffe9a0,transparent),radial-gradient(6px 4px at 50% 50%,#ffe9a0,transparent),radial-gradient(6px 4px at 70% 50%,#ffe9a0,transparent),radial-gradient(6px 4px at 90% 50%,#ffe9a0,transparent);filter:drop-shadow(0 0 6px #ffcf6a)}&.p .lamp{opacity:1;background:conic-gradient(from 166deg at 50% -10%,transparent 0deg,rgba(255,240,200,.28) 6deg 22deg,transparent 28deg),radial-gradient(30% 22% at 50% 88%,rgba(255,230,170,.35),transparent 70%)}&.p .wain{height:16%;background:linear-gradient(#3a2416,#140a04);border-top:3px solid #5a3a20}`,
+      view: () => ({}),
+      windows: () => ({ ...windowSet("rect", 1, 1, 1, 4), box: "left:0;width:0" })
+    },
+    {
+      id: "shrine",
+      css: `&.p .wall{background:linear-gradient(90deg,#2a1c10 0 6px,transparent 6px) 0 0/25% 100%,repeating-linear-gradient(0deg,rgba(60,40,20,.55) 0 2px,transparent 2px 25%),repeating-linear-gradient(90deg,rgba(60,40,20,.55) 0 2px,transparent 2px 12.5%),linear-gradient(180deg,#d8c8a0,#a89060);filter:brightness(calc(.35 + (1 - var(--lit)) * .45))}&.p .walldim{opacity:0}&.p .lamp{opacity:1;background:radial-gradient(40% 60% at 50% 40%,rgba(255,200,120,calc(.15 + var(--lit) * .35)),transparent 70%)}&.p .wf{background:#2a1c10}&.p .ra{left:var(--shx);top:10%;width:34px;height:52px;border-radius:40%;transform-origin:50% -40px;background:linear-gradient(90deg,transparent 46%,rgba(0,0,0,.25) 46% 54%,transparent 54%),radial-gradient(circle at 50% 50%,#ffefc0,#e04a2a 60%,#8a1a10);box-shadow:0 0 28px 10px rgba(255,150,80,calc(.2 + var(--lit) * .5))}&.p .wain{height:16%;background:repeating-linear-gradient(90deg,#3a3a1a 0 2px,transparent 2px 50%),linear-gradient(#8a8a4a,#4a4a22);border-top:4px solid #2a1c10}@media (prefers-reduced-motion:no-preference){&.p .ra{animation:swing 6s ease-in-out infinite alternate}}`,
+      view: (r) => {
+        const l = L();
+        skyline(l, l, r, "eastern", 100, [24, 50]);
+        return { far: forest(L(), r, "round", 20, 99, [16, 30]), mid: l, vars: "--hf:40%;--hm:44%;" };
+      },
+      windows: (v) => ({ ...windowSet("circle", 1, 1, 1, 9), box: BOXES[v].box.replace(/width:clamp\([^)]*\)/, "width:clamp(110px,24%,170px)") + ";top:12%;aspect-ratio:1", wx: BOXES[v].wx, shx: v === 3 ? "8%" : BOXES[v].shx })
+    },
+    {
+      id: "attic",
+      css: `&.p .wall{background:repeating-linear-gradient(90deg,rgba(0,0,0,.25) 0 2px,transparent 2px 46px),linear-gradient(180deg,#4a3828,#20160e)}&.p .ra,&.p .rb{top:0;width:52%;height:72%;background:linear-gradient(#2a1c10,#1a1008)}&.p .ra{left:0;clip-path:polygon(0 0,100% 0,0 100%)}&.p .rb{right:0;left:auto;clip-path:polygon(0 0,100% 0,100% 100%)}&.p .rc{left:var(--shx);width:24%;bottom:12%;height:16%;border-radius:8px 8px 2px 2px;background:linear-gradient(90deg,transparent 46%,#6a4a20 46% 54%,transparent 54%),linear-gradient(#4a3020,#20140a);border:2px solid #120a04}&.p .spill{opacity:calc(.25 + (1 - var(--lit)) * .75);background:linear-gradient(180deg,rgba(255,240,200,.18),transparent 80%) 50% 18%/22% 80% no-repeat}&.p .wain{height:12%;background:repeating-linear-gradient(90deg,#1a1008 0 2px,transparent 2px 60px),linear-gradient(#3a2618,#1a1008)}`,
+      view: (r) => ({ far: (() => {
+        const l = L();
+        houses(l, l, r, 100, [20, 34]);
+        return l;
+      })(), vars: "--hf:50%;" }),
+      windows: (v) => ({ ...windowSet(v % 2 ? "circle" : "tri", 1, 2, 2, 7), box: "left:50%;right:auto;width:clamp(80px,16%,120px);transform:translateX(-50%);top:4%;aspect-ratio:1", wx: "50%", shx: v % 2 ? "8%" : "66%" })
+    },
+    {
+      id: "cellar",
+      css: `&.p :is(.scene,.wf){display:none}&.p .wall{background:repeating-linear-gradient(0deg,rgba(0,0,0,.35) 0 2px,transparent 2px 16px),repeating-linear-gradient(90deg,rgba(0,0,0,.25) 0 2px,transparent 2px 34px),linear-gradient(180deg,#4a2c20,#1a0e08)}&.p .ra{inset:0;background:radial-gradient(34% 70% at 25% 100%,transparent 60%,#120806 61%),radial-gradient(34% 70% at 75% 100%,transparent 60%,#120806 61%);opacity:.85}&.p .rc{left:0;right:0;bottom:8%;height:30%;-webkit-mask:var(--sh) 0 100%/auto 100% repeat-x;mask:var(--sh) 0 100%/auto 100% repeat-x;background:linear-gradient(90deg,#5a3418,#2a1608)}&.p .lamp{opacity:1;background:radial-gradient(8% 16% at 50% 40%,rgba(255,200,110,.9),transparent 70%),radial-gradient(40% 50% at 50% 40%,rgba(255,170,80,.3),transparent 70%)}&.p .wain{height:10%;background:#120806}`,
+      view: () => ({}),
+      windows: () => ({ ...windowSet("rect", 1, 1, 1, 4), box: "left:0;width:0" })
+    },
+    {
+      id: "greenhouse",
+      css: `&.p .wall{background:linear-gradient(180deg,#1a2a1c,#0c140c)}&.p .wf{background:linear-gradient(180deg,#e8ece4,#9aa49a)}&.p .scene:after{content:"";position:absolute;inset:0;background:rgba(160,255,190,.1)}&.p .rc{left:0;right:0;bottom:0;height:46%;-webkit-mask:var(--sh) 0 100%/auto 100% repeat-x;mask:var(--sh) 0 100%/auto 100% repeat-x;background:linear-gradient(#2e6a3a,#0e2a14)}&.p .ra{left:0;right:0;top:0;height:30%;-webkit-mask:var(--sh2) 0 0/auto 100% repeat-x;mask:var(--sh2) 0 0/auto 100% repeat-x;background:linear-gradient(#1e4a26,#3e8a4a)}&.p .wain{display:none}&.p .lamp{opacity:calc(var(--lit) * .8);background:radial-gradient(5% 9% at 30% 30%,rgba(255,220,150,.9),transparent 70%),radial-gradient(5% 9% at 70% 30%,rgba(255,220,150,.9),transparent 70%)}`,
+      view: (r) => ({ far: forest(L(), r, "round", 30, 99, [20, 40]), vars: "--hf:40%;" }),
+      windows: (v) => ({ ...windowSet(v % 2 ? "arch" : "rect", 1, 6 + v, 4, 5), box: "left:3%;right:3%;top:4%;bottom:4%" })
+    },
+    {
+      id: "shop",
+      css: `&.p .wall{background:linear-gradient(180deg,#3a2c22,#1c140e)}&.p .ra{left:var(--shx);width:40%;top:6%;height:60%;background:repeating-linear-gradient(180deg,transparent 0 calc(33% - 5px),#2a1a0e calc(33% - 5px) 33%)}&.p .ra:after{content:"";position:absolute;inset:0;-webkit-mask:var(--sh) 0 100%/auto 33.3% repeat;mask:var(--sh) 0 100%/auto 33.3% repeat;background:linear-gradient(90deg,#4a8a5a,#a8642a 20%,#3a5aa0 40%,#9a2a3a 60%,#c9a45c 80%,#4a8a5a);opacity:.85}&.p .rc{left:0;right:0;bottom:0;height:26%;border-top:6px solid #7a5a3a;background:linear-gradient(#4a3222,#1c120a)}&.p .lamp{background:radial-gradient(30% 40% at calc(var(--shx) + 20%) 30%,rgba(255,210,140,.45),transparent 70%)}&.p .wain{display:none}`,
+      view: (r) => ({ far: (() => {
+        const l = L();
+        houses(l, l, r, 100, [30, 46], { gap: [-2, 4] });
+        return l;
+      })(), vars: "--hf:66%;" }),
+      windows: (v) => ({ ...windowSet(v === 1 ? "arch" : "rect", 1, 2, 3, 8), box: (v % 2 ? "left:6%;right:auto" : "left:auto;right:6%") + ";width:36%;top:10%;bottom:28%", wx: v % 2 ? "24%" : "76%", shx: v % 2 ? "52%" : "6%" })
+    },
+    {
+      id: "bath",
+      css: `&.p .wall{background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 20px),repeating-linear-gradient(90deg,rgba(0,0,0,.18) 0 1px,transparent 1px 20px),linear-gradient(180deg,#9ab0b4,#4a5a5e);filter:brightness(calc(.45 + (1 - var(--lit)) * .4))}&.p .scene{filter:blur(3px) saturate(.7)}&.p .rc{left:var(--shx);width:44%;bottom:8%;height:26%;-webkit-mask:var(--sh) 0 100%/100% 100%;mask:var(--sh) 0 100%/100% 100%;background:linear-gradient(#f4f4f0,#a8aeb0)}&.p .rb{left:calc(var(--shx) - 4%);width:52%;bottom:26%;height:50%;background:radial-gradient(30% 30% at 30% 70%,rgba(255,255,255,.35),transparent 70%),radial-gradient(26% 26% at 60% 50%,rgba(255,255,255,.3),transparent 70%),radial-gradient(30% 24% at 45% 24%,rgba(255,255,255,.22),transparent 70%);filter:blur(6px)}&.p .wain{height:10%;background:linear-gradient(#5a6a6e,#2a3234)}&.p .lamp{background:radial-gradient(30% 40% at 50% 20%,rgba(255,240,220,.3),transparent 70%)}@media (prefers-reduced-motion:no-preference){&.p .rb{animation:steam 9s ease-in-out infinite}}`,
+      view: (r) => ({ far: forest(L(), r, "round", 24, 99, [20, 40]), vars: "--hf:46%;" }),
+      windows: (v) => {
+        const b = BOXES[v === 3 ? 0 : v];
+        return { ...windowSet(v === 2 ? "circle" : "rect", 1, 2, 2, 7), box: b.box + ";top:10%;aspect-ratio:1/1.1", wx: b.wx, shx: b.shx };
+      }
+    }
+  ];
+  ROOM_WORDS = [
+    ["train", "train|carriage|railcar|compartment|sleeper car|dining car|coach car|tram|subway car"],
+    ["bridge", "bridge of the|flight deck|helm|cockpit|command deck|starship bridge|shuttle|spacecraft|airship gondola"],
+    ["car", "car|truck|van|taxi|cab|limo|limousine|backseat|back seat|driver's seat|passenger seat|jeep|sedan|pickup|motorcar|bus"],
+    ["cabin", "ship's cabin|cabin of the ship|stateroom|captain's quarters|captain's cabin|below deck|below decks|berth|galley"],
+    ["tent", "tent|pavilion|yurt|marquee"],
+    ["shrine", "shrine|dojo|teahouse|tea house|tea room|tatami|ryokan|shoji|zen garden|temple hall"],
+    ["chapel", "church|chapel|cathedral|sanctuary|sanctum|nave|monastery|temple interior|mosque|synagogue"],
+    ["theater", "theatre|theater|stage|backstage|opera house|auditorium|cinema|concert hall|playhouse|green room"],
+    ["library", "library|study|archive|scriptorium|bookshop|bookstore|reading room"],
+    ["hall", "throne|ballroom|great hall|banquet|palace|court room|courtroom|audience chamber|grand hall|gallery|museum|manor|mansion|dining hall"],
+    ["ward", "hospital|ward|infirmary|clinic|sickbay|sick bay|medbay|emergency room|recovery room|icu|patient room"],
+    ["lab", "lab|laboratory|clean room|server room|control room|engine room|operating|morgue|research station"],
+    ["club", "nightclub|night club|club|disco|rave|karaoke|casino|dance floor|lounge"],
+    ["tavern", "tavern|inn|pub|bar|saloon|taproom|common room|alehouse|brewery|cabin|lodge|forge|smithy|mead hall|speakeasy"],
+    ["cafe", "caf[e\xE9]|coffee shop|coffeehouse|coffee house|diner|restaurant|bistro|tea shop|bakery|canteen|cafeteria|food court|ramen"],
+    ["kitchen", "kitchen|scullery|pantry"],
+    ["bath", "bathroom|bath|bathhouse|onsen|hot spring|spa|sauna|shower|washroom|restroom|locker room"],
+    ["classroom", "classroom|lecture hall|schoolroom|school|homeroom|seminar room|art room|music room"],
+    ["office", "office|cubicle|boardroom|meeting room|conference room|headquarters|precinct|newsroom|reception|bullpen"],
+    ["shop", "shop|store|apothecary|boutique|emporium|pharmacy|pawnshop|market stall|general store|workshop|atelier"],
+    ["cell", "cell|prison|jail|gaol|brig|holding cell|interrogation room|cage"],
+    ["cellar", "cellar|wine cellar|storeroom|store room|larder|root cellar"],
+    ["attic", "attic|loft|garret"],
+    ["greenhouse", "greenhouse|conservatory|orangery|glasshouse|sunroom|solarium"],
+    ["bedroom", "bedroom|bed|chamber|bedchamber|dorm|dormitory|bunk|suite|nursery|guest room|boudoir|hotel room|motel room|quarters"],
+    ["home", "living room|lounge room|sitting room|den|apartment|flat|lobby|home|house|residence|hallway|corridor|parlou?r|salon|studio|garage|basement|warehouse|gym|motel|hotel|dining room|foyer|porch"]
+  ];
+  KIND_WORDS = [
+    ["space", "space|orbit|orbital|starship|spaceship|space station|asteroid|deep space|the void|nebula|moon base"],
+    ["rooftop", "rooftop|roof|skyline|balcony|terrace|fire escape"],
+    ["graveyard", "cemetery|graveyard|churchyard|necropolis|mausoleum|tomb|barrow|burial"],
+    ["ruins", "ruin|ruins|ruined|abandoned temple|ziggurat|pyramid|obelisk|monolith|standing stones|henge|temple steps|colosseum|amphitheat"],
+    ["castle", "castle|fortress|citadel|keep|rampart|battlement|walls|gatehouse|stronghold|fort\\b"],
+    ["deck", "deck|aboard|ship|boat|galleon|vessel|frigate|schooner|ferry|yacht|raft"],
+    ["underground", "cave|cavern|tunnel|mine|sewer|crypt|catacomb|dungeon|underground|undercroft|vault|grotto|metro|bunker"],
+    ["volcano", "volcano|lava|caldera|crater|magma|ashlands|ash fields"],
+    ["canyon", "canyon|gorge|ravine|mesa|butte|badlands|red rock|arroyo"],
+    ["swamp", "swamp|marsh|bog|bayou|fen|mire|wetland|everglade"],
+    ["jungle", "jungle|rainforest|tropical forest"],
+    ["tropic", "island|isle|atoll|lagoon|palm|tropic|reef|cay"],
+    ["tundra", "tundra|ice|glacier|arctic|antarctic|frozen|snowfield|icefield|permafrost|polar|taiga"],
+    ["bridge", "bridge"],
+    ["lake", "lake|pond|loch|mere|reservoir|tarn"],
+    ["river", "river|stream|brook|creek|ford|canal|riverbank|riverside|waterfall|rapids"],
+    ["harbour", "harbou?r|dock|docks|pier|wharf|port|quay|marina|shipyard"],
+    ["camp", "camp|encampment|campsite|bivouac|battlefield|front line|trench|siege"],
+    ["garden", "garden|gardens|park|orchard|vineyard|greenhouse|hedge maze|courtyard|cloister"],
+    ["forest", "forest|wood|woods|grove|thicket|glade|copse|wildwood|treeline|clearing"],
+    ["sea", "sea|ocean|open water|the waves|high seas|strait"],
+    ["coast", "beach|coast|cliff|shore|bay|lighthouse|seaside|cove|strand|headland"],
+    ["mountain", "mountain|peak|pass|summit|ridge|alps|highlands?|crag|foothills|valley"],
+    ["desert", "desert|dunes?|wastes?|wasteland|oasis|sands|steppe|savann?a"],
+    ["plains", "plain|plains|field|fields|meadow|farm|ranch|moor|heath|prairie|road|trail|countryside|pasture|hill|hills|downs"],
+    ["village", "village|hamlet|farmstead|homestead"],
+    ["city", "city|street|square|market|district|avenue|alley|downtown|capital|metropolis|plaza|quarter|borough|lane|boulevard|station|campus|neighbou?rhood|suburb|block"]
+  ];
+});
+
+// src/core/plate/fx.ts
+function dots(seed, n, color, size, tw = 100, th = 100) {
+  const r = rng2(seed);
+  return Array.from({ length: n }, () => {
+    const s = size[0] + (size[1] - size[0]) * r();
+    return `radial-gradient(${s.toFixed(1)}px ${s.toFixed(1)}px at ${(r() * tw).toFixed(0)}% ${(r() * th).toFixed(0)}%,${color},transparent)`;
+  }).join(",");
+}
+function pickFx(seed, band, wx, kind) {
+  const grp = ["morning", "midday", "afternoon"].includes(band) ? "day" : ["dawn", "sunrise", "golden", "sunset", "dusk"].includes(band) ? "twi" : "night";
+  const i = (seed % 6 + 6) % 6;
+  if (kind === "space")
+    return SPACE[i];
+  if (kind === "underground")
+    return "none";
+  if (wx === "storm")
+    return "bolt";
+  if (wx === "showers")
+    return grp === "night" ? "none" : "rainbow";
+  if (wx === "fog")
+    return "mist";
+  if (["rain", "sleet", "snow"].includes(wx))
+    return "none";
+  if (wx === "overcast")
+    return grp === "night" ? "none" : "birds";
+  return (grp === "day" ? DAY : grp === "twi" ? TWI : NIGHT)[i];
+}
+var flock = (seed, count) => {
+  const l = new Layer;
+  birds(l, rng2(seed), count, 150, 44);
+  return l.url(150, 44);
+}, batFlock = (seed) => {
+  const l = new Layer;
+  bats(l, rng2(seed), 6, 150, 50);
+  return l.url(150, 50);
+}, balloonUrl, bolt, branch, isle, MOTION = (rules) => `@media (prefers-reduced-motion:no-preference){${rules}}`, scroll = (name, w, h, tx, ty) => `@keyframes ${name}{to{background-position:${w * tx}px ${h * ty}px}}`, FX, DAY, TWI, NIGHT, SPACE, GENRE_FX;
+var init_fx = __esm(() => {
+  balloonUrl = (() => {
+    const l = new Layer;
+    balloon(l, 20, 18, 1);
+    return l.url(40, 40);
+  })();
+  bolt = svgUrl(`<path fill='none' stroke='#000' stroke-width='3' stroke-linejoin='round' d='M40 0L30 40L44 46L26 92L36 98L20 140M30 40L14 62M44 46L58 74M26 92L10 108'/>`, 70, 140, true);
+  branch = cornerBranch(new Layer, rng2(41)).url(220, 110);
+  isle = (() => {
+    const l = new Layer;
+    floatingIsle(l, rng2(5), 60, 24, 100);
+    return l.url(120, 100);
+  })();
+  FX = {
+    birds: `&.p .fx,&.p .fx2{inset:auto;top:16%;left:-30%;width:150px;height:44px;-webkit-mask:${flock(3, 9)} 0 0/100% 100%;mask:${flock(3, 9)} 0 0/100% 100%;background:color-mix(in oklab,var(--N),#000 25%);opacity:.8}&.p .fx{left:22%}&.p .fx2{top:26%;left:56%;width:90px;height:26px;-webkit-mask-image:${flock(9, 5)};mask-image:${flock(9, 5)};opacity:.55}` + MOTION(`&.p .fx{animation:fly 58s linear infinite,bob 3s ease-in-out infinite alternate}&.p .fx2{animation:fly 80s linear -30s infinite,bob 2.4s ease-in-out infinite alternate}`),
+    bats: `&.p .fx{inset:auto;top:20%;left:30%;width:150px;height:50px;-webkit-mask:${batFlock(4)} 0 0/100% 100%;mask:${batFlock(4)} 0 0/100% 100%;background:#0d0a14;opacity:.85}` + MOTION(`&.p .fx{animation:fly 30s linear infinite,flit .5s steps(2) infinite}`),
+    shoot: `&.p .fx,&.p .fx2{inset:auto;top:14%;left:62%;width:150px;height:1.5px;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.95));transform:rotate(-24deg);opacity:.85}&.p .fx2{top:24%;left:22%;width:90px;transform:rotate(-30deg);opacity:.5}` + MOTION(`&.p .fx{opacity:0;animation:shoot 9s ease-in infinite}&.p .fx2{opacity:0;animation:shoot 13s ease-in -5s infinite}`),
+    aurora: `&.p .fx,&.p .fx2{inset:-6% -20% 34% -20%;background:repeating-linear-gradient(90deg,transparent 0 5px,rgba(120,255,190,.18) 5px 7px,transparent 7px 13px),linear-gradient(180deg,transparent 4%,rgba(90,255,170,.5) 46%,rgba(70,200,255,.32) 66%,transparent 86%);-webkit-mask:radial-gradient(60% 46% at 50% 56%,#000 40%,transparent 72%);mask:radial-gradient(60% 46% at 50% 56%,#000 40%,transparent 72%);filter:blur(5px);mix-blend-mode:screen;transform:skewX(-14deg)}&.p .fx2{inset:-12% -10% 46% 10%;background:linear-gradient(180deg,transparent 10%,rgba(200,110,255,.45) 50%,rgba(255,90,170,.22) 70%,transparent 90%);transform:skewX(18deg)}` + MOTION(`&.p .fx{animation:aur 14s ease-in-out infinite alternate}&.p .fx2{animation:aur 19s ease-in-out -6s infinite alternate-reverse}`),
+    milky: `&.p .fx{inset:-30%;transform:rotate(-28deg);background:linear-gradient(90deg,transparent 36%,rgba(190,180,255,.12) 44%,rgba(255,236,220,.22) 50%,rgba(190,180,255,.12) 56%,transparent 64%);filter:blur(3px)}&.p .fx2{inset:-30%;transform:rotate(-28deg);background:${dots(11, 26, "#fff", [0.6, 1.2])};background-size:90px 70px;-webkit-mask:linear-gradient(90deg,transparent 40%,#000 50%,transparent 60%);mask:linear-gradient(90deg,transparent 40%,#000 50%,transparent 60%);opacity:.9}`,
+    comet: `&.p .fx{inset:auto;top:16%;left:18%;width:220px;height:3px;border-radius:3px;background:linear-gradient(90deg,transparent,rgba(170,215,255,.55) 70%,#fff);transform:rotate(-14deg);filter:blur(.6px)}&.p .fx:after{content:"";position:absolute;right:-4px;top:-4px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 14px 6px rgba(190,225,255,.8)}&.p .fx2{inset:auto;top:calc(16% - 10px);left:18%;width:200px;height:24px;transform:rotate(-11deg);background:linear-gradient(90deg,transparent,rgba(150,190,255,.18));filter:blur(6px);border-radius:50%}`,
+    fireflies: `&.p .fx,&.p .fx2{inset:auto 0 0 0;height:56%;background:${dots(21, 14, "#efff9a", [1.4, 2.6])};filter:drop-shadow(0 0 3px #d6ff6a)}&.p .fx2{background:${dots(22, 12, "#fff4a0", [1.2, 2.2])}}` + MOTION(`&.p .fx{animation:blink 2.6s ease-in-out infinite alternate,driftup 22s ease-in-out infinite alternate}&.p .fx2{animation:blink 3.4s ease-in-out -1s infinite alternate,driftup 30s ease-in-out infinite alternate-reverse}`),
+    lanterns: `&.p .fx,&.p .fx2{inset:0;background:${dots(31, 6, "rgba(255,190,110,.95)", [2, 3.4])};background-size:220px 200px;filter:drop-shadow(0 0 4px rgba(255,150,60,.9))}&.p .fx2{background:${dots(32, 3, "rgba(255,170,90,.95)", [3.5, 5.5])};background-size:300px 260px;opacity:.9}` + scroll("lan1", 220, 200, 0, -2) + scroll("lan2", 300, 260, 0, -2) + MOTION(`&.p .fx{animation:lan1 70s linear infinite}&.p .fx2{animation:lan2 50s linear infinite}`),
+    godrays: `&.p .fx{inset:-30% -10% 18% -10%;background:repeating-conic-gradient(from 168deg at var(--sx) 0%,rgba(255,244,214,.2) 0 2.5deg,transparent 2.5deg 8deg);-webkit-mask:linear-gradient(180deg,#000 10%,transparent 90%);mask:linear-gradient(180deg,#000 10%,transparent 90%);mix-blend-mode:screen}` + MOTION(`&.p .fx{animation:breathe 9s ease-in-out infinite alternate}`),
+    balloon: `&.p .fx,&.p .fx2{inset:auto;top:20%;left:66%;width:34px;height:34px;-webkit-mask:${balloonUrl} 0 0/100% 100%;mask:${balloonUrl} 0 0/100% 100%;background:repeating-linear-gradient(90deg,#d9493a 0 5px,#f4c64e 5px 10px,#3a8fd9 10px 15px);box-shadow:inset -8px -6px 0 rgba(0,0,0,.25)}&.p .fx2{top:32%;left:24%;width:22px;height:22px;background:repeating-linear-gradient(90deg,#3fae7a 0 4px,#f2efe6 4px 8px);opacity:.85}` + MOTION(`&.p .fx{animation:balloon 40s ease-in-out infinite alternate}&.p .fx2{animation:balloon 52s ease-in-out -12s infinite alternate-reverse}`),
+    cirrus: `&.p .fx{inset:4% -20% 52% -20%;background:radial-gradient(48% 7% at 26% 32%,color-mix(in oklab,#fff 70%,var(--s3)),transparent 70%),radial-gradient(40% 5% at 60% 50%,color-mix(in oklab,#fff 60%,var(--s3)),transparent 70%),radial-gradient(36% 6% at 80% 24%,color-mix(in oklab,#fff 60%,var(--s3)),transparent 70%),radial-gradient(30% 4% at 44% 70%,color-mix(in oklab,#fff 50%,var(--s3)),transparent 70%);filter:blur(1.5px);transform:rotate(-5deg);opacity:.75}` + MOTION(`&.p .fx{animation:drift 120s linear infinite alternate}`),
+    season: `&.p .fx,&.p .fx2{inset:-12% 0 0 0;background-size:170px 150px}&.p[data-season=spring] .fx,&.p[data-season=spring] .fx2{background-image:${dots(41, 7, "#ffc4d8", [2, 3.4])}}&.p[data-season=summer] .fx,&.p[data-season=summer] .fx2{background-image:${dots(42, 7, "rgba(255,240,170,.85)", [1, 2])}}&.p[data-season=autumn] .fx,&.p[data-season=autumn] .fx2{background-image:${dots(43, 6, "#e0762a", [2.4, 3.6])},${dots(44, 4, "#c9452a", [2, 3])}}&.p:is([data-season=winter],[data-season=""]) .fx,&.p:is([data-season=winter],[data-season=""]) .fx2{background-image:${dots(45, 8, "#fff", [1.2, 2.2])}}&.p .fx2{background-size:240px 210px;filter:blur(.7px);opacity:.8}` + scroll("pet1", 170, 150, 1, 2) + scroll("pet2", 240, 210, 1, 2) + MOTION(`&.p .fx{animation:pet1 16s linear infinite}&.p .fx2{animation:pet2 22s linear infinite}`),
+    mist: `&.p .fx,&.p .fx2{inset:auto -20% 18% -20%;height:24%;background:radial-gradient(40% 50% at 30% 50%,rgba(240,244,250,.55),transparent 70%),radial-gradient(40% 40% at 72% 60%,rgba(240,244,250,.45),transparent 70%);filter:blur(6px)}&.p .fx2{bottom:30%;height:16%;opacity:.6}` + MOTION(`&.p .fx{animation:drift 50s ease-in-out infinite alternate}&.p .fx2{animation:drift 70s ease-in-out infinite alternate-reverse}`),
+    venus: `&.p .fx{inset:auto;top:30%;left:calc(100% - var(--sx) * .8);width:4px;height:4px;border-radius:50%;background:#fffbe8;box-shadow:0 0 8px 3px rgba(255,250,220,.8)}&.p .fx2{inset:auto;top:20%;left:calc(92% - var(--sx) * .7);width:18px;height:18px;border-radius:50%;box-shadow:inset -4px 2px 0 0 #fdf3d6;opacity:.9;transform:rotate(-30deg)}` + MOTION(`&.p .fx{animation:twinkle 4s ease-in-out infinite alternate}`),
+    bolt: `&.p .fx{inset:0 auto 26% calc(30% + var(--ox) * .03);width:70px;-webkit-mask:${bolt} 0 0/100% 100%;mask:${bolt} 0 0/100% 100%;background:#f4f7ff;opacity:0}&.p .fx2{inset:0;background:radial-gradient(30% 40% at 34% 20%,rgba(200,215,255,.5),transparent 70%);opacity:0}` + MOTION(`&.p :is(.fx,.fx2){animation:flash 7s ease-out infinite}`),
+    rainbow: `&.p .fx{inset:auto;left:calc(64% - var(--p) * 44%);width:min(560px,90%);aspect-ratio:1;top:34%;transform:translateX(-50%);border-radius:50%;background:radial-gradient(closest-side,transparent 80%,rgba(255,70,70,.5) 81.5%,rgba(255,170,60,.5) 83%,rgba(255,240,90,.5) 84.5%,rgba(90,210,110,.5) 86%,rgba(70,140,255,.5) 87.5%,rgba(140,80,230,.45) 89%,transparent 90.5%);-webkit-mask:linear-gradient(180deg,#000 20%,transparent 50%);mask:linear-gradient(180deg,#000 20%,transparent 50%);opacity:.7;filter:blur(1px)}`,
+    none: ""
+  };
+  DAY = ["birds", "godrays", "balloon", "cirrus", "season", "mist"];
+  TWI = ["birds", "venus", "bats", "mist", "season", "cirrus"];
+  NIGHT = ["shoot", "aurora", "milky", "fireflies", "lanterns", "comet"];
+  SPACE = ["shoot", "comet", "milky", "none", "shoot", "comet"];
+  GENRE_FX = {
+    horror: `&.p .moon{background:radial-gradient(circle at 36% 36%,#ffe2d4 0 26%,#d0553a 66%,#7a1d14);box-shadow:inset var(--ph) 0 0 0 rgba(30,8,10,.92),0 0 50px 14px rgba(200,60,40,.35)}&.p .gx{inset:0 auto auto 0;width:min(46%,320px);aspect-ratio:2/1;-webkit-mask:${branch} 0 0/100% 100%;mask:${branch} 0 0/100% 100%;background:#07050a}&.p .grade{background:radial-gradient(120% 90% at 50% 40%,transparent 45%,rgba(60,0,10,.6))}&.p .scene{filter:saturate(.7) contrast(1.05)}`,
+    tragedy: `&.p .grade{background:linear-gradient(180deg,rgba(40,60,100,.3),rgba(20,30,50,.3));mix-blend-mode:multiply}&.p .scene{filter:saturate(.5)}&.p .gx{inset:0;background:${dots(51, 10, "rgba(220,230,255,.5)", [1, 2])};background-size:160px 120px;opacity:.6}` + scroll("tra", 160, 120, 0, 3) + MOTION(`&.p .gx{animation:tra 24s linear infinite}`),
+    scifi: `&.p .gx{inset:auto;left:12%;top:12%;width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 34% 34%,#d8ecff,#6a8fd0 50%,#1e2c5a 80%);box-shadow:inset -10px -6px 18px rgba(0,0,20,.6),0 0 24px rgba(140,190,255,.35);opacity:.9}&.p .gx:after{content:"";position:absolute;left:-40%;right:-40%;top:42%;height:16%;border-radius:50%;border:2px solid rgba(220,235,255,.55);transform:rotate(-18deg)}&.p .grade{background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px),linear-gradient(180deg,rgba(0,190,220,.12),rgba(160,0,220,.1));mix-blend-mode:screen}`,
+    fantasy: `&.p .gx{inset:auto;top:12%;left:calc(14% + var(--ox) * .04);width:132px;height:110px;-webkit-mask:${isle} 0 0/100% 100%;mask:${isle} 0 0/100% 100%;background:color-mix(in oklab,var(--F),var(--s2) 40%);opacity:.85}&.p .gx:after{content:"";position:absolute;inset:0;background:${dots(61, 8, "rgba(255,240,200,.9)", [1, 2])}}&.p .grade{background:radial-gradient(100% 80% at 50% 0%,rgba(255,220,160,.12),transparent 60%)}` + MOTION(`&.p .gx{animation:bob 6s ease-in-out infinite alternate}`),
+    dark_fantasy: `&.p .gx{inset:0;background:${dots(71, 16, "rgba(255,140,60,.95)", [1.2, 2.4])};background-size:220px 200px;filter:drop-shadow(0 0 3px rgba(255,90,20,.9))}${scroll("emb", 220, 200, -1, -2)}&.p .grade{background:radial-gradient(120% 90% at 50% 30%,transparent 40%,rgba(50,0,40,.55)),linear-gradient(0deg,rgba(120,20,10,.2),transparent 50%)}&.p .moon{background:radial-gradient(circle at 36% 36%,#fff2e0 0 30%,#e0a070 66%,#8a4a2a)}` + MOTION(`&.p .gx{animation:emb 20s linear infinite}`),
+    romance: `&.p .gx{inset:0;background:radial-gradient(40px 40px at 18% 30%,rgba(255,170,200,.22),transparent 70%),radial-gradient(28px 28px at 72% 22%,rgba(255,210,160,.24),transparent 70%),radial-gradient(54px 54px at 84% 60%,rgba(255,160,190,.16),transparent 70%),radial-gradient(22px 22px at 40% 14%,rgba(255,230,200,.26),transparent 70%),radial-gradient(34px 34px at 56% 44%,rgba(255,180,210,.14),transparent 70%);mix-blend-mode:screen}&.p .grade{background:linear-gradient(180deg,rgba(255,150,170,.12),rgba(255,190,150,.1));mix-blend-mode:soft-light}` + MOTION(`&.p .gx{animation:breathe 7s ease-in-out infinite alternate}`),
+    mystery: `&.p .grade{background:rgba(140,100,50,.22);mix-blend-mode:color}&.p .gx{inset:auto -20% 10% -20%;height:30%;background:radial-gradient(50% 40% at 30% 60%,rgba(230,224,210,.4),transparent 70%),radial-gradient(40% 30% at 70% 50%,rgba(230,224,210,.32),transparent 70%);filter:blur(8px)}` + MOTION(`&.p .gx{animation:drift 60s ease-in-out infinite alternate}`),
+    noir: `&.p .scene{filter:grayscale(.88) contrast(1.15)}&.p .grade{background:radial-gradient(120% 100% at 50% 30%,transparent 40%,rgba(0,0,0,.6))}`,
+    thriller: `&.p .gx{inset:auto 0 auto 0;top:calc(var(--sy) + 27px);height:2px;background:linear-gradient(90deg,transparent,rgba(120,200,255,.7) 50%,transparent);opacity:var(--sv);filter:blur(.5px)}&.p .grade{background:linear-gradient(180deg,rgba(0,120,140,.2),rgba(255,120,40,.14));mix-blend-mode:soft-light}`,
+    intrigue: `&.p .grade{background:radial-gradient(120% 100% at 50% 20%,transparent 40%,rgba(10,40,30,.5)),linear-gradient(180deg,rgba(200,160,60,.1),transparent);mix-blend-mode:normal}`,
+    survival: `&.p .scene{filter:saturate(.65) contrast(1.06)}&.p .grade{background:linear-gradient(0deg,rgba(60,50,40,.3),transparent 60%)}`,
+    cozy: `&.p .grade{background:radial-gradient(120% 100% at 50% 50%,rgba(255,200,130,.16),rgba(80,40,20,.25));mix-blend-mode:soft-light}&.p .scene{filter:saturate(1.12)}`
+  };
+  GENRE_FX.erotic = GENRE_FX.romance;
+  GENRE_FX.action = GENRE_FX.thriller;
+  GENRE_FX.adventure = `&.p .scene{filter:saturate(1.15)}&.p .grade{background:linear-gradient(180deg,rgba(255,200,120,.1),transparent)}`;
+  GENRE_FX.comedy = GENRE_FX.cozy;
+  GENRE_FX.slice_of_life = GENRE_FX.cozy;
+  GENRE_FX.drama = `&.p .grade{background:radial-gradient(130% 110% at 50% 40%,transparent 50%,rgba(0,0,0,.35))}`;
+});
+
+// src/core/plate/style.ts
+function raw(strings, ...values) {
+  const fix = (s) => s.replace(/\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})/g, (_m, a, b) => String.fromCodePoint(parseInt(a ?? b, 16)));
+  return String.raw({ raw: strings.raw.map(fix) }, ...values);
+}
+function minCss(src) {
+  let out = src.replace(/\s*\n\s*/g, "");
+  while (out.includes("}}"))
+    out = out.replace(/\}\}/g, "} }");
+  return out;
+}
+function cloudBank(seed, n, y) {
+  const r = rng2(seed), out = [];
+  for (let i = 0;i < n; i++) {
+    const x = (i + r() * 0.6) * (100 / n), cy = y[0] + r() * (y[1] - y[0]), w = 9 + r() * 9, h = w * (1.3 + r() * 0.5);
+    for (let k = 0;k < 3; k++) {
+      const dx = x + (k - 1) * w * 0.55 + (r() - 0.5) * 4, dy = cy - (k === 1 ? h * 0.18 : 0);
+      out.push(`radial-gradient(${w.toFixed(1)}% ${h.toFixed(1)}% at ${dx.toFixed(1)}% ${dy.toFixed(1)}%,var(--cc) 30%,transparent 70%)`);
+    }
+    out.push(`radial-gradient(${(w * 1.7).toFixed(1)}% ${(h * 0.6).toFixed(1)}% at ${x.toFixed(1)}% ${(cy + h * 0.32).toFixed(1)}%,var(--cs) 25%,transparent 70%)`);
+  }
+  return out.join(",");
+}
+function starField(seed, n) {
+  const r = rng2(seed);
+  return Array.from({ length: n }, () => {
+    const s = (0.7 + r() * 0.9).toFixed(1);
+    return `radial-gradient(${s}px ${s}px at ${(r() * 100).toFixed(0)}% ${(r() * 100).toFixed(0)}%,#fff 60%,transparent)`;
+  }).join(",");
+}
+var NOISE, PLATE_CSS, CLOCK2, PLATE_FIND;
+var init_style = __esm(() => {
+  NOISE = svgUrl(`<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='160' height='160' filter='url(#n)'/>`, 160, 160);
+  PLATE_CSS = raw`
+.p{--h:12;--rise:6.5;--set:18.5;--t:.5;--wd:90;--ph:0px;--ox:0px;--fl:1;--kbo:50%;
+ --p:calc((var(--h) - var(--rise)) / (var(--set) - var(--rise)));
+ --early:clamp(0,calc((var(--rise) - var(--h)) * 100),1);
+ --q:calc((var(--h) + 24 * var(--early) - var(--set)) / (24 - var(--set) + var(--rise)));
+ --sx:calc(6% + var(--p) * 82%);--sy:calc(74% - var(--p) * (1 - var(--p)) * 240%);--sun:clamp(0,calc(var(--p) * (1 - var(--p)) * 28),1);
+ --mx:calc(6% + var(--q) * 82%);--my:calc(70% - var(--q) * (1 - var(--q)) * 230%);--mvis:clamp(0,calc(var(--q) * (1 - var(--q)) * 28),.95);
+ --s1:#3f7fd0;--s2:#86b9ee;--s3:#d6e9fa;--far:#5d6f8c;--near:#223043;--cc:rgba(255,255,255,.75);--cs:rgba(150,165,190,.55);--lit:0;--gl:rgba(255,255,255,.12);--acc:#ffd27a;
+ --kt:var(--far);--ka:0%;--va:0%;--veg:var(--far);--tn:var(--far);
+ --F:color-mix(in oklab,color-mix(in oklab,var(--far),var(--kt) var(--ka)),var(--tn) 16%);
+ --N:color-mix(in oklab,color-mix(in oklab,var(--near),var(--kt) calc(var(--ka) * .5)),var(--tn) 8%);
+ --M:color-mix(in oklab,color-mix(in oklab,var(--F),var(--N) 55%),var(--veg) var(--va));
+ --mf:none;--mm:none;--mn:none;--mg:none;--mw:none;--hf:0%;--hm:0%;--hn:0%;--hg:0%;--hw:0%;--bf:0px;--bm:0px;--bn:0px;--bw:0px;--kf:.5;--km:.8;--kn:1.2;--kg:1.6;--kw:.8;--af:.5;--am:.5;--an:.5;--ag:.5;--aw:.5;--wl:0px;--rf:0;--g:40px;
+ position:relative;isolation:isolate;overflow:hidden;display:flex;flex-direction:column;min-height:258px;margin:.3em 0 1.2em;border-radius:22px;color:#fff;
+ font-family:"Newsreader","Iowan Old Style",Palatino,Georgia,serif;background:#111a33;
+ box-shadow:0 26px 50px -30px rgba(10,10,30,.85),inset 0 0 0 1px rgba(255,255,255,.08)}
+.p *{box-sizing:border-box}
+.l{position:absolute;inset:0;pointer-events:none}
+.scene{position:absolute;inset:0;overflow:hidden;transform-origin:var(--kbo) 78%}
+.p[data-flip="1"]{--fl:-1}
+.p[data-tint="1"]{--tn:#2c7a86}.p[data-tint="2"]{--tn:#5e3e96}.p[data-tint="3"]{--tn:#94404f}.p[data-tint="4"]{--tn:#3f7444}
+.p[data-season=spring]{--veg:#86b86c}.p[data-season=summer]{--veg:#3f7a3a}.p[data-season=autumn]{--veg:#c06a2a}.p[data-season=winter]{--veg:#dfe7f0}
+.p[data-band=night]{--s1:#05081a;--s2:#0f1838;--s3:#27224d;--far:#1a2146;--near:#070a15;--cc:rgba(88,98,132,.55);--cs:rgba(20,24,44,.6);--lit:1;--gl:rgba(110,130,200,.1);--acc:#8fb6ff}
+.p[data-band=small]{--s1:#03051a;--s2:#0a1130;--s3:#171a42;--far:#151b3c;--near:#05070f;--cc:rgba(80,90,125,.5);--cs:rgba(16,18,36,.6);--lit:.6;--gl:transparent;--acc:#8fb6ff}
+.p[data-band=predawn]{--s1:#0c1030;--s2:#2a2a5a;--s3:#5a4470;--far:#2c2a55;--near:#0d0c1d;--cc:rgba(110,100,150,.5);--cs:rgba(40,32,70,.55);--lit:.4;--gl:rgba(160,110,170,.25);--acc:#c9a8ff}
+.p[data-band=dawn]{--s1:#27295a;--s2:#7a4d80;--s3:#f0a07a;--far:#8a6390;--near:#2a1a2c;--cc:rgba(255,190,190,.6);--cs:rgba(120,80,120,.5);--gl:rgba(255,150,120,.5);--acc:#ffb38a}
+.p[data-band=sunrise]{--s1:#4a5a9a;--s2:#e89a7c;--s3:#ffd79a;--far:#9c7895;--near:#3a2a38;--cc:rgba(255,220,195,.7);--cs:rgba(170,110,120,.5);--gl:rgba(255,190,120,.55);--acc:#ffc27a}
+.p[data-band=morning]{--s1:#5b8fd0;--s2:#9cc3ea;--s3:#e8f1f8;--gl:rgba(255,250,230,.2)}
+.p[data-band=midday]{--s1:#3a78cc;--s2:#83b6ec;--s3:#d9ebfa}
+.p[data-band=afternoon]{--s1:#4b82c4;--s2:#a2c3e4;--s3:#f3e7c8;--far:#6c7690;--gl:rgba(255,230,180,.22)}
+.p[data-band=golden]{--s1:#48609e;--s2:#e0a36a;--s3:#ffd28a;--far:#8c6c70;--near:#35263a;--cc:rgba(255,226,180,.72);--cs:rgba(180,110,100,.5);--gl:rgba(255,200,120,.5);--acc:#ffcf6a}
+.p[data-band=sunset]{--s1:#34275f;--s2:#c0587a;--s3:#ffb070;--far:#6a3f6c;--near:#1f1428;--cc:rgba(255,175,160,.62);--cs:rgba(110,50,90,.55);--lit:.3;--gl:rgba(255,110,90,.55);--acc:#ff9a8a}
+.p[data-band=dusk]{--s1:#1c1c4a;--s2:#5a3a70;--s3:#b0607a;--far:#3a2c58;--near:#120f22;--cc:rgba(170,125,165,.5);--cs:rgba(60,40,80,.55);--lit:.7;--gl:rgba(200,90,140,.35);--acc:#f0a0d0}
+.p[data-band=evening]{--s1:#0b1030;--s2:#1c2350;--s3:#3a3060;--far:#222a52;--near:#080b18;--cc:rgba(90,100,135,.55);--cs:rgba(24,28,50,.6);--lit:1;--gl:rgba(120,110,190,.15);--acc:#a8b8ff}
+.sky{background:linear-gradient(180deg,var(--s1),var(--s2) 55%,var(--s3))}
+.glow{background:radial-gradient(75% 60% at calc(var(--sx) + 28px) 96%,var(--gl),transparent 70%)}
+.p:is([data-wx=overcast],[data-wx=showers],[data-wx=rain],[data-wx=sleet]) .sky{filter:saturate(.35) brightness(.78)}
+.p[data-wx=storm] .sky{filter:saturate(.3) brightness(.5)}
+.p:is([data-wx=fog],[data-wx=snow]) .sky{filter:saturate(.3) brightness(1.08)}
+.p:not([data-wx=clear]):not([data-wx=fair]) .glow{opacity:.35}
+.p[data-season=spring] .wash{background:linear-gradient(0deg,rgba(130,210,130,.16),transparent 60%)}
+.p[data-season=summer] .wash{background:linear-gradient(0deg,rgba(255,200,80,.12),transparent 70%)}
+.p[data-season=autumn] .wash{background:linear-gradient(0deg,rgba(235,140,50,.2),rgba(235,140,50,.05) 70%)}
+.p[data-season=winter] .wash{background:linear-gradient(0deg,rgba(210,225,255,.22),rgba(210,225,255,.06))}
+.stars{opacity:calc(var(--lit) * .95);background:${starField(1, 22)};background-size:300px 190px}
+.stars:after{content:"";position:absolute;inset:0;background:${starField(2, 8).replace(/0\.\dpx 0\.\dpx|1\.\dpx 1\.\dpx/g, "1.6px 1.6px")};background-size:420px 230px}
+.p:is([data-wx=overcast],[data-wx=showers],[data-wx=rain],[data-wx=storm],[data-wx=fog],[data-wx=snow],[data-wx=sleet]) .stars{opacity:0}
+.sun,.moon{inset:auto;border-radius:50%}
+.sun{width:56px;height:56px;left:var(--sx);top:var(--sy);opacity:var(--sun);
+ background:radial-gradient(circle,#fff8e0 0 40%,#ffd07a 68%,rgba(255,170,90,0));box-shadow:0 0 80px 30px rgba(255,190,110,.38)}
+.rays{inset:auto;width:440px;height:440px;margin:-192px 0 0 -192px;left:var(--sx);top:var(--sy);border-radius:50%;opacity:0;
+ background:repeating-conic-gradient(rgba(255,228,170,.2) 0 5deg,transparent 5deg 15deg);-webkit-mask:radial-gradient(circle,#000 8%,transparent 62%);mask:radial-gradient(circle,#000 8%,transparent 62%)}
+.p:is([data-band=dawn],[data-band=sunrise],[data-band=golden],[data-band=sunset]):is([data-wx=clear],[data-wx=fair]) .rays{opacity:.9}
+.moon{width:36px;height:36px;left:var(--mx);top:var(--my);opacity:var(--mvis);
+ background:radial-gradient(circle at 36% 36%,#fbfcff 0 44%,#d7defa 72%,#aeb8e6);box-shadow:inset var(--ph) 0 0 0 rgba(18,22,48,.92),0 0 38px 10px rgba(200,210,255,.2)}
+.p:is([data-wx=overcast],[data-wx=rain],[data-wx=storm],[data-wx=fog],[data-wx=snow],[data-wx=sleet]) :is(.sun,.moon){filter:blur(3px);opacity:.25}
+.clouds,.clouds2{inset:-6% -50% 40% -10%;opacity:0;background:${cloudBank(3, 6, [26, 52])}}
+.clouds2{inset:-14% -40% 52% -30%;background:${cloudBank(8, 7, [30, 60])};filter:blur(1px)}
+.p[data-wx=fair] .clouds{opacity:.55}.p[data-wx=fair] .clouds2{opacity:.35}
+.p[data-wx=broken] :is(.clouds,.clouds2){opacity:.9}
+.p:is([data-wx=overcast],[data-wx=showers],[data-wx=rain],[data-wx=sleet],[data-wx=snow]) :is(.clouds,.clouds2){opacity:1;inset:-14% -50% 26% -10%}
+.p:is([data-wx=overcast],[data-wx=showers],[data-wx=rain],[data-wx=sleet],[data-wx=snow]) .clouds2{inset:-24% -40% 40% -30%}
+.p[data-wx=storm] :is(.clouds,.clouds2){opacity:1;inset:-14% -50% 18% -10%;--cc:rgba(46,50,66,.92);--cs:rgba(14,16,24,.85)}
+.land{position:absolute;left:0;right:0;top:auto;bottom:calc(var(--b,0px) + var(--g));height:var(--hh,0%);pointer-events:none;transform:scaleX(var(--fl));
+ -webkit-mask:var(--m) calc(var(--a) * 100% + var(--ox) * var(--k)) 100%/auto 100% repeat-x;mask:var(--m) calc(var(--a) * 100% + var(--ox) * var(--k)) 100%/auto 100% repeat-x}
+.ground{top:auto;height:calc(var(--g) + 1px);background:var(--N)}
+.p[data-wx=snow] .ground{background:linear-gradient(180deg,#e9eef6,#c3cddb)}
+.far{--m:var(--mf);--hh:var(--hf);--b:var(--bf);--k:var(--kf);--a:var(--af);background:linear-gradient(180deg,color-mix(in oklab,var(--F),var(--s3) 40%),color-mix(in oklab,var(--F),var(--s3) 14%))}
+.refl{--m:var(--mf);--hh:var(--hf);--k:var(--kf);--a:var(--af);bottom:calc(var(--bf) + var(--g) - var(--hf));transform:scale(var(--fl),-1);opacity:calc(var(--rf) * .3);background:linear-gradient(0deg,var(--F),transparent);filter:blur(1.2px)}
+.mid{--m:var(--mm);--hh:var(--hm);--b:var(--bm);--k:var(--km);--a:var(--am);background:var(--M)}
+.lit{--m:var(--mw);--hh:var(--hw);--b:var(--bw);--k:var(--kw);--a:var(--aw);background:#ffd27a;opacity:var(--lit)}
+.near{--m:var(--mn);--hh:var(--hn);--b:var(--bn);--k:var(--kn);--a:var(--an);background:var(--N)}
+.fg{--m:var(--mg);--hh:calc(var(--hg) - var(--g));--k:var(--kg);--a:var(--ag);background:color-mix(in oklab,var(--N),#000 30%)}
+.p[data-wx=snow] .far{background:linear-gradient(180deg,rgba(240,245,252,.85) 0 14%,transparent 34%),color-mix(in oklab,var(--F),var(--s3) 24%)}
+.p[data-wx=snow] .mid{background:linear-gradient(180deg,rgba(238,243,250,.9) 0 10%,transparent 26%),var(--M)}
+.p[data-wx=snow] .near{background:linear-gradient(180deg,rgba(236,242,250,.92) 0 10%,transparent 24%),var(--N)}
+.water{top:auto;height:calc(var(--wl) + var(--g));background:linear-gradient(180deg,color-mix(in oklab,var(--s3),var(--s2) 30%),color-mix(in oklab,var(--s2),var(--N) 50%) 55%,var(--N))}
+.water:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(180deg,rgba(255,255,255,.12) 0 1px,transparent 1px 6px);-webkit-mask:linear-gradient(180deg,transparent,#000 30%);mask:linear-gradient(180deg,transparent,#000 30%)}
+.glint,.mglint{top:auto;height:calc(var(--wl) + var(--g));width:70px;left:calc(var(--sx) - 7px);opacity:var(--sun);background:repeating-linear-gradient(180deg,rgba(255,236,190,.8) 0 2px,transparent 2px 7px);-webkit-mask:radial-gradient(50% 100% at 50% 0,#000,transparent 85%);mask:radial-gradient(50% 100% at 50% 0,#000,transparent 85%)}
+.mglint{left:calc(var(--mx) - 17px);opacity:calc(var(--mvis) * var(--lit) * .8);background:repeating-linear-gradient(180deg,rgba(215,225,255,.7) 0 2px,transparent 2px 8px)}
+.p:not([data-wx=clear]):not([data-wx=fair]):not([data-wx=broken]) :is(.glint,.mglint){opacity:.15}
+.fog{opacity:0;background:linear-gradient(180deg,transparent 25%,rgba(228,233,240,.5) 62%,rgba(228,233,240,.78))}
+.p[data-wx=fog] .fog{opacity:1}.p:is([data-wx=rain],[data-wx=snow]) .fog{opacity:.3}
+.rain{inset:-30%;opacity:0;transform:rotate(12deg);background-image:radial-gradient(1px 11px at 50% 50%,rgba(215,228,255,.6) 40%,transparent),radial-gradient(1px 8px at 30% 20%,rgba(215,228,255,.42) 40%,transparent),radial-gradient(1.3px 15px at 70% 60%,rgba(232,240,255,.62) 40%,transparent);background-size:23px 61px,37px 83px,53px 113px}
+.rain.r2{background-size:17px 47px,29px 67px,41px 89px;transform:rotate(9deg) scale(.9)}
+.p:is([data-wx=showers],[data-wx=rain],[data-wx=storm],[data-wx=sleet]) .rain{opacity:.85}
+.p:is([data-wx=rain],[data-wx=storm]) .rain.r2{opacity:.5}
+.p[data-int=light] .rain{opacity:.45}.p[data-int=light] .rain.r2{opacity:0}
+.p:is([data-int=heavy],[data-int=torrential]) .rain.r2{opacity:.85}
+.snow{inset:-20%;opacity:0;background-image:radial-gradient(2px 2px at 10% 20%,#fff 60%,transparent),radial-gradient(3px 3px at 30% 60%,#fff 60%,transparent),radial-gradient(2px 2px at 50% 30%,#fff 60%,transparent),radial-gradient(3px 3px at 70% 70%,#fff 60%,transparent),radial-gradient(2px 2px at 85% 25%,#fff 60%,transparent),radial-gradient(2.5px 2.5px at 20% 85%,#fff 60%,transparent);background-size:150px 110px}
+.snow.big{background-size:260px 200px;filter:blur(.8px);transform:scale(1.6)}
+.p[data-wx=snow] .snow{opacity:.95}.p[data-wx=sleet] .snow{opacity:.5}
+.flash{opacity:0;background:#eef3ff}
+.windl{opacity:0;background:repeating-linear-gradient(172deg,transparent 0 26px,rgba(255,255,255,.2) 26px 27px)}
+.p[data-wx=wind] .windl,.p[data-wx=storm] .windl{opacity:.8}
+.heat{opacity:0;background:linear-gradient(0deg,rgba(255,160,80,.3),transparent 55%)}
+.p[data-wx=heat] .heat{opacity:1}
+.room,.wf{display:none}
+.p[data-place^=r_]{--g:0px}
+.p[data-place^=r_] :is(.room,.wf){display:block}
+.p[data-place^=r_] .scene{z-index:1;-webkit-mask:var(--mwin) 0 0/100% 100% no-repeat;mask:var(--mwin) 0 0/100% 100% no-repeat}
+.p[data-place^=r_] .scene:before{content:"";position:absolute;inset:0;z-index:3;background:linear-gradient(125deg,transparent 30%,rgba(255,255,255,.1) 42%,transparent 52%)}
+.wf{position:absolute;z-index:1;pointer-events:none;-webkit-mask:var(--mfr) 0 0/100% 100% no-repeat;mask:var(--mfr) 0 0/100% 100% no-repeat;background:linear-gradient(180deg,#6a4a30,#2a1a10);filter:drop-shadow(0 6px 10px rgba(0,0,0,.5))}
+.p[data-place^=r_] :is(.ra,.rb,.rc,.rd){z-index:1}
+.ra,.rb,.rc,.rd{position:absolute;pointer-events:none}
+.wall{background:linear-gradient(180deg,#3d2819,#24170f)}
+.wain{top:auto;height:20%;background:linear-gradient(#2c1b10,#1a100a)}
+.lamp{opacity:calc(.35 + var(--lit) * .65);background:radial-gradient(40% 70% at 10% 96%,rgba(255,170,80,.6),transparent 70%)}
+.spill{z-index:1;opacity:calc((1 - var(--lit)) * .9);background:radial-gradient(30% 70% at var(--wx,70%) 40%,rgba(255,244,220,.16),transparent 70%)}
+.p[data-place^=r_] .walldim{opacity:calc(var(--lit) * .35);background:#05060c}
+.motes{z-index:1;background:radial-gradient(1.5px 1.5px at 20% 70%,rgba(255,220,170,.8),transparent),radial-gradient(1px 1px at 35% 40%,rgba(255,220,170,.7),transparent),radial-gradient(1.5px 1.5px at 12% 50%,rgba(255,220,170,.6),transparent);background-size:220px 180px}
+.roomflash{z-index:1;opacity:0;background:radial-gradient(60% 90% at var(--wx,70%) 32%,rgba(220,232,255,.3),transparent 70%)}
+.scrim{background:linear-gradient(0deg,rgba(6,8,18,.62),rgba(6,8,18,.12) 48%,transparent 70%)}
+.grain{opacity:.07;background:${NOISE} 0 0/160px 160px;mix-blend-mode:overlay}
+.frame{z-index:1;border-radius:inherit}
+.p[data-frame="1"] .frame{inset:8px;border:1px solid rgba(255,255,255,.3);border-radius:15px}
+.p[data-frame="2"] .frame{inset:10px;opacity:.6;background:linear-gradient(#fff,#fff) 0 0/18px 1.5px,linear-gradient(#fff,#fff) 0 0/1.5px 18px,linear-gradient(#fff,#fff) 100% 0/18px 1.5px,linear-gradient(#fff,#fff) 100% 0/1.5px 18px,linear-gradient(#fff,#fff) 0 100%/18px 1.5px,linear-gradient(#fff,#fff) 0 100%/1.5px 18px,linear-gradient(#fff,#fff) 100% 100%/18px 1.5px,linear-gradient(#fff,#fff) 100% 100%/1.5px 18px;background-repeat:no-repeat}
+.p[data-frame="3"] .frame{inset:6px;border:4px double rgba(255,236,200,.38);border-radius:17px}
+.p[data-frame="4"] .frame{box-shadow:inset 0 0 90px 12px rgba(0,0,0,.55)}
+.top{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 14px 0}
+.crumb{display:inline-flex;flex-wrap:wrap;align-items:center;gap:5px;padding:7px 12px;border-radius:999px;font:500 12px/1.25 "DM Mono",ui-monospace,Menlo,monospace;background:rgba(8,10,22,.36);border:1px solid rgba(255,255,255,.18);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.crumb b{font-weight:500;color:#ffe3b0}
+.crumb:empty{display:none}
+.dial{position:relative;flex:none;width:56px;height:56px;border-radius:50%;margin-left:auto;
+ background:conic-gradient(from 180deg,#1d2250 0deg calc(var(--rise) * 15deg - 10deg),#f19a6b calc(var(--rise) * 15deg),#ffd978 calc(var(--rise) * 15deg + 14deg) calc(var(--set) * 15deg - 14deg),#ef7f69 calc(var(--set) * 15deg),#1d2250 calc(var(--set) * 15deg + 10deg));box-shadow:0 0 0 1px rgba(255,255,255,.25),0 6px 16px -6px rgba(0,0,0,.6)}
+.dial::before{content:"";position:absolute;inset:7px;border-radius:50%;background:rgba(8,10,24,.74)}
+.mk{position:absolute;inset:0;transform:rotate(calc(180deg + var(--h) * 15deg))}
+.mk::before{content:"";position:absolute;left:50%;top:-1px;width:9px;height:9px;margin-left:-4.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.35),0 0 10px 3px rgba(255,255,255,.7)}
+.dial span{position:absolute;inset:0;display:grid;place-items:center;font:500 11px/1 "DM Mono",ui-monospace,Menlo,monospace;color:#fff}
+.title{position:relative;z-index:2;margin-top:auto;padding:16px 20px 14px}
+.kicker{display:inline-flex;align-items:center;gap:8px;font:500 10.5px/1 "DM Mono",ui-monospace,Menlo,monospace;letter-spacing:.22em;text-transform:uppercase;opacity:.92}
+.ttl{margin:8px 0 0;font:700 clamp(26px,6vw,42px)/1.04 "Fraunces","Iowan Old Style",Palatino,Georgia,serif;letter-spacing:-.01em;text-shadow:0 2px 24px rgba(0,0,0,.55)}
+.ttl:empty{display:none}
+.p[data-lay="1"] .title{text-align:center;padding-bottom:16px}
+.p[data-lay="1"] .ttl:after{content:"";display:block;width:76px;height:1px;margin:12px auto 0;background:linear-gradient(90deg,transparent,var(--acc),transparent)}
+.p[data-lay="2"] .title{display:grid;grid-template-columns:auto 1fr;align-items:end;column-gap:14px}
+.p[data-lay="2"] .kicker{grid-row:1/3;writing-mode:vertical-rl;transform:rotate(180deg);padding:0 0 0 12px;border-right:2px solid var(--acc);letter-spacing:.3em;font-size:9.5px}
+.p[data-lay="2"] .ttl{margin:0;font-size:clamp(28px,6.6vw,48px)}
+.p[data-lay="3"] .title{align-self:flex-end;margin:auto 14px 12px auto;max-width:min(82%,520px);padding:13px 18px 14px;text-align:right;border-radius:16px;background:rgba(8,10,22,.34);border:1px solid rgba(255,255,255,.18);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.p[data-lay="4"] .ttl{display:inline;padding:0 .12em;background:linear-gradient(transparent 64%,color-mix(in oklab,var(--acc) 55%,transparent) 64% 88%,transparent 88%);-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.p[data-lay="4"] .kicker{display:flex;width:fit-content;margin-bottom:8px}
+.strip{position:relative;z-index:2;display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px 12px;background:linear-gradient(0deg,rgba(6,8,18,.62),rgba(6,8,18,.28));border-top:1px solid rgba(255,255,255,.14);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2)}
+.gl{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:999px;white-space:nowrap;font:500 12px/1 "DM Mono",ui-monospace,Menlo,monospace;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16)}
+.gl:empty{display:none}
+.thermo{position:relative;width:6px;height:14px;border-radius:3px;background:rgba(255,255,255,.25);overflow:hidden}
+.thermo::after{content:"";position:absolute;left:0;right:0;bottom:0;height:calc(var(--t) * 100%);background:linear-gradient(0deg,#69b7ff,#ffb86b 70%,#ff6b6b)}
+.wind{display:inline-block;font-style:normal;font-size:11px;transform:rotate(calc(var(--wd) * 1deg - 90deg))}
+.mo{width:13px;height:13px;border-radius:50%;background:#f4f1e6;box-shadow:inset calc(var(--ph) / 3) 0 0 0 #2a2f4a}
+.p[data-genre=mystery] .kicker{padding:5px 10px 4px;border-radius:5px 5px 0 0;background:#efe2c4;color:#3a2c1c;opacity:1;transform:rotate(-1.2deg);box-shadow:0 3px 10px rgba(0,0,0,.35);writing-mode:horizontal-tb}
+.p[data-genre=mystery] .ttl{font-variant:small-caps;letter-spacing:.02em}
+.p[data-genre=noir] .ttl{font:600 clamp(26px,6vw,42px)/.98 "Oswald","Bebas Neue","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em}
+.p[data-genre=noir] .scrim{background:repeating-linear-gradient(172deg,transparent 0 16px,rgba(0,0,0,.22) 16px 25px),linear-gradient(0deg,rgba(6,8,18,.6),transparent 60%)}
+.p:is([data-genre=fantasy],[data-genre=dark_fantasy]) .ttl{font:700 italic clamp(26px,6vw,42px)/1 "Cormorant Garamond","Iowan Old Style",Georgia,serif}
+.p:is([data-genre=fantasy],[data-genre=dark_fantasy]) .kicker::before,.p:is([data-genre=fantasy],[data-genre=dark_fantasy]) .kicker::after{content:"\u2767";letter-spacing:0;font-size:14px}
+.p:is([data-genre=fantasy],[data-genre=dark_fantasy]) .kicker::before{transform:scaleX(-1)}
+.p:is([data-genre=thriller],[data-genre=scifi],[data-genre=action]) .ttl{font:700 clamp(24px,5.4vw,36px)/1.02 "Space Grotesk",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.04em}
+.p:is([data-genre=romance],[data-genre=erotic]) .ttl{font:600 italic clamp(26px,6vw,42px)/1.02 "Fraunces","Iowan Old Style",Georgia,serif}
+.p:is([data-genre=romance],[data-genre=erotic]) .kicker{color:#ffd5dc}
+.p:is([data-genre=romance],[data-genre=erotic]) .kicker::before{content:"\u2766";font-size:15px;letter-spacing:0}
+.p:is([data-genre=horror],[data-genre=tragedy]) .ttl{font:600 clamp(26px,6vw,42px)/1 "Cormorant Garamond",Georgia,serif;letter-spacing:.03em;text-shadow:0 0 1px #000,0 3px 18px rgba(120,0,0,.55)}
+.p:is([data-genre=comedy],[data-genre=cozy],[data-genre=slice_of_life]) .ttl{font:600 clamp(26px,6vw,40px)/1.05 "Fredoka","Nunito",system-ui,sans-serif;display:inline-block;padding:4px 14px;border-radius:14px;background:rgba(255,255,255,.14);transform:rotate(-1.5deg)}
+@media (prefers-reduced-motion:no-preference){
+ .scene{animation:kb 48s ease-in-out infinite alternate}
+ .p[data-place^=r_] .scene{animation:none}
+ .rain{animation:rain .75s linear infinite}.rain.r2{animation-duration:1.05s}
+ .snow{animation:snow 10s linear infinite}.snow.big{animation-duration:6s}
+ .clouds{animation:drift 70s linear infinite alternate}.clouds2{animation:drift 110s linear infinite alternate-reverse}
+ .p[data-wx=storm] :is(.flash,.roomflash){animation:flash 7s ease-out infinite}
+ .rays{animation:spin 90s linear infinite}
+ .windl{animation:gust 1.4s linear infinite}
+ .fog{animation:breathe 14s ease-in-out infinite alternate}
+ .stars:after{animation:twinkle 3.5s ease-in-out infinite alternate}
+ .water:before{animation:shimmer 3s linear infinite}
+ .glint,.mglint{animation:breathe 4s ease-in-out infinite alternate}
+ .lamp{animation:flicker 4.5s ease-in-out infinite}
+ .motes{animation:motes 26s linear infinite}
+ .title>*{animation:rise 1s cubic-bezier(.2,.7,.2,1) both}.title>*:nth-child(2){animation-delay:.12s}
+ .mk::before{animation:pulse 2.8s ease-in-out infinite}
+}
+@keyframes kb{to{transform:scale(1.07)}}
+@keyframes rain{to{background-position:0 244px,0 332px,0 452px}}
+@keyframes snow{to{background-position:30px 220px,-20px 220px,15px 220px,-30px 220px,25px 220px,-15px 220px}}
+@keyframes drift{to{transform:translateX(-26%)}}
+@keyframes flash{0%,86%,92%,100%{opacity:0}87%{opacity:.8}89%{opacity:.1}90%{opacity:.55}}
+@keyframes spin{to{transform:rotate(1turn)}}
+@keyframes gust{to{background-position:-120px 20px}}
+@keyframes breathe{to{opacity:.7;transform:translateX(-4%)}}
+@keyframes flicker{0%,100%{opacity:1}45%{opacity:.86}48%{opacity:.97}52%{opacity:.8}60%{opacity:.95}}
+@keyframes motes{to{background-position:40px -360px,-30px -360px,20px -360px}}
+@keyframes rise{from{opacity:0;transform:translateY(10px);filter:blur(5px)}}
+@keyframes pulse{50%{box-shadow:0 0 0 2px rgba(0,0,0,.35),0 0 16px 6px rgba(255,255,255,.9)}}
+@keyframes twinkle{to{opacity:.35}}
+@keyframes shimmer{to{background-position:0 12px}}
+@keyframes pan{from{-webkit-mask-position:0 100%;mask-position:0 100%}to{-webkit-mask-position:-800px 100%;mask-position:-800px 100%}}
+@keyframes fly{from{left:-30%}to{left:115%}}
+@keyframes bob{to{transform:translateY(7px)}}
+@keyframes flit{50%{transform:scaleY(.55)}}
+@keyframes shoot{0%,88%{opacity:0;translate:0 0}90%{opacity:1}100%{opacity:0;translate:-230px 104px}}
+@keyframes aur{to{transform:skewX(8deg) translateX(5%);opacity:.6}}
+@keyframes blink{0%,25%{opacity:.15}100%{opacity:1}}
+@keyframes driftup{to{transform:translate(12px,-16px)}}
+@keyframes balloon{to{transform:translate(-70px,-14px)}}
+@keyframes sway{from{transform:scale(1.06) rotate(-1.4deg) translateY(3px)}to{transform:scale(1.06) rotate(1.4deg) translateY(-3px)}}
+@keyframes rattle{50%{transform:translateY(1px)}}
+@keyframes beam{0%,100%{transform:rotate(-6deg) scaleX(1)}50%{transform:rotate(-6deg) scaleX(-1)}}
+@keyframes plume{to{transform:translate(-6%,-5%) scale(1.14)}}
+@keyframes fall{to{background-position:0 28px}}
+@keyframes sweep{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
+@keyframes swing{from{transform:rotate(-7deg)}to{transform:rotate(7deg)}}
+@keyframes ecg{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@keyframes steam{0%{transform:translateY(10%);opacity:.4}50%{opacity:1}100%{transform:translateY(-14%);opacity:.3}}
+@media (max-width:560px){.p{min-height:236px;border-radius:18px}.dial{width:46px;height:46px}.dial::before{inset:6px}.dial span{font-size:9.5px}.gl{font-size:11px;padding:5px 8px}.p[data-lay="2"] .kicker{display:none}}
+`;
+  CLOCK2 = raw`(?:\u{1f570}|\uD83D[\uDD50-\uDD67]|\u23F0|\u231A|\u23F1|\u23F2)`;
+  PLATE_FIND = raw`(?:^|\n)[ \t]*(?:\*\*)?\u{1f5d3}\uFE0F?[ \t]*((?:(?!${CLOCK2})[^\n])*?)[ \t]*(?:${CLOCK2}\uFE0F?)?[ \t]*0?(\d|1\d|2[0-3]):([0-5]\d)[ \t]*(?:(\u2600|\u{1f319}|\u2728|\u{1f324}|\u26C5|\u{1f325}|\u2601|\u{1f326}|\u{1f327}|\u26C8|\u{1f329}|\u{1f328}|\u2744|\u{1f9ca}|\u{1f32b}|\u{1f32c}|\u{1f32a}|\u{1f525}|\u{1f321})\uFE0F?)?[ \t]*([^\n\u27EA]*?)[ \t]*(?:\*\*)?[ \t]*(?:\u27EA(\d{1,2}):(\d\d)\|(\d{1,2}):(\d\d)\|([^\u27EB\n]*)\u27EB)?[ \t]*(?:\n[ \t]*(?:\*\*)?\u{1f4cd}\uFE0F?[ \t]*([^\n]*?)(?:\*\*)?)?[ \t]*(?:\n[ \t]*#{1,3}[ \t]+([^\n]+))?(?=\n|$)`;
+});
+
+// src/core/plate/index.ts
+function weather(glyph, cond) {
+  if (glyph && GLYPH_WX[glyph])
+    return GLYPH_WX[glyph];
+  if (/storm|thunder/i.test(cond))
+    return "storm";
+  if (/snow|blizzard/i.test(cond))
+    return "snow";
+  if (/rain|drizzle|shower/i.test(cond))
+    return "rain";
+  if (/fog|mist/i.test(cond))
+    return "fog";
+  if (/overcast|cloud/i.test(cond))
+    return "overcast";
+  return "clear";
+}
+function season(date) {
+  if (/spring/i.test(date))
+    return "spring";
+  if (/summer|midsummer/i.test(date))
+    return "summer";
+  if (/autumn|fall\b|harvest/i.test(date))
+    return "autumn";
+  if (/winter|midwinter|yule/i.test(date))
+    return "winter";
+  if (/\b(?:Mar|Apr|May)[a-z]*\b/.test(date))
+    return "spring";
+  if (/\b(?:Jun|Jul|Aug)[a-z]*\b/.test(date))
+    return "summer";
+  if (/\b(?:Sep|Oct|Nov)[a-z]*\b/.test(date))
+    return "autumn";
+  if (/\b(?:Dec|Jan|Feb)[a-z]*\b/.test(date))
+    return "winter";
+  return "";
+}
+function moonShadow(moon) {
+  const m = (re) => re.test(moon);
+  return m(/\uD83C\uDF11|new moon/i) ? "44px" : m(/\uD83C\uDF12|waxing crescent/i) ? "26px" : m(/\uD83C\uDF13|first quarter/i) ? "18px" : m(/\uD83C\uDF14|waxing gibbous/i) ? "8px" : m(/\uD83C\uDF16|waning gibbous/i) ? "-8px" : m(/\uD83C\uDF17|last quarter|third quarter/i) ? "-18px" : m(/\uD83C\uDF18|waning crescent/i) ? "-26px" : "0px";
+}
+function eraOf(date, genre) {
+  if (/\b1[0-8]\d\d\b/.test(date))
+    return "old";
+  if (/\b19[0-4]\d\b/.test(date))
+    return "deco";
+  if (/\b(?:2[1-9]\d\d|[3-9]\d\d\d)\b/.test(date))
+    return "future";
+  return genre === "fantasy" || genre === "dark_fantasy" ? "old" : genre === "scifi" ? "future" : "modern";
+}
+function placeKind(path, era) {
+  const last = path.replace(/^.*\u203A[ \t]*/, "");
+  const k = firstKind(last) ?? firstKind(path) ?? "town";
+  if (k === "city")
+    return `city_${era}`;
+  if (k === "rooftop")
+    return era === "old" ? "rooftop_old" : "rooftop";
+  if (k === "r_default")
+    return era === "old" || era === "deco" ? "r_tavern" : era === "future" ? "r_lab" : "r_home";
+  return k;
+}
+function drawPlate(h, genre, as) {
+  const lead = genre || "";
+  const g = lead || "drama";
+  const era = eraOf(h.date, lead);
+  const kind = as ? as.replace(/-\d$/, "") : placeKind(h.place, era);
+  const last = h.place.replace(/^.*\u203A[ \t]*/, "");
+  const sd = h.place.length * 7 + vowels(h.place, /[^aeiouy]/gi) * 13 + last.length * 3 + 1;
+  const ss = h.title.length * 5 + vowels(h.title, /[^aeiou]/gi) * 11 + h.hour * 7;
+  const v = as ? Number(as.slice(-1)) : sd % 4;
+  const band = BANDS[h.hour] ?? "night";
+  const wx = weather(h.glyph, h.cond);
+  const fx = pickFx(ss, band, wx, kind);
+  const wind = /\bwind[ \t]+(N|NNE|NE|ENE|E|ESE|SE|SSE|S|SSW|SW|WSW|W|WNW|NW|NNW)\b/i.exec(h.cond)?.[1]?.toUpperCase();
+  const tc = /(-?\d{1,3})[ \t]*\u00B0[ \t]*C\b/i.exec(h.cond)?.[1];
+  const sun = h.rise && h.set ? `--rise:calc(${h.rise.replace(":", " + ")} / 60);--set:calc(${h.set.replace(":", " + ")} / 60);` : "";
+  const style = `--h:calc(${h.hour} + ${h.minute} / 60);${sun}--ph:${moonShadow(h.moon ?? "")};--wd:${wind ? WIND_DEG[wind] : 90};${tc ? `--t:clamp(0,calc((${tc} + 10) / 50),1);` : ""}--ox:${sd * 37 % 240 - 120}px;--kbo:${sd * 29 % 100}%`;
+  const attrs = {
+    k: `${kind}-${v}`,
+    place: kind,
+    band,
+    wx,
+    int: intensity(h.cond),
+    season: season(h.date),
+    genre: g,
+    flip: last.length % 2,
+    tint: Math.floor(sd / 4) % 5,
+    frame: Math.floor(sd / 3) % 5,
+    lay: (h.title.length * 3 + vowels(h.title, /[^aeiou]/gi)) % 5,
+    fx
+  };
+  const css = BASE + art(attrs.k) + (FX[fx] ? minCss(FX[fx].replaceAll("&", `[data-fx=${fx}]`)) : "") + (GENRE_FX[g] ? minCss(GENRE_FX[g].replaceAll("&", `[data-genre=${g}]`)) : "");
+  const segs = h.place.split(/[ \t]*\u203A[ \t]*/).filter((s) => s.length).map(esc);
+  const crumb = segs.length > 1 ? `${segs.slice(0, -1).join(" <span>\u203A</span> ")} <span>\u203A</span> <b>${segs[segs.length - 1]}</b>` : segs.join("");
+  const day = /^\s*((?:Day|Dia|D\u00EDa|Jour|Tag)\s*\d+)/i.exec(h.date)?.[1] ?? h.date;
+  const kicker = esc(day) + (lead ? ` \xB7 ${esc(lead.replace(/_/g, " "))}` : "");
+  const dateOnly = h.date.replace(/^\s*(?:(?:Day|Dia|D\u00EDa|Jour|Tag)\s*\d+\s*[\u00B7\u2022|,]\s*)?/i, "");
+  const pills = esc(h.cond).replace(/\bwind[ \t]+([NSEW]{1,3})\b/i, `<i class="wind">\u27A4</i> $1`).replace(/(-?\d{1,3})[ \t]*\u00B0[ \t]*([CF])\b/i, `<i class="thermo"></i>$1\xB0$2`).replace(/[ \t]*[\u00B7\u2022|][ \t]*/g, `</span><span class="gl">`);
+  const clock = `${h.hour < 10 ? "0" : ""}${h.hour}:${h.minute}`;
+  return `<div class="p" ${Object.entries(attrs).map(([k, x]) => `data-${k}="${x}"`).join(" ")} style="${style}"><style>${css}</style>` + `<div class="scene"><div class="l sky"></div><div class="l wash"></div><div class="l glow"></div><div class="l stars"></div><div class="l fx"></div><div class="l fx2"></div><div class="l rays"></div><div class="l sun"></div><div class="l moon"></div><div class="l clouds"></div><div class="l clouds2"></div><div class="l gx"></div><div class="l kx2"></div><div class="l ground"></div>` + `<div class="far land"></div><div class="l water"></div><div class="l glint"></div><div class="l mglint"></div><div class="refl land"></div><div class="mid land"></div><div class="lit land"></div><div class="l kx"></div><div class="near land"></div><div class="fg land"></div>` + `<div class="l fog"></div><div class="l windl"></div><div class="l heat"></div><div class="l rain"></div><div class="l rain r2"></div><div class="l snow"></div><div class="l snow big"></div><div class="l flash"></div></div>` + `<div class="l room wall"></div><div class="l room walldim"></div><div class="l room wain"></div><div class="l room lamp"></div><div class="wf"></div><div class="room ra"></div><div class="room rb"></div><div class="room rc"></div><div class="room rd"></div><div class="l room spill"></div><div class="l room motes"></div><div class="l room roomflash"></div>` + `<div class="l scrim"></div><div class="l grade"></div><div class="l grain"></div><div class="l frame"></div>` + `<div class="top"><span class="crumb">${crumb}</span><span class="dial"><i class="mk"></i><span>${clock}</span></span></div>` + `<div class="title"><span class="kicker">${kicker}</span><h3 class="ttl">${esc(h.title)}</h3></div>` + `<div class="strip"><span class="gl">\uD83D\uDDD3 ${esc(dateOnly)}</span><span class="gl">${h.glyph ? `${h.glyph} ` : ""}${pills}</span>${h.rise ? `<span class="gl">\u2600 ${h.rise} \u2013 ${h.set}</span>` : ""}${h.moon ? `<span class="gl"><i class="mo"></i>${esc(h.moon)}</span>` : ""}</div></div>`;
+}
+function drawPlates(content, genre) {
+  return content.replace(new RegExp(PLATE_FIND, "g"), (all, date, hour, minute, glyph, cond, rh, rm, sh, sm, moon, place, title) => {
+    const lead = /^\n/.test(all) ? `
+` : "";
+    return `${lead}
+${drawPlate({
+      date: date ?? "",
+      hour: parseInt(hour, 10),
+      minute,
+      glyph: glyph ?? "",
+      cond: cond ?? "",
+      rise: rh ? `${rh}:${rm}` : undefined,
+      set: sh ? `${sh}:${sm}` : undefined,
+      moon: moon || undefined,
+      place: (place ?? "").trim(),
+      title: (title ?? "").trim()
+    }, genre)}
+`;
+  });
+}
+var esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"), BANDS, GLYPH_WX, WIND_DEG, intensity = (c) => /torrential|downpour|blizzard|driving/i.test(c) ? "torrential" : /heavy|hard|thick|dense/i.test(c) ? "heavy" : /light|drizzle|thin|fine|patchy/i.test(c) ? "light" : "moderate", EXT_A, PLACE_ORDER, wordRe = (w) => new RegExp(String.raw`\b(?:${w})(?:s|es)?(?![a-z])`, "i"), ORDER_RE, firstKind = (text) => ORDER_RE.find(([, re]) => re.test(text))?.[0], ART = null, art = (key) => (ART ??= new Map(kindChunks().map((c) => [c.key, minCss(c.css)]))).get(key) ?? "", BASE, vowels = (s, set) => s.replace(set, "").length;
+var init_plate = __esm(() => {
+  init_kinds();
+  init_fx();
+  init_style();
+  BANDS = ["night", "night", "small", "small", "predawn", "dawn", "sunrise", "morning", "morning", "morning", "morning", "midday", "midday", "midday", "afternoon", "afternoon", "afternoon", "golden", "sunset", "dusk", "evening", "evening", "night", "night"];
+  GLYPH_WX = { "\u2600": "clear", "\uD83C\uDF19": "clear", "\u2728": "clear", "\uD83C\uDF24": "fair", "\u26C5": "broken", "\uD83C\uDF25": "broken", "\u2601": "overcast", "\uD83C\uDF26": "showers", "\uD83C\uDF27": "rain", "\u26C8": "storm", "\uD83C\uDF29": "storm", "\uD83C\uDF28": "snow", "\u2744": "snow", "\uD83E\uDDCA": "sleet", "\uD83C\uDF2B": "fog", "\uD83C\uDF2C": "wind", "\uD83C\uDF2A": "storm", "\uD83D\uDD25": "heat", "\uD83C\uDF21": "heat" };
+  WIND_DEG = { N: 180, NNE: 202, NE: 225, ENE: 247, E: 270, ESE: 292, SE: 315, SSE: 337, S: 0, SSW: 22, SW: 45, WSW: 67, W: 90, WNW: 112, NW: 135, NNW: 157 };
+  EXT_A = ["space", "rooftop", "graveyard", "ruins", "castle"];
+  PLACE_ORDER = [
+    ...EXT_A.map((k) => KIND_WORDS.find(([w]) => w === k)),
+    ...ROOM_WORDS.map(([k, w]) => [`r_${k}`, w]),
+    ["r_default", "room|interior|inside|indoors|hall"],
+    ...KIND_WORDS.filter(([k]) => !EXT_A.includes(k))
+  ];
+  ORDER_RE = PLACE_ORDER.map(([k, w]) => [k, wordRe(w)]);
+  BASE = minCss(PLATE_CSS);
+});
+
 // src/core/prompts.ts
 function langRule(lang, keep = "the section labels") {
   const l = (lang ?? "").trim();
@@ -5346,7 +8028,7 @@ function offPageFacts(st, auto) {
 }
 function wordPattern(words) {
   const w = words.map((x) => x.trim()).filter((x) => x.length >= 2);
-  return w.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${w.map(esc).join("|")})(?![\\p{L}\\p{N}])`, "giu") : null;
+  return w.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${w.map(esc2).join("|")})(?![\\p{L}\\p{N}])`, "giu") : null;
 }
 function redact(text, list) {
   let out = text;
@@ -5377,7 +8059,7 @@ function offPageLines(list, nm, max = 4) {
     return `#${o.key} (${who}): not on the page yet. No narration, thought or register states it${never}${as}. It comes out only in a scene where someone tells it.`;
   });
 }
-var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var esc2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // src/core/player.ts
 function asides(text) {
@@ -6235,7 +8917,7 @@ function findDate(cal, text) {
     best = { at: r.index, month, day, year: r[yearGroup] ? parseInt(r[yearGroup], 10) : undefined };
   };
   cal.months.forEach((mo, i) => {
-    const n = esc2(mo.name);
+    const n = esc3(mo.name);
     if (mo.festival && mo.days === 1) {
       consider(new RegExp(`(?<![\\w'])${n}(?![\\w'])${yearTail}`, "i"), i, null, 1);
       return;
@@ -6551,7 +9233,7 @@ function describeCalendar(cal) {
     parts.push(`The story sets the season: when it turns, write "season: winter" (or spring, summer, autumn) in the ledger.`);
   return parts.join(" ");
 }
-var GREG_MONTHS, GREG_DAYS, sumDays = (months) => months.reduce((s, m) => s + m.days, 0) || 365, SEASON_DOY, esc2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"), splitList = (s) => s.split(/\s*,\s*(?![^()[\]]*[)\]])/).map((x) => x.trim()).filter(Boolean), DEFAULT_FORMAT = "{weekday} {day} {month} {year} {era}";
+var GREG_MONTHS, GREG_DAYS, sumDays = (months) => months.reduce((s, m) => s + m.days, 0) || 365, SEASON_DOY, esc3 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"), splitList = (s) => s.split(/\s*,\s*(?![^()[\]]*[)\]])/).map((x) => x.trim()).filter(Boolean), DEFAULT_FORMAT = "{weekday} {day} {month} {year} {era}";
 var init_calendar = __esm(() => {
   init_calendars();
   GREG_MONTHS = [
@@ -6598,7 +9280,7 @@ function latitudeFrom(text) {
     return Math.max(-89, Math.min(89, v));
   }
   const south = /\bsouth/.test(t);
-  for (const [k, v] of Object.entries(BANDS))
+  for (const [k, v] of Object.entries(BANDS2))
     if (t.includes(k))
       return south ? -v : v;
   return south ? -45 : 45;
@@ -6671,10 +9353,10 @@ function skyBand(minute, sun) {
     return "evening";
   return "deep night";
 }
-var BANDS, rad = (d) => d * Math.PI / 180, MOON_PHASES, SYNODIC = 29.530588;
+var BANDS2, rad = (d) => d * Math.PI / 180, MOON_PHASES, SYNODIC = 29.530588;
 var init_astro = __esm(() => {
   init_util();
-  BANDS = {
+  BANDS2 = {
     equatorial: 2,
     tropical: 15,
     subtropical: 28,
@@ -8810,7 +11492,7 @@ function buildRoster(input) {
     let base;
     for (const p of placeRecs) {
       const s = `${p.summary} ${p.body?.lore ?? ""}`;
-      if (names.some((n) => n.length >= 3 && new RegExp(`\\b${esc3(n)}(?:'s|\u2019s)?\\b[^.]*\\b(lives|home|sleeps|works|keeps)\\b|\\bwhere ${esc3(n)} (lives|sleeps|works)`, "i").test(s)))
+      if (names.some((n) => n.length >= 3 && new RegExp(`\\b${esc4(n)}(?:'s|\u2019s)?\\b[^.]*\\b(lives|home|sleeps|works|keeps)\\b|\\bwhere ${esc4(n)} (lives|sleeps|works)`, "i").test(s)))
         base = p.name;
     }
     const lastPlace = c && ring === "offstage" && c.place && /^\p{Lu}/u.test(c.place) && isLocal(c.place) ? c.place : undefined;
@@ -8916,7 +11598,7 @@ function buildRoster(input) {
   }
   const userNames = [userName, userName.split(/\s+/)[0]].filter((n) => n && n.length >= 3);
   const named = (a) => a.names.length ? [...a.names, ...a.names.flatMap((n) => n.split(/\s+/).filter((w) => w.length >= 3 && part.get(low(w)) === a))] : [];
-  const strongRe = (n) => new RegExp(`\\b${esc3(n)}(?:'s|\u2019s|'|\u2019)\\s+(?:[\\w-]+\\s+){0,3}?(${FAMILY}|${WORK})\\b|\\b(${FAMILY}|${WORK})\\s+(?:of|to)\\s+(?:[\\w-]+\\s+){0,2}?${esc3(n)}\\b`, "i");
+  const strongRe = (n) => new RegExp(`\\b${esc4(n)}(?:'s|\u2019s|'|\u2019)\\s+(?:[\\w-]+\\s+){0,3}?(${FAMILY}|${WORK})\\b|\\b(${FAMILY}|${WORK})\\s+(?:of|to)\\s+(?:[\\w-]+\\s+){0,2}?${esc4(n)}\\b`, "i");
   for (const a of actors) {
     if (!a.lore)
       continue;
@@ -8924,7 +11606,7 @@ function buildRoster(input) {
     for (const o of others) {
       const ns = o === "user" ? userNames : named(o);
       for (const n of ns) {
-        if (!new RegExp(`\\b${esc3(n)}\\b`).test(a.lore))
+        if (!new RegExp(`\\b${esc4(n)}\\b`).test(a.lore))
           continue;
         const m = strongRe(n).exec(a.lore);
         const word = (m?.[1] ?? m?.[2] ?? "").toLowerCase();
@@ -8955,7 +11637,7 @@ function buildRoster(input) {
       both(a, find(a.owner) ?? (userNames.some((u) => low(u) === low(a.owner)) ? "user" : undefined), 3, "owner");
   for (const g of groups)
     for (const a of actors) {
-      if (new RegExp(`\\b(leads?|heads?|runs?|member of|serves?|works for)\\b[^.]*\\b${esc3(g.name)}`, "i").test(a.lore))
+      if (new RegExp(`\\b(leads?|heads?|runs?|member of|serves?|works for)\\b[^.]*\\b${esc4(g.name)}`, "i").test(a.lore))
         both(a, g, /\b(leads?|heads?|runs?)\b/i.test(a.lore) ? 3 : 2, "member");
     }
   for (const f of Object.values(st.facts ?? {})) {
@@ -9055,7 +11737,7 @@ function awakeSet(r, opts) {
       out.push(a);
   return out;
 }
-var REACH_WEIGHT, low = (s) => s.toLowerCase().replace(/[\u2019]/g, "'").trim(), esc3 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), firstSentence = (t) => /^[\s\S]*?[.!?](?:\s|$)/.exec(t)?.[0] ?? t, CLOSE = "mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|fianc[e\xE9]e?|lover|partner|mentor|best friend|closest friend|twin|sire|ward|guardian|betrothed|consort|parent|child|children|sibling", EXTENDED = "uncle|aunt|cousin|nephew|niece|grandmother|grandfather|grandson|granddaughter|ex-girlfriend|ex-boyfriend|ex|heir|patriarch|matriarch", FAMILY, WORK = "watcher|doctor|physician|bodyguard|servant|employer|boss|maid|squire|liege|knight|master|apprentice|assistant|friend|ally|confidante?|handler|teacher|student|lawyer|attorney|captain|rider", FAR, ANIMAL, MEANS_UP, MEANS_DOWN, NOCTURNAL;
+var REACH_WEIGHT, low = (s) => s.toLowerCase().replace(/[\u2019]/g, "'").trim(), esc4 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), firstSentence = (t) => /^[\s\S]*?[.!?](?:\s|$)/.exec(t)?.[0] ?? t, CLOSE = "mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|fianc[e\xE9]e?|lover|partner|mentor|best friend|closest friend|twin|sire|ward|guardian|betrothed|consort|parent|child|children|sibling", EXTENDED = "uncle|aunt|cousin|nephew|niece|grandmother|grandfather|grandson|granddaughter|ex-girlfriend|ex-boyfriend|ex|heir|patriarch|matriarch", FAMILY, WORK = "watcher|doctor|physician|bodyguard|servant|employer|boss|maid|squire|liege|knight|master|apprentice|assistant|friend|ally|confidante?|handler|teacher|student|lawyer|attorney|captain|rider", FAR, ANIMAL, MEANS_UP, MEANS_DOWN, NOCTURNAL;
 var init_roster = __esm(() => {
   init_util();
   REACH_WEIGHT = { house: 1, town: 0.8, region: 0.5, far: 0.3, none: 0 };
@@ -13983,21 +16665,25 @@ function registerRenderProcessor() {
       if (!/<ledger\b|\uD83D\uDDD3/u.test(fixed))
         return fixed !== ctx.content ? { content: fixed } : undefined;
       const L = ledgerFor(ctx.chatId, ctx.userId);
-      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}:${files.meta.detected.header ?? ""}:${hash(JSON.stringify(Object.entries(files.meta.checks ?? {}).filter(([k]) => k.startsWith(`${ctx.messageId}:`))))}`;
+      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}:${files.meta.detected.header ?? ""}:${files.meta.detected.lead ?? ""}:${hash(JSON.stringify(Object.entries(files.meta.checks ?? {}).filter(([k]) => k.startsWith(`${ctx.messageId}:`))))}`;
       const hit = renderCache.get(key);
       if (hit != null)
         return { content: hit };
       if (!L.raw.some((m) => m.id === ctx.messageId))
         await L.refresh();
       const state = L.stateAt(ctx.messageId, files.meta, settings, files.side);
-      if (!state)
-        return;
+      const genre = files.meta.detected.lead || files.meta.detected.genres?.[0] || files.meta.config.genres?.[0];
+      if (!state) {
+        const drawn = drawPlates(fixed, genre);
+        return drawn !== ctx.content ? { content: drawn } : undefined;
+      }
       const al = L.almanac(files.meta, settings, state);
       let content = fixed;
       if (al)
         content = content.replace(/^([ \t]*\uD83D\uDDD3[^\n]*?)(\s*\u27EA[^\u27EB]*\u27EB)?[ \t]*$/mu, (_m, line) => `${line}${plateSuffix(al)}`);
       if (al && files.meta.detected.header === "every")
         content = fillHeader(content, al, state.place);
+      content = drawPlates(content, genre);
       const block = extractLedgerBlock(content);
       if (block) {
         const view = (files.meta.detected.trackerView ?? "drawer").toLowerCase();
@@ -14039,6 +16725,7 @@ var init_hooks = __esm(() => {
   init_chronicle();
   init_dsl();
   init_render();
+  init_plate();
   init_prompts();
   init_util();
   init_host();

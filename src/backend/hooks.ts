@@ -6,6 +6,7 @@ import type { InterceptorResultDTO, LlmMessageDTO } from "lumiverse-spindle-type
 import { splice, validateUnits } from "../core/chronicle";
 import { extractLedgerBlock, fixSpeakerLabels, rewriteKnowledgeLines } from "../core/dsl";
 import { renderDrawer, plateSuffix, fillHeader } from "../core/render";
+import { drawPlates } from "../core/plate";
 import { sidecarPrompt } from "../core/prompts";
 import { hash, plainProse } from "../core/util";
 import { redact } from "../core/offpage";
@@ -351,18 +352,24 @@ export function registerRenderProcessor() {
       const fixed = labelled ? fixSpeakerLabels(ctx.content) : ctx.content;
       if (!/<ledger\b|🗓/u.test(fixed)) return fixed !== ctx.content ? { content: fixed } : undefined;
       const L = ledgerFor(ctx.chatId, ctx.userId);
-      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}:${files.meta.detected.header ?? ""}:${hash(JSON.stringify(Object.entries(files.meta.checks ?? {}).filter(([k]) => k.startsWith(`${ctx.messageId}:`))))}`;
+      const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}:${files.meta.detected.header ?? ""}:${files.meta.detected.lead ?? ""}:${hash(JSON.stringify(Object.entries(files.meta.checks ?? {}).filter(([k]) => k.startsWith(`${ctx.messageId}:`))))}`;
       const hit = renderCache.get(key);
       if (hit != null) return { content: hit };
       if (!L.raw.some((m) => m.id === ctx.messageId)) await L.refresh();
       const state = L.stateAt(ctx.messageId, files.meta, settings, files.side);
-      if (!state) return;
+      // The scene header is drawn here, with the place's own art, so the preset's lighter plate regex finds nothing left.
+      const genre = files.meta.detected.lead || files.meta.detected.genres?.[0] || files.meta.config.genres?.[0];
+      if (!state) {
+        const drawn = drawPlates(fixed, genre);
+        return drawn !== ctx.content ? { content: drawn } : undefined;
+      }
       const al = L.almanac(files.meta, settings, state);
       let content = fixed;
       // Plate enrichment: exact sun times and moon phase on the header line.
       if (al) content = content.replace(/^([ \t]*🗓[^\n]*?)(\s*⟪[^⟫]*⟫)?[ \t]*$/mu, (_m, line) => `${line}${plateSuffix(al)}`);
       // "Every reply" in the preset, but the model left the header out: draw it from the ledger.
       if (al && files.meta.detected.header === "every") content = fillHeader(content, al, state.place);
+      content = drawPlates(content, genre);
       const block = extractLedgerBlock(content);
       if (block) {
         const view = (files.meta.detected.trackerView ?? "drawer").toLowerCase();

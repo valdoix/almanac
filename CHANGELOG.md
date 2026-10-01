@@ -4,6 +4,22 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.15.0 — preset 1.0.13 (2026-10-01)
+
+**Intimate scenes: more explicit, and Extended means extended.** In a replayed chat (Explicit · Crude · Extended), the model read "Length: extended" as the length of one reply and took each act from its start to orgasm and afterglow in a single reply, with half the prose spent on metaphor and memory.
+- **Explicit** now asks for the act in full on the page: bodies and acts named outright, and the mechanics shown (positions, rhythm, depth, wetness, taste, sound, mess). Metaphor and inner monologue add flavour but never replace the act. No refrain carries over from one reply to the next. Each Vocabulary setting now says what it means (Tasteful still names things; Plain uses the everyday words; Crude is filthy and welcomes dirty talk).
+- **Scene length** now counts replies, not reply length, and each setting sets a pace. Brief: the act may peak in one reply. Standard: one phase per reply. Extended: one beat per reply, a few minutes of story time, ending mid-act. Climaxes are held back until the player's message brings them or asks. A climax doesn't end the scene; it goes on until the player moves the story elsewhere, and a reply never closes in afterglow the player didn't write. The Director's Pass names the beat, and the ledger keeps `mode: intimacy` until the player ends the scene.
+- Phases are now a ladder climbed across replies, with undressing and foreplay as their own rungs. Under Explicit, a single minute of the act can fill a reply.
+- Pace lines appear only under Sensual or Explicit, so Fade to black is unchanged.
+
+**Scene plates: every place drawn, and the Ledger draws them.**
+- The Ledger's render step now draws the scene header itself, before the display regex, so the preset carries no place art (it stays about 350 KB) and no macro parsing happens per header.
+- **32 outdoor kinds** (forest, jungle, marsh, garden, plains, mountain, tundra, desert, canyon, volcano, sea, ship's deck, coast, harbour, lake, river, bridge, tropical island, four eras of city, town, village, two eras of rooftop, castle, ruins, graveyard, camp, underground, space) and **26 rooms** (tavern, library, bedroom, chapel, great hall, lab, train, home, tent, kitchen, office, café, nightclub, classroom, hospital ward, cell, ship's cabin, starship bridge, car, theatre, shrine or dojo, attic, cellar, greenhouse, shop, bathhouse). Each has four drawn variants: procedural SVG silhouettes, lit windows, water with reflections, and room props.
+- A seed from the 📍 path picks the variant, a mirror, a tint, a frame and an offset, so one place always looks the same and two places of a kind differ. A seed from the title and the hour picks one of five title layouts and a sky accent (birds, bats, god rays, balloons, cirrus, petals or leaves, mist, the evening star, shooting stars, aurora, the Milky Way, fireflies, sky lanterns, a comet). Storms bring lightning, and sun showers bring a rainbow.
+- Era from the date's year (else the genre) picks skylines and the default room. Genres add atmosphere: a blood moon and a gnarled branch for horror, a ringed planet for sci-fi, a floating isle for fantasy, embers, bokeh, grain and grades.
+- Motion: a slow Ken Burns drift, lighthouse beams, volcano plumes, a waterfall, panning views from trains and cars, a ship that sways, swinging lanterns, club lights. All of it stops under reduced motion.
+- Without the Ledger, the preset's plate keeps the new sky, weather, accents and genre styling over one town or one room.
+
 ## 1.14.0 — preset 1.0.12 (2026-10-01)
 
 **Elsewhere: the world off the page** ([design/09](design/09-elsewhere.md)). It replaces the off-screen simulator.

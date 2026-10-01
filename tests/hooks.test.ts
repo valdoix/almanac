@@ -126,7 +126,10 @@ describe("extension hooks with the preset", () => {
     expect(latest.content).not.toContain("<ledger>");
     expect(latest.content).toContain("alm-drawer");
     expect(latest.content).toContain("[[alm-desk]]");
-    expect(latest.content).toMatch(/🗓[^\n]*⟪\d{2}:\d{2}\|\d{2}:\d{2}\|[^⟫]+⟫/u);
+    // The header is drawn here as the plate, with the almanac's exact sun times and moon; no raw header is left for the preset's regex.
+    expect(latest.content).toMatch(/<div class="p" data-k="r_[a-z]+-\d"/);
+    expect(latest.content).toMatch(/☀ \d{2}:\d{2} – \d{2}:\d{2}/u);
+    expect(latest.content).not.toMatch(/^[ \t]*(?:\*\*)?🗓/mu);
     const older = await hooks.render({ chatId: CHAT, userId: USER, messageId: "m0", content: OPENING, isUser: false, origin: "render" });
     expect(older.content).toContain("alm-drawer");
     expect(older.content).not.toContain("[[alm-desk]]");

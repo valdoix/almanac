@@ -262,7 +262,7 @@ export const REGEX: RegexDef[] = [
   {
     id: "alm-show-plate", name: "Scene header · living plate", layer: "display", target: ["display"], order: 50, flags: "", macros: "raw",
     find: PLATE_FIND, rep: PLATE_REPLACE,
-    description: "Draws the header as a sky that follows the hour, weather, season and place. With the Ledger it also shows exact sunrise, sunset and the moon phase.",
+    description: "Draws the header as a sky that follows the hour, weather and season, over a town or a room. With the Ledger installed the extension draws the full plate instead (every place drawn, exact sunrise, sunset and moon), so this only runs without it.",
   },
   {
     id: "alm-show-title", name: "Scene header · title card", layer: "display", target: ["display"], order: 51, flags: "", macros: "raw",
