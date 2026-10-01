@@ -675,9 +675,11 @@ const PARSERS: Record<OpName, LineParser> = {
     const parts = rest.split(/\s+\|\s+/);
     const fields: Record<string, string> = {};
     let head = "";
+    // A `set` line is all fields ("arc set #a: bring: yes | next: 10"); the others lead with a head (the kind, the result).
+    const allFields = m[1].toLowerCase() === "set";
     parts.forEach((part, i) => {
       const kv = /^([a-z]+):\s?([\s\S]*)$/.exec(part.trim());
-      if (kv && (i > 0 || /^(lead|text|status|next|thread|reason)$/.test(kv[1]))) fields[kv[1]] = kv[2].trim();
+      if (kv && (i > 0 || allFields || /^(lead|text|status|next|thread|reason)$/.test(kv[1]))) fields[kv[1]] = kv[2].trim();
       else if (i === 0) head = part.trim();
     });
     p.subject = m[2].replace(/^arc:/, "");

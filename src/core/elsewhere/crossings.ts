@@ -82,9 +82,11 @@ export function routeFor(o: {
   const aboutStage = castActors.some((c) => o.onstage.includes(c)) || o.onstage.some((c) => c.names.some((n) => arc.want.includes(n.split(" ")[0])));
   const toUser = !!lead?.ties.some((t) => t.to === "user" && t.strength >= 2);
   const near = (a?: Actor) => !!a && (a.reach === "town" || a.reach === "house");
-  // A carrier: someone local who has been on the page and is tied to the lead (or the lead).
+  // A carrier: someone local who has been on the page and is close to the lead (or the lead). Someone
+  // in the subplot only as its target (Willow, in Valeria's report on her) doesn't carry its news.
+  const close = (a: Actor) => a === lead || !!lead?.ties.some((t) => t.to === a.key && t.strength >= 2);
   const carriers = [lead, ...castActors, ...(lead?.ties ?? []).filter((t) => t.strength >= 2).map((t) => r.byKey(t.to))]
-    .filter((a): a is Actor => !!a && !a.group && near(a) && canAct(a) && a.ring === "offstage");
+    .filter((a): a is Actor => !!a && !a.group && near(a) && canAct(a) && a.ring === "offstage" && close(a));
   // A trace waits somewhere particular: the beat's own place if it's a spot in town, else a place an open thread will take the player.
   const isTown = (p?: string) => !p || (!!o.town && p.toLowerCase() === o.town.toLowerCase());
   const spot = !isTown(o.place) && r.local.some((x) => x.length >= 4 && (o.place!.toLowerCase().includes(x) || x.includes(o.place!.toLowerCase()))) ? o.place!.split(/\s*›\s*/) : o.tracePlaces?.[0];

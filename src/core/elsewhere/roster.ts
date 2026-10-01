@@ -105,6 +105,8 @@ const ANIMAL = /\b(cat|dog|kitten|puppy|horse|stallion|mare|dragon|wolf|direwolf
 const MEANS_UP = /\b(rich|wealthy|heir|lord|lady|king|queen|prince|princess|knight|witch|wizard|mage|sorcer|warlock|powerful|council|gang|leader|leads|doctor|physician|surgeon|lawyer|attorney|police|soldier|vampire|demon|slayer|dragon|rider|hand of the king|master of|commander|director|holdings|baronet|noble)\b/i;
 const MEANS_DOWN = /(?<![\w-])(little girl|little boy|toddler|baby|powerless|penniless|destitute|(?:[1-9]|1[0-5])[- ]year[- ]old|(?:seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen)[- ]year[- ]old)\b/i;
 const NOCTURNAL = /\b(vampire|nocturnal|creature of the night|undead)\b/i;
+/** Hunting vampires doesn't make you keep their hours: "a Vampire Slayer" is up by day. */
+const SLAYS_THEM = /\b(?:vampire|undead)[- ](?:slayers?|hunters?|killers?)\b|\b(?:slayers?|hunters?|killers?) of (?:vampires|the undead)\b/gi;
 
 /** The standing and whereabouts the lore text gives, if any. */
 export function readStanding(text: string): { standing?: Standing; where?: string; owner?: string } {
@@ -207,7 +209,7 @@ export function buildRoster(input: RosterInput): Roster {
       key, name: c?.name ?? r.name, names, charId, recordId: r.id, ring, standing, where, base, reach,
       drives: { want: prof?.want ?? (typeof b.want === "string" ? b.want : undefined), fear: prof?.fear ?? (typeof b.fear === "string" ? b.fear : undefined), role, tension: typeof b.tension === "string" ? b.tension : undefined },
       ties: [], routine: typeof b.routine === "string" ? b.routine : undefined, owner: read.owner,
-      nocturnal: prof?.nocturnal ?? NOCTURNAL.test(`${role ?? ""} ${loreText}`),
+      nocturnal: prof?.nocturnal ?? NOCTURNAL.test(`${role ?? ""} ${loreText}`.replace(SLAYS_THEM, "")),
       lastPage: c && ring !== "unmet" ? c.lastSeen : -1,
       protected: !!b.lore || r.provenance.source === "lore" || ring !== "unmet",
       flags: { out: pref.out, wake: pref.wake, offPage: pref.offPage },
@@ -228,6 +230,8 @@ export function buildRoster(input: RosterInput): Roster {
   // Name lookup: full names and aliases, then unique first or last names.
   const exact = new Map<string, Actor>();
   for (const a of [...actors, ...groups]) for (const n of a.names) if (!exact.has(low(n))) exact.set(low(n), a);
+  // "The Witches' Circle" is also "Witches' Circle" when a sentence names it.
+  for (const g of groups) for (const n of g.names) if (/^the\s+/i.test(n) && !exact.has(low(n).replace(/^the\s+/, ""))) exact.set(low(n).replace(/^the\s+/, ""), g);
   const part = new Map<string, Actor | null>();
   for (const a of actors) for (const n of a.names) {
     const t = n.split(/\s+/).filter((w) => w.length >= 3 && /^[A-Z]/.test(w) && !/^(the|of|and|lady|lord|ser|sir|king|queen|prince|princess|mr|mrs|ms|dr)$/i.test(w));
@@ -352,7 +356,7 @@ function groupActor(name: string, id: string, text: string, isLocal: (w: string)
   const where = readStanding(text).where;
   return {
     key: id, name, names: [name], recordId: id, ring: "unmet", standing: "here", where, reach: where && !isLocal(where) ? (FAR.test(where) ? "far" : "region") : "town",
-    drives: {}, ties: [], nocturnal: /\b(vampire|demon|undead)\b/i.test(text), lastPage: -1, protected: false, flags: {}, text: text.slice(0, 300), lore: text, knows: [], means: 1, group: true,
+    drives: {}, ties: [], nocturnal: /\b(vampire|demon|undead)\b/i.test(text.replace(SLAYS_THEM, "")), lastPage: -1, protected: false, flags: {}, text: text.slice(0, 300), lore: text, knows: [], means: 1, group: true,
   };
 }
 

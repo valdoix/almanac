@@ -6,7 +6,7 @@
 //   arc beat #giles-return: cost | roll: 4+5+0 | at: 3880 | text: … | next: 4600
 //   arc stage #giles-return: rising          arc cross #giles-return: thread: Giles comes back
 //   arc end #giles-return: met | text: …      arc drop #giles-return: reason: idle three days
-//   arc set #giles-return: status: held | next: 4000 | bring: yes | premise: … | fate: accept
+//   arc set #giles-return: status: held | next: 4000 | bring: yes | push: yes | wait: asleep | kind: duty | premise: … | fate: accept
 //   whereabouts Giles: England | since: 3830
 
 import type { ArcKind, ArcStage, ArcState, BeatResult, ParsedOp, WorldState } from "../types";
@@ -46,7 +46,7 @@ export function applyArcOp(st: WorldState, op: ParsedOp, mi: number): boolean {
         grounds: list(f.grounds), secrecy: f.secrecy === "public" || f.secrecy === "secret" ? f.secrecy : "private",
         clock: { cur: Math.min(int(f.cur, 0), max), max }, tally: { win: 0, cost: 0, loss: 0 }, heat: int(f.heat, 1), stage: "setup",
         beats: [], nextAbs: int(f.next, at), status: "running", by: f.by === "player" ? "player" : f.by === "lore" ? "lore" : "engine",
-        locked: f.by === "player" || undefined, place: clean(f.place) || undefined, startedAbs: at, startedMsg: mi,
+        locked: f.by === "player" || undefined, place: clean(f.place) || undefined, startedAbs: at, startedMsg: mi, push: f.push === "yes" || undefined,
         faction: f.faction ? { name: f.faction.split("/")[0].trim(), project: (f.faction.split("/")[1] ?? "").trim() } : undefined,
       };
       return true;
@@ -59,6 +59,7 @@ export function applyArcOp(st: WorldState, op: ParsedOp, mi: number): boolean {
       arc.beats.push({
         atAbs: at, roll: roll ? [parseInt(roll[1], 10), parseInt(roll[2], 10)] : [0, 0], mod: roll?.[3] ? parseInt(roll[3].replace(/\s/g, ""), 10) : 0,
         result, twist: clean(f.twist) || undefined, text: clean(f.text), told: f.told === "model" ? "model" : "template", msgIndex: mi, tick: clean(f.tick) || undefined, place: clean(f.place) || undefined,
+        note: clean(f.note) || undefined,
       });
       if (arc.beats.length > BEATS_KEPT) {
         const old = arc.beats.splice(0, arc.beats.length - BEATS_KEPT);
@@ -69,7 +70,9 @@ export function applyArcOp(st: WorldState, op: ParsedOp, mi: number): boolean {
       arc.lastBeatAbs = at;
       arc.nextAbs = int(f.next, at + 60);
       if (f.place) arc.place = clean(f.place);
-      if (arc.bring) arc.bring = undefined;
+      arc.bring = undefined;
+      arc.push = undefined;
+      arc.wait = undefined;
       return true;
     }
     case "stage": {
@@ -104,6 +107,10 @@ export function applyArcOp(st: WorldState, op: ParsedOp, mi: number): boolean {
       if (status === "held" || status === "running" || status === "fate") arc.status = status;
       if (f.next) arc.nextAbs = int(f.next, arc.nextAbs);
       if (f.bring) arc.bring = f.bring === "yes" || undefined;
+      if (f.push) arc.push = f.push === "yes" || undefined;
+      if ("wait" in f) arc.wait = clean(f.wait) || undefined;
+      if ((KINDS as string[]).includes(f.kind ?? "") && f.kind !== "world") arc.kind = f.kind as ArcKind;
+      if (f.kind) arc.locked = true;
       if (f.heat) arc.heat = int(f.heat, arc.heat);
       if (f.cast) arc.cast = [...new Set([...arc.cast, ...list(f.cast)])];
       if (f.secrecy === "public" || f.secrecy === "private" || f.secrecy === "secret") arc.secrecy = f.secrecy;

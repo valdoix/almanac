@@ -572,3 +572,15 @@ Changes the replay forced, beyond the text above:
 - **The player's controls are side events** (`arc set`, `arc new … | by: player`) anchored like corrections. Per-person flags live in the chat's config.
 - **Not built:** premises aren't checked with the reply check's passage search (`supportOf`); the validator checks their names and words instead.
 
+### Since 1.15.1
+
+A report from the Buffy chat: two stories written on the page never moved, and the one step told was nonsense. The replay of that afternoon (Day 4, messages 270–290) changed these:
+- **A player's story starts pushed** (`push: yes`): its first step comes at once, in a step of its own. With telling on, one small call first shapes the premise into a kind, a want, a fear, a cast and a secrecy (`shapePrompt`, `validateShape`). Without it, `kindForStory` reads the kind for what the lead does: words after "about" or "how" are the topic, and a decline or a grief belongs to the person named nearest before it.
+- **Nudge is a push.** A pushed step happens even out of the lead's hours, at −1, and the card tells the model so. A held step writes its reason (`wait:`), and the page shows it with the next possible time.
+- **A forced step** ("Move the world a step now") counts the whole step for any subplot whose cooldown ends within it. If the dice move nothing, the most overdue subplot that can move does, the player's first.
+- **Outcome labels:** a near miss (win told as cost) keeps the model's words. Only the opposite outcome falls back to the template, and the rejected text goes into the tick's log.
+- **Cards carry SO FAR** (the last two beats) and the grounds' own words.
+- **Carriers** are the lead or someone close to them (a tie of 2 or more). The subplot's target never carries it.
+- **Seeding:** the player's stories don't count as the world being busy, and a step seeds one subplot per kind at most.
+- **The parser:** every field of an `arc set` line counts, including the first. Before this, bring-ins, fates, premise edits, twist casts and slips were silently dropped.
+

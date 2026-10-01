@@ -4,6 +4,20 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.15.1 (2026-10-01)
+
+**Elsewhere: your own stories move, and make sense.** In the Buffy chat, two stories written on the Elsewhere page sat still through three "Move the world a step now" presses and a nudge. The one step that happened was told in the engine's words ("Valeria leaned on it a little"), even with the model telling.
+- **A story you write starts at once.** Its first step happens when you press Start it. With the model telling, the model first reads your words once: the kind of story, what the lead is after, what they fear, who is in it, and how secret it is.
+- **The kind comes from what the lead does.** "Valeria tells the Witches' Circle about Willow's dark magic; the Circle holds an investigation" is now an Investigation, not Valeria's Decline. What someone talks *about* is the topic, and a decline belongs to whoever has it. Groups a story names (the Witches' Circle) join its cast and grounds. Your stories can reach the scene unless your words keep them secret.
+- **Nudge makes the next step happen now**, even out of the lead's hours, at a disadvantage (a vampire by day). **Move the world a step now** counts the whole step, and moves something if anything can, your stories first. Both say in a toast what moved, or why nothing did.
+- **Each subplot says when its next step can come, and why it waits** ("Spike keeps night hours; not before 19:00").
+- **Edit** can now change a subplot's kind and how secret it is.
+- **The model's telling is kept when it only labels the outcome differently** (a win told as "cost"). Only an opposite outcome falls back to the engine's words, and the log keeps what the model wrote. Each card now gives the model the subplot's last steps, what its grounds say, and "this is its first step", so a telling continues its story.
+- **The engine's own words read as one step:** "and it went well" instead of "this time it worked out", and a decline names what is leaned on ("dark magic").
+- **Fixed: Bring in, Accept · Soften · Keep it for the page, premise edits, twist cast additions and secrets slipping never took effect.** The first field of an `arc set` line was read as a label and dropped.
+- Fixed: stems like "investigat", "conspir", "attract" and "obsess" never matched ("investigation" didn't suggest an Investigation). A Vampire Slayer no longer keeps vampire hours. Bonds are no longer read as lore situations that seed subplots, and wants copied from archivist notes ("…suggests she wants forgiveness") read as wants.
+- With none of the world's own subplots running (only yours), the world seeds at once. A step seeds at most one new subplot of each kind.
+
 ## 1.15.0 — preset 1.0.13 (2026-10-01)
 
 **Intimate scenes: more explicit, and Extended means extended.** In a replayed chat (Explicit · Crude · Extended), the model read "Length: extended" as the length of one reply and took each act from its start to orgasm and afterglow in a single reply, with half the prose spent on metaphor and memory.

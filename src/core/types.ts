@@ -742,6 +742,8 @@ export interface ArcBeat {
   msgIndex: number;
   tick?: string;
   place?: string;
+  /** Why the engine's words stand when the model was asked to tell it. */
+  note?: string;
 }
 
 export interface ArcState {
@@ -777,6 +779,10 @@ export interface ArcState {
   lastBeatAbs?: number;
   /** The player asked for a crossing next turn. */
   bring?: boolean;
+  /** The player asked for its next step now (nudge, or a story they just wrote). */
+  push?: boolean;
+  /** Why its next step waits (asleep, news not yet heard), shown on the Elsewhere page. */
+  wait?: string;
   /** A faction clock it moves (the Hellions' raid). */
   faction?: { name: string; project: string };
   /** An irreversible outcome waiting on the player, and their word on it. */

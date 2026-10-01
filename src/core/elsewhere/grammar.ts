@@ -35,19 +35,19 @@ export const SPECS: Record<ArcKind, KindSpec> = {
     want: "to get what they're after", fear: "it slips away for good", moves: ["set out {want}", "pressed on, still trying {want}", "made a last push {want}"],
   },
   scheme: {
-    kind: "scheme", words: /\b(scheme|plot|conspir|usurp|seize|ambition|ambitious|alliance|marry\b.*\bto|influence|power|succession|whisper|spymaster|hand of the king|leverage)\b/i, clock: 8, base: 0.07, secrecy: "secret",
+    kind: "scheme", words: /\b(scheme|plot|conspir\w*|usurp|seize|ambition|ambitious|alliance|marry\b.*\bto|influence|power|succession|whisper|spymaster|hand of the king|leverage)\b/i, clock: 8, base: 0.07, secrecy: "secret",
     routes: ["carrier", "signal", "entrance"], prices: ["an ally's doubt", "a debt to a dangerous friend", "a witness", "coin"],
     worse: ["a confidant talked", "the rival moved first", "a letter went astray", "the plan had to change"],
     want: "to gain the upper hand", fear: "the plot comes to light", moves: ["laid the groundwork {want}", "moved a piece {want}", "made the decisive move {want}"],
   },
   rivalry: {
-    kind: "rivalry", words: /\b(rival|rivalry|grudge|resent|feud|compet|enemy|enemies|score to settle)\b/i, clock: 6, base: 0.07, secrecy: "private",
+    kind: "rivalry", words: /\b(rival|rivalry|grudge|resent|feud|compet\w*|enemy|enemies|score to settle)\b/i, clock: 6, base: 0.07, secrecy: "private",
     routes: ["carrier", "ambient", "entrance"], prices: ["a public scene", "a friend's patience", "pride"],
     worse: ["the other side struck back", "it turned ugly in public", "someone got hurt"],
     want: "to come out on top", fear: "the other side wins", moves: ["took a swipe, trying {want}", "escalated, trying {want}", "forced a showdown, trying {want}"],
   },
   courtship: {
-    kind: "courtship", words: /\b(court|courting|flirt|date|dating|crush|attract|romance|in love|sweetheart|smitten)\b/i, clock: 6, base: 0.07, secrecy: "private",
+    kind: "courtship", words: /\b(court|courting|flirt|date|dating|crush|attract\w*|romance|in love|sweetheart|smitten)\b/i, clock: 6, base: 0.07, secrecy: "private",
     routes: ["carrier", "ambient", "entrance"], prices: ["gossip", "a friend's disapproval", "a misunderstanding"],
     worse: ["it went awkwardly wrong", "a rival appeared", "one of them pulled back"],
     want: "to be with the one they want", fear: "it falls apart before it starts", moves: ["found an excuse to be near them, hoping {want}", "risked something real, hoping {want}", "said it plainly, hoping {want}"],
@@ -71,13 +71,13 @@ export const SPECS: Record<ArcKind, KindSpec> = {
     want: "to keep it hidden", fear: "it comes out", moves: ["covered tracks, trying {want}", "had a close call, trying {want}", "was nearly caught, trying {want}"],
   },
   decline: {
-    kind: "decline", words: /\b(addict|spiral|drawn deeper|dark magic|drinking|drunk|illness|sick|dying|overdose|withdraw|craving|hooked|obsess)\b/i, clock: 6, base: 0.07, secrecy: "secret",
+    kind: "decline", words: /\b(addict|spiral|drawn deeper|dark magic|drinking|drunk|illness|sick|dying|overdose|withdraw|craving|hooked|obsess\w*)\b/i, clock: 6, base: 0.07, secrecy: "secret",
     routes: ["carrier", "signal", "entrance"], prices: ["a lie to someone close", "money", "sleep", "a little more of themselves"],
     worse: ["it went further than meant", "someone close was hurt by it", "the cost showed"],
-    want: "to stay in control", fear: "they hit bottom", moves: ["leaned on it a little", "leaned on it harder", "leaned on it hard, with everything at stake"], irreversible: true,
+    want: "to stay in control", fear: "they hit bottom", moves: ["leaned on {vice} a little", "leaned on {vice} harder", "leaned on {vice} hard, with everything at stake"], irreversible: true,
   },
   investigation: {
-    kind: "investigation", words: /\b(research|investigat|study|studies|cross[- ]referenc|case file|find out|scry|trace|evidence|clue|theory|diagnos|analy)\b/i, clock: 6, base: 0.08, secrecy: "private",
+    kind: "investigation", words: /\b(research|investigat\w*|study|studies|cross[- ]referenc\w*|case file|find out|scry|trace|evidence|clue|theory|diagnos\w*|analy\w*)\b/i, clock: 6, base: 0.08, secrecy: "private",
     routes: ["carrier", "entrance", "signal"], prices: ["a sleepless night", "a favour from an archive", "a dangerous contact"],
     worse: ["a dead end", "the lead was false", "someone noticed the questions"],
     want: "to find the answer", fear: "the answer comes too late", moves: ["followed a lead, trying {want}", "dug deeper, trying {want}", "closed in, trying {want}"],
@@ -85,7 +85,7 @@ export const SPECS: Record<ArcKind, KindSpec> = {
   threat: {
     kind: "threat", words: /\b(raid|attack|hunt|gang|army|war|invade|invasion|monster|demon|loot|siege|threat|danger|predator|killer|bandits?)\b/i, clock: 6, base: 0.09, secrecy: "public",
     routes: ["ambient", "trace", "carrier"], prices: ["they were seen", "one of theirs was hurt", "it took longer"],
-    worse: ["someone fought back", "they lost ground", "it went wrong for them"],
+    worse: ["someone fought back", "they lost ground", "they were beaten back"],
     want: "to take what they came for", fear: "they're driven off", moves: ["scouted, working {want}", "struck, working {want}", "went all in, working {want}"],
   },
   return: {
@@ -101,7 +101,7 @@ export const SPECS: Record<ArcKind, KindSpec> = {
     want: "to do what the post demands", fear: "the institution turns on them", moves: ["answered a summons, meaning {want}", "carried out an order, meaning {want}", "faced the institution, meaning {want}"],
   },
   life: {
-    kind: "life", words: /\b(recital|work|job|shift|school|class|birthday|family|wedding|holiday|festival|dinner|rehears|practice|hospital|restaurant|studio)\b/i, clock: 6, base: 0.035, secrecy: "private",
+    kind: "life", words: /\b(recital|work|job|shift|school|class|birthday|family|wedding|holiday|festival|dinner|rehears\w*|practice|hospital|restaurant|studio)\b/i, clock: 6, base: 0.035, secrecy: "private",
     routes: ["signal", "carrier"], prices: ["a long day", "a forgotten errand", "a small disappointment"],
     worse: ["the day went badly", "plans fell through", "a small worry grew"],
     want: "to get on with an ordinary life", fear: "the ordinary life comes apart", moves: ["went about the ordinary business of life", "had a busy stretch", "reached a small milestone"],
@@ -128,6 +128,64 @@ export function kindFromText(text: string): ArcKind | null {
   return SPECS.pursuit.words.test(text) ? "pursuit" : null;
 }
 
+/** Words that belong to whoever is named nearest before them (a decline, a grief), not to the lead by default. */
+const ATTRIBUTE: ArcKind[] = ["decline", "loss"];
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The kind a player's own story suggests, read for what the lead does. "Valeria tells the Circle
+ * about Willow's dark magic; the Circle opens an investigation" is an investigation, not Valeria's
+ * decline: what is said "about" something is its topic, and a decline belongs to whoever has it.
+ */
+export function kindForStory(premise: string, lead: string[], others: string[]): ArcKind {
+  const scores = new Map<ArcKind, number>();
+  const names = [...lead.map((n) => ({ n, me: true })), ...others.map((n) => ({ n, me: false }))].filter((x) => x.n.length >= 3);
+  for (const k of ORDER) {
+    const re = new RegExp(SPECS[k].words.source, "gi");
+    for (const m of premise.matchAll(re)) {
+      const clause = premise.slice(0, m.index).split(/[.;!?]/).at(-1) ?? "";
+      let w = k === "pursuit" ? 0.6 : 1;
+      if (/\b(about|regarding|concerning|of how|how)\b/i.test(clause)) w *= 0.4;
+      if (ATTRIBUTE.includes(k)) {
+        let best = -1;
+        let mine = true;
+        for (const x of names) {
+          const hits = [...clause.matchAll(new RegExp(`\\b${esc(x.n)}\\b`, "gi"))];
+          const j = hits.length ? hits[hits.length - 1].index! : -1;
+          if (j > best) {
+            best = j;
+            mine = x.me;
+          }
+        }
+        if (!mine) w *= 0.2;
+      }
+      scores.set(k, (scores.get(k) ?? 0) + w);
+    }
+  }
+  let kind: ArcKind = "pursuit";
+  let top = 0;
+  for (const k of ORDER) if ((scores.get(k) ?? 0) > top) [kind, top] = [k, scores.get(k)!];
+  return kind;
+}
+
+/** A want the player's words state ("is searching for Dawn" → "to find Dawn"), or null. */
+export function wantFromStory(premise: string): string | null {
+  const cut = (s: string) => s.trim().split(/\s+/).slice(0, 12).join(" ").replace(/[,;:]+$/, "");
+  const m = /\b(?:wants?|hopes?|needs?|tries|trying|plans?|means|intends?|is determined|sets? out|vows?|swears?|is going)\s+to\s+([^.;,!?]+)/i.exec(premise);
+  if (m) return `to ${cut(m[1])}`;
+  const f = /\b(?:search(?:es|ing)? for|look(?:s|ing)? for|hunt(?:s|ing)? for|track(?:s|ing)? down)\s+([^.;,!?]+)/i.exec(premise);
+  if (f) return `to find ${cut(f[1])}`;
+  return null;
+}
+
+/** What someone in decline leans on, from the subplot's words ("dark magic", "the bottle"), or "it". */
+export function viceOf(text: string): string {
+  const m = /\b(dark magic|black magic|magic|drink(?:ing)?|alcohol|the bottle|drugs?|pills|power|gambling|blood)\b/i.exec(text);
+  if (!m) return "it";
+  const w = m[1].toLowerCase();
+  return /^(drink|drinking|alcohol)$/.test(w) ? "the bottle" : /^drug$/.test(w) ? "drugs" : w;
+}
+
 export function stageOf(cur: number, max: number): ArcStage {
   if (cur >= max) return "aftermath";
   if (cur >= max - 1) return "crisis";
@@ -138,14 +196,15 @@ export function stageOf(cur: number, max: number): ArcStage {
 const bare = (want: string) => want.replace(/[.!]+$/, "").trim();
 
 /** The engine's sentence for a beat. */
-export function beatTemplate(opts: { kind: ArcKind; lead: string; want: string; stage: ArcStage; result: BeatResult; price?: string; worse?: string; place?: string }): string {
+export function beatTemplate(opts: { kind: ArcKind; lead: string; want: string; stage: ArcStage; result: BeatResult; price?: string; worse?: string; place?: string; premise?: string }): string {
   const spec = SPECS[opts.kind];
   const i = opts.stage === "setup" ? 0 : opts.stage === "crisis" ? 2 : 1;
-  const move = spec.moves[i].replace("{want}", bare(opts.want) || spec.want);
+  const move = spec.moves[i].replace("{want}", bare(opts.want) || spec.want).replace("{vice}", viceOf(`${opts.premise ?? ""} ${opts.want}`));
   const at = opts.place ? ` (${opts.place})` : "";
-  if (opts.result === "win") return `${opts.lead} ${move}${at}; this time it worked out.`;
-  if (opts.result === "cost") return `${opts.lead} ${move}${at}; it worked, at a price: ${opts.price ?? spec.prices[0]}.`;
-  return `${opts.lead} ${move}${at}; it went wrong: ${opts.worse ?? spec.worse[0]}.`;
+  // One step of the story, not the whole of it: a win is headway, never the want met.
+  if (opts.result === "win") return `${opts.lead} ${move}${at}, and it went well.`;
+  if (opts.result === "cost") return `${opts.lead} ${move}${at}; it got somewhere, at a price: ${opts.price ?? spec.prices[0]}.`;
+  return `${opts.lead} ${move}${at}, but it went wrong: ${opts.worse ?? spec.worse[0]}.`;
 }
 
 /** The engine's sentence for an ending. */

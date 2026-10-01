@@ -64,10 +64,15 @@ export function isLight(a: ArcState): boolean {
 const VERB = /^(be|get|find|keep|protect|stay|win|make|help|see|know|learn|stop|save|leave|go|return|prove|earn|marry|take|have|become|avoid|escape|fix|end|mend|settle|reach|reunite|bring|destroy|kill|defeat|hide|claim|seize|rule|serve|free|heal|understand|undo|break|build|finish|catch|expose|warn|confront|reclaim|regain|restore|redeem|repay|survive|live|do|be)\b/i;
 /** A want as "to …": "Gabriel's recovery" becomes "to see Gabriel's recovery". */
 export function asWant(text: string | undefined, fallback: string): string {
-  const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0];
+  // An archivist's note ("Unanswered apology suggests she wants forgiveness") holds the want after "wants".
+  const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0].replace(/^.*?\b(?:wants?|wishes|longs? for|hopes? for)\s+/i, "");
   if (!t) return fallback;
   const bare = t.replace(/^to\s+/i, "");
-  return VERB.test(bare) ? `to ${bare.charAt(0).toLowerCase()}${bare.slice(1)}` : `to see ${bare}`;
+  if (VERB.test(bare)) return `to ${bare.charAt(0).toLowerCase()}${bare.slice(1)}`;
+  // A name or a thing ("Gabriel's recovery") is seen through; a state ("forgiveness") is found; anything else reads as a verb ("guide Buffy").
+  if (/^(?:the|a|an|his|her|their|its|my|our|\p{Lu})/u.test(bare)) return `to see ${bare}`;
+  if (/^\w+(?:ness|tion|sion|ment|ity|ance|ence|dom|ship|cy)\b/i.test(bare)) return `to find ${bare}`;
+  return `to ${bare}`;
 }
 /** A fear as a plain clause: "That the Willow she loves is gone" becomes "the Willow she loves is gone". */
 export function asFear(text: string | undefined, fallback: string): string {
@@ -198,7 +203,8 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
 
   // Lore: situations the story moved past, and forecasts (canon gravity).
   for (const rec of ctx.records) {
-    if (rec.kind !== "forecast" && rec.kind !== "situation") continue;
+    // Bonds are filed as situations too; they seed below, from their axes.
+    if ((rec.kind !== "forecast" && rec.kind !== "situation") || rec.id.startsWith("bond:")) continue;
     if (rec.kind === "forecast" && (ctx.canonGravity === "off" || rec.status === "diverged")) continue;
     const parts = (Array.isArray(rec.body?.participants) ? rec.body.participants.map(String) : []).map((n: string) => r.find(n)).filter(Boolean) as Actor[];
     const text = `${rec.summary} ${(Array.isArray(rec.body?.expected) ? rec.body.expected.join(" ") : "")}`.replace(/^Upcoming \(not yet true\):\s*/i, "");
@@ -292,6 +298,10 @@ export interface GateResult {
   deferTo?: number;
   drop?: string;
   why: string[];
+  /** Why it waits, in the player's words ("keeps night hours"), for the Elsewhere page. */
+  wait?: string;
+  /** The player pushed it through out of the lead's hours ("by day, though he keeps night hours"). */
+  offHours?: string;
 }
 
 /** Whether this person is up at this minute of the day. */
@@ -301,29 +311,43 @@ export function awakeAt(a: Actor | undefined, minuteOfDay: number): boolean {
   return minuteOfDay >= 7 * 60 && minuteOfDay < 23 * 60;
 }
 
-export function gate(arc: ArcState, lead: Actor | undefined, r: Roster, opts: { from: number; now: number; rand: () => number }): GateResult {
+/**
+ * `push`: the player asked for this step now (a nudge, a story they just wrote): it happens even
+ * out of the lead's hours, at a disadvantage. `forced`: the player moved the world a step, so the
+ * step's whole window counts, whatever the subplot's cooldown.
+ */
+export function gate(arc: ArcState, lead: Actor | undefined, r: Roster, opts: { from: number; now: number; rand: () => number; push?: boolean; forced?: boolean }): GateResult {
   const why: string[] = [];
   if (lead && !lead.group && !canAct(lead)) return { ok: false, mod: 0, drop: `${lead.name} can no longer act (${lead.standing})`, why };
   // Knowledge: a beat acts only on facts the lead has. Unrecorded is not enough.
   if (lead && !lead.group) {
     const missing = arc.grounds.filter((g) => g.startsWith("#") && !hasFact(lead, g.slice(1)) && arc.kind !== "secret");
-    if (missing.length) return { ok: false, mod: 0, deferTo: opts.now + 360, why: [`waits for news (${missing.join(", ")})`] };
+    if (missing.length) return { ok: false, mod: 0, deferTo: opts.now + 360, why: [`waits for news (${missing.join(", ")})`], wait: `waits until ${lead.name} hears ${missing.join(", ")}` };
   }
   // Time: a minute in the window when the lead is up.
-  const start = Math.max(opts.from, arc.nextAbs);
+  const since = Math.max(opts.from, arc.lastBeatAbs ?? arc.startedAbs);
+  const start = opts.push || opts.forced ? Math.min(since, opts.now) : Math.max(opts.from, arc.nextAbs);
   if (start > opts.now) return { ok: false, mod: 0, deferTo: arc.nextAbs, why: ["not yet"] };
   let at: number | undefined;
   for (let i = 0; i < 24 && at == null; i++) {
     const t = Math.round(start + opts.rand() * Math.max(0, opts.now - start));
     if (awakeAt(lead, ((t % 1440) + 1440) % 1440)) at = t;
   }
+  let mod = 0;
+  let offHours: string | undefined;
   if (at == null) {
-    let t = opts.now;
-    while (!awakeAt(lead, ((t % 1440) + 1440) % 1440) && t < opts.now + 1440) t += 30;
-    return { ok: false, mod: 0, deferTo: t, why: ["asleep"] };
+    const hours = lead?.nocturnal ? "keeps night hours" : "is asleep at this hour";
+    if (!opts.push) {
+      let t = opts.now;
+      while (!awakeAt(lead, ((t % 1440) + 1440) % 1440) && t < opts.now + 1440) t += 30;
+      return { ok: false, mod: 0, deferTo: t, why: ["asleep"], wait: `${lead?.name ?? arc.lead} ${hours}` };
+    }
+    at = opts.now;
+    mod -= 1;
+    why.push("out of hours");
+    offHours = lead?.nocturnal ? `by day, though ${lead.name} keeps night hours` : `at an hour ${lead?.name ?? arc.lead} is usually asleep`;
   }
   // Means, allies, opponents, beliefs and distance.
-  let mod = 0;
   if (lead) {
     mod += lead.means;
     if (lead.means > 0) why.push("means");
@@ -347,7 +371,7 @@ export function gate(arc: ArcState, lead: Actor | undefined, r: Roster, opts: { 
       why.push("from afar");
     }
   }
-  return { ok: true, mod: Math.max(-2, Math.min(2, mod)), atAbs: at, why };
+  return { ok: true, mod: Math.max(-2, Math.min(2, mod)), atAbs: at, why, offHours };
 }
 
 /** Travel time to the scene's town, in minutes. */
@@ -362,17 +386,17 @@ export function travelTime(a: Actor | undefined): number {
 /** A value safe inside an arc line (no field separators, no line breaks). */
 export const cleanVal = (s: string | undefined) => (s ?? "").replace(/\s*\|\s*/g, " / ").replace(/\s*\n+\s*/g, " ").trim();
 
-export function arcNewLine(c: { id: string; kind: ArcKind; lead: string; cast: string[]; secrecy: string; clock: number; cur?: number; heat: number; at: number; premise: string; want: string; fear: string; grounds: string[]; place?: string; by: string; faction?: { name: string; project: string } }): string {
+export function arcNewLine(c: { id: string; kind: ArcKind; lead: string; cast: string[]; secrecy: string; clock: number; cur?: number; heat: number; at: number; premise: string; want: string; fear: string; grounds: string[]; place?: string; by: string; faction?: { name: string; project: string }; push?: boolean }): string {
   const f = [
     `lead: ${cleanVal(c.lead)}`, c.cast.length ? `cast: ${cleanVal(c.cast.join(", "))}` : "", `secrecy: ${c.secrecy}`, `clock: ${c.clock}`, c.cur ? `cur: ${c.cur}` : "",
     `heat: ${c.heat}`, `at: ${c.at}`, `premise: ${cleanVal(c.premise)}`, `want: ${cleanVal(c.want)}`, `fear: ${cleanVal(c.fear)}`, `grounds: ${cleanVal(c.grounds.join(", "))}`,
-    c.place ? `place: ${cleanVal(c.place)}` : "", `by: ${c.by}`, c.faction ? `faction: ${cleanVal(c.faction.name)} / ${cleanVal(c.faction.project)}` : "",
+    c.place ? `place: ${cleanVal(c.place)}` : "", `by: ${c.by}`, c.faction ? `faction: ${cleanVal(c.faction.name)} / ${cleanVal(c.faction.project)}` : "", c.push ? "push: yes" : "",
   ].filter(Boolean);
   return `arc new #${c.id}: ${c.kind} | ${f.join(" | ")}`;
 }
 
-export function beatLine(id: string, b: { result: BeatResult; roll: [number, number]; mod: number; at: number; text: string; told: "model" | "template"; twist?: string; place?: string; tick: string; next: number }): string {
+export function beatLine(id: string, b: { result: BeatResult; roll: [number, number]; mod: number; at: number; text: string; told: "model" | "template"; twist?: string; place?: string; tick: string; next: number; note?: string }): string {
   const mod = b.mod ? `${b.mod > 0 ? "+" : "-"}${Math.abs(b.mod)}` : "";
-  const f = [`roll: ${b.roll[0]}+${b.roll[1]}${mod}`, `at: ${b.at}`, b.twist ? `twist: ${cleanVal(b.twist)}` : "", b.place ? `place: ${cleanVal(b.place)}` : "", `tick: ${b.tick}`, `next: ${b.next}`, `told: ${b.told}`, `text: ${cleanVal(b.text)}`].filter(Boolean);
+  const f = [`roll: ${b.roll[0]}+${b.roll[1]}${mod}`, `at: ${b.at}`, b.twist ? `twist: ${cleanVal(b.twist)}` : "", b.place ? `place: ${cleanVal(b.place)}` : "", `tick: ${b.tick}`, `next: ${b.next}`, `told: ${b.told}`, b.note ? `note: ${cleanVal(b.note)}` : "", `text: ${cleanVal(b.text)}`].filter(Boolean);
   return `arc beat #${id}: ${b.result} | ${f.join(" | ")}`;
 }

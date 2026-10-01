@@ -7,10 +7,10 @@ import type { CharacterState, FactState, WorldState } from "../src/core/types";
 import { buildRoster, readStanding, storyTown } from "../src/core/elsewhere/roster";
 import { spreadNews } from "../src/core/elsewhere/news";
 import { gate, seedCandidates } from "../src/core/elsewhere/arcs";
-import { tick } from "../src/core/elsewhere/storyteller";
+import { authorArc, tick } from "../src/core/elsewhere/storyteller";
 import { confirmArrivals, coverage, elsewhereLane, expireArrivals, routeFor, upgradeArrival, type Arrival } from "../src/core/elsewhere/crossings";
 import { validateTold } from "../src/core/elsewhere/telling";
-import { kindFromText, stageOf } from "../src/core/elsewhere/grammar";
+import { beatTemplate, kindForStory, kindFromText, stageOf, wantFromStory } from "../src/core/elsewhere/grammar";
 import { rng } from "../src/core/util";
 
 const DAY = 1440;
@@ -273,7 +273,69 @@ describe("the telling's validator", () => {
     expect(validateTold(card, { result: "cost", text: "Giles called his old friend Ethan for help." }, ctx).rejected).toContain("Ethan");
     expect(validateTold(card, { result: "cost", text: "Giles phoned, and Gabriel agreed to meet him." }, ctx).rejected).toContain("decides for");
     expect(validateTold(card, { result: "cost", text: "Giles learned where she had been: Heaven." }, ctx).rejected).toContain("off-page");
-    expect(validateTold(card, { result: "win", text: "Giles booked a flight." }, ctx).rejected).toContain("decided cost");
+    // A near miss on the label keeps the words (the model priced a win); the opposite outcome doesn't.
+    expect(validateTold(card, { result: "win", text: "Giles booked a flight." }, ctx).rejected).toBeUndefined();
+    expect(validateTold({ ...card, result: "win" }, { result: "loss", text: "Giles couldn't get a flight." }, ctx).rejected).toContain("decided win");
     expect(validateTold(card, { result: "cost", text: "Giles booked a flight, and Willow died that night." }, ctx).rejected).toContain("irreversible");
+  });
+});
+
+describe("the player's own stories", () => {
+  test("the kind comes from what the lead does, not from what they talk about", () => {
+    const valeria = "Valeria is speaking to the Witches' Circle about Willow Rosenberg and the dark magic she witnessed in Buffy and how Willow threw Gabriel to a wall. The Witches' Circle holds their investigation.";
+    expect(kindForStory(valeria, ["Valeria"], ["Willow Rosenberg", "Willow", "Buffy"])).toBe("investigation");
+    expect(kindForStory("Spike is searching for Dawn.", ["Spike"], ["Dawn"])).toBe("pursuit");
+    expect(kindForStory("Willow is drawn deeper into dark magic and hides it from Tara.", ["Willow"], ["Tara"])).toBe("decline");
+    expect(wantFromStory("Spike is searching for Dawn.")).toBe("to find Dawn");
+    expect(wantFromStory("Spike wants the chip out and is asking the wrong people")).toBeNull();
+  });
+
+  test("every field of an arc set line counts, the first one too", () => {
+    expect(parseLine("arc set #a: bring: yes | next: 10")!.args.fields).toEqual({ bring: "yes", next: "10" });
+    expect(parseLine("arc set #a: fate: accept")!.args.fields).toEqual({ fate: "accept" });
+    expect(parseLine("arc set #a: premise: X | want: to y")!.args.fields).toEqual({ premise: "X", want: "to y" });
+    expect(parseLine("arc new #a: decline | lead: Willow")!.args.head).toBe("decline");
+  });
+
+  const spikeWorld = () => {
+    const w = world();
+    w.records.push(person("char:spike", "Spike", "Spike is a vampire in Sunnydale, over a century old."));
+    w.st.time = { day: 4, minute: 12 * 60 };
+    return w;
+  };
+  const arc = (o: any) => ({ id: "spike_pursuit", kind: "pursuit", lead: "Spike", cast: ["Dawn"], premise: "Spike is searching for Dawn.", want: "to find Dawn", fear: "he failed her", grounds: ["char:spike", "player"], secrecy: "private", clock: { cur: 0, max: 6 }, tally: { win: 0, cost: 0, loss: 0 }, heat: 2, stage: "setup", beats: [], nextAbs: 3 * DAY + 720, status: "running", by: "player", locked: true, startedAbs: 3 * DAY + 700, startedMsg: 10, ...o }) as any;
+  const inp = (st: WorldState, records: CodexRecord[], o: any = {}) => ({ chatId: "c", tickId: "w1", state: st, records, userName: "Gabriel", mode: "restless" as const, canonGravity: "off" as const, fates: "ask" as const, genres: [], from: 3 * DAY + 720, now: 3 * DAY + 720, anchorIndex: 11, offPage: [], recentArrivals: [], ...o });
+
+  test("a story starts pushed, and a push moves it now, even out of the lead's hours", () => {
+    const { st, records } = spikeWorld();
+    const r = buildRoster({ state: st, records, userName: "Gabriel" });
+    expect(r.find("Buffy")!.nocturnal).toBe(false);
+    expect(r.find("Spike")!.nocturnal).toBe(true);
+    const line = authorArc({ roster: r, name: "Spike", premise: "Spike is searching for Dawn.", now: 3 * DAY + 720, arcs: [] })!;
+    expect(line).toMatch(/^arc new #spike_pursuit: pursuit \| lead: Spike \| cast: Dawn \| secrecy: private .*want: to find Dawn .*by: player \| push: yes$/);
+    // Unpushed, a vampire waits for dark, and the page is told why.
+    const held = gate(arc({}), r.find("Spike"), r, { from: 3 * DAY + 600, now: 3 * DAY + 720, rand: rng("x") });
+    expect(held).toMatchObject({ ok: false, wait: "Spike keeps night hours" });
+    expect(held.deferTo! % DAY).toBe(19 * 60);
+    // Pushed (a nudge, or the story just written), it happens now, by day, at a disadvantage.
+    st.arcs = { spike_pursuit: arc({ push: true }) };
+    const t = tick(inp(st, records));
+    expect(t.lines.some((l) => l.startsWith("arc beat #spike_pursuit:"))).toBe(true);
+    const card = t.cards.find((c) => c.arcId === "spike_pursuit")!;
+    expect(card.offHours).toContain("keeps night hours");
+    expect(card.sofar).toEqual([]);
+  });
+
+  test("moving the world a step moves something, even a subplot just nudged", () => {
+    const { st, records } = spikeWorld();
+    st.chars.willow.place = "Sunnydale";
+    st.arcs = { willow_x: arc({ id: "willow_x", lead: "Willow", cast: [], nextAbs: 3 * DAY + 720, startedAbs: 3 * DAY + 500 }) };
+    // The old window started at the cooldown, so a step "now" had no time in it.
+    const forced = tick(inp(st, records, { from: 3 * DAY + 600, forced: true, tickId: "w1f1" }));
+    expect(forced.lines.some((l) => l.startsWith("arc beat #willow_x:"))).toBe(true);
+  });
+
+  test("a decline's engine words name what is leaned on; a win is headway", () => {
+    expect(beatTemplate({ kind: "decline", lead: "Willow", want: "to stay in control", stage: "setup", result: "win", premise: "Willow is drawn deeper into dark magic" })).toBe("Willow leaned on dark magic a little, and it went well.");
   });
 });

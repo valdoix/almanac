@@ -8,9 +8,9 @@ import type { WeaverWorld } from "../lore";
 import type { OffPage } from "../offpage";
 import type { ArcKind, ArcStage, ArcState, BeatResult, ElsewhereConfig, WorldState } from "../types";
 import { rng, slug } from "../util";
-import { arcNewLine, awakeAt, beatLine, cleanVal, gate, isLight, namesIn, seedCandidates, type SeedCand } from "./arcs";
+import { arcNewLine, awakeAt, beatLine, cleanVal, gate, isLight, namesIn, seedCandidates, type GateResult, type SeedCand } from "./arcs";
 import { routeFor, type Arrival } from "./crossings";
-import { beatTemplate, endTemplate, SPECS, stageOf, type RouteKind } from "./grammar";
+import { beatTemplate, endTemplate, kindForStory, SPECS, stageOf, wantFromStory, type RouteKind } from "./grammar";
 import { spreadNews, type Hop } from "./news";
 import { awakeSet, buildRoster, canAct, type Actor, type Profile, type Roster } from "./roster";
 
@@ -49,6 +49,8 @@ export interface TickInput {
   truths?: string[];
   /** The tick before this one (its leads wait a turn: spotlight rotation). */
   prevTick?: string;
+  /** The player moved the world a step: the whole step counts, and something moves if anything can. */
+  forced?: boolean;
 }
 
 export interface BeatCard {
@@ -71,6 +73,12 @@ export interface BeatCard {
   want: string;
   fear: string;
   leadText: string;
+  /** What the grounds say (a group, a fact, a thread), so the telling stays on them. */
+  groundText?: string[];
+  /** The subplot's last beats, so the telling continues it. */
+  sofar?: string[];
+  /** Pushed through out of the lead's hours. */
+  offHours?: string;
   knows: string[];
   noRoute: string[];
   grounds: string[];
@@ -178,7 +186,7 @@ export function tick(inp: TickInput): TickResult {
     const result = d === "accept" ? "lost" : "softened";
     const text = endTemplate({ lead: arc.lead, want: arc.want, fear: arc.fear, result });
     lines.push(`arc end #${arc.id}: ${result} | text: ${cleanVal(text)}`);
-    cards.push(cardFor(arc, lead, roster, st, { result, roll: [0, 0], mod: 0, stage: "aftermath", atAbs: inp.now, template: text, line: lines.length - 1, ending: true, fateOk: d === "accept", offPage: inp.offPage }));
+    cards.push(cardFor(arc, lead, roster, st, { result, roll: [0, 0], mod: 0, stage: "aftermath", atAbs: inp.now, template: text, line: lines.length - 1, ending: true, fateOk: d === "accept", offPage: inp.offPage, records: inp.records }));
   }
 
   // 4. Idle subplots end; leads who can no longer act drop out.
@@ -191,29 +199,33 @@ export function tick(inp: TickInput): TickResult {
   }
 
   // 5. Which running subplots move this tick (a hazard per story hour).
-  type Cand = { arc: ArcState; lead?: Actor; fresh?: SeedCand; prio: number; r?: number };
+  type Cand = { arc: ArcState; lead?: Actor; fresh?: SeedCand; prio: number; r?: number; push?: boolean };
   const cands: Cand[] = [];
   const running = arcs.filter((a) => a.status === "running" && !lines.some((l) => l.startsWith(`arc drop #${a.id}:`) || l.startsWith(`arc end #${a.id}:`)));
   for (const arc of running) {
     const lead = leadOf(arc);
     if (lead?.ring === "onstage" || arc.clock.cur >= arc.clock.max || arc.fate) continue;
-    if (arc.bring) {
-      cands.push({ arc, lead, prio: 3 });
+    if (arc.bring || arc.push) {
+      cands.push({ arc, lead, prio: 3, push: true });
       continue;
     }
     const spec = SPECS[arc.kind];
     const lambda = spec.base * (1 + arc.heat / 2) * STAGE_F[arc.stage] * M.factor;
-    const span = Math.max(0, (inp.now - Math.max(inp.from, arc.nextAbs)) / 60);
+    // A step the player asked for counts in full, for any subplot whose cooldown ends within it.
+    const span = inp.forced ? (arc.nextAbs <= inp.now + (inp.now - inp.from) ? hours : 0) : Math.max(0, (inp.now - Math.max(inp.from, arc.nextAbs)) / 60);
     const p = 1 - Math.exp(-lambda * span);
     if (rand() < p) cands.push({ arc, lead, prio: 1 + Math.min(1, (inp.now - (arc.lastBeatAbs ?? arc.startedAbs)) / 1440) });
   }
 
   // 6. New subplots, while there is room.
   const seeded: string[] = [];
-  const live = running.length + arcs.filter((a) => a.status === "held" || a.status === "fate").length;
+  const liveArcs = [...running, ...arcs.filter((a) => a.status === "held" || a.status === "fate")];
+  const live = liveArcs.length;
   const room = M.arcs - live;
-  const seedP = live === 0 ? 1 : 1 - Math.exp(-0.06 * M.factor * Math.max(hours, 1));
-  if (room > 0 && (hours > 0 || inp.tickId.includes("f")) && rand() < seedP) {
+  // The player's own stories don't make the world busy: with none of its own yet, the world seeds at once.
+  const own = liveArcs.filter((a) => a.by !== "player").length;
+  const seedP = own === 0 ? 1 : 1 - Math.exp(-0.06 * M.factor * (1 + (2 * room) / M.arcs) * Math.max(hours, 1));
+  if (room > 0 && (hours > 0 || inp.forced || inp.tickId.includes("f")) && rand() < seedP) {
     const pool = seedCandidates({ state: st, roster, records: inp.records, awake, arcs, canonGravity: inp.canonGravity, genres: inp.genres, world: inp.world, pressures: inp.pressures, now: inp.now });
     const n = Math.min(room, M.seeds);
     for (let i = 0; i < n && pool.length; i++) {
@@ -226,6 +238,8 @@ export function tick(inp: TickInput): TickResult {
         k = pool.findIndex((c) => (x -= c.weight) <= 0);
       }
       const c = pool.splice(k < 0 ? 0 : k, 1)[0];
+      // Variety: one new subplot of a kind per step (three people's "ordinary life" at once is filler).
+      for (let j = pool.length - 1; j >= 0; j--) if (pool[j].kind === c.kind && !pool[j].faction) pool.splice(j, 1);
       const light = arcs.find((a) => isLight(a) && a.lead.toLowerCase() === c.lead.name.toLowerCase());
       if (light) {
         lines.push(`arc drop #${light.id}: reason: ${cleanVal(`gave way to a better grounded story (${c.kind})`)}`);
@@ -240,7 +254,7 @@ export function tick(inp: TickInput): TickResult {
       };
       seeded.push(c.id);
       log.push(`seeded ${c.id} (${c.kind}, ${c.lead.name}) from ${c.why}`);
-      cards.push(cardFor(arc, c.lead, roster, st, { result: "cost", roll: [0, 0], mod: 0, stage: "setup", atAbs: at, template: c.premise, line: lines.length - 1, seed: true, offPage: inp.offPage }));
+      cards.push(cardFor(arc, c.lead, roster, st, { result: "cost", roll: [0, 0], mod: 0, stage: "setup", atAbs: at, template: c.premise, line: lines.length - 1, seed: true, offPage: inp.offPage, records: inp.records }));
       // A new subplot may take its first step at once.
       if (rand() < 0.6 * M.factor || c.lead.flags.wake) cands.push({ arc, lead: c.lead, fresh: c, prio: 1.5 });
       // Pull its cast awake.
@@ -259,7 +273,7 @@ export function tick(inp: TickInput): TickResult {
     for (const c of cands) {
       if (chosen.length >= M.perTick) break;
       if (chosen.includes(c) || chosen.some((x) => x.arc.id === c.arc.id)) continue;
-      if (pass === 0 && lastTickLeads.has(c.arc.lead) && !c.arc.bring) continue;
+      if (pass === 0 && lastTickLeads.has(c.arc.lead) && !c.push) continue;
       if ((perKind.get(c.arc.kind) ?? 0) >= kindCap && c.prio < 3) continue;
       chosen.push(c);
       perKind.set(c.arc.kind, (perKind.get(c.arc.kind) ?? 0) + 1);
@@ -268,14 +282,18 @@ export function tick(inp: TickInput): TickResult {
 
   // 8. The beats: gate, dice, twist, clock, ending, route.
   const collided = new Set<string>();
-  const doBeat = (arc: ArcState, lead: Actor | undefined, forced?: { atAbs: number; place?: string; twist?: string }) => {
-    const g = forced ? { ok: true, mod: 0, atAbs: forced.atAbs, why: ["collision"] } : gate(arc, lead, roster, { from: inp.from, now: inp.now, rand });
+  let moved = 0;
+  const tried = new Set<string>();
+  const doBeat = (arc: ArcState, lead: Actor | undefined, forced?: { atAbs: number; place?: string; twist?: string }, push?: boolean) => {
+    tried.add(arc.id);
+    const g: GateResult = forced ? { ok: true, mod: 0, atAbs: forced.atAbs, why: ["collision"] } : gate(arc, lead, roster, { from: inp.from, now: inp.now, rand, push, forced: inp.forced });
     if (!g.ok) {
       if (g.drop) lines.push(`arc drop #${arc.id}: reason: ${cleanVal(g.drop)}`);
-      else if (g.deferTo != null) lines.push(`arc set #${arc.id}: next: ${g.deferTo}`);
+      else if (g.deferTo != null) lines.push(`arc set #${arc.id}: next: ${g.deferTo}${g.wait ? ` | wait: ${cleanVal(g.wait)}` : ""}${arc.push ? " | push: no" : ""}`);
       log.push(`${arc.id}: held back (${g.drop ?? g.why.join(", ")})`);
       return;
     }
+    moved++;
     const spec = SPECS[arc.kind];
     const roll: [number, number] = [d6(rand), d6(rand)];
     const total = roll[0] + roll[1] + g.mod;
@@ -313,7 +331,7 @@ export function tick(inp: TickInput): TickResult {
     const cur = Math.min(arc.clock.max, arc.clock.cur + 1);
     const stage = stageOf(cur, arc.clock.max);
     const shownPlace = place && place.toLowerCase() !== (town ?? "").toLowerCase() && !arc.want.toLowerCase().includes(place.toLowerCase()) ? place : undefined;
-    const text = beatTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, stage: stage === "aftermath" ? "crisis" : stage, result, price, worse, place: shownPlace });
+    const text = beatTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, stage: stage === "aftermath" ? "crisis" : stage, result, price, worse, place: shownPlace, premise: arc.premise });
     const next = atAbs + Math.round(120 + rand() * 240 / M.factor);
     lines.push(beatLine(arc.id, { result, roll, mod: g.mod, at: atAbs, text: twistText ? `${text} (${twistText})` : text, told: "template", twist: twistText, place, tick: inp.tickId, next }));
     const beatIdx = lines.length - 1;
@@ -327,7 +345,7 @@ export function tick(inp: TickInput): TickResult {
       if (stage === "crisis" && result !== "loss") lines.push(`whereabouts ${lead.name}: ${town} | since: ${atAbs}`);
     } else if (lead && !lead.group && place && place !== lead.where) lines.push(`whereabouts ${lead.name}: ${cleanVal(place)} | since: ${atAbs}`);
 
-    const card = cardFor(arc, lead, roster, st, { result, roll, mod: g.mod, stage, atAbs, template: text, line: beatIdx, twist: twistText, price, worse, place, offPage: inp.offPage });
+    const card = cardFor(arc, lead, roster, st, { result, roll, mod: g.mod, stage, atAbs, template: text, line: beatIdx, twist: twistText, price, worse, place, offPage: inp.offPage, records: inp.records, offHours: g.offHours });
     // The ending, when the clock fills.
     let ending = false;
     if (cur >= arc.clock.max) {
@@ -342,7 +360,7 @@ export function tick(inp: TickInput): TickResult {
         log.push(`${arc.id}: an irreversible ending waits on the player (${inp.fates})`);
       } else {
         lines.push(`arc end #${arc.id}: ${end} | text: ${cleanVal(endText)} | at: ${atAbs}`);
-        cards.push(cardFor(arc, lead, roster, st, { result: end, roll: [0, 0], mod: final - tally.win + tally.loss, stage: "aftermath", atAbs, template: endText, line: lines.length - 1, ending: true, fateOk: inp.fates === "allow", offPage: inp.offPage }));
+        cards.push(cardFor(arc, lead, roster, st, { result: end, roll: [0, 0], mod: final - tally.win + tally.loss, stage: "aftermath", atAbs, template: endText, line: lines.length - 1, ending: true, fateOk: inp.fates === "allow", offPage: inp.offPage, records: inp.records }));
         for (const l of consequences(arc, end, roster)) lines.push(l);
         log.push(`${arc.id}: ends (${end})`);
       }
@@ -365,7 +383,17 @@ export function tick(inp: TickInput): TickResult {
       }
     }
   };
-  for (const c of chosen) if (!collided.has(c.arc.id)) doBeat(c.arc, c.lead);
+  for (const c of chosen) if (!collided.has(c.arc.id)) doBeat(c.arc, c.lead, undefined, c.push);
+  // The player moved the world a step: if the dice moved nothing, the most overdue subplot that can move does.
+  if (inp.forced && !moved) {
+    const waiting = running
+      .filter((a) => !tried.has(a.id) && !collided.has(a.id) && !a.fate && a.clock.cur < a.clock.max && leadOf(a)?.ring !== "onstage")
+      .sort((a, b) => Number(b.by === "player") - Number(a.by === "player") || a.nextAbs - b.nextAbs);
+    for (const arc of waiting) {
+      doBeat(arc, leadOf(arc));
+      if (moved) break;
+    }
+  }
 
   // 9. A bring-in with no beat this tick still offers its entrance.
   for (const arc of running) {
@@ -384,14 +412,33 @@ export function tick(inp: TickInput): TickResult {
   return { tickId: inp.tickId, hours, lines, cards, arrivals, awake: awake.map((a) => a.name), hops, seeded, log, roster };
 }
 
-function cardFor(arc: ArcState, lead: Actor | undefined, r: Roster, st: WorldState, o: { result: BeatCard["result"]; roll: [number, number]; mod: number; stage: ArcStage; atAbs: number; template: string; line: number; twist?: string; price?: string; worse?: string; place?: string; ending?: boolean; seed?: boolean; fateOk?: boolean; offPage: OffPage[] }): BeatCard {
+function cardFor(arc: ArcState, lead: Actor | undefined, r: Roster, st: WorldState, o: { result: BeatCard["result"]; roll: [number, number]; mod: number; stage: ArcStage; atAbs: number; template: string; line: number; twist?: string; price?: string; worse?: string; place?: string; ending?: boolean; seed?: boolean; fateOk?: boolean; offPage: OffPage[]; records: CodexRecord[]; offHours?: string }): BeatCard {
   const off = new Set(o.offPage.map((x) => x.key));
+  const offWords = o.offPage.flatMap((x) => x.words.map((w) => w.toLowerCase()));
+  const clean = (t: string) => (offWords.some((w) => w && t.toLowerCase().includes(w)) ? "" : t);
+  // What the grounds say: a group's or a place's record, a fact, a thread (never the lead's own record: LEAD has it).
+  const groundText = arc.grounds
+    .filter((g) => g !== "player" && g !== lead?.recordId)
+    .map((g) => {
+      if (g.startsWith("#")) {
+        const f = st.facts?.[g.slice(1)];
+        return f && !off.has(f.key) && !f.hidden ? `${g}: ${f.statement}` : "";
+      }
+      const t = st.threads[g];
+      if (t) return `${t.title}${t.latest ? `: ${t.latest}` : ""}`;
+      const rec = o.records.find((x) => x.id === g);
+      return rec ? `${rec.name}: ${rec.summary}` : "";
+    })
+    .map((t) => clean(t.slice(0, 200)))
+    .filter(Boolean)
+    .slice(0, 3);
+  const sofar = arc.beats.slice(-2).map((b) => b.text);
   const knows = (lead?.knows ?? []).filter((k) => !off.has(k.key)).slice(-4).map((k) => `#${k.key} (${k.statement.slice(0, 80)})`);
   const noRoute = Object.values(st.facts ?? {}).filter((f) => !f.hidden && f.keepers?.length && lead && !(lead.charId && f.stances[lead.charId])).slice(0, 2).map((f) => `#${f.key}`);
   return {
     id: `b${o.line}`, arcId: arc.id, kind: arc.kind, lead: arc.lead, cast: arc.cast, result: o.result, roll: o.roll, mod: o.mod, twist: o.twist, price: o.price, worse: o.worse, stage: o.stage,
     clock: `${Math.min(arc.clock.max, arc.clock.cur + (o.seed || o.ending ? 0 : 1))}/${arc.clock.max}`, atAbs: o.atAbs, where: o.place ?? lead?.where, premise: arc.premise, want: arc.want, fear: arc.fear,
-    leadText: lead?.text ?? "", knows, noRoute, grounds: arc.grounds, template: o.template, line: o.line, ending: o.ending, seed: o.seed, fateOk: o.fateOk,
+    leadText: lead?.text ?? "", groundText, sofar, offHours: o.offHours, knows, noRoute, grounds: arc.grounds, template: o.template, line: o.line, ending: o.ending, seed: o.seed, fateOk: o.fateOk,
   };
 }
 
@@ -458,16 +505,40 @@ function incident(inp: TickInput, rand: () => number, hours: number, perDay: num
   return fresh.length ? fresh[Math.floor(rand() * fresh.length)] : null;
 }
 
-/** A player's story for someone: the kind from their words, grounded on the person's record. */
-export function authorArc(o: { roster: Roster; name: string; premise: string; now: number; arcs: ArcState[] }): string | null {
+/** How the model (or the player) shaped a story before it starts: all optional. */
+export interface StoryShape {
+  kind?: ArcKind;
+  want?: string;
+  fear?: string;
+  cast?: string[];
+  secrecy?: "public" | "private" | "secret";
+  place?: string;
+}
+
+/**
+ * A player's story for someone. The kind comes from what the lead does in their words (or the
+ * shaping call), the want from what they say the lead is after; it is grounded on the lead's
+ * record, the people and groups it names, and the player's word. It starts pushed: its first
+ * step comes at once.
+ */
+export function authorArc(o: { roster: Roster; name: string; premise: string; now: number; arcs: ArcState[]; shape?: StoryShape | null }): string | null {
   const lead = o.roster.find(o.name);
   if (!lead) return null;
-  const kind = (Object.values(SPECS).find((s) => s.kind !== "world" && s.kind !== "pursuit" && s.words.test(o.premise))?.kind ?? "pursuit") as ArcKind;
+  const named = namesIn(o.premise, o.roster).filter((a) => a !== lead);
+  const people = named.filter((a) => !a.group);
+  const groups = named.filter((a) => a.group);
+  const sh = o.shape ?? {};
+  const kind: ArcKind = sh.kind && sh.kind !== "world" ? sh.kind : kindForStory(o.premise, lead.names, people.flatMap((a) => a.names));
   const spec = SPECS[kind];
-  const cast = namesIn(o.premise, o.roster).filter((a) => a !== lead && !a.group).map((a) => a.name);
+  const castNames = sh.cast?.length ? sh.cast.map((n) => o.roster.find(n)).filter((a): a is Actor => !!a && a !== lead).map((a) => a.name) : [...people, ...groups].map((a) => a.name);
+  // The player wrote it to matter: it can reach the story unless their words keep it secret.
+  const secrecy = sh.secrecy ?? (/\b(secret(?:ly)?|in secret|hid(?:e|es|ing)|behind (?:\w+['’]s|her|his|their) back|tells? no one|nobody knows)\b/i.test(o.premise) ? "secret" : kind === "threat" ? "public" : "private");
+  const want = sh.want ?? wantFromStory(o.premise) ?? spec.want;
+  const fear = sh.fear ?? spec.fear;
   let id = slug(`${lead.name.split(/\s+/)[0]}-${kind}`);
   for (let i = 2; o.arcs.some((a) => a.id === id && (a.status === "running" || a.status === "held")); i++) id = `${slug(`${lead.name.split(/\s+/)[0]}-${kind}`)}-${i}`;
-  return arcNewLine({ id, kind, lead: lead.name, cast, secrecy: spec.secrecy, clock: spec.clock, heat: 1, at: o.now, premise: o.premise, want: spec.want, fear: spec.fear, grounds: [lead.recordId ?? `char:${lead.key}`, "player"], by: "player" });
+  const grounds = [lead.recordId ?? `char:${lead.key}`, ...groups.map((g) => g.recordId ?? g.key), "player"];
+  return arcNewLine({ id, kind, lead: lead.name, cast: [...new Set(castNames)], secrecy, clock: spec.clock, heat: 2, at: o.now, premise: o.premise, want, fear, grounds: [...new Set(grounds)], place: sh.place, by: "player", push: true });
 }
 
 export { awakeAt };

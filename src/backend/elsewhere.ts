@@ -9,12 +9,12 @@ import { parseLine } from "../core/dsl";
 import { offPageFacts } from "../core/offpage";
 import { extractJson } from "../core/prompts";
 import { NOT_A_PERSON } from "../core/state";
-import type { ParsedOp, Settings, WorldState } from "../core/types";
+import type { ArcState, ParsedOp, Settings, WorldState } from "../core/types";
 import { absMinutes, estTokens, hash, plainProse } from "../core/util";
 import { confirmArrivals, elsewhereLane, upgradeArrival, type Arrival } from "../core/elsewhere/crossings";
-import { buildRoster, type Profile } from "../core/elsewhere/roster";
+import { buildRoster, type Actor, type Profile, type Roster } from "../core/elsewhere/roster";
 import { authorArc, tick, type BeatCard, type Mode } from "../core/elsewhere/storyteller";
-import { tellingPrompt, validateProfile, validateSeed, validateTold, type TellingCtx } from "../core/elsewhere/telling";
+import { shapePrompt, tellingPrompt, validateProfile, validateSeed, validateShape, validateTold, type TellingCtx } from "../core/elsewhere/telling";
 import { debug, describe, serial, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
@@ -134,7 +134,7 @@ export async function runElsewhere(chatId: string, userId?: string, opts: { forc
         last = now;
       }
       const arcs = Object.values(st.arcs ?? {});
-      const decisions = arcs.some((a) => a.status === "running" && (a.fate?.decision || (a.bring && !arrivalsOf(meta).some((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered")))));
+      const decisions = arcs.some((a) => a.status === "running" && (a.fate?.decision || a.push || (a.bring && !arrivalsOf(meta).some((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered")))));
       const due = now - last >= step;
       if (!due && !opts.force && !decisions) return null;
       let from = last;
@@ -145,7 +145,7 @@ export async function runElsewhere(chatId: string, userId?: string, opts: { forc
         tickId = `${tickId}f${E.forced}`;
       } else if (!due) {
         from = now;
-        tickId = `${tickId}d${arcs.filter((a) => a.fate?.decision || a.bring).length}x${E.order.length}`;
+        tickId = `${tickId}d${arcs.filter((a) => a.fate?.decision || a.bring || a.push).length}x${E.order.length}`;
       }
       if (E.ticks[tickId] && !opts.force) tickId = `${tickId}r${E.order.length}`;
       const al = L.almanac(meta, settings);
@@ -156,7 +156,7 @@ export async function runElsewhere(chatId: string, userId?: string, opts: { forc
         from, now, anchorIndex: target.index, people: meta.config.elsewhere?.people, profiles: E.profiles, notPeople: notPeople(meta),
         offPage: offPageFacts(st, settings.secretsOffPage !== false), world: meta.lore.world?.agenda ? meta.lore.world : null,
         pressures: settings.pressures ? meta.pressures : {}, recentArrivals: arrivalsOf(meta), recentText: L.path.slice(-40).map((m) => m.content).join("\n"),
-        namedDay: named, truths: meta.config.truths ?? [], prevTick: E.lastTick,
+        namedDay: named, truths: meta.config.truths ?? [], prevTick: E.lastTick, forced: !!opts.force && !due,
       });
       const id = `${SIM_ID}${tickId}`;
       putLines(files, target.index, id, res.lines);
@@ -265,7 +265,9 @@ export async function tell(chatId: string, tickId: string, userId?: string): Pro
       if (!raw) continue;
       const v = validateTold(card, raw, ctx);
       if (v.rejected || !v.text) {
-        rejected.push(`${card.arcId}: ${v.rejected}`);
+        // Kept for the Director's log: what the model wrote, and why the engine's words stand.
+        rejected.push(`${card.arcId}: ${v.rejected}${raw.text ? ` — “${String(raw.text).replace(/\s+/g, " ").slice(0, 200)}”` : ""}`);
+        lines[card.line] = setField(lines[card.line], "note", `the model's telling was set aside: ${v.rejected}`);
         continue;
       }
       lines[card.line] = setField(setField(lines[card.line], "told", "model"), "text", v.text);
@@ -327,7 +329,7 @@ export function confirmElsewhere(meta: ChatMeta, o: { state: WorldState; records
 }
 
 /** The player's controls: hold, resume, nudge, bring in, drop, edit, fates, a story of their own. */
-export async function elsewhereAction(chatId: string, m: { action: string; id?: string; name?: string; premise?: string; want?: string; fear?: string; decision?: string }, userId?: string): Promise<string | null> {
+export async function elsewhereAction(chatId: string, m: { action: string; id?: string; name?: string; premise?: string; want?: string; fear?: string; kind?: string; secrecy?: string; decision?: string }, userId?: string): Promise<{ warn?: string; info?: string } | null> {
   const L = ledgerFor(chatId, userId);
   await L.refresh();
   const st = L.state;
@@ -337,12 +339,15 @@ export async function elsewhereAction(chatId: string, m: { action: string; id?: 
   switch (m.action) {
     case "hold": line = arc ? `arc set #${arc.id}: status: held` : null; break;
     case "resume": line = arc ? `arc set #${arc.id}: status: running | next: ${now}` : null; break;
-    case "nudge": line = arc ? `arc set #${arc.id}: next: ${now} | heat: ${Math.min(3, arc.heat + 1)}` : null; break;
+    case "nudge": line = arc ? `arc set #${arc.id}: push: yes | next: ${now} | heat: ${Math.min(3, arc.heat + 1)}` : null; break;
     case "bring": line = arc ? `arc set #${arc.id}: bring: yes | next: ${now}` : null; break;
     case "drop": line = arc ? `arc drop #${arc.id}: reason: dropped by the player` : null; break;
     case "edit": {
       if (!arc) break;
-      const f = [m.premise ? `premise: ${m.premise}` : "", m.want ? `want: ${m.want}` : "", m.fear ? `fear: ${m.fear}` : ""].filter(Boolean);
+      const f = [
+        m.premise ? `premise: ${m.premise}` : "", m.want ? `want: ${m.want}` : "", m.fear ? `fear: ${m.fear}` : "",
+        m.kind && m.kind !== arc.kind ? `kind: ${m.kind}` : "", m.secrecy && m.secrecy !== arc.secrecy ? `secrecy: ${m.secrecy}` : "",
+      ].filter(Boolean);
       line = f.length ? `arc set #${arc.id}: ${f.join(" | ").replace(/\n+/g, " ")}` : null;
       break;
     }
@@ -351,24 +356,68 @@ export async function elsewhereAction(chatId: string, m: { action: string; id?: 
       if (!m.name || !m.premise) break;
       const files = await loadChat(chatId, userId);
       const roster = buildRoster({ state: st, records: L.records, userName: L.names.user, notPeople: notPeople(files.meta), people: files.meta.config.elsewhere?.people, profiles: elsewhereOf(files.meta).profiles });
-      line = authorArc({ roster, name: m.name, premise: m.premise.replace(/\s*\|\s*/g, " / ").replace(/\n+/g, " ").slice(0, 300), now, arcs: Object.values(st.arcs ?? {}) });
-      if (!line) return `No one called “${m.name}” is in the roster.`;
+      const premise = m.premise.replace(/\s*\|\s*/g, " / ").replace(/\n+/g, " ").slice(0, 300);
+      const lead = roster.find(m.name);
+      if (!lead) return { warn: `No one called “${m.name}” is in the roster.` };
+      const settings = await loadSettings(userId);
+      // With the model telling, it reads the player's words once: what kind of story, what the lead is after.
+      const shape = settings.elsewhereTelling !== "engine" ? await shapeStory(lead, premise, roster, L.names.user, files.meta.detected.lang, settings, userId) : null;
+      line = authorArc({ roster, name: m.name, premise, now, arcs: Object.values(st.arcs ?? {}), shape });
+      if (!line) return { warn: `No one called “${m.name}” is in the roster.` };
       break;
     }
   }
-  if (!line) return "Nothing to change.";
+  if (!line) return { warn: "Nothing to change." };
   const target = L.lastAssistant();
-  if (!target) return "The chat has no reply to anchor this to yet.";
+  if (!target) return { warn: "The chat has no reply to anchor this to yet." };
   const op = parseLine(line);
-  if (!op) return "That couldn't be recorded.";
+  if (!op) return { warn: "That couldn't be recorded." };
   const files = await loadChat(chatId, userId);
   const key = anchorKey(target.index);
   files.side[key] = [...(files.side[key] ?? []), { source: "user", ops: [op], id: `ewu:${Date.now().toString(36)}`, at: Date.now() }];
   save(chatId, "side", userId, 0);
   await L.refresh();
-  // Fates and bring-ins act at once.
-  if (m.action === "fate" || m.action === "bring") await runElsewhere(chatId, userId).catch((err) => warn(`elsewhere: ${describe(err)}`));
+  // Fates, bring-ins, nudges and a new story act at once.
+  if (["fate", "bring", "nudge", "author"].includes(m.action)) {
+    const rec = await runElsewhere(chatId, userId).catch((err) => {
+      warn(`elsewhere: ${describe(err)}`);
+      return null;
+    });
+    if (m.action === "nudge" || m.action === "author") return { info: tickSummary(rec, L.state.arcs) };
+  }
   return null;
+}
+
+/** The shaping call for a player's story; null when the model can't be asked or answers nothing usable. */
+async function shapeStory(lead: Actor, premise: string, roster: Roster, userName: string, lang: string | undefined, settings: Settings, userId?: string) {
+  const p = shapePrompt({
+    userName, lead: lead.name, leadText: lead.text, premise, lang,
+    people: roster.actors.filter((a) => a !== lead && a.standing !== "dead").map((a) => a.name).slice(0, 60), groups: roster.groups.map((g) => g.name).slice(0, 20),
+  });
+  try {
+    const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 45_000, label: "Elsewhere (story)" });
+    return validateShape(extractJson(text), roster, lead.name);
+  } catch (err) {
+    warn(`elsewhere: shaping the story failed: ${describe(err)}`);
+    return null;
+  }
+}
+
+/** One line on what a step did, for a toast: what moved, what began, and why the rest waited. */
+export function tickSummary(rec: TickRecord | null, arcs: Record<string, ArcState> = {}): string {
+  if (!rec) return "Nothing moved: story time hasn't gone a step since the last one, and nothing is waiting on you.";
+  const name = (id: string) => (arcs[id] ? `${arcs[id].lead}'s ${arcs[id].kind}` : id);
+  const moved = rec.log.filter((l) => /= -?\d+ → (win|cost|loss)/.test(l)).map((l) => `${name(l.split(":")[0])} (${/→ (\w+)/.exec(l)![1]})`);
+  const seeded = rec.log.filter((l) => l.startsWith("seeded ")).map((l) => /\(([^)]+)\)/.exec(l)?.[1]?.replace(/^(\w+), (.+)$/, "$2's $1") ?? "");
+  const held = rec.log.filter((l) => /held back/.test(l)).map((l) => `${name(l.split(":")[0])} waits (${/held back \((.*)\)$/.exec(l)?.[1] ?? ""})`);
+  const parts = [
+    moved.length ? `moved: ${moved.join(", ")}` : "",
+    seeded.length ? `new: ${seeded.join(", ")}` : "",
+    rec.hops ? `${rec.hops} piece${rec.hops === 1 ? "" : "s"} of news travelled` : "",
+    held.length ? held.join("; ") : "",
+  ].filter(Boolean);
+  if (!parts.length) return "Nothing moved this step: no subplot came due and none could start.";
+  return `Elsewhere ${parts.join(" · ")}${rec.status === "telling" ? " · the model is telling it now" : ""}.`;
 }
 
 /** What the Elsewhere page shows. */
@@ -380,14 +429,19 @@ export function elsewhereView(o: { state: WorldState; records: ReturnType<typeof
   const recName = new Map(o.records.map((r) => [r.id, r.name]));
   const groundName = (g: string) => (g.startsWith("#") ? g : g === "player" ? "your words" : recName.get(g) ?? g.replace(/^(char|lore|loc|thread|fac|cons|bond|pressure):/, "").replace(/_/g, " "));
   const order: Record<string, number> = { fate: 0, running: 1, held: 2, resolved: 3, dropped: 4 };
+  const now = st.time ? absMinutes(st.time) : null;
+  const telling = new Set(E.order.filter((id) => E.ticks[id]?.status === "telling"));
   const arcs = Object.values(st.arcs ?? {})
-    .sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5) || (b.lastBeatAbs ?? b.startedAbs) - (a.lastBeatAbs ?? a.startedAbs))
+    // The player's own stories first, then the liveliest.
+    .sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5) || Number(b.by === "player") - Number(a.by === "player") || (b.lastBeatAbs ?? b.startedAbs) - (a.lastBeatAbs ?? a.startedAbs))
     .slice(0, 30)
     .map((a) => ({
       id: a.id, kind: a.kind, lead: a.lead, cast: a.cast, premise: a.premise, want: a.want, fear: a.fear, secrecy: a.secrecy, clock: a.clock, tally: a.tally, stage: a.stage,
       status: a.status, crossed: !!a.crossed, by: a.by, locked: !!a.locked, heat: a.heat, note: a.note, ending: a.ending ? { ...a.ending, at: o.fmt(a.ending.atAbs) } : null, fate: a.fate ?? null,
       grounds: a.grounds.map((g) => ({ id: g, name: groundName(g) })), earlier: a.earlier ?? "",
-      beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "" })),
+      beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "", note: b.note ?? "", telling: b.told === "template" && !!b.tick && telling.has(b.tick) })),
+      // When its next step can come, and why it waits.
+      next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "", wait: a.status === "running" ? a.wait ?? "" : "", pushed: !!a.push,
       reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered")).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" })),
     }));
   const ticks = E.order.map((id) => E.ticks[id]).filter(Boolean).reverse().map((t) => ({ id: t.id, at: t.at, from: o.fmt(t.from), to: o.fmt(t.to), hours: t.hours, beats: t.beats, seeds: t.seeds, hops: t.hops, arrivals: t.arrivals, status: t.status, tokens: t.tokens ?? 0, log: t.log, rejected: t.rejected ?? [], awake: t.awake }));

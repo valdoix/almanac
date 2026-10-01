@@ -2437,9 +2437,10 @@ var init_dsl = __esm(() => {
       const parts = rest.split(/\s+\|\s+/);
       const fields = {};
       let head = "";
+      const allFields = m[1].toLowerCase() === "set";
       parts.forEach((part, i) => {
         const kv = /^([a-z]+):\s?([\s\S]*)$/.exec(part.trim());
-        if (kv && (i > 0 || /^(lead|text|status|next|thread|reason)$/.test(kv[1])))
+        if (kv && (i > 0 || allFields || /^(lead|text|status|next|thread|reason)$/.test(kv[1])))
           fields[kv[1]] = kv[2].trim();
         else if (i === 0)
           head = part.trim();
@@ -2477,7 +2478,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.15.0";
+var VERSION = "1.15.1";
 
 // src/core/facts.ts
 function stem(w) {
@@ -3366,6 +3367,7 @@ function applyArcOp(st, op, mi) {
         place: clean2(f.place) || undefined,
         startedAbs: at,
         startedMsg: mi,
+        push: f.push === "yes" || undefined,
         faction: f.faction ? { name: f.faction.split("/")[0].trim(), project: (f.faction.split("/")[1] ?? "").trim() } : undefined
       };
       return true;
@@ -3386,7 +3388,8 @@ function applyArcOp(st, op, mi) {
         told: f.told === "model" ? "model" : "template",
         msgIndex: mi,
         tick: clean2(f.tick) || undefined,
-        place: clean2(f.place) || undefined
+        place: clean2(f.place) || undefined,
+        note: clean2(f.note) || undefined
       });
       if (arc.beats.length > BEATS_KEPT) {
         const old = arc.beats.splice(0, arc.beats.length - BEATS_KEPT);
@@ -3398,8 +3401,9 @@ function applyArcOp(st, op, mi) {
       arc.nextAbs = int(f.next, at + 60);
       if (f.place)
         arc.place = clean2(f.place);
-      if (arc.bring)
-        arc.bring = undefined;
+      arc.bring = undefined;
+      arc.push = undefined;
+      arc.wait = undefined;
       return true;
     }
     case "stage": {
@@ -3442,6 +3446,14 @@ function applyArcOp(st, op, mi) {
         arc.nextAbs = int(f.next, arc.nextAbs);
       if (f.bring)
         arc.bring = f.bring === "yes" || undefined;
+      if (f.push)
+        arc.push = f.push === "yes" || undefined;
+      if ("wait" in f)
+        arc.wait = clean2(f.wait) || undefined;
+      if (KINDS2.includes(f.kind ?? "") && f.kind !== "world")
+        arc.kind = f.kind;
+      if (f.kind)
+        arc.locked = true;
       if (f.heat)
         arc.heat = int(f.heat, arc.heat);
       if (f.cast)
@@ -11530,7 +11542,7 @@ function buildRoster(input) {
       ties: [],
       routine: typeof b.routine === "string" ? b.routine : undefined,
       owner: read.owner,
-      nocturnal: prof?.nocturnal ?? NOCTURNAL.test(`${role ?? ""} ${loreText}`),
+      nocturnal: prof?.nocturnal ?? NOCTURNAL.test(`${role ?? ""} ${loreText}`.replace(SLAYS_THEM, "")),
       lastPage: c && ring !== "unmet" ? c.lastSeen : -1,
       protected: !!b.lore || r.provenance.source === "lore" || ring !== "unmet",
       flags: { out: pref.out, wake: pref.wake, offPage: pref.offPage },
@@ -11554,6 +11566,10 @@ function buildRoster(input) {
     for (const n of a.names)
       if (!exact.has(low(n)))
         exact.set(low(n), a);
+  for (const g of groups)
+    for (const n of g.names)
+      if (/^the\s+/i.test(n) && !exact.has(low(n).replace(/^the\s+/, "")))
+        exact.set(low(n).replace(/^the\s+/, ""), g);
   const part = new Map;
   for (const a of actors)
     for (const n of a.names) {
@@ -11697,7 +11713,7 @@ function groupActor(name, id, text, isLocal) {
     reach: where && !isLocal(where) ? FAR.test(where) ? "far" : "region" : "town",
     drives: {},
     ties: [],
-    nocturnal: /\b(vampire|demon|undead)\b/i.test(text),
+    nocturnal: /\b(vampire|demon|undead)\b/i.test(text.replace(SLAYS_THEM, "")),
     lastPage: -1,
     protected: false,
     flags: {},
@@ -11737,7 +11753,7 @@ function awakeSet(r, opts) {
       out.push(a);
   return out;
 }
-var REACH_WEIGHT, low = (s) => s.toLowerCase().replace(/[\u2019]/g, "'").trim(), esc4 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), firstSentence = (t) => /^[\s\S]*?[.!?](?:\s|$)/.exec(t)?.[0] ?? t, CLOSE = "mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|fianc[e\xE9]e?|lover|partner|mentor|best friend|closest friend|twin|sire|ward|guardian|betrothed|consort|parent|child|children|sibling", EXTENDED = "uncle|aunt|cousin|nephew|niece|grandmother|grandfather|grandson|granddaughter|ex-girlfriend|ex-boyfriend|ex|heir|patriarch|matriarch", FAMILY, WORK = "watcher|doctor|physician|bodyguard|servant|employer|boss|maid|squire|liege|knight|master|apprentice|assistant|friend|ally|confidante?|handler|teacher|student|lawyer|attorney|captain|rider", FAR, ANIMAL, MEANS_UP, MEANS_DOWN, NOCTURNAL;
+var REACH_WEIGHT, low = (s) => s.toLowerCase().replace(/[\u2019]/g, "'").trim(), esc4 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), firstSentence = (t) => /^[\s\S]*?[.!?](?:\s|$)/.exec(t)?.[0] ?? t, CLOSE = "mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|fianc[e\xE9]e?|lover|partner|mentor|best friend|closest friend|twin|sire|ward|guardian|betrothed|consort|parent|child|children|sibling", EXTENDED = "uncle|aunt|cousin|nephew|niece|grandmother|grandfather|grandson|granddaughter|ex-girlfriend|ex-boyfriend|ex|heir|patriarch|matriarch", FAMILY, WORK = "watcher|doctor|physician|bodyguard|servant|employer|boss|maid|squire|liege|knight|master|apprentice|assistant|friend|ally|confidante?|handler|teacher|student|lawyer|attorney|captain|rider", FAR, ANIMAL, MEANS_UP, MEANS_DOWN, NOCTURNAL, SLAYS_THEM;
 var init_roster = __esm(() => {
   init_util();
   REACH_WEIGHT = { house: 1, town: 0.8, region: 0.5, far: 0.3, none: 0 };
@@ -11747,6 +11763,7 @@ var init_roster = __esm(() => {
   MEANS_UP = /\b(rich|wealthy|heir|lord|lady|king|queen|prince|princess|knight|witch|wizard|mage|sorcer|warlock|powerful|council|gang|leader|leads|doctor|physician|surgeon|lawyer|attorney|police|soldier|vampire|demon|slayer|dragon|rider|hand of the king|master of|commander|director|holdings|baronet|noble)\b/i;
   MEANS_DOWN = /(?<![\w-])(little girl|little boy|toddler|baby|powerless|penniless|destitute|(?:[1-9]|1[0-5])[- ]year[- ]old|(?:seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen)[- ]year[- ]old)\b/i;
   NOCTURNAL = /\b(vampire|nocturnal|creature of the night|undead)\b/i;
+  SLAYS_THEM = /\b(?:vampire|undead)[- ](?:slayers?|hunters?|killers?)\b|\b(?:slayers?|hunters?|killers?) of (?:vampires|the undead)\b/gi;
 });
 
 // src/core/elsewhere/news.ts
@@ -11881,7 +11898,8 @@ function routeFor(o) {
   const aboutStage = castActors.some((c) => o.onstage.includes(c)) || o.onstage.some((c) => c.names.some((n) => arc.want.includes(n.split(" ")[0])));
   const toUser = !!lead?.ties.some((t) => t.to === "user" && t.strength >= 2);
   const near = (a) => !!a && (a.reach === "town" || a.reach === "house");
-  const carriers = [lead, ...castActors, ...(lead?.ties ?? []).filter((t) => t.strength >= 2).map((t) => r.byKey(t.to))].filter((a) => !!a && !a.group && near(a) && canAct(a) && a.ring === "offstage");
+  const close = (a) => a === lead || !!lead?.ties.some((t) => t.to === a.key && t.strength >= 2);
+  const carriers = [lead, ...castActors, ...(lead?.ties ?? []).filter((t) => t.strength >= 2).map((t) => r.byKey(t.to))].filter((a) => !!a && !a.group && near(a) && canAct(a) && a.ring === "offstage" && close(a));
   const isTown = (p) => !p || !!o.town && p.toLowerCase() === o.town.toLowerCase();
   const spot = !isTown(o.place) && r.local.some((x) => x.length >= 4 && (o.place.toLowerCase().includes(x) || x.includes(o.place.toLowerCase()))) ? o.place.split(/\s*\u203A\s*/) : o.tracePlaces?.[0];
   const local = !!spot;
@@ -12124,6 +12142,57 @@ function kindFromText(text) {
       return k;
   return SPECS.pursuit.words.test(text) ? "pursuit" : null;
 }
+function kindForStory(premise, lead, others) {
+  const scores = new Map;
+  const names = [...lead.map((n) => ({ n, me: true })), ...others.map((n) => ({ n, me: false }))].filter((x) => x.n.length >= 3);
+  for (const k of ORDER) {
+    const re = new RegExp(SPECS[k].words.source, "gi");
+    for (const m of premise.matchAll(re)) {
+      const clause = premise.slice(0, m.index).split(/[.;!?]/).at(-1) ?? "";
+      let w = k === "pursuit" ? 0.6 : 1;
+      if (/\b(about|regarding|concerning|of how|how)\b/i.test(clause))
+        w *= 0.4;
+      if (ATTRIBUTE.includes(k)) {
+        let best = -1;
+        let mine = true;
+        for (const x of names) {
+          const hits = [...clause.matchAll(new RegExp(`\\b${esc5(x.n)}\\b`, "gi"))];
+          const j = hits.length ? hits[hits.length - 1].index : -1;
+          if (j > best) {
+            best = j;
+            mine = x.me;
+          }
+        }
+        if (!mine)
+          w *= 0.2;
+      }
+      scores.set(k, (scores.get(k) ?? 0) + w);
+    }
+  }
+  let kind = "pursuit";
+  let top = 0;
+  for (const k of ORDER)
+    if ((scores.get(k) ?? 0) > top)
+      [kind, top] = [k, scores.get(k)];
+  return kind;
+}
+function wantFromStory(premise) {
+  const cut = (s) => s.trim().split(/\s+/).slice(0, 12).join(" ").replace(/[,;:]+$/, "");
+  const m = /\b(?:wants?|hopes?|needs?|tries|trying|plans?|means|intends?|is determined|sets? out|vows?|swears?|is going)\s+to\s+([^.;,!?]+)/i.exec(premise);
+  if (m)
+    return `to ${cut(m[1])}`;
+  const f = /\b(?:search(?:es|ing)? for|look(?:s|ing)? for|hunt(?:s|ing)? for|track(?:s|ing)? down)\s+([^.;,!?]+)/i.exec(premise);
+  if (f)
+    return `to find ${cut(f[1])}`;
+  return null;
+}
+function viceOf(text) {
+  const m = /\b(dark magic|black magic|magic|drink(?:ing)?|alcohol|the bottle|drugs?|pills|power|gambling|blood)\b/i.exec(text);
+  if (!m)
+    return "it";
+  const w = m[1].toLowerCase();
+  return /^(drink|drinking|alcohol)$/.test(w) ? "the bottle" : /^drug$/.test(w) ? "drugs" : w;
+}
 function stageOf(cur, max) {
   if (cur >= max)
     return "aftermath";
@@ -12136,13 +12205,13 @@ function stageOf(cur, max) {
 function beatTemplate(opts) {
   const spec = SPECS[opts.kind];
   const i = opts.stage === "setup" ? 0 : opts.stage === "crisis" ? 2 : 1;
-  const move = spec.moves[i].replace("{want}", bare(opts.want) || spec.want);
+  const move = spec.moves[i].replace("{want}", bare(opts.want) || spec.want).replace("{vice}", viceOf(`${opts.premise ?? ""} ${opts.want}`));
   const at = opts.place ? ` (${opts.place})` : "";
   if (opts.result === "win")
-    return `${opts.lead} ${move}${at}; this time it worked out.`;
+    return `${opts.lead} ${move}${at}, and it went well.`;
   if (opts.result === "cost")
-    return `${opts.lead} ${move}${at}; it worked, at a price: ${opts.price ?? spec.prices[0]}.`;
-  return `${opts.lead} ${move}${at}; it went wrong: ${opts.worse ?? spec.worse[0]}.`;
+    return `${opts.lead} ${move}${at}; it got somewhere, at a price: ${opts.price ?? spec.prices[0]}.`;
+  return `${opts.lead} ${move}${at}, but it went wrong: ${opts.worse ?? spec.worse[0]}.`;
 }
 function endTemplate(opts) {
   const want = bare(opts.want).replace(/^to\s+/i, "");
@@ -12154,7 +12223,7 @@ function endTemplate(opts) {
     return `It nearly went badly for ${opts.lead} (${bare(opts.fear)}), but not quite.`;
   return `It went badly for ${opts.lead}: ${bare(opts.fear)}.`;
 }
-var SPECS, ORDER, bare = (want) => want.replace(/[.!]+$/, "").trim(), GENRE_LEAN;
+var SPECS, ORDER, ATTRIBUTE, esc5 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), bare = (want) => want.replace(/[.!]+$/, "").trim(), GENRE_LEAN;
 var init_grammar = __esm(() => {
   SPECS = {
     pursuit: {
@@ -12172,7 +12241,7 @@ var init_grammar = __esm(() => {
     },
     scheme: {
       kind: "scheme",
-      words: /\b(scheme|plot|conspir|usurp|seize|ambition|ambitious|alliance|marry\b.*\bto|influence|power|succession|whisper|spymaster|hand of the king|leverage)\b/i,
+      words: /\b(scheme|plot|conspir\w*|usurp|seize|ambition|ambitious|alliance|marry\b.*\bto|influence|power|succession|whisper|spymaster|hand of the king|leverage)\b/i,
       clock: 8,
       base: 0.07,
       secrecy: "secret",
@@ -12185,7 +12254,7 @@ var init_grammar = __esm(() => {
     },
     rivalry: {
       kind: "rivalry",
-      words: /\b(rival|rivalry|grudge|resent|feud|compet|enemy|enemies|score to settle)\b/i,
+      words: /\b(rival|rivalry|grudge|resent|feud|compet\w*|enemy|enemies|score to settle)\b/i,
       clock: 6,
       base: 0.07,
       secrecy: "private",
@@ -12198,7 +12267,7 @@ var init_grammar = __esm(() => {
     },
     courtship: {
       kind: "courtship",
-      words: /\b(court|courting|flirt|date|dating|crush|attract|romance|in love|sweetheart|smitten)\b/i,
+      words: /\b(court|courting|flirt|date|dating|crush|attract\w*|romance|in love|sweetheart|smitten)\b/i,
       clock: 6,
       base: 0.07,
       secrecy: "private",
@@ -12250,7 +12319,7 @@ var init_grammar = __esm(() => {
     },
     decline: {
       kind: "decline",
-      words: /\b(addict|spiral|drawn deeper|dark magic|drinking|drunk|illness|sick|dying|overdose|withdraw|craving|hooked|obsess)\b/i,
+      words: /\b(addict|spiral|drawn deeper|dark magic|drinking|drunk|illness|sick|dying|overdose|withdraw|craving|hooked|obsess\w*)\b/i,
       clock: 6,
       base: 0.07,
       secrecy: "secret",
@@ -12259,12 +12328,12 @@ var init_grammar = __esm(() => {
       worse: ["it went further than meant", "someone close was hurt by it", "the cost showed"],
       want: "to stay in control",
       fear: "they hit bottom",
-      moves: ["leaned on it a little", "leaned on it harder", "leaned on it hard, with everything at stake"],
+      moves: ["leaned on {vice} a little", "leaned on {vice} harder", "leaned on {vice} hard, with everything at stake"],
       irreversible: true
     },
     investigation: {
       kind: "investigation",
-      words: /\b(research|investigat|study|studies|cross[- ]referenc|case file|find out|scry|trace|evidence|clue|theory|diagnos|analy)\b/i,
+      words: /\b(research|investigat\w*|study|studies|cross[- ]referenc\w*|case file|find out|scry|trace|evidence|clue|theory|diagnos\w*|analy\w*)\b/i,
       clock: 6,
       base: 0.08,
       secrecy: "private",
@@ -12283,7 +12352,7 @@ var init_grammar = __esm(() => {
       secrecy: "public",
       routes: ["ambient", "trace", "carrier"],
       prices: ["they were seen", "one of theirs was hurt", "it took longer"],
-      worse: ["someone fought back", "they lost ground", "it went wrong for them"],
+      worse: ["someone fought back", "they lost ground", "they were beaten back"],
       want: "to take what they came for",
       fear: "they're driven off",
       moves: ["scouted, working {want}", "struck, working {want}", "went all in, working {want}"]
@@ -12316,7 +12385,7 @@ var init_grammar = __esm(() => {
     },
     life: {
       kind: "life",
-      words: /\b(recital|work|job|shift|school|class|birthday|family|wedding|holiday|festival|dinner|rehears|practice|hospital|restaurant|studio)\b/i,
+      words: /\b(recital|work|job|shift|school|class|birthday|family|wedding|holiday|festival|dinner|rehears\w*|practice|hospital|restaurant|studio)\b/i,
       clock: 6,
       base: 0.035,
       secrecy: "private",
@@ -12355,6 +12424,7 @@ var init_grammar = __esm(() => {
     }
   };
   ORDER = ["return", "decline", "threat", "scheme", "investigation", "debt", "rift", "rivalry", "courtship", "loss", "secret", "duty", "life", "pursuit"];
+  ATTRIBUTE = ["decline", "loss"];
   GENRE_LEAN = {
     horror: ["threat", "decline"],
     romance: ["courtship", "rift"],
@@ -12397,11 +12467,17 @@ function isLight(a) {
   return !a.locked && a.status === "running" && a.grounds.length === 1 && /^char:/.test(a.grounds[0]) && a.clock.cur <= Math.ceil(a.clock.max / 2);
 }
 function asWant(text, fallback) {
-  const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0];
+  const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0].replace(/^.*?\b(?:wants?|wishes|longs? for|hopes? for)\s+/i, "");
   if (!t)
     return fallback;
   const bare = t.replace(/^to\s+/i, "");
-  return VERB.test(bare) ? `to ${bare.charAt(0).toLowerCase()}${bare.slice(1)}` : `to see ${bare}`;
+  if (VERB.test(bare))
+    return `to ${bare.charAt(0).toLowerCase()}${bare.slice(1)}`;
+  if (/^(?:the|a|an|his|her|their|its|my|our|\p{Lu})/u.test(bare))
+    return `to see ${bare}`;
+  if (/^\w+(?:ness|tion|sion|ment|ity|ance|ence|dom|ship|cy)\b/i.test(bare))
+    return `to find ${bare}`;
+  return `to ${bare}`;
 }
 function asFear(text, fallback) {
   const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0].replace(/^(?:that|the fear that|fears? that)\s+/i, "");
@@ -12575,7 +12651,7 @@ function seedCandidates(ctx) {
       push({ kind: "rift", lead: a, cast: [o], premise: `${a.name} and ${o.name} have fallen out`, want: "to mend it, or end it cleanly", fear: spec("rift").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 1, clock: 4, by: "engine", why: "a strained bond" });
   }
   for (const rec of ctx.records) {
-    if (rec.kind !== "forecast" && rec.kind !== "situation")
+    if (rec.kind !== "forecast" && rec.kind !== "situation" || rec.id.startsWith("bond:"))
       continue;
     if (rec.kind === "forecast" && (ctx.canonGravity === "off" || rec.status === "diverged"))
       continue;
@@ -12707,9 +12783,10 @@ function gate(arc, lead, r, opts) {
   if (lead && !lead.group) {
     const missing = arc.grounds.filter((g) => g.startsWith("#") && !hasFact(lead, g.slice(1)) && arc.kind !== "secret");
     if (missing.length)
-      return { ok: false, mod: 0, deferTo: opts.now + 360, why: [`waits for news (${missing.join(", ")})`] };
+      return { ok: false, mod: 0, deferTo: opts.now + 360, why: [`waits for news (${missing.join(", ")})`], wait: `waits until ${lead.name} hears ${missing.join(", ")}` };
   }
-  const start = Math.max(opts.from, arc.nextAbs);
+  const since = Math.max(opts.from, arc.lastBeatAbs ?? arc.startedAbs);
+  const start = opts.push || opts.forced ? Math.min(since, opts.now) : Math.max(opts.from, arc.nextAbs);
   if (start > opts.now)
     return { ok: false, mod: 0, deferTo: arc.nextAbs, why: ["not yet"] };
   let at;
@@ -12718,13 +12795,21 @@ function gate(arc, lead, r, opts) {
     if (awakeAt(lead, (t % 1440 + 1440) % 1440))
       at = t;
   }
-  if (at == null) {
-    let t = opts.now;
-    while (!awakeAt(lead, (t % 1440 + 1440) % 1440) && t < opts.now + 1440)
-      t += 30;
-    return { ok: false, mod: 0, deferTo: t, why: ["asleep"] };
-  }
   let mod = 0;
+  let offHours;
+  if (at == null) {
+    const hours = lead?.nocturnal ? "keeps night hours" : "is asleep at this hour";
+    if (!opts.push) {
+      let t = opts.now;
+      while (!awakeAt(lead, (t % 1440 + 1440) % 1440) && t < opts.now + 1440)
+        t += 30;
+      return { ok: false, mod: 0, deferTo: t, why: ["asleep"], wait: `${lead?.name ?? arc.lead} ${hours}` };
+    }
+    at = opts.now;
+    mod -= 1;
+    why.push("out of hours");
+    offHours = lead?.nocturnal ? `by day, though ${lead.name} keeps night hours` : `at an hour ${lead?.name ?? arc.lead} is usually asleep`;
+  }
   if (lead) {
     mod += lead.means;
     if (lead.means > 0)
@@ -12750,7 +12835,7 @@ function gate(arc, lead, r, opts) {
       why.push("from afar");
     }
   }
-  return { ok: true, mod: Math.max(-2, Math.min(2, mod)), atAbs: at, why };
+  return { ok: true, mod: Math.max(-2, Math.min(2, mod)), atAbs: at, why, offHours };
 }
 function arcNewLine(c) {
   const f = [
@@ -12767,13 +12852,14 @@ function arcNewLine(c) {
     `grounds: ${cleanVal(c.grounds.join(", "))}`,
     c.place ? `place: ${cleanVal(c.place)}` : "",
     `by: ${c.by}`,
-    c.faction ? `faction: ${cleanVal(c.faction.name)} / ${cleanVal(c.faction.project)}` : ""
+    c.faction ? `faction: ${cleanVal(c.faction.name)} / ${cleanVal(c.faction.project)}` : "",
+    c.push ? "push: yes" : ""
   ].filter(Boolean);
   return `arc new #${c.id}: ${c.kind} | ${f.join(" | ")}`;
 }
 function beatLine(id, b) {
   const mod = b.mod ? `${b.mod > 0 ? "+" : "-"}${Math.abs(b.mod)}` : "";
-  const f = [`roll: ${b.roll[0]}+${b.roll[1]}${mod}`, `at: ${b.at}`, b.twist ? `twist: ${cleanVal(b.twist)}` : "", b.place ? `place: ${cleanVal(b.place)}` : "", `tick: ${b.tick}`, `next: ${b.next}`, `told: ${b.told}`, `text: ${cleanVal(b.text)}`].filter(Boolean);
+  const f = [`roll: ${b.roll[0]}+${b.roll[1]}${mod}`, `at: ${b.at}`, b.twist ? `twist: ${cleanVal(b.twist)}` : "", b.place ? `place: ${cleanVal(b.place)}` : "", `tick: ${b.tick}`, `next: ${b.next}`, `told: ${b.told}`, b.note ? `note: ${cleanVal(b.note)}` : "", `text: ${cleanVal(b.text)}`].filter(Boolean);
   return `arc beat #${id}: ${b.result} | ${f.join(" | ")}`;
 }
 var NAME_RE, low2 = (s) => s.toLowerCase(), clip = (s, n) => s.length > n ? `${s.slice(0, n - 1).replace(/\s+\S*$/, "")}\u2026` : s, first = (n) => n.split(/\s+/)[0], VERB, cleanVal = (s) => (s ?? "").replace(/\s*\|\s*/g, " / ").replace(/\s*\n+\s*/g, " ").trim();
@@ -12863,7 +12949,7 @@ function tick(inp) {
     const result = d === "accept" ? "lost" : "softened";
     const text = endTemplate({ lead: arc.lead, want: arc.want, fear: arc.fear, result });
     lines.push(`arc end #${arc.id}: ${result} | text: ${cleanVal(text)}`);
-    cards.push(cardFor(arc, lead, roster, st, { result, roll: [0, 0], mod: 0, stage: "aftermath", atAbs: inp.now, template: text, line: lines.length - 1, ending: true, fateOk: d === "accept", offPage: inp.offPage }));
+    cards.push(cardFor(arc, lead, roster, st, { result, roll: [0, 0], mod: 0, stage: "aftermath", atAbs: inp.now, template: text, line: lines.length - 1, ending: true, fateOk: d === "accept", offPage: inp.offPage, records: inp.records }));
   }
   for (const arc of arcs) {
     if (arc.status !== "running")
@@ -12881,22 +12967,24 @@ function tick(inp) {
     const lead = leadOf(arc);
     if (lead?.ring === "onstage" || arc.clock.cur >= arc.clock.max || arc.fate)
       continue;
-    if (arc.bring) {
-      cands.push({ arc, lead, prio: 3 });
+    if (arc.bring || arc.push) {
+      cands.push({ arc, lead, prio: 3, push: true });
       continue;
     }
     const spec = SPECS[arc.kind];
     const lambda = spec.base * (1 + arc.heat / 2) * STAGE_F[arc.stage] * M.factor;
-    const span = Math.max(0, (inp.now - Math.max(inp.from, arc.nextAbs)) / 60);
+    const span = inp.forced ? arc.nextAbs <= inp.now + (inp.now - inp.from) ? hours : 0 : Math.max(0, (inp.now - Math.max(inp.from, arc.nextAbs)) / 60);
     const p = 1 - Math.exp(-lambda * span);
     if (rand() < p)
       cands.push({ arc, lead, prio: 1 + Math.min(1, (inp.now - (arc.lastBeatAbs ?? arc.startedAbs)) / 1440) });
   }
   const seeded = [];
-  const live = running.length + arcs.filter((a) => a.status === "held" || a.status === "fate").length;
+  const liveArcs = [...running, ...arcs.filter((a) => a.status === "held" || a.status === "fate")];
+  const live = liveArcs.length;
   const room = M.arcs - live;
-  const seedP = live === 0 ? 1 : 1 - Math.exp(-0.06 * M.factor * Math.max(hours, 1));
-  if (room > 0 && (hours > 0 || inp.tickId.includes("f")) && rand() < seedP) {
+  const own = liveArcs.filter((a) => a.by !== "player").length;
+  const seedP = own === 0 ? 1 : 1 - Math.exp(-0.06 * M.factor * (1 + 2 * room / M.arcs) * Math.max(hours, 1));
+  if (room > 0 && (hours > 0 || inp.forced || inp.tickId.includes("f")) && rand() < seedP) {
     const pool = seedCandidates({ state: st, roster, records: inp.records, awake, arcs, canonGravity: inp.canonGravity, genres: inp.genres, world: inp.world, pressures: inp.pressures, now: inp.now });
     const n = Math.min(room, M.seeds);
     for (let i = 0;i < n && pool.length; i++) {
@@ -12908,6 +12996,9 @@ function tick(inp) {
         k = pool.findIndex((c) => (x -= c.weight) <= 0);
       }
       const c = pool.splice(k < 0 ? 0 : k, 1)[0];
+      for (let j = pool.length - 1;j >= 0; j--)
+        if (pool[j].kind === c.kind && !pool[j].faction)
+          pool.splice(j, 1);
       const light = arcs.find((a) => isLight(a) && a.lead.toLowerCase() === c.lead.name.toLowerCase());
       if (light) {
         lines.push(`arc drop #${light.id}: reason: ${cleanVal(`gave way to a better grounded story (${c.kind})`)}`);
@@ -12940,7 +13031,7 @@ function tick(inp) {
       };
       seeded.push(c.id);
       log.push(`seeded ${c.id} (${c.kind}, ${c.lead.name}) from ${c.why}`);
-      cards.push(cardFor(arc, c.lead, roster, st, { result: "cost", roll: [0, 0], mod: 0, stage: "setup", atAbs: at, template: c.premise, line: lines.length - 1, seed: true, offPage: inp.offPage }));
+      cards.push(cardFor(arc, c.lead, roster, st, { result: "cost", roll: [0, 0], mod: 0, stage: "setup", atAbs: at, template: c.premise, line: lines.length - 1, seed: true, offPage: inp.offPage, records: inp.records }));
       if (rand() < 0.6 * M.factor || c.lead.flags.wake)
         cands.push({ arc, lead: c.lead, fresh: c, prio: 1.5 });
       for (const a of c.cast)
@@ -12961,7 +13052,7 @@ function tick(inp) {
         break;
       if (chosen.includes(c) || chosen.some((x) => x.arc.id === c.arc.id))
         continue;
-      if (pass === 0 && lastTickLeads.has(c.arc.lead) && !c.arc.bring)
+      if (pass === 0 && lastTickLeads.has(c.arc.lead) && !c.push)
         continue;
       if ((perKind.get(c.arc.kind) ?? 0) >= kindCap && c.prio < 3)
         continue;
@@ -12970,16 +13061,20 @@ function tick(inp) {
     }
   }
   const collided = new Set;
-  const doBeat = (arc, lead, forced) => {
-    const g = forced ? { ok: true, mod: 0, atAbs: forced.atAbs, why: ["collision"] } : gate(arc, lead, roster, { from: inp.from, now: inp.now, rand });
+  let moved = 0;
+  const tried = new Set;
+  const doBeat = (arc, lead, forced, push) => {
+    tried.add(arc.id);
+    const g = forced ? { ok: true, mod: 0, atAbs: forced.atAbs, why: ["collision"] } : gate(arc, lead, roster, { from: inp.from, now: inp.now, rand, push, forced: inp.forced });
     if (!g.ok) {
       if (g.drop)
         lines.push(`arc drop #${arc.id}: reason: ${cleanVal(g.drop)}`);
       else if (g.deferTo != null)
-        lines.push(`arc set #${arc.id}: next: ${g.deferTo}`);
+        lines.push(`arc set #${arc.id}: next: ${g.deferTo}${g.wait ? ` | wait: ${cleanVal(g.wait)}` : ""}${arc.push ? " | push: no" : ""}`);
       log.push(`${arc.id}: held back (${g.drop ?? g.why.join(", ")})`);
       return;
     }
+    moved++;
     const spec = SPECS[arc.kind];
     const roll = [d6(rand), d6(rand)];
     const total = roll[0] + roll[1] + g.mod;
@@ -13019,7 +13114,7 @@ function tick(inp) {
     const cur = Math.min(arc.clock.max, arc.clock.cur + 1);
     const stage = stageOf(cur, arc.clock.max);
     const shownPlace = place && place.toLowerCase() !== (town ?? "").toLowerCase() && !arc.want.toLowerCase().includes(place.toLowerCase()) ? place : undefined;
-    const text = beatTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, stage: stage === "aftermath" ? "crisis" : stage, result, price, worse, place: shownPlace });
+    const text = beatTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, stage: stage === "aftermath" ? "crisis" : stage, result, price, worse, place: shownPlace, premise: arc.premise });
     const next = atAbs + Math.round(120 + rand() * 240 / M.factor);
     lines.push(beatLine(arc.id, { result, roll, mod: g.mod, at: atAbs, text: twistText ? `${text} (${twistText})` : text, told: "template", twist: twistText, place, tick: inp.tickId, next }));
     const beatIdx = lines.length - 1;
@@ -13035,7 +13130,7 @@ function tick(inp) {
         lines.push(`whereabouts ${lead.name}: ${town} | since: ${atAbs}`);
     } else if (lead && !lead.group && place && place !== lead.where)
       lines.push(`whereabouts ${lead.name}: ${cleanVal(place)} | since: ${atAbs}`);
-    const card = cardFor(arc, lead, roster, st, { result, roll, mod: g.mod, stage, atAbs, template: text, line: beatIdx, twist: twistText, price, worse, place, offPage: inp.offPage });
+    const card = cardFor(arc, lead, roster, st, { result, roll, mod: g.mod, stage, atAbs, template: text, line: beatIdx, twist: twistText, price, worse, place, offPage: inp.offPage, records: inp.records, offHours: g.offHours });
     let ending = false;
     if (cur >= arc.clock.max) {
       ending = true;
@@ -13049,7 +13144,7 @@ function tick(inp) {
         log.push(`${arc.id}: an irreversible ending waits on the player (${inp.fates})`);
       } else {
         lines.push(`arc end #${arc.id}: ${end} | text: ${cleanVal(endText)} | at: ${atAbs}`);
-        cards.push(cardFor(arc, lead, roster, st, { result: end, roll: [0, 0], mod: final - tally.win + tally.loss, stage: "aftermath", atAbs, template: endText, line: lines.length - 1, ending: true, fateOk: inp.fates === "allow", offPage: inp.offPage }));
+        cards.push(cardFor(arc, lead, roster, st, { result: end, roll: [0, 0], mod: final - tally.win + tally.loss, stage: "aftermath", atAbs, template: endText, line: lines.length - 1, ending: true, fateOk: inp.fates === "allow", offPage: inp.offPage, records: inp.records }));
         for (const l of consequences(arc, end, roster))
           lines.push(l);
         log.push(`${arc.id}: ends (${end})`);
@@ -13072,7 +13167,15 @@ function tick(inp) {
   };
   for (const c of chosen)
     if (!collided.has(c.arc.id))
-      doBeat(c.arc, c.lead);
+      doBeat(c.arc, c.lead, undefined, c.push);
+  if (inp.forced && !moved) {
+    const waiting = running.filter((a) => !tried.has(a.id) && !collided.has(a.id) && !a.fate && a.clock.cur < a.clock.max && leadOf(a)?.ring !== "onstage").sort((a, b) => Number(b.by === "player") - Number(a.by === "player") || a.nextAbs - b.nextAbs);
+    for (const arc of waiting) {
+      doBeat(arc, leadOf(arc));
+      if (moved)
+        break;
+    }
+  }
   for (const arc of running) {
     if (!arc.bring || chosen.some((c) => c.arc.id === arc.id) || arrivals.some((a) => a.arc === arc.id))
       continue;
@@ -13089,6 +13192,20 @@ function tick(inp) {
 }
 function cardFor(arc, lead, r, st, o) {
   const off = new Set(o.offPage.map((x) => x.key));
+  const offWords = o.offPage.flatMap((x) => x.words.map((w) => w.toLowerCase()));
+  const clean = (t) => offWords.some((w) => w && t.toLowerCase().includes(w)) ? "" : t;
+  const groundText = arc.grounds.filter((g) => g !== "player" && g !== lead?.recordId).map((g) => {
+    if (g.startsWith("#")) {
+      const f = st.facts?.[g.slice(1)];
+      return f && !off.has(f.key) && !f.hidden ? `${g}: ${f.statement}` : "";
+    }
+    const t = st.threads[g];
+    if (t)
+      return `${t.title}${t.latest ? `: ${t.latest}` : ""}`;
+    const rec = o.records.find((x) => x.id === g);
+    return rec ? `${rec.name}: ${rec.summary}` : "";
+  }).map((t) => clean(t.slice(0, 200))).filter(Boolean).slice(0, 3);
+  const sofar = arc.beats.slice(-2).map((b) => b.text);
   const knows = (lead?.knows ?? []).filter((k) => !off.has(k.key)).slice(-4).map((k) => `#${k.key} (${k.statement.slice(0, 80)})`);
   const noRoute = Object.values(st.facts ?? {}).filter((f) => !f.hidden && f.keepers?.length && lead && !(lead.charId && f.stances[lead.charId])).slice(0, 2).map((f) => `#${f.key}`);
   return {
@@ -13111,6 +13228,9 @@ function cardFor(arc, lead, r, st, o) {
     want: arc.want,
     fear: arc.fear,
     leadText: lead?.text ?? "",
+    groundText,
+    sofar,
+    offHours: o.offHours,
     knows,
     noRoute,
     grounds: arc.grounds,
@@ -13197,13 +13317,21 @@ function authorArc(o) {
   const lead = o.roster.find(o.name);
   if (!lead)
     return null;
-  const kind = Object.values(SPECS).find((s) => s.kind !== "world" && s.kind !== "pursuit" && s.words.test(o.premise))?.kind ?? "pursuit";
+  const named = namesIn(o.premise, o.roster).filter((a) => a !== lead);
+  const people = named.filter((a) => !a.group);
+  const groups = named.filter((a) => a.group);
+  const sh = o.shape ?? {};
+  const kind = sh.kind && sh.kind !== "world" ? sh.kind : kindForStory(o.premise, lead.names, people.flatMap((a) => a.names));
   const spec = SPECS[kind];
-  const cast = namesIn(o.premise, o.roster).filter((a) => a !== lead && !a.group).map((a) => a.name);
+  const castNames = sh.cast?.length ? sh.cast.map((n) => o.roster.find(n)).filter((a) => !!a && a !== lead).map((a) => a.name) : [...people, ...groups].map((a) => a.name);
+  const secrecy = sh.secrecy ?? (/\b(secret(?:ly)?|in secret|hid(?:e|es|ing)|behind (?:\w+['\u2019]s|her|his|their) back|tells? no one|nobody knows)\b/i.test(o.premise) ? "secret" : kind === "threat" ? "public" : "private");
+  const want = sh.want ?? wantFromStory(o.premise) ?? spec.want;
+  const fear = sh.fear ?? spec.fear;
   let id = slug(`${lead.name.split(/\s+/)[0]}-${kind}`);
   for (let i = 2;o.arcs.some((a) => a.id === id && (a.status === "running" || a.status === "held")); i++)
     id = `${slug(`${lead.name.split(/\s+/)[0]}-${kind}`)}-${i}`;
-  return arcNewLine({ id, kind, lead: lead.name, cast, secrecy: spec.secrecy, clock: spec.clock, heat: 1, at: o.now, premise: o.premise, want: spec.want, fear: spec.fear, grounds: [lead.recordId ?? `char:${lead.key}`, "player"], by: "player" });
+  const grounds = [lead.recordId ?? `char:${lead.key}`, ...groups.map((g) => g.recordId ?? g.key), "player"];
+  return arcNewLine({ id, kind, lead: lead.name, cast: [...new Set(castNames)], secrecy, clock: spec.clock, heat: 2, at: o.now, premise: o.premise, want, fear, grounds: [...new Set(grounds)], place: sh.place, by: "player", push: true });
 }
 var MODES, d6 = (rand) => 1 + Math.floor(rand() * 6), pickOf = (rand, xs) => xs[Math.floor(rand() * xs.length) % Math.max(1, xs.length)], STAGE_F, TWISTS;
 var init_storyteller = __esm(() => {
@@ -13233,8 +13361,11 @@ function cardText(c, ctx) {
   }
   return `CARD ${c.id} \xB7 ${c.kind} \xB7 ${c.ending ? "ending" : `beat ${c.clock} \xB7 ${c.stage}`} \xB7 roll ${c.roll[0]}+${c.roll[1]}${c.mod ? ` ${c.mod > 0 ? "+" : "-"}${Math.abs(c.mod)}` : ""} \u2192 ${RESULT_WORD[c.result]}${c.price ? ` (price: ${c.price})` : ""}${c.worse ? ` (worse: ${c.worse})` : ""}${c.twist ? ` \xB7 twist: ${c.twist}` : ""}
   LEAD ${c.lead}: ${c.leadText.slice(0, 200) || "\u2014"}
-  SUBPLOT ${c.premise} \xB7 wants ${c.want} \xB7 fears ${c.fear}
-  CAST ${c.cast.join(", ") || "\u2014"} \xB7 WHERE ${c.where ?? "\u2014"} \xB7 WHEN ${fmtTime(fromAbs(c.atAbs))}
+  SUBPLOT ${c.premise} \xB7 wants ${c.want} \xB7 fears ${c.fear}${c.groundText?.length ? `
+  GROUNDS ${c.groundText.join(" \xB7 ")}` : ""}${c.sofar?.length ? `
+  SO FAR ${c.sofar.join(" \u2192 ")}` : `
+  SO FAR (this is its first step: begin what the SUBPLOT describes)`}
+  CAST ${c.cast.join(", ") || "\u2014"} \xB7 WHERE ${c.where ?? "\u2014"} \xB7 WHEN ${fmtTime(fromAbs(c.atAbs))}${c.offHours ? ` (${c.offHours}: tell it so that fits)` : ""}
   KNOWS ${c.knows.join("; ") || "\u2014"}${c.noRoute.length ? ` \xB7 NO ROUTE TO ${c.noRoute.join(", ")} (can't act on it)` : ""}
   ENGINE DRAFT ${c.template}${c.arrival ? `
   REACHES THE SCENE AS (${c.arrivalKind}) ${c.arrival}` : ""}`;
@@ -13245,7 +13376,7 @@ function tellingPrompt(cards, ctx) {
 Also PROFILE each person listed under PROFILES from their text only: {"key","standing":"here|away|captive|changed|dead|companion|construct","where":"the place they are now, or empty","reach":"town|region|far","want":"to \u2026","fear":"\u2026","nocturnal":true|false}.` : "";
   return {
     system: `You tell what happened off the page in a roleplay, between two story times. ${SAFETY_DATA}
-Each CARD is already decided: who, where, when, and how it turned out. Tell it as ONE plain past-tense sentence (at most 40 words) of what happened, in the story's language. Keep the outcome exactly. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, and places it names. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter). Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
+Each CARD is already decided: who, where, when, and how it turned out. Tell it as ONE plain past-tense sentence (at most 40 words) of what happened, in the story's language: the next concrete step of the SUBPLOT, continuing SO FAR, doing what the lead would do toward what they want. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, and places it names. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
 For a card with REACHES THE SCENE, also write "arrival": how it reaches the scene, at most 30 words, in-world.
 You may add up to two ledger "lines" per card for the LEAD and CAST only: "know Name: #key fact | how they learned it \xB7 knows/believes", "bond A>B: trust +1 \u2014 cause", "journal Name: their own words".
 Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only.${cards.some((c) => c.kind === "world") ? `
@@ -13281,8 +13412,9 @@ function validateTold(c, raw, ctx) {
   const text = String(raw.text ?? "").trim();
   if (!text)
     return fail("no text");
-  if (raw.result && String(raw.result).toLowerCase() !== String(c.result))
-    return fail(`told as ${raw.result}, decided ${c.result}`);
+  const told = raw.result ? String(raw.result).toLowerCase().trim() : "";
+  if (told && told !== String(c.result) && OPPOSITE[String(c.result)]?.includes(told))
+    return fail(`told as ${told}, decided ${c.result}`);
   const wc = (s) => s.split(/\s+/).filter(Boolean).length;
   if (wc(text) > 55)
     return fail("too long");
@@ -13370,25 +13502,96 @@ function validateProfile(raw, hash) {
     p.nocturnal = raw.nocturnal;
   return p;
 }
-var RESULT_WORD, IRREVERSIBLE, VERBISH, STANDINGS, REACHES;
+function shapePrompt(o) {
+  return {
+    system: `A player wrote a subplot for someone off the page in their roleplay. File it for the engine that will play it out. ${SAFETY_DATA}
+Read the premise for what the LEAD does and is after. Use only the premise and who the lead is; add nothing.
+- "kind": one of ${Object.entries(KIND_MEANING).map(([k, v]) => `${k} (${v})`).join("; ")}.
+- "want": what the LEAD is after, "to \u2026", at most 12 words.
+- "fear": what the LEAD fears if it goes badly, at most 12 words.
+- "cast": the people and groups from the lists below who take part (not ${o.userName}).
+- "secrecy": "public" (anyone could hear of it), "private" (those close to it), or "secret" (hidden on purpose).
+- "place": where it happens, if the premise says; else "".
+Output JSON only: {"kind":"\u2026","want":"to \u2026","fear":"\u2026","cast":["\u2026"],"secrecy":"\u2026","place":"\u2026"}${o.lang && !/^en/i.test(o.lang) ? `
+Write want and fear in ${o.lang}; keep the JSON keys and the kind in English.` : ""}`,
+    user: `LEAD ${o.lead}: ${o.leadText.slice(0, 240) || "\u2014"}
+PREMISE ${o.premise}
+PEOPLE ${o.people.join(", ") || "\u2014"}
+GROUPS ${o.groups.join(", ") || "\u2014"}`
+  };
+}
+function validateShape(raw, roster, lead) {
+  if (!raw || typeof raw !== "object")
+    return null;
+  const out = {};
+  const k = String(raw.kind ?? "").toLowerCase().trim();
+  if (KIND_NAMES.includes(k))
+    out.kind = k;
+  const short = (v, n) => typeof v === "string" && v.trim() && v.trim().split(/\s+/).length <= n ? v.trim().replace(/[.]+$/, "") : undefined;
+  const want = short(raw.want, 16);
+  if (want)
+    out.want = /^to\s/i.test(want) ? want : `to ${want}`;
+  const fear = short(raw.fear, 16);
+  if (fear)
+    out.fear = fear.replace(/^(?:that|fears? that)\s+/i, "");
+  const me = roster.find(lead);
+  if (Array.isArray(raw.cast)) {
+    const cast = raw.cast.map((n) => roster.find(String(n))).filter((a) => !!a && a !== me).map((a) => a.name);
+    if (cast.length)
+      out.cast = [...new Set(cast)].slice(0, 4);
+  }
+  if (raw.secrecy === "public" || raw.secrecy === "private" || raw.secrecy === "secret")
+    out.secrecy = raw.secrecy;
+  const place = short(raw.place, 6);
+  if (place)
+    out.place = place;
+  return Object.keys(out).length ? out : null;
+}
+var RESULT_WORD, OPPOSITE, IRREVERSIBLE, VERBISH, STANDINGS, REACHES, KIND_MEANING, KIND_NAMES;
 var init_telling = __esm(() => {
   init_dsl();
   init_state();
   init_prompts();
   init_util();
   RESULT_WORD = {
-    win: "WIN (they got what they were after this time)",
-    cost: "COST (they got it, and paid)",
-    loss: "LOSS (it didn't work, and something got worse)",
+    win: "WIN (this step went the lead's way: real headway toward the want, not the whole of it)",
+    cost: "COST (this step got somewhere, and the lead paid the price named)",
+    loss: "LOSS (this step failed, and something got worse)",
     met: "ENDING: MET (the want is met)",
     price: "ENDING: AT A PRICE (met, but it cost)",
     lost: "ENDING: LOST (the fear came true)",
     softened: "ENDING: SOFTENED (it nearly went badly, but not quite)"
   };
+  OPPOSITE = {
+    win: ["loss", "lost"],
+    loss: ["win", "met"],
+    cost: [],
+    met: ["lost", "loss"],
+    lost: ["met", "win", "softened"],
+    price: [],
+    softened: ["lost"]
+  };
   IRREVERSIBLE = /\b(died|dies|killed|dead|murdered|suicide|overdosed|married|wedding vows|pregnan\w*|gave birth|left (?:town|for good) forever|maimed|paralys\w*|lost (?:an? )?(?:arm|leg|eye|hand))\b/i;
   VERBISH = /^(?:\w+ly\s+)?(?:said|says|did|does|went|goes|decided|decides|felt|feels|thought|thinks|knew|knows|asked|asks|told|tells|agreed|agrees|refused|refuses|took|takes|gave|gives|kissed|kisses|walked|walks|ran|runs|looked|looks|smiled|smiles|called|calls|answered|answers|replied|replies|promised|promises|wanted|wants|chose|chooses|left|leaves|came|comes|met|meets|found|finds|saw|sees|heard|hears|realized|realised|learned|learnt|was|is|had|has|would|will|could|can|should|must|might)\b/i;
   STANDINGS = ["here", "away", "captive", "changed", "dead", "companion", "construct"];
   REACHES = ["house", "town", "region", "far"];
+  KIND_MEANING = {
+    pursuit: "the lead goes after something they want",
+    scheme: "the lead plots for power or advantage",
+    rivalry: "the lead against a rival",
+    courtship: "the lead and someone they're drawn to",
+    rift: "the lead and someone they've fallen out with",
+    debt: "the lead owes, or is owed",
+    secret: "the lead keeps something hidden",
+    decline: "the LEAD's own addiction, illness or hunger for power gets worse",
+    investigation: "the lead (or a body they go to) looks into a question",
+    threat: "the lead is a danger to others",
+    return: "the lead, away, comes back",
+    duty: "the lead answers to an institution (a council, a court, a circle)",
+    life: "the lead's ordinary life",
+    loss: "the lead grieves"
+  };
+  KIND_NAMES = Object.keys(KIND_MEANING);
 });
 
 // src/core/changes.ts
@@ -15618,7 +15821,7 @@ async function runElsewhere(chatId, userId, opts = {}) {
         last = now;
       }
       const arcs = Object.values(st.arcs ?? {});
-      const decisions = arcs.some((a) => a.status === "running" && (a.fate?.decision || a.bring && !arrivalsOf(meta).some((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered"))));
+      const decisions = arcs.some((a) => a.status === "running" && (a.fate?.decision || a.push || a.bring && !arrivalsOf(meta).some((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered"))));
       const due = now - last >= step;
       if (!due && !opts.force && !decisions)
         return null;
@@ -15630,7 +15833,7 @@ async function runElsewhere(chatId, userId, opts = {}) {
         tickId = `${tickId}f${E.forced}`;
       } else if (!due) {
         from = now;
-        tickId = `${tickId}d${arcs.filter((a) => a.fate?.decision || a.bring).length}x${E.order.length}`;
+        tickId = `${tickId}d${arcs.filter((a) => a.fate?.decision || a.bring || a.push).length}x${E.order.length}`;
       }
       if (E.ticks[tickId] && !opts.force)
         tickId = `${tickId}r${E.order.length}`;
@@ -15660,7 +15863,8 @@ async function runElsewhere(chatId, userId, opts = {}) {
 `),
         namedDay: named,
         truths: meta.config.truths ?? [],
-        prevTick: E.lastTick
+        prevTick: E.lastTick,
+        forced: !!opts.force && !due
       });
       const id = `${SIM_ID}${tickId}`;
       putLines(files, target.index, id, res.lines);
@@ -15787,7 +15991,8 @@ async function tell(chatId, tickId, userId) {
         continue;
       const v = validateTold(card, raw, ctx);
       if (v.rejected || !v.text) {
-        rejected.push(`${card.arcId}: ${v.rejected}`);
+        rejected.push(`${card.arcId}: ${v.rejected}${raw.text ? ` \u2014 \u201C${String(raw.text).replace(/\s+/g, " ").slice(0, 200)}\u201D` : ""}`);
+        lines[card.line] = setField(lines[card.line], "note", `the model's telling was set aside: ${v.rejected}`);
         continue;
       }
       lines[card.line] = setField(setField(lines[card.line], "told", "model"), "text", v.text);
@@ -15873,7 +16078,7 @@ async function elsewhereAction(chatId, m, userId) {
       line = arc ? `arc set #${arc.id}: status: running | next: ${now}` : null;
       break;
     case "nudge":
-      line = arc ? `arc set #${arc.id}: next: ${now} | heat: ${Math.min(3, arc.heat + 1)}` : null;
+      line = arc ? `arc set #${arc.id}: push: yes | next: ${now} | heat: ${Math.min(3, arc.heat + 1)}` : null;
       break;
     case "bring":
       line = arc ? `arc set #${arc.id}: bring: yes | next: ${now}` : null;
@@ -15884,7 +16089,13 @@ async function elsewhereAction(chatId, m, userId) {
     case "edit": {
       if (!arc)
         break;
-      const f = [m.premise ? `premise: ${m.premise}` : "", m.want ? `want: ${m.want}` : "", m.fear ? `fear: ${m.fear}` : ""].filter(Boolean);
+      const f = [
+        m.premise ? `premise: ${m.premise}` : "",
+        m.want ? `want: ${m.want}` : "",
+        m.fear ? `fear: ${m.fear}` : "",
+        m.kind && m.kind !== arc.kind ? `kind: ${m.kind}` : "",
+        m.secrecy && m.secrecy !== arc.secrecy ? `secrecy: ${m.secrecy}` : ""
+      ].filter(Boolean);
       line = f.length ? `arc set #${arc.id}: ${f.join(" | ").replace(/\n+/g, " ")}` : null;
       break;
     }
@@ -15896,28 +16107,75 @@ async function elsewhereAction(chatId, m, userId) {
         break;
       const files = await loadChat(chatId, userId);
       const roster = buildRoster({ state: st, records: L.records, userName: L.names.user, notPeople: notPeople(files.meta), people: files.meta.config.elsewhere?.people, profiles: elsewhereOf(files.meta).profiles });
-      line = authorArc({ roster, name: m.name, premise: m.premise.replace(/\s*\|\s*/g, " / ").replace(/\n+/g, " ").slice(0, 300), now, arcs: Object.values(st.arcs ?? {}) });
+      const premise = m.premise.replace(/\s*\|\s*/g, " / ").replace(/\n+/g, " ").slice(0, 300);
+      const lead = roster.find(m.name);
+      if (!lead)
+        return { warn: `No one called \u201C${m.name}\u201D is in the roster.` };
+      const settings = await loadSettings(userId);
+      const shape = settings.elsewhereTelling !== "engine" ? await shapeStory(lead, premise, roster, L.names.user, files.meta.detected.lang, settings, userId) : null;
+      line = authorArc({ roster, name: m.name, premise, now, arcs: Object.values(st.arcs ?? {}), shape });
       if (!line)
-        return `No one called \u201C${m.name}\u201D is in the roster.`;
+        return { warn: `No one called \u201C${m.name}\u201D is in the roster.` };
       break;
     }
   }
   if (!line)
-    return "Nothing to change.";
+    return { warn: "Nothing to change." };
   const target = L.lastAssistant();
   if (!target)
-    return "The chat has no reply to anchor this to yet.";
+    return { warn: "The chat has no reply to anchor this to yet." };
   const op = parseLine(line);
   if (!op)
-    return "That couldn't be recorded.";
+    return { warn: "That couldn't be recorded." };
   const files = await loadChat(chatId, userId);
   const key = anchorKey(target.index);
   files.side[key] = [...files.side[key] ?? [], { source: "user", ops: [op], id: `ewu:${Date.now().toString(36)}`, at: Date.now() }];
   save(chatId, "side", userId, 0);
   await L.refresh();
-  if (m.action === "fate" || m.action === "bring")
-    await runElsewhere(chatId, userId).catch((err) => warn(`elsewhere: ${describe(err)}`));
+  if (["fate", "bring", "nudge", "author"].includes(m.action)) {
+    const rec = await runElsewhere(chatId, userId).catch((err) => {
+      warn(`elsewhere: ${describe(err)}`);
+      return null;
+    });
+    if (m.action === "nudge" || m.action === "author")
+      return { info: tickSummary(rec, L.state.arcs) };
+  }
   return null;
+}
+async function shapeStory(lead, premise, roster, userName, lang, settings, userId) {
+  const p = shapePrompt({
+    userName,
+    lead: lead.name,
+    leadText: lead.text,
+    premise,
+    lang,
+    people: roster.actors.filter((a) => a !== lead && a.standing !== "dead").map((a) => a.name).slice(0, 60),
+    groups: roster.groups.map((g) => g.name).slice(0, 20)
+  });
+  try {
+    const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 45000, label: "Elsewhere (story)" });
+    return validateShape(extractJson(text), roster, lead.name);
+  } catch (err) {
+    warn(`elsewhere: shaping the story failed: ${describe(err)}`);
+    return null;
+  }
+}
+function tickSummary(rec, arcs = {}) {
+  if (!rec)
+    return "Nothing moved: story time hasn't gone a step since the last one, and nothing is waiting on you.";
+  const name = (id) => arcs[id] ? `${arcs[id].lead}'s ${arcs[id].kind}` : id;
+  const moved = rec.log.filter((l) => /= -?\d+ \u2192 (win|cost|loss)/.test(l)).map((l) => `${name(l.split(":")[0])} (${/\u2192 (\w+)/.exec(l)[1]})`);
+  const seeded = rec.log.filter((l) => l.startsWith("seeded ")).map((l) => /\(([^)]+)\)/.exec(l)?.[1]?.replace(/^(\w+), (.+)$/, "$2's $1") ?? "");
+  const held = rec.log.filter((l) => /held back/.test(l)).map((l) => `${name(l.split(":")[0])} waits (${/held back \((.*)\)$/.exec(l)?.[1] ?? ""})`);
+  const parts = [
+    moved.length ? `moved: ${moved.join(", ")}` : "",
+    seeded.length ? `new: ${seeded.join(", ")}` : "",
+    rec.hops ? `${rec.hops} piece${rec.hops === 1 ? "" : "s"} of news travelled` : "",
+    held.length ? held.join("; ") : ""
+  ].filter(Boolean);
+  if (!parts.length)
+    return "Nothing moved this step: no subplot came due and none could start.";
+  return `Elsewhere ${parts.join(" \xB7 ")}${rec.status === "telling" ? " \xB7 the model is telling it now" : ""}.`;
 }
 function elsewhereView(o) {
   const { state: st, meta } = o;
@@ -15927,7 +16185,9 @@ function elsewhereView(o) {
   const recName = new Map(o.records.map((r) => [r.id, r.name]));
   const groundName = (g) => g.startsWith("#") ? g : g === "player" ? "your words" : recName.get(g) ?? g.replace(/^(char|lore|loc|thread|fac|cons|bond|pressure):/, "").replace(/_/g, " ");
   const order = { fate: 0, running: 1, held: 2, resolved: 3, dropped: 4 };
-  const arcs = Object.values(st.arcs ?? {}).sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5) || (b.lastBeatAbs ?? b.startedAbs) - (a.lastBeatAbs ?? a.startedAbs)).slice(0, 30).map((a) => ({
+  const now = st.time ? absMinutes(st.time) : null;
+  const telling = new Set(E.order.filter((id) => E.ticks[id]?.status === "telling"));
+  const arcs = Object.values(st.arcs ?? {}).sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5) || Number(b.by === "player") - Number(a.by === "player") || (b.lastBeatAbs ?? b.startedAbs) - (a.lastBeatAbs ?? a.startedAbs)).slice(0, 30).map((a) => ({
     id: a.id,
     kind: a.kind,
     lead: a.lead,
@@ -15949,7 +16209,10 @@ function elsewhereView(o) {
     fate: a.fate ?? null,
     grounds: a.grounds.map((g) => ({ id: g, name: groundName(g) })),
     earlier: a.earlier ?? "",
-    beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "" })),
+    beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "", note: b.note ?? "", telling: b.told === "template" && !!b.tick && telling.has(b.tick) })),
+    next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "",
+    wait: a.status === "running" ? a.wait ?? "" : "",
+    pushed: !!a.push,
     reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered")).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" }))
   }));
   const ticks = E.order.map((id) => E.ticks[id]).filter(Boolean).reverse().map((t) => ({ id: t.id, at: t.at, from: o.fmt(t.from), to: o.fmt(t.to), hours: t.hours, beats: t.beats, seeds: t.seeds, hops: t.hops, arrivals: t.arrivals, status: t.status, tokens: t.tokens ?? 0, log: t.log, rejected: t.rejected ?? [], awake: t.awake }));
@@ -18055,10 +18318,16 @@ function registerBridge() {
         case "schedule":
           await scheduleWeather(m.chatId, m.spec, userId);
           return;
-        case "simulate":
-          await runElsewhere(m.chatId, userId, { force: true }).catch((err) => toast(userId, "error", `Elsewhere: ${describe(err)}`));
+        case "simulate": {
+          const rec = await runElsewhere(m.chatId, userId, { force: true }).catch((err) => {
+            toast(userId, "error", `Elsewhere: ${describe(err)}`);
+            return;
+          });
+          if (rec !== undefined)
+            toast(userId, "info", tickSummary(rec, ledgerFor(m.chatId, userId).state?.arcs ?? {}));
           pushState(m.chatId, userId);
           return;
+        }
         case "elsewhere": {
           if (m.action === "person") {
             const files = await loadChat(m.chatId, userId);
@@ -18087,9 +18356,11 @@ function registerBridge() {
             pushState(m.chatId, userId);
             return;
           }
-          const err = await elsewhereAction(m.chatId, { action: m.action, id: m.id, name: m.name, premise: m.premise, want: m.want, fear: m.fear, decision: m.decision }, userId);
-          if (err)
-            toast(userId, "warning", err);
+          const res = await elsewhereAction(m.chatId, { action: m.action, id: m.id, name: m.name, premise: m.premise, want: m.want, fear: m.fear, kind: m.kind, secrecy: m.secrecy, decision: m.decision }, userId);
+          if (res?.warn)
+            toast(userId, "warning", res.warn);
+          if (res?.info)
+            toast(userId, "info", res.info);
           onMutation(m.chatId, userId);
           return;
         }
