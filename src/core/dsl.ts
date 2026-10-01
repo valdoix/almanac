@@ -965,6 +965,18 @@ export function parseSpeech(text: string): SpokenLine[] {
   return out;
 }
 
+/**
+ * True when a reply speaks in plain quotes instead of [spk] marks: at least two
+ * unmarked lines and more of them than marked ones (a stray scare quote in a
+ * marked reply doesn't count). Once one reply drops the marks the next copies it.
+ */
+export function hasUnmarkedSpeech(text: string): boolean {
+  const lines = parseSpeech(text);
+  const marked = lines.filter((l) => l.who).length;
+  const plain = lines.length - marked;
+  return plain >= 2 && plain > marked;
+}
+
 export function parseSpeakers(text: string): { name: string; slot?: number }[] {
   text = fixSpeakerLabels(text);
   const seen = new Map<string, { name: string; slot?: number }>();

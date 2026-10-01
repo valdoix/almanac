@@ -2,7 +2,7 @@
   "name": "ALMANAC",
   "description": "A living-world roleplay preset: deep characters with private minds, autonomous NPCs who relate to each other, a knowledge firewall, real time and weather, genre contracts that change the story, a sealed persona, and a line-based ledger that drives trackers and memory. Works alone; pairs with the ALMANAC Ledger extension for verified state, chapters, recall and a deterministic almanac.",
   "coverUrl": null,
-  "presetVersion": "1.0.8",
+  "presetVersion": "1.0.9",
   "schemaVersion": 2,
   "samplerOverrides": {
     "enabled": true,
@@ -143,7 +143,7 @@
       "characterTagTrigger": [],
       "group": null,
       "categoryMode": null,
-      "content": "{{if::{{or::{{eq::{{almActive}}::yes}}::{{eq::{{almActive}}::no}}}}}}<almanac-config persona=\"{{getvar::alm_persona}}\" thoughts=\"{{default::{{var::persona_thoughts}}::0}}\" inner=\"{{default::{{var::inner_voice}}::register}}\" genres=\"{{getvar::alm_genres}}\" lead=\"{{getvar::alm_lead}}\" nsfw=\"{{getvar::alm_nsfw}}\" romance=\"{{getvar::alm_romance}}\" dialogue=\"{{default::{{var::dialogue}}::adaptive}}\" style=\"{{default::{{var::dialogue_style}}::blocks}}\" cot=\"{{default::{{var::cot_channel}}::native}}\" ledger=\"{{default::{{var::ledger}}::full}}\" trackers=\"{{default::{{getchatvar::alm_cfg_trackers}}::{{var::trackers}}}}\" view=\"{{default::{{var::tracker_view}}::drawer}}\" header=\"{{default::{{var::header}}::change}}\" theme=\"{{default::{{getchatvar::alm_cfg_theme}}::{{default::{{var::theme}}::auto}}}}\"/>{{/if}}",
+      "content": "{{if::{{or::{{eq::{{almActive}}::yes}}::{{eq::{{almActive}}::no}}}}}}<almanac-config persona=\"{{getvar::alm_persona}}\" thoughts=\"{{default::{{var::persona_thoughts}}::0}}\" inner=\"{{default::{{var::inner_voice}}::register}}\" genres=\"{{getvar::alm_genres}}\" lead=\"{{getvar::alm_lead}}\" nsfw=\"{{getvar::alm_nsfw}}\" romance=\"{{getvar::alm_romance}}\" dialogue=\"{{default::{{var::dialogue}}::adaptive}}\" style=\"{{default::{{var::dialogue_style}}::blocks}}\" color=\"{{default::{{var::dialogue_color}}::1}}\" cot=\"{{default::{{var::cot_channel}}::native}}\" ledger=\"{{default::{{var::ledger}}::full}}\" trackers=\"{{default::{{getchatvar::alm_cfg_trackers}}::{{var::trackers}}}}\" view=\"{{default::{{var::tracker_view}}::drawer}}\" header=\"{{default::{{var::header}}::change}}\" theme=\"{{default::{{getchatvar::alm_cfg_theme}}::{{default::{{var::theme}}::auto}}}}\"/>{{/if}}",
       "id": "alm-handshake",
       "name": "Ledger handshake (hidden; stripped by the extension)"
     },
@@ -5327,7 +5327,7 @@
   },
   "metadata": {
     "almanac": {
-      "version": "1.0.8",
+      "version": "1.0.9",
       "companion": "almanac_ledger",
       "design": "design/02-preset-almanac.md"
     }

@@ -13,7 +13,7 @@ import { NOT_A_PERSON } from "../core/state";
 import { offPageFacts, redact } from "../core/offpage";
 import { chronicleBits } from "../core/chronicle";
 import { seedTraitsFor } from "./traitseed";
-import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels } from "../core/dsl";
+import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels, hasUnmarkedSpeech } from "../core/dsl";
 import { debug, describe, has, host, warn, within } from "./host";
 import { ledgerFor, type ChatLedger } from "./ledger";
 import { waitForClerk } from "./clerk";
@@ -189,6 +189,10 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     SPEAKER_LABEL.lastIndex = 0;
     const who = m ? `${m[3].trim()}#${m[4]}${m[5] ? `|${m[5]}` : ""}` : "Name#N|tone";
     speechFix = `Speech format: your last reply put a label in front of speech (${who}: "…"). The page can't draw that. Write every spoken line as [spk=${who}]"Words."[/spk], with no label before it.`;
+  } else if (lastReplyMsg && lastReplyMsg.index > 0 && meta.detected.dialogueMarks !== false && hasUnmarkedSpeech(lastReplyMsg.content)) {
+    const v = Object.values(st.chars).filter((c) => !c.isUser && !c.dead && c.slot != null).sort((a, b) => b.lastSeen - a.lastSeen)[0];
+    const who = v ? `${v.name}#${v.slot}` : "Name#N";
+    speechFix = `Speech format: your last reply wrote its dialogue as bare quotes, so the page drew no voice cards. Wrap every spoken line again: [spk=${who}]"Words."[/spk] — each speaker with their own voice number.`;
   }
 
   // Nothing that names an off-page secret reaches the model: mirror cards are reworded like the recall block.

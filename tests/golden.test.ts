@@ -121,6 +121,16 @@ describe("speaker labels", () => {
     const craft = buildPreset().blocks.find((b: any) => b.content?.includes("[spk=Name#N]"));
     expect(craft?.content).toContain("never write Name#N: or Name#N|tone:");
   });
+  test("a reply that speaks in bare quotes is caught; a marked one with a scare quote isn't", async () => {
+    const { hasUnmarkedSpeech } = await import("../src/core/dsl");
+    expect(hasUnmarkedSpeech(`"Clingy stayer."\n\nShe says it into his hair.\n\n"Oh."`)).toBe(true);
+    expect(hasUnmarkedSpeech(`[spk=Buffy#1]"Hi."[/spk] The "plan" fails.\n\n[spk=Dawn#2]"Told you."[/spk]`)).toBe(false);
+    expect(hasUnmarkedSpeech(`One "quote" only.`)).toBe(false);
+    expect(hasUnmarkedSpeech(`Prose.\n<ledger>\njournal Buffy: "a" "b"\n</ledger>`)).toBe(false);
+  });
+  test("the handshake carries the Dialogue blocks switch", () => {
+    expect(JSON.stringify(buildPreset().blocks)).toContain(`color=\\"{{default::{{var::dialogue_color}}::1}}\\"`);
+  });
 });
 
 describe("emphasis inside speech", () => {

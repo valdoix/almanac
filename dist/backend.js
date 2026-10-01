@@ -2288,6 +2288,12 @@ function parseSpeech(text) {
   }
   return out;
 }
+function hasUnmarkedSpeech(text) {
+  const lines = parseSpeech(text);
+  const marked = lines.filter((l) => l.who).length;
+  const plain = lines.length - marked;
+  return plain >= 2 && plain > marked;
+}
 function parseSpeakers(text) {
   text = fixSpeakerLabels(text);
   const seen = new Map;
@@ -2396,7 +2402,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.12.2";
+var VERSION = "1.12.3";
 
 // src/core/facts.ts
 var STOP2 = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));
@@ -8445,6 +8451,10 @@ ${b.body}
     SPEAKER_LABEL.lastIndex = 0;
     const who = m ? `${m[3].trim()}#${m[4]}${m[5] ? `|${m[5]}` : ""}` : "Name#N|tone";
     speechFix = `Speech format: your last reply put a label in front of speech (${who}: "\u2026"). The page can't draw that. Write every spoken line as [spk=${who}]"Words."[/spk], with no label before it.`;
+  } else if (lastReplyMsg && lastReplyMsg.index > 0 && meta.detected.dialogueMarks !== false && hasUnmarkedSpeech(lastReplyMsg.content)) {
+    const v = Object.values(st.chars).filter((c) => !c.isUser && !c.dead && c.slot != null).sort((a, b) => b.lastSeen - a.lastSeen)[0];
+    const who = v ? `${v.name}#${v.slot}` : "Name#N";
+    speechFix = `Speech format: your last reply wrote its dialogue as bare quotes, so the page drew no voice cards. Wrap every spoken line again: [spk=${who}]"Words."[/spk] \u2014 each speaker with their own voice number.`;
   }
   const off = offPageFacts(st, settings.secretsOffPage !== false);
   if (off.length)
@@ -9120,6 +9130,7 @@ function parseConfig(attrs) {
     romance: get("romance"),
     dialogue: get("dialogue"),
     dialogueStyle: get("style"),
+    dialogueMarks: get("color") === undefined ? undefined : get("color") !== "0",
     cot: get("cot"),
     ledger: get("ledger"),
     trackers: list(get("trackers")),

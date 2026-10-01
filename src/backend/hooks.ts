@@ -133,6 +133,7 @@ function parseConfig(attrs: string): Detected {
     romance: get("romance"),
     dialogue: get("dialogue"),
     dialogueStyle: get("style"),
+    dialogueMarks: get("color") === undefined ? undefined : get("color") !== "0",
     cot: get("cot"),
     ledger: get("ledger"),
     trackers: list(get("trackers")),

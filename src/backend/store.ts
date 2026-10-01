@@ -36,6 +36,8 @@ export interface Detected {
   theme?: string;
   ledger?: string;
   dialogueStyle?: string;
+  /** The preset's Dialogue blocks switch: false when speech is written without [spk] marks. */
+  dialogueMarks?: boolean;
   at?: number;
 }
 
