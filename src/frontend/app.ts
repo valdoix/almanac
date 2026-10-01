@@ -513,9 +513,11 @@ ${w.canon.length ? `<h4>Minted canon</h4><ul class="alm-list">${w.canon.map((c: 
     const RES: Record<string, string> = { win: "win", cost: "cost", loss: "loss" };
     const ring = (n: number, of: number, c: string) => `<div class="alm-clock__face"><div class="alm-ring" style="--n:${n};--of:${Math.max(1, of)};--rc:${c}"></div><b>${n}/${of}</b></div>`;
     const modeBtn = (m: string, lab: string) => `<button class="btn${(x.chatMode ?? "") === m ? " primary" : ""}" data-act="ewMode" data-id="${m}">${lab}</button>`;
-    const head = `<div class="card flat"><div class="row"><span class="grow">The world off the page: <b>${e(x.mode)}</b>${x.chatMode ? " (this chat)" : " (from Settings)"}${x.town ? ` · ${e(x.town)}` : ""}</span>
-<button class="btn${director ? " primary" : ""}" data-act="ewView" data-id="director" title="Everything: subplots, dice, grounds">Director</button><button class="btn${director ? "" : " primary"}" data-act="ewView" data-id="surprise" title="Only what has reached your story">Surprise me</button></div>
-<div class="row" style="margin-top:6px"><small class="muted grow">This chat:</small>${modeBtn("", "as Settings")}${modeBtn("off", "off")}${modeBtn("quiet", "quiet")}${modeBtn("living", "living")}${modeBtn("restless", "restless")}</div>
+    const head = `<div class="card flat"><div>The world off the page: <b>${e(x.mode)}</b>${x.chatMode ? " (this chat)" : " (from Settings)"}${x.town ? ` · ${e(x.town)}` : ""}</div>
+<div class="muted" style="margin-top:10px"><small>Show</small></div>
+<div class="row" style="margin-top:4px"><button class="btn${director ? " primary" : ""}" data-act="ewView" data-id="director" title="Everything: subplots, dice, grounds">Director</button><button class="btn${director ? "" : " primary"}" data-act="ewView" data-id="surprise" title="Only what has reached your story">Surprise me</button></div>
+<div class="muted" style="margin-top:10px"><small>In this chat</small></div>
+<div class="row" style="margin-top:4px">${modeBtn("", "as Settings")}${modeBtn("off", "off")}${modeBtn("quiet", "quiet")}${modeBtn("living", "living")}${modeBtn("restless", "restless")}</div>
 ${x.ticks[0] ? `<p class="muted"><small>Last step: ${e(x.ticks[0].from)} → ${e(x.ticks[0].to)} (${x.ticks[0].hours} h) · ${x.ticks[0].beats} beat${x.ticks[0].beats === 1 ? "" : "s"} · ${x.ticks[0].seeds} new · ${x.ticks[0].hops} news · ${e(x.ticks[0].status)}${x.ticks[0].tokens ? ` · ${Math.round(x.ticks[0].tokens / 100) / 10}K tokens` : ""}</small></p>` : `<p class="muted"><small>Nothing has moved yet: the world steps forward when story time moves ${x.step} minutes or more.</small></p>`}
 <div class="row"><button class="btn" data-act="simulate">⏭ Move the world a step now</button></div></div>`;
     if (!director) {

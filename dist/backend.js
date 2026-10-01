@@ -9714,6 +9714,17 @@ function namesIn(text, r) {
 function isLight(a) {
   return !a.locked && a.status === "running" && a.grounds.length === 1 && /^char:/.test(a.grounds[0]) && a.clock.cur <= Math.ceil(a.clock.max / 2);
 }
+function asWant(text, fallback) {
+  const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0];
+  if (!t)
+    return fallback;
+  const bare = t.replace(/^to\s+/i, "");
+  return VERB.test(bare) ? `to ${bare.charAt(0).toLowerCase()}${bare.slice(1)}` : `to see ${bare}`;
+}
+function asFear(text, fallback) {
+  const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0].replace(/^(?:that|the fear that|fears? that)\s+/i, "");
+  return t ? `${t.charAt(0).toLowerCase()}${t.slice(1)}` : fallback;
+}
 function reasonToReturn(a, r, st) {
   for (const k of a.knows) {
     const f = st.facts?.[k.key];
@@ -9811,8 +9822,8 @@ function seedCandidates(ctx) {
       lead,
       cast: who.filter((a) => a !== lead).slice(0, 3),
       premise: clip(`${t.title}: ${t.latest ?? ""}`.replace(/:\s*$/, ""), 200),
-      want: lead.drives.want ? `to ${lead.drives.want.replace(/^to\s+/i, "")}` : `to settle "${t.title}"`,
-      fear: lead.drives.fear ?? spec(kind).fear,
+      want: lead.drives.want ? asWant(lead.drives.want, "") : `to settle "${t.title}"`,
+      fear: asFear(lead.drives.fear, "") || spec(kind).fear,
       grounds: [t.id],
       secrecy: spec(kind).secrecy,
       weight: 2.5,
@@ -9929,8 +9940,8 @@ function seedCandidates(ctx) {
       lead,
       cast: [...reason && !cast.includes(reason.about) ? [reason.about] : [], ...cast].slice(0, 3),
       premise: clip(text, 220),
-      want: kind === "return" && reason ? `to see ${first(reason.about.name)} with their own eyes` : lead.drives.want ? `to ${lead.drives.want.replace(/^to\s+/i, "")}` : sp.want,
-      fear: lead.drives.fear ?? sp.fear,
+      want: kind === "return" && reason ? `to see ${first(reason.about.name)} with their own eyes` : lead.drives.want ? asWant(lead.drives.want, "") : sp.want,
+      fear: asFear(lead.drives.fear, "") || sp.fear,
       grounds: [rec.id, ...reason ? [`#${reason.key}`] : []],
       secrecy: sp.secrecy,
       weight: ctx.canonGravity === "strong" ? 3 : 1.5,
@@ -9966,9 +9977,9 @@ function seedCandidates(ctx) {
       kind,
       lead: a,
       cast: named,
-      premise: clip(`${a.name}: ${a.drives.want ? `wants ${a.drives.want.replace(/^to\s+/i, "to ")}` : a.text.replace(new RegExp(`^${a.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(is|was)\\s+`), "")}`, 200),
-      want: a.drives.want ? `to ${a.drives.want.replace(/^to\s+/i, "")}` : sp.want,
-      fear: a.drives.fear ?? sp.fear,
+      premise: clip(`${a.name}: ${a.drives.want ? `wants ${asWant(a.drives.want, "")}` : a.text.replace(new RegExp(`^${a.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(is|was)\\s+`), "")}`, 200),
+      want: asWant(a.drives.want, sp.want),
+      fear: asFear(a.drives.fear, sp.fear),
       grounds,
       secrecy: sp.secrecy,
       weight: 1,
@@ -10083,13 +10094,14 @@ function beatLine(id, b) {
   const f = [`roll: ${b.roll[0]}+${b.roll[1]}${mod}`, `at: ${b.at}`, b.twist ? `twist: ${cleanVal(b.twist)}` : "", b.place ? `place: ${cleanVal(b.place)}` : "", `tick: ${b.tick}`, `next: ${b.next}`, `told: ${b.told}`, `text: ${cleanVal(b.text)}`].filter(Boolean);
   return `arc beat #${id}: ${b.result} | ${f.join(" | ")}`;
 }
-var NAME_RE, low2 = (s) => s.toLowerCase(), clip = (s, n) => s.length > n ? `${s.slice(0, n - 1).replace(/\s+\S*$/, "")}\u2026` : s, first = (n) => n.split(/\s+/)[0], cleanVal = (s) => (s ?? "").replace(/\s*\|\s*/g, " / ").replace(/\s*\n+\s*/g, " ").trim();
+var NAME_RE, low2 = (s) => s.toLowerCase(), clip = (s, n) => s.length > n ? `${s.slice(0, n - 1).replace(/\s+\S*$/, "")}\u2026` : s, first = (n) => n.split(/\s+/)[0], VERB, cleanVal = (s) => (s ?? "").replace(/\s*\|\s*/g, " / ").replace(/\s*\n+\s*/g, " ").trim();
 var init_arcs = __esm(() => {
   init_util();
   init_grammar();
   init_roster();
   init_news();
   NAME_RE = /[A-Z][\w'\u2019-]+(?:\s+(?:of\s+)?[A-Z][\w'\u2019-]+)*/g;
+  VERB = /^(be|get|find|keep|protect|stay|win|make|help|see|know|learn|stop|save|leave|go|return|prove|earn|marry|take|have|become|avoid|escape|fix|end|mend|settle|reach|reunite|bring|destroy|kill|defeat|hide|claim|seize|rule|serve|free|heal|understand|undo|break|build|finish|catch|expose|warn|confront|reclaim|regain|restore|redeem|repay|survive|live|do|be)\b/i;
 });
 
 // src/core/elsewhere/storyteller.ts
