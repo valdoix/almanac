@@ -11,7 +11,7 @@ import { KeyIndex, cleanKeys, DEFAULT_STOP } from "../src/core/keys";
 import { recall } from "../src/core/recall";
 import { buildLedgerNote } from "../src/core/note";
 import { isOffPage, offPageFacts, redact } from "../src/core/offpage";
-import { checkReply } from "../src/core/audit";
+import { AGREES, checkReply, passageIndex, saidBefore, supported, supportOf } from "../src/core/audit";
 import { playerClock, playerOps } from "../src/core/player";
 import { traitsFromText, traitsStated } from "../src/core/traits";
 import { buildCalendar, dayOfDate, dateFor } from "../src/core/engines/calendar";
@@ -288,5 +288,29 @@ describe("wounds that were treated say so", () => {
   test("a part that is someone else's is not where the wound is", () => {
     expect(injuriesIn("bruises fading under his mouth")[0].where).toBe("bruise");
     expect(injuriesIn("hands cleaned (wounded but clean)")[0]).toMatchObject({ where: "hands", treated: true });
+  });
+});
+
+describe("the reply check looks a claim up before calling it invented", () => {
+  const index = passageIndex([
+    { from: "persona", text: "Spanish (fluent, learned from his nanny Maria). - **Maria** left because she died. - **Amaya**, his best friend and first love, left the relationship at twenty when she came out as a lesbian." },
+    { from: "#127", text: `"I'm not going anywhere, Buffy," he says, smiling. "In fact, historically, it's been people leaving me and me staying. I'm a stayer. So."` },
+    { from: "#220", text: "She is lying in a blue room in pink pajama pants with the top on the floor. The rain keeps on." },
+  ]);
+  test("a line said fifty turns back, whatever the framing around it", () => {
+    expect(saidBefore("He told her this on the first night — historically, it's been people leaving me and me staying", index)?.from).toBe("#127");
+  });
+  test("a detail the story wrote, and the persona's history", () => {
+    expect(supported(supportOf("pink pajamas", index)[0])).toBe(true);
+    expect(supported(supportOf("Maria died", index)[0])).toBe(true);
+    expect(supported(supportOf("His first love came out and left", index)[0])).toBe(true);
+  });
+  test("what nobody said stays flagged", () => {
+    expect(supported(supportOf("the bruise on his cheekbone", index)[0])).toBe(false);
+    expect(saidBefore("the bruise on her ribs from the coffin lid", index)).toBeNull();
+  });
+  test("a 'flag' that admits the record agrees is dropped", () => {
+    expect(AGREES.test("Consistent with the record — Ruth is on Gabriel's chest. No contradiction.")).toBe(true);
+    expect(AGREES.test("the record describes Buffy's clothing as a sage shirt and jeans")).toBe(false);
   });
 });

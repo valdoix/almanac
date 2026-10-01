@@ -2,7 +2,7 @@
 // finds shows on the reply's drawer, in the Now widget and on the Recall page, and the next
 // turn's note tells the model, so a slip isn't carried forward.
 
-import { checkPrompt, checkRecord, checkReply, type CheckIssue } from "../core/audit";
+import { AGREES, checkPrompt, checkRecord, checkReply, passageIndex, saidBefore, supported, supportOf, verifyPrompt, type CheckIssue, type Passage } from "../core/audit";
 import { sideKey } from "../core/branch";
 import { storySoFar } from "../core/chronicle";
 import { offPageFacts, redact } from "../core/offpage";
@@ -40,21 +40,57 @@ export async function runCheck(chatId: string, msgId: string, userId?: string): 
         reply: m.content, parsed: L.runtime.parse(m.content), before, after: res.state, events: res.events.filter((e) => e.msgIndex === m.index),
         offPage, player, userName: L.names.user, seed: seedTraitsFor(L, meta), visiblePlan: meta.detected.cot === "visible",
       });
-      return { m, before, offPage, issues, recent: L.path.slice(Math.max(0, i - 10), i).map((x) => `${x.isUser ? L.names.user : x.name || L.names.char}: ${plainProse(x.content)}`).join("\n\n") };
+      // Everything said before this reply, for checking the model's claims against (it only sees a summary).
+      const sources: Passage[] = [
+        ...(L.names.personaText ? [{ from: "persona", text: L.names.personaText }] : []),
+        ...(L.names.charText ? [{ from: "card", text: L.names.charText }] : []),
+        ...L.records.filter((r) => r.provenance.source === "lore").map((r) => ({ from: `lore: ${r.name}`, text: [r.summary, ...Object.values(r.body).filter((v) => typeof v === "string")].join(". ") })),
+        ...L.path.slice(0, i).map((x) => ({ from: `#${x.index}`, text: plainProse(x.content) })),
+      ];
+      return { m, before, offPage, issues, sources, recent: L.path.slice(Math.max(0, i - 10), i).map((x) => `${x.isUser ? L.names.user : x.name || L.names.char}: ${plainProse(x.content)}`).join("\n\n") };
     });
     if (!found) return null;
-    const { m, before, offPage, issues, recent } = found;
+    const { m, before, offPage, issues, sources, recent } = found;
     let model = false;
     if (settings.replyCheck === "model") {
       try {
         const summaries = storySoFar(files.chronicle).map((u) => redact(`${u.title}: ${u.text}`, offPage));
-        const record = `${checkRecord(before, summaries, L.names.user, 7000)}\n\nRecent turns:\n${recent.slice(-6000)}`;
+        const sheets = redact([L.names.personaText && `${L.names.user} (the player's persona):\n${L.names.personaText.slice(0, 2500)}`, L.names.charText && `${L.names.char} (the card):\n${L.names.charText.slice(0, 2500)}`].filter(Boolean).join("\n\n"), offPage);
+        const record = `${sheets ? `${sheets}\n\n` : ""}${checkRecord(before, summaries, L.names.user, 7000)}\n\nRecent turns:\n${recent.slice(-8000)}`;
         const p = checkPrompt({ record, reply: plainProse(m.content).slice(0, 12000), userName: L.names.user });
-        const text = await quiet([sys(p.system), usr(p.user)], { userId, reasoningOff: true, timeoutMs: 90_000, connectionId: settings.replyCheckConnection || settings.summarizerConnection || undefined, label: "reply check" });
+        const conn = settings.replyCheckConnection || settings.summarizerConnection || undefined;
+        const text = await quiet([sys(p.system), usr(p.user)], { userId, reasoningOff: true, timeoutMs: 90_000, connectionId: conn, label: "reply check" });
         const res = extractJson<{ issues?: { quote?: string; why?: string }[] }>(text);
+        // The model reads a summary, so it calls things invented that the story said fifty turns
+        // ago or the persona states. Look each claim up in everything said before; what's found goes.
+        const index = passageIndex(sources);
+        const doubt: { quote: string; why: string; passages: Passage[]; ok?: boolean }[] = [];
         for (const x of res?.issues ?? []) {
           if (!x?.quote || !x.why) continue;
-          issues.push({ kind: "unsupported", level: "warn", text: `"${String(x.quote).slice(0, 80)}": ${String(x.why).slice(0, 160)}`, quote: String(x.quote).slice(0, 120) });
+          const quote = String(x.quote), why = String(x.why);
+          if (AGREES.test(why)) continue;
+          const near = supportOf(quote, index, 3);
+          const said = saidBefore(quote, index);
+          if (said || supported(near[0])) {
+            debug(`check ${chatId}/${m.index}: "${quote.slice(0, 60)}" is in ${said?.from ?? near[0].from}`);
+            continue;
+          }
+          doubt.push({ quote, why, passages: near.filter((s) => s.cover >= 0.3).map((s) => ({ from: s.from, text: redact(s.text, offPage) })) });
+        }
+        // Close but not plain (a paraphrase, a retelling): ask once more, with the passages in hand.
+        const ask = doubt.filter((d) => d.passages.length);
+        if (ask.length) {
+          try {
+            const v = verifyPrompt(ask);
+            const ok = extractJson<{ supported?: unknown[] }>(await quiet([sys(v.system), usr(v.user)], { userId, reasoningOff: true, timeoutMs: 60_000, connectionId: conn, label: "reply check (verify)" }))?.supported ?? [];
+            ask.forEach((d, j) => (d.ok = ok[j] === true));
+          } catch (err) {
+            warn(`reply check (verify): ${describe(err)}`);
+          }
+        }
+        for (const d of doubt) {
+          if (d.ok) continue;
+          issues.push({ kind: "unsupported", level: "warn", text: `"${d.quote.slice(0, 80)}": ${d.why.slice(0, 160)}`, quote: d.quote.slice(0, 120) });
         }
         model = true;
       } catch (err) {
