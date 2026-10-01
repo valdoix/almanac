@@ -6,8 +6,9 @@ import { absMinutes, estTokens, fmtSpan, fmtTime, hhmm, partyName } from "../cor
 import { coverageMap, finestUnits, storySoFar } from "../core/chronicle";
 import { factKind, factsInPlay, isHere, isKnower, lackOf, lackText, stanceVerb, storyStamp } from "../core/facts";
 import type { WorldState } from "../core/types";
+import type { ConnectionProfileDTO } from "lumiverse-spindle-types";
 import { replyChanges, type ChangeRow } from "../core/changes";
-import { debounce, describe, host, warn } from "./host";
+import { debounce, describe, host, warn, within } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings, onProblem } from "./store";
 import { corrections } from "./ingest";
@@ -70,6 +71,8 @@ export interface UIView {
   corrections: { key: string; id: string; at: number; index: number; lines: string[] }[];
   /** Turns the Almanac has hidden under summaries. */
   hiddenTurns: number;
+  /** The user's Lumiverse connection profiles, for the connection pickers in Settings (null when they couldn't be read). */
+  connections: { id: string; name: string; model: string; isDefault: boolean }[] | null;
 }
 
 const AUTO_THEME: Record<string, string> = {
@@ -87,8 +90,31 @@ export function themeFor(settingsTheme: string, detectedTheme?: string, lead?: s
   return (lead && AUTO_THEME[lead.toLowerCase()]) || "almanac";
 }
 
+type Conn = NonNullable<UIView["connections"]>[number];
+const connCache = new Map<string, { at: number; list: Conn[] }>();
+
+/** The user's connection profiles, cached for a minute; a failed read is never cached. */
+async function connectionsFor(userId?: string): Promise<Conn[] | null> {
+  const key = userId ?? "";
+  const hit = connCache.get(key);
+  if (hit && Date.now() - hit.at < 60_000) return hit.list;
+  try {
+    if (!host.connections?.list) return null;
+    const raw = await within<ConnectionProfileDTO[] | null>(host.connections.list(userId), 3000, null, "connections");
+    if (!raw) return hit?.list ?? null;
+    const list = raw.map((c) => ({ id: c.id, name: c.name || c.id, model: c.model || "", isDefault: !!c.is_default }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    connCache.set(key, { at: Date.now(), list });
+    return list;
+  } catch (err) {
+    warn("connections list failed:", describe(err));
+    return hit?.list ?? null;
+  }
+}
+
 export async function buildView(chatId: string, userId?: string): Promise<UIView | null> {
   const files = await loadChat(chatId, userId);
+  const connections = await connectionsFor(userId);
   const settings = await loadSettings(userId);
   const meta = files.meta;
   const L = ledgerFor(chatId, userId);
@@ -228,6 +254,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     problems: (meta.problems ?? []).filter((p) => Date.now() - p.at < 3 * 86_400_000),
     corrections: corrections(files.side),
     hiddenTurns: files.chronicle.hidden.length,
+    connections,
   };
 }
 

@@ -2407,7 +2407,7 @@ function rewriteKnowledgeLines(text, filed) {
 }
 
 // src/core/version.ts
-var VERSION = "1.13.0";
+var VERSION = "1.13.1";
 
 // src/core/facts.ts
 var STOP2 = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));
@@ -9973,8 +9973,29 @@ function themeFor(settingsTheme, detectedTheme, lead, configTheme) {
     return t;
   return lead && AUTO_THEME[lead.toLowerCase()] || "almanac";
 }
+var connCache = new Map;
+async function connectionsFor(userId) {
+  const key = userId ?? "";
+  const hit = connCache.get(key);
+  if (hit && Date.now() - hit.at < 60000)
+    return hit.list;
+  try {
+    if (!host.connections?.list)
+      return null;
+    const raw = await within(host.connections.list(userId), 3000, null, "connections");
+    if (!raw)
+      return hit?.list ?? null;
+    const list = raw.map((c) => ({ id: c.id, name: c.name || c.id, model: c.model || "", isDefault: !!c.is_default })).sort((a, b) => a.name.localeCompare(b.name));
+    connCache.set(key, { at: Date.now(), list });
+    return list;
+  } catch (err) {
+    warn("connections list failed:", describe(err));
+    return hit?.list ?? null;
+  }
+}
 async function buildView(chatId, userId) {
   const files = await loadChat(chatId, userId);
+  const connections = await connectionsFor(userId);
   const settings = await loadSettings(userId);
   const meta = files.meta;
   const L = ledgerFor(chatId, userId);
@@ -10177,7 +10198,8 @@ async function buildView(chatId, userId) {
     ].slice(0, 30),
     problems: (meta.problems ?? []).filter((p) => Date.now() - p.at < 3 * 86400000),
     corrections: corrections(files.side),
-    hiddenTurns: files.chronicle.hidden.length
+    hiddenTurns: files.chronicle.hidden.length,
+    connections
   };
 }
 function bondToUser(st, id) {

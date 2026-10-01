@@ -4,6 +4,10 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.13.1 (2026-10-01)
+
+- Settings: the Summariser, Clerk, Check, Simulator and Planner connections are picked by name from your Lumiverse connections (name, model, default marked) instead of typed as ids Lumiverse never shows. Saved ids carry over; one whose connection is gone shows as missing. If the list can't be read, the id box comes back.
+
 ## 1.13.0 — preset 1.0.11 (2026-10-01)
 
 Release audit fixes ([design/08](design/08-release-audit.md)).
