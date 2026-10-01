@@ -1,2216 +1,287 @@
-// src/core/util.ts
-function escapeHtml(s) {
-  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-function initials(name) {
-  const parts = name.replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/);
-  if (!parts[0])
-    return "?";
-  return (parts[0][0] ?? "?").toUpperCase();
-}
-function kpNote(note) {
-  const short = note.length > 70 ? `${note.slice(0, 67).trimEnd()}…` : note;
-  return `<small class="alm-kp__n" title="${escapeHtml(note)}">${escapeHtml(short)}</small>`;
-}
+var Da=globalThis.Bun?.hash;function n(e){return String(e??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}function q(e){let t=e.replace(/[^\p{L}\p{N} ]/gu," ").trim().split(/\s+/);if(!t[0])return"?";return(t[0][0]??"?").toUpperCase()}function qe(e){let t=e.length>70?`${e.slice(0,67).trimEnd()}…`:e;return`<small class="alm-kp__n" title="${n(e)}">${n(t)}</small>`}var J="1.13.0",$e="1.0.11";function Ze(e,t){let a=e.split(".").map((s)=>parseInt(s,10)||0),r=t.split(".").map((s)=>parseInt(s,10)||0);for(let s=0;s<Math.max(a.length,r.length);s++)if((a[s]??0)!==(r[s]??0))return(a[s]??0)<(r[s]??0);return!1}var Ye={trust:"#3f9a62",affection:"#e05a8a",respect:"#4f7ab0",familiarity:"#8a8a8a",comfort:"#6bb3a0",attraction:"#ff6fa8",fear:"#7b5bd6",resentment:"#cc4a4a",obligation:"#c58a22",rivalry:"#e07b30"};function Tt(e,t){if(t===1/0)return e.axes;let a={};for(let r of e.history)if(r.msgIndex<=t)a[r.axis]=r.to;return a}function It(e,t,a=640,r=360){let s={};e.forEach((i,o)=>{let l=o/Math.max(1,e.length)*Math.PI*2;s[i.id]={x:a/2+Math.cos(l)*a*0.3,y:r/2+Math.sin(l)*r*0.3,vx:0,vy:0}});for(let i=0;i<260;i++){for(let o of e)for(let l of e){if(o.id>=l.id)continue;let d=s[o.id],c=s[l.id],u=d.x-c.x,m=d.y-c.y,g=Math.max(80,u*u+m*m),y=26000/g,S=Math.sqrt(g);u/=S,m/=S,d.vx+=u*y,d.vy+=m*y,c.vx-=u*y,c.vy-=m*y}for(let o of t){let l=s[o.from],d=s[o.to];if(!l||!d)continue;let c=d.x-l.x,u=d.y-l.y,m=Math.max(1,Math.sqrt(c*c+u*u)),g=(m-190)*0.012;l.vx+=c/m*g,l.vy+=u/m*g,d.vx-=c/m*g,d.vy-=u/m*g}for(let o of e){let l=s[o.id];l.vx+=(a/2-l.x)*0.004,l.vy+=(r/2-l.y)*0.006,l.x+=Math.max(-12,Math.min(12,l.vx)),l.y+=Math.max(-12,Math.min(12,l.vy)),l.vx*=0.55,l.vy*=0.55,l.x=Math.max(44,Math.min(a-44,l.x)),l.y=Math.max(40,Math.min(r-46,l.y))}}return Object.fromEntries(Object.entries(s).map(([i,o])=>[i,{x:o.x,y:o.y}]))}function Ve(e,t,a){let i=t.map((y)=>({...y,cur:Tt(y,a.asOf)})).filter((y)=>Object.keys(y.cur).length).filter((y)=>!a.npcOnly||y.from!=="user"&&y.to!=="user").filter((y)=>!a.filterAxis||y.cur[a.filterAxis]!=null),o=new Set(i.flatMap((y)=>[y.from,y.to])),l=e.filter((y)=>o.has(y.id)||y.spot);if(!l.length)return`<div class="empty">No relationships recorded${a.asOf!==1/0?" yet at this point":""}.</div>`;let d=It(l,i,640,360),c=['<marker id="almar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>'],u=[],m=[];i.forEach((y,S)=>{let _=d[y.from],L=d[y.to];if(!_||!L)return;let C=a.filterAxis??Object.entries(y.cur).sort((B,G)=>Math.abs(G[1])-Math.abs(B[1]))[0]?.[0]??"trust",x=Math.abs(y.cur[C]??0),v=Ye[C]??"#888",b=L.x-_.x,E=L.y-_.y,T=Math.max(1,Math.hypot(b,E)),j=-E/T,f=b/T,A=26,I=_.x+b/T*30,K=_.y+E/T*30,N=L.x-b/T*32,Q=L.y-E/T*32,Z=(_.x+L.x)/2+j*A,ee=(_.y+L.y)/2+f*A,me=`M${I.toFixed(1)},${K.toFixed(1)} Q${Z.toFixed(1)},${ee.toFixed(1)} ${N.toFixed(1)},${Q.toFixed(1)}`,ue=(y.cur[C]??0)<0;if(u.push(`<path d="${me}" stroke="${v}" stroke-width="${(1.4+x*0.55).toFixed(1)}" fill="none" stroke-linecap="round" marker-end="url(#almar)"${ue?' stroke-dasharray="6 5"':""} opacity=".9"><title>${n(y.from)} → ${n(y.to)}</title></path>`),y.changedNow&&a.asOf===1/0)u.push(`<path class="spark" d="${me}" fill="none"/>`);let he=Object.entries(y.cur).filter(([,B])=>B).slice(0,2).map(([B,G])=>`${B} ${G>0?"+":""}${G}`).join(" · ")+(y.label?` · ${y.label}`:"");m.push(`<text class="lbl" x="${Z.toFixed(0)}" y="${(ee+(S%2?12:-6)).toFixed(0)}" text-anchor="middle">${n(he.slice(0,42))}</text>`)});let g=l.map((y,S)=>{let _=d[y.id];return c.push(`<radialGradient id="almn${S}" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="${y.color}" stop-opacity=".55"/><stop offset=".6" stop-color="${y.color}"/></radialGradient>`),`${y.spot?`<circle cx="${_.x.toFixed(0)}" cy="${_.y.toFixed(0)}" r="34" fill="${y.color}" opacity=".16"/>`:""}<circle cx="${_.x.toFixed(0)}" cy="${_.y.toFixed(0)}" r="24" fill="url(#almn${S})" stroke="var(--alm-panel)" stroke-width="3"/><text class="ini" x="${_.x.toFixed(0)}" y="${(_.y+5).toFixed(0)}" text-anchor="middle">${n(q(y.name))}</text><text class="nm" x="${_.x.toFixed(0)}" y="${(_.y+42).toFixed(0)}" text-anchor="middle">${n(y.name)}</text>`});return`<svg class="graph" viewBox="0 0 640 360" role="img" aria-label="Relationship graph"><defs>${c.join("")}</defs><g>${u.join("")}</g><g>${m.join("")}</g><g>${g.join("")}</g></svg>
+<div class="row" style="margin-top:6px">${Object.entries(Ye).map(([y,S])=>`<span class="pill"><i style="display:inline-block;width:10px;height:3px;background:${S}"></i>${y}</span>`).join("")}<span class="pill">┄ negative</span><span class="pill">✦ changed now</span></div>`}async function _e(e,t){try{if(typeof e.ui?.showConfirm==="function")return!!(await e.ui.showConfirm({title:t.title,message:t.message,confirmLabel:t.confirmLabel,cancelLabel:t.cancelLabel,variant:t.danger?"danger":"warning"}))?.confirmed}catch{}return typeof window<"u"&&typeof window.confirm==="function"?window.confirm(`${t.title}
 
-// src/frontend/graph.ts
-var DOMINANT_COLORS = {
-  trust: "#3f9a62",
-  affection: "#e05a8a",
-  respect: "#4f7ab0",
-  familiarity: "#8a8a8a",
-  comfort: "#6bb3a0",
-  attraction: "#ff6fa8",
-  fear: "#7b5bd6",
-  resentment: "#cc4a4a",
-  obligation: "#c58a22",
-  rivalry: "#e07b30"
-};
-function edgeAsOf(edge, msgIndex) {
-  if (msgIndex === Infinity)
-    return edge.axes;
-  const out = {};
-  for (const h of edge.history)
-    if (h.msgIndex <= msgIndex)
-      out[h.axis] = h.to;
-  return out;
-}
-function layout(nodes, edges, w = 640, h = 360) {
-  const pos = {};
-  nodes.forEach((n, i) => {
-    const a = i / Math.max(1, nodes.length) * Math.PI * 2;
-    pos[n.id] = { x: w / 2 + Math.cos(a) * w * 0.3, y: h / 2 + Math.sin(a) * h * 0.3, vx: 0, vy: 0 };
-  });
-  for (let it = 0;it < 260; it++) {
-    for (const a of nodes)
-      for (const b of nodes) {
-        if (a.id >= b.id)
-          continue;
-        const pa = pos[a.id], pb = pos[b.id];
-        let dx = pa.x - pb.x, dy = pa.y - pb.y;
-        const d2 = Math.max(80, dx * dx + dy * dy);
-        const f = 26000 / d2;
-        const d = Math.sqrt(d2);
-        dx /= d;
-        dy /= d;
-        pa.vx += dx * f;
-        pa.vy += dy * f;
-        pb.vx -= dx * f;
-        pb.vy -= dy * f;
-      }
-    for (const ed of edges) {
-      const pa = pos[ed.from], pb = pos[ed.to];
-      if (!pa || !pb)
-        continue;
-      const dx = pb.x - pa.x, dy = pb.y - pa.y;
-      const d = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-      const f = (d - 190) * 0.012;
-      pa.vx += dx / d * f;
-      pa.vy += dy / d * f;
-      pb.vx -= dx / d * f;
-      pb.vy -= dy / d * f;
-    }
-    for (const n of nodes) {
-      const p = pos[n.id];
-      p.vx += (w / 2 - p.x) * 0.004;
-      p.vy += (h / 2 - p.y) * 0.006;
-      p.x += Math.max(-12, Math.min(12, p.vx));
-      p.y += Math.max(-12, Math.min(12, p.vy));
-      p.vx *= 0.55;
-      p.vy *= 0.55;
-      p.x = Math.max(44, Math.min(w - 44, p.x));
-      p.y = Math.max(40, Math.min(h - 46, p.y));
-    }
-  }
-  return Object.fromEntries(Object.entries(pos).map(([k, v]) => [k, { x: v.x, y: v.y }]));
-}
-function renderGraph(nodes, edges, opts) {
-  const w = 640, h = 360;
-  const es = edges.map((ed) => ({ ...ed, cur: edgeAsOf(ed, opts.asOf) })).filter((ed) => Object.keys(ed.cur).length).filter((ed) => !opts.npcOnly || ed.from !== "user" && ed.to !== "user").filter((ed) => !opts.filterAxis || ed.cur[opts.filterAxis] != null);
-  const used = new Set(es.flatMap((x) => [x.from, x.to]));
-  const ns = nodes.filter((n) => used.has(n.id) || n.spot);
-  if (!ns.length)
-    return `<div class="empty">No relationships recorded${opts.asOf !== Infinity ? " yet at this point" : ""}.</div>`;
-  const pos = layout(ns, es, w, h);
-  const defs = [`<marker id="almar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>`];
-  const paths = [];
-  const labels = [];
-  es.forEach((ed, i) => {
-    const a = pos[ed.from], b = pos[ed.to];
-    if (!a || !b)
-      return;
-    const axis = opts.filterAxis ?? Object.entries(ed.cur).sort((x, y) => Math.abs(y[1]) - Math.abs(x[1]))[0]?.[0] ?? "trust";
-    const mag = Math.abs(ed.cur[axis] ?? 0);
-    const color = DOMINANT_COLORS[axis] ?? "#888";
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const len = Math.max(1, Math.hypot(dx, dy));
-    const nx = -dy / len, ny = dx / len;
-    const bend = 26;
-    const sx = a.x + dx / len * 30, sy = a.y + dy / len * 30;
-    const ex = b.x - dx / len * 32, ey = b.y - dy / len * 32;
-    const cx = (a.x + b.x) / 2 + nx * bend, cy = (a.y + b.y) / 2 + ny * bend;
-    const d = `M${sx.toFixed(1)},${sy.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`;
-    const neg = (ed.cur[axis] ?? 0) < 0;
-    paths.push(`<path d="${d}" stroke="${color}" stroke-width="${(1.4 + mag * 0.55).toFixed(1)}" fill="none" stroke-linecap="round" marker-end="url(#almar)"${neg ? ' stroke-dasharray="6 5"' : ""} opacity=".9"><title>${escapeHtml(ed.from)} → ${escapeHtml(ed.to)}</title></path>`);
-    if (ed.changedNow && opts.asOf === Infinity)
-      paths.push(`<path class="spark" d="${d}" fill="none"/>`);
-    const txt = Object.entries(ed.cur).filter(([, v]) => v).slice(0, 2).map(([k, v]) => `${k} ${v > 0 ? "+" : ""}${v}`).join(" · ") + (ed.label ? ` · ${ed.label}` : "");
-    labels.push(`<text class="lbl" x="${cx.toFixed(0)}" y="${(cy + (i % 2 ? 12 : -6)).toFixed(0)}" text-anchor="middle">${escapeHtml(txt.slice(0, 42))}</text>`);
-  });
-  const circles = ns.map((n, i) => {
-    const p = pos[n.id];
-    defs.push(`<radialGradient id="almn${i}" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="${n.color}" stop-opacity=".55"/><stop offset=".6" stop-color="${n.color}"/></radialGradient>`);
-    return `${n.spot ? `<circle cx="${p.x.toFixed(0)}" cy="${p.y.toFixed(0)}" r="34" fill="${n.color}" opacity=".16"/>` : ""}<circle cx="${p.x.toFixed(0)}" cy="${p.y.toFixed(0)}" r="24" fill="url(#almn${i})" stroke="var(--alm-panel)" stroke-width="3"/><text class="ini" x="${p.x.toFixed(0)}" y="${(p.y + 5).toFixed(0)}" text-anchor="middle">${escapeHtml(initials(n.name))}</text><text class="nm" x="${p.x.toFixed(0)}" y="${(p.y + 42).toFixed(0)}" text-anchor="middle">${escapeHtml(n.name)}</text>`;
-  });
-  return `<svg class="graph" viewBox="0 0 ${w} ${h}" role="img" aria-label="Relationship graph"><defs>${defs.join("")}</defs><g>${paths.join("")}</g><g>${labels.join("")}</g><g>${circles.join("")}</g></svg>
-<div class="row" style="margin-top:6px">${Object.entries(DOMINANT_COLORS).map(([k, c]) => `<span class="pill"><i style="display:inline-block;width:10px;height:3px;background:${c}"></i>${k}</span>`).join("")}<span class="pill">┄ negative</span><span class="pill">✦ changed now</span></div>`;
-}
-
-// src/frontend/creator-ui.ts
-class CreatorUI {
-  ctx;
-  getView;
-  rerender;
-  step = "source";
-  mode = "quick";
-  sourceKind = "text";
-  sourceText = "";
-  bookId = "";
-  notes = "";
-  plan = [];
-  entries = [];
-  issues = {};
-  fixes = {};
-  report = null;
-  activation = null;
-  scene = "";
-  busy = "";
-  progress = "";
-  books = [];
-  error = "";
-  written = null;
-  health = null;
-  rid = 0;
-  pending = new Map;
-  constructor(ctx, getView, rerender) {
-    this.ctx = ctx;
-    this.getView = getView;
-    this.rerender = rerender;
-  }
-  handle(m) {
-    if (m?.type === "creatorProgress") {
-      this.progress = `${m.done}/${m.total}`;
-      this.rerender();
-      return true;
-    }
-    if ((m?.type === "creator" || m?.type === "books" || m?.type === "bookHealth") && this.pending.has(m.rid)) {
-      this.pending.get(m.rid)(m);
-      this.pending.delete(m.rid);
-      return true;
-    }
-    return false;
-  }
-  call(payload) {
-    const rid = ++this.rid;
-    return new Promise((resolve) => {
-      this.pending.set(rid, resolve);
-      this.ctx.sendToBackend({ ...payload, rid, chatId: this.getView()?.chatId });
-      setTimeout(() => {
-        if (this.pending.has(rid)) {
-          this.pending.delete(rid);
-          resolve({ error: "timed out" });
-        }
-      }, 15 * 60000);
-    });
-  }
-  source() {
-    return { kind: this.sourceKind, text: this.sourceText, chatId: this.getView()?.chatId, bookId: this.bookId };
-  }
-  render(_v) {
-    const busy = this.busy ? `<div class="card flat">⏳ ${escapeHtml(this.busy)} ${escapeHtml(this.progress)}</div>` : "";
-    const err = this.error ? `<div class="alm-tag warn">${escapeHtml(this.error)}</div>` : "";
-    if (this.step === "source") {
-      return `${busy}${err}<p class="muted">Build a lorebook that follows VELLUM III conventions (labelled titles, first-sentence formulas, metadata), so the Ledger — and VELLUM III — read it exactly.</p>
-<label class="f">Mode<select data-cr="mode">${[["quick", "⚡ Quick — plan and write"], ["guided", "\uD83E\uDD1D Guided — review the plan first"], ["suggest", "\uD83D\uDCCB Suggest entries from a premise"], ["parse", "\uD83D\uDCCB Parse raw lore"], ["category", "\uD83D\uDCCB Example entries for a category"]].map(([k, l]) => `<option value="${k}"${k === this.mode ? " selected" : ""}>${l}</option>`).join("")}</select></label>
-<label class="f">Source<select data-cr="sourceKind">${[["text", "Text I paste"], ["character", "This chat's character card"], ["codex", "This chat's Codex (save the story so far)"], ["book", "An existing lorebook (upgrade)"]].map(([k, l]) => `<option value="${k}"${k === this.sourceKind ? " selected" : ""}>${l}</option>`).join("")}</select></label>
-${this.sourceKind === "text" ? `<label class="f">Premise or lore<textarea data-cr="sourceText" style="min-height:140px">${escapeHtml(this.sourceText)}</textarea></label>` : ""}
-${this.sourceKind === "book" ? `<label class="f">Lorebook<select data-cr="bookId"><option value="">choose…</option>${this.books.map((b) => `<option value="${escapeHtml(b.id)}"${b.id === this.bookId ? " selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}</select></label><div class="row"><button class="btn" data-cr-act="loadBooks">Load books</button>${this.bookId ? `<button class="btn" data-cr-act="health">Health check</button>` : ""}</div>${this.health ? this.renderHealth() : ""}` : ""}
-<label class="f">Notes (optional)<input type="text" data-cr="notes" value="${escapeHtml(this.notes)}" placeholder="tone, era, what to emphasise"></label>
-<button class="btn primary" data-cr-act="plan"${this.busy ? " disabled" : ""}>Plan the lorebook</button>`;
-    }
-    if (this.step === "plan") {
-      return `${busy}${err}<h4>Plan · ${this.plan.length} entries</h4><p class="muted">Rename, remove or add entries. Titles use VELLUM III labels (Character:, Location:, CURRENT - …, Upcoming: …).</p>
-<div class="list">${this.plan.map((p, i) => `<div class="rec"><div class="row"><input type="text" data-plan-title="${i}" value="${escapeHtml(p.title)}" class="grow"><input type="number" data-plan-pri="${i}" value="${p.priority ?? 100}" style="width:78px" title="priority"><label class="chk"><input type="checkbox" data-plan-const="${i}"${p.constant ? " checked" : ""}> const</label><button class="btn danger" data-cr-act="planDel" data-i="${i}">✕</button></div>${p.description ? `<div class="muted"><small>${escapeHtml(p.description)}</small></div>` : ""}</div>`).join("")}</div>
-<div class="row" style="margin-top:8px"><button class="btn" data-cr-act="planAdd">+ Add entry</button><button class="btn" data-cr-act="back">Back</button><button class="btn primary" data-cr-act="generate"${this.busy ? " disabled" : ""}>Write ${this.plan.length} entries</button></div>`;
-    }
-    if (this.step === "entries" || this.step === "done") {
-      const rep = this.report;
-      return `${busy}${err}<h4>${this.entries.length} entries</h4>
-${rep ? `<div class="card flat"><div class="kv"><b>Tokens</b><span>${rep.totalTokens} total · ${rep.constantTokens} constant per turn</span><b>Positions</b><span>${Object.entries(rep.positions).map(([k, n]) => `${k}: ${n}`).join(" · ")}</span><b>Links</b><span>${rep.link.edges.length} recursion links · ${rep.link.orphans.length} orphans · ${rep.link.loops.length} loops</span></div>${rep.link.mismatches.length ? `<div class="alm-tag warn">${escapeHtml(rep.link.mismatches.slice(0, 3).join(" · "))}</div>` : ""}${rep.link.suggestions.slice(0, 4).map((s) => `<div class="muted"><small>• ${escapeHtml(s)}</small></div>`).join("")}</div>` : ""}
-<div class="list">${this.entries.map((en) => `<details class="rec"><summary><b>${escapeHtml(en.comment)}</b> <span class="pill">P${en.priority}</span> <span class="pill">pos ${en.position}${en.position === 4 ? "@" + en.depth : ""}</span>${en.constant ? `<span class="pill">const</span>` : ""}${this.issues[en.uid] ? `<span class="pill" style="color:var(--alm-danger)">${this.issues[en.uid].length} issue(s)</span>` : ""}</summary>
-<textarea data-en-content="${en.uid}" style="min-height:90px">${escapeHtml(en.content)}</textarea><label class="f">Keys<input type="text" data-en-keys="${en.uid}" value="${escapeHtml(en.key.join(", "))}"></label>
-${this.issues[en.uid] ? `<div class="alm-tag warn">${escapeHtml(this.issues[en.uid].join(" · "))}</div>` : ""}${this.fixes[en.uid] ? `<div class="muted"><small>auto-fixed: ${escapeHtml(this.fixes[en.uid].join(" · "))}</small></div>` : ""}
-<div class="row"><button class="btn danger" data-cr-act="entryDel" data-uid="${en.uid}">Remove</button></div></details>`).join("")}</div>
-<h4>Activation simulator</h4><textarea data-cr="scene" placeholder="Paste a sample scene to see which entries would fire…">${escapeHtml(this.scene)}</textarea><button class="btn" data-cr-act="simulate">Simulate</button>
-${this.activation ? `<ul class="alm-list">${this.activation.map((a) => `<li>${escapeHtml(a.comment)} — <small class="muted">${escapeHtml(a.reason)}</small></li>`).join("") || "<li>Nothing fires.</li>"}</ul>` : ""}
+${t.message}`):!1}class Se{ctx;getView;rerender;step="source";mode="quick";sourceKind="text";sourceText="";bookId="";notes="";plan=[];entries=[];issues={};fixes={};report=null;activation=null;scene="";busy="";progress="";books=[];error="";written=null;health=null;rid=0;pending=new Map;constructor(e,t,a){this.ctx=e,this.getView=t,this.rerender=a}handle(e){if(e?.type==="creatorProgress")return this.progress=`${e.done}/${e.total}`,this.rerender(),!0;if((e?.type==="creator"||e?.type==="books"||e?.type==="bookHealth")&&this.pending.has(e.rid))return this.pending.get(e.rid)(e),this.pending.delete(e.rid),!0;return!1}call(e){let t=++this.rid;return new Promise((a)=>{this.pending.set(t,a),this.ctx.sendToBackend({...e,rid:t,chatId:this.getView()?.chatId}),setTimeout(()=>{if(this.pending.has(t))this.pending.delete(t),a({error:"timed out"})},900000)})}source(){return{kind:this.sourceKind,text:this.sourceText,chatId:this.getView()?.chatId,bookId:this.bookId}}render(e){let t=this.busy?`<div class="card flat">⏳ ${n(this.busy)} ${n(this.progress)}</div>`:"",a=this.error?`<div class="alm-tag warn">${n(this.error)}</div>`:"";if(this.step==="source")return`${t}${a}<p class="muted">Build a lorebook that follows VELLUM III conventions (labelled titles, first-sentence formulas, metadata), so the Ledger — and VELLUM III — read it exactly.</p>
+<label class="f">Mode<select data-cr="mode">${[["quick","⚡ Quick — plan and write"],["guided","\uD83E\uDD1D Guided — review the plan first"],["suggest","\uD83D\uDCCB Suggest entries from a premise"],["parse","\uD83D\uDCCB Parse raw lore"],["category","\uD83D\uDCCB Example entries for a category"]].map(([r,s])=>`<option value="${r}"${r===this.mode?" selected":""}>${s}</option>`).join("")}</select></label>
+<label class="f">Source<select data-cr="sourceKind">${[["text","Text I paste"],["character","This chat's character card"],["codex","This chat's Codex (save the story so far)"],["book","An existing lorebook (upgrade)"]].map(([r,s])=>`<option value="${r}"${r===this.sourceKind?" selected":""}>${s}</option>`).join("")}</select></label>
+${this.sourceKind==="text"?`<label class="f">Premise or lore<textarea data-cr="sourceText" style="min-height:140px">${n(this.sourceText)}</textarea></label>`:""}
+${this.sourceKind==="book"?`<label class="f">Lorebook<select data-cr="bookId"><option value="">choose…</option>${this.books.map((r)=>`<option value="${n(r.id)}"${r.id===this.bookId?" selected":""}>${n(r.name)}</option>`).join("")}</select></label><div class="row"><button class="btn" data-cr-act="loadBooks">Load books</button>${this.bookId?'<button class="btn" data-cr-act="health">Health check</button>':""}</div>${this.health?this.renderHealth():""}`:""}
+<label class="f">Notes (optional)<input type="text" data-cr="notes" value="${n(this.notes)}" placeholder="tone, era, what to emphasise"></label>
+<button class="btn primary" data-cr-act="plan"${this.busy?" disabled":""}>Plan the lorebook</button>`;if(this.step==="plan")return`${t}${a}<h4>Plan · ${this.plan.length} entries</h4><p class="muted">Rename, remove or add entries. Titles use VELLUM III labels (Character:, Location:, CURRENT - …, Upcoming: …).</p>
+<div class="list">${this.plan.map((r,s)=>`<div class="rec"><div class="row"><input type="text" data-plan-title="${s}" value="${n(r.title)}" class="grow"><input type="number" data-plan-pri="${s}" value="${r.priority??100}" style="width:78px" title="priority"><label class="chk"><input type="checkbox" data-plan-const="${s}"${r.constant?" checked":""}> const</label><button class="btn danger" data-cr-act="planDel" data-i="${s}">✕</button></div>${r.description?`<div class="muted"><small>${n(r.description)}</small></div>`:""}</div>`).join("")}</div>
+<div class="row" style="margin-top:8px"><button class="btn" data-cr-act="planAdd">+ Add entry</button><button class="btn" data-cr-act="back">Back</button><button class="btn primary" data-cr-act="generate"${this.busy?" disabled":""}>Write ${this.plan.length} entries</button></div>`;if(this.step==="entries"||this.step==="done"){let r=this.report;return`${t}${a}<h4>${this.entries.length} entries</h4>
+${r?`<div class="card flat"><div class="kv"><b>Tokens</b><span>${r.totalTokens} total · ${r.constantTokens} constant per turn</span><b>Positions</b><span>${Object.entries(r.positions).map(([s,i])=>`${s}: ${i}`).join(" · ")}</span><b>Links</b><span>${r.link.edges.length} recursion links · ${r.link.orphans.length} orphans · ${r.link.loops.length} loops</span></div>${r.link.mismatches.length?`<div class="alm-tag warn">${n(r.link.mismatches.slice(0,3).join(" · "))}</div>`:""}${r.link.suggestions.slice(0,4).map((s)=>`<div class="muted"><small>• ${n(s)}</small></div>`).join("")}</div>`:""}
+<div class="list">${this.entries.map((s)=>`<details class="rec"><summary><b>${n(s.comment)}</b> <span class="pill">P${s.priority}</span> <span class="pill">pos ${s.position}${s.position===4?"@"+s.depth:""}</span>${s.constant?'<span class="pill">const</span>':""}${this.issues[s.uid]?`<span class="pill" style="color:var(--alm-danger)">${this.issues[s.uid].length} issue(s)</span>`:""}</summary>
+<textarea data-en-content="${s.uid}" style="min-height:90px">${n(s.content)}</textarea><label class="f">Keys<input type="text" data-en-keys="${s.uid}" value="${n(s.key.join(", "))}"></label>
+${this.issues[s.uid]?`<div class="alm-tag warn">${n(this.issues[s.uid].join(" · "))}</div>`:""}${this.fixes[s.uid]?`<div class="muted"><small>auto-fixed: ${n(this.fixes[s.uid].join(" · "))}</small></div>`:""}
+<div class="row"><button class="btn danger" data-cr-act="entryDel" data-uid="${s.uid}">Remove</button></div></details>`).join("")}</div>
+<h4>Activation simulator</h4><textarea data-cr="scene" placeholder="Paste a sample scene to see which entries would fire…">${n(this.scene)}</textarea><button class="btn" data-cr-act="simulate">Simulate</button>
+${this.activation?`<ul class="alm-list">${this.activation.map((s)=>`<li>${n(s.comment)} — <small class="muted">${n(s.reason)}</small></li>`).join("")||"<li>Nothing fires.</li>"}</ul>`:""}
 <h4>Save</h4><div class="row"><input type="text" id="almCrName" placeholder="New lorebook name" class="grow"><select id="almCrAttach"><option value="none">don't attach</option><option value="character">attach to character</option><option value="persona">attach to persona</option><option value="chat">attach to this chat</option><option value="global">attach globally</option></select></div>
 <label class="chk"><input type="checkbox" id="almCrBridge" checked> Read it into this chat's Codex now (Lore Bridge)</label>
-<div class="row"><button class="btn primary" data-cr-act="writeNew">Create lorebook</button>${this.bookId ? `<button class="btn" data-cr-act="writeMerge">Merge into the source book</button>` : ""}<button class="btn" data-cr-act="export">Download JSON</button><button class="btn" data-cr-act="restart">Start over</button></div>
-${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} created, ${this.written.updated} updated.</div>` : ""}`;
-    }
-    return "";
-  }
-  renderHealth() {
-    const h = this.health;
-    return `<div class="card flat"><h4>Health check</h4><div class="muted">${h.constantTokens} constant tokens per turn</div><ul class="alm-list">${h.issues.slice(0, 40).map((i) => `<li class="${i.severity === "error" ? "due" : ""}">${escapeHtml(i.entry)}: ${escapeHtml(i.issue)}</li>`).join("") || "<li>No issues found.</li>"}</ul></div>`;
-  }
-  onChange(t) {
-    const d = t.dataset;
-    if (d.cr) {
-      this[d.cr] = t.value;
-      if (d.cr === "sourceKind" || d.cr === "bookId")
-        this.rerender();
-      return true;
-    }
-    if (d.planTitle != null) {
-      this.plan[+d.planTitle].title = t.value;
-      return true;
-    }
-    if (d.planPri != null) {
-      this.plan[+d.planPri].priority = Number(t.value);
-      return true;
-    }
-    if (d.planConst != null) {
-      this.plan[+d.planConst].constant = t.checked;
-      return true;
-    }
-    if (d.enContent != null) {
-      const en = this.entries.find((x) => x.uid === +d.enContent);
-      if (en)
-        en.content = t.value;
-      return true;
-    }
-    if (d.enKeys != null) {
-      const en = this.entries.find((x) => x.uid === +d.enKeys);
-      if (en)
-        en.key = t.value.split(",").map((s) => s.trim()).filter(Boolean);
-      return true;
-    }
-    return false;
-  }
-  onClick(t) {
-    const el = t.closest("[data-cr-act]");
-    if (!el)
-      return false;
-    const act = el.dataset.crAct;
-    const root = el.closest(".almp");
-    const run = async (label, fn) => {
-      this.busy = label;
-      this.progress = "";
-      this.error = "";
-      this.rerender();
-      try {
-        await fn();
-      } catch (err) {
-        this.error = String(err);
-      }
-      this.busy = "";
-      this.rerender();
-    };
-    switch (act) {
-      case "loadBooks":
-        run("Loading books", async () => {
-          this.books = (await this.call({ type: "books" })).books ?? [];
-        });
-        break;
-      case "health":
-        run("Checking", async () => {
-          this.health = (await this.call({ type: "bookHealth", bookId: this.bookId })).result;
-        });
-        break;
-      case "plan":
-        run("Planning", async () => {
-          const r = await this.call({ type: "creator", action: "plan", req: { mode: this.mode, source: this.source(), notes: this.notes } });
-          if (r.error)
-            throw new Error(r.error);
-          this.plan = r.plan ?? [];
-          if (this.mode === "quick" && this.plan.length) {
-            this.busy = "Writing entries";
-            this.rerender();
-            await this.generate();
-          } else
-            this.step = "plan";
-        });
-        break;
-      case "planDel":
-        this.plan.splice(Number(el.dataset.i), 1);
-        this.rerender();
-        break;
-      case "planAdd":
-        this.plan.push({ title: "Character: New Name", priority: 150 });
-        this.rerender();
-        break;
-      case "back":
-        this.step = "source";
-        this.rerender();
-        break;
-      case "generate":
-        run("Writing entries", () => this.generate());
-        break;
-      case "entryDel":
-        this.entries = this.entries.filter((x) => x.uid !== Number(el.dataset.uid));
-        run("Relinking", async () => {
-          this.report = (await this.call({ type: "creator", action: "report", entries: this.entries })).report;
-        });
-        break;
-      case "simulate":
-        run("Simulating", async () => {
-          this.activation = (await this.call({ type: "creator", action: "simulate", entries: this.entries, scene: this.scene })).activation ?? [];
-        });
-        break;
-      case "writeNew":
-      case "writeMerge": {
-        const name = root.querySelector("#almCrName")?.value || "ALMANAC lorebook";
-        const attach = root.querySelector("#almCrAttach")?.value || "none";
-        const bridge = root.querySelector("#almCrBridge")?.checked;
-        run("Saving", async () => {
-          const target = act === "writeMerge" ? { kind: "merge", bookId: this.bookId } : { kind: "new", name };
-          const r = await this.call({ type: "creator", action: "write", req: { entries: this.entries, target, attach, chatId: this.getView()?.chatId, bridge } });
-          if (r.error)
-            throw new Error(r.error);
-          this.written = r.written;
-          this.step = "done";
-        });
-        break;
-      }
-      case "export":
-        run("Exporting", async () => {
-          const r = await this.call({ type: "creator", action: "export", entries: this.entries });
-          const blob = new Blob([JSON.stringify(r.json, null, 2)], { type: "application/json" });
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = "almanac-lorebook.json";
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-        });
-        break;
-      case "restart":
-        Object.assign(this, { step: "source", plan: [], entries: [], issues: {}, fixes: {}, report: null, activation: null, written: null });
-        this.rerender();
-        break;
-    }
-    return true;
-  }
-  async generate() {
-    const r = await this.call({ type: "creator", action: "generate", req: { plan: this.plan, source: this.source() } });
-    if (r.error)
-      throw new Error(r.error);
-    this.entries = r.entries ?? [];
-    this.issues = r.issues ?? {};
-    this.fixes = r.fixes ?? {};
-    this.report = r.report ?? null;
-    this.step = "entries";
-  }
-}
-
-// src/core/version.ts
-var VERSION = "1.12.4";
-
-// src/frontend/skins.ts
-var SKIN_LIST = [
-  ["almanac", "Almanac"],
-  ["solar", "Solar Editorial"],
-  ["nocturne", "Nocturne"],
-  ["botanical", "Botanical"],
-  ["prism", "Prism"],
-  ["candy", "Candy"],
-  ["dossier", "Dossier"],
-  ["scriptorium", "Scriptorium"],
-  ["arcana", "Arcana"],
-  ["orbital", "Orbital"],
-  ["posy", "Posy"],
-  ["lumiverse", "Follow Lumiverse"]
-];
-var FLOWERS = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg transform='translate(24 26)'%3E%3Cg fill='%23f2a9bf'%3E%3Ccircle cx='0' cy='-6' r='5'/%3E%3Ccircle cx='5.7' cy='-1.9' r='5'/%3E%3Ccircle cx='3.5' cy='4.9' r='5'/%3E%3Ccircle cx='-3.5' cy='4.9' r='5'/%3E%3Ccircle cx='-5.7' cy='-1.9' r='5'/%3E%3C/g%3E%3Ccircle r='2.6' fill='%23e8b25c'/%3E%3C/g%3E%3Cpath d='M66 70c6-10 16-12 22-10-4 8-14 12-22 10z' fill='%2396c4a0'/%3E%3Cpath d='M66 70c-2-9 2-18 8-22 2 8-2 17-8 22z' fill='%23acd3b3'/%3E%3Ccircle cx='78' cy='22' r='2.4' fill='%23f2a9bf'/%3E%3Ccircle cx='14' cy='76' r='2' fill='%23acd3b3'/%3E%3C/svg%3E")`;
-var SPRIG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cpath d='M20 110C40 80 60 60 100 40' stroke='%234f8a5c' stroke-width='2' fill='none'/%3E%3Cpath d='M45 80c-10-8-12-20-8-26 9 4 13 16 8 26z' fill='%237fb08a'/%3E%3Cpath d='M70 58c2-12 12-20 20-20-1 10-10 18-20 20z' fill='%239cc5a5'/%3E%3Cg transform='translate(96 30)'%3E%3Cg fill='%23f0a3b9'%3E%3Cellipse rx='7' ry='11' transform='translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(72) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(144) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(216) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(288) translate(0 -9)'/%3E%3C/g%3E%3Ccircle r='5' fill='%23e8b25c'/%3E%3C/g%3E%3C/svg%3E")`;
-var SKINS = {
-  almanac: {
-    shared: { "font-display": `"Fraunces",Georgia,serif`, "font-body": `"Newsreader",Georgia,serif`, "font-mono": `"DM Mono",ui-monospace,monospace`, "font-hand": `"Caveat",cursive`, radius: "14px", "r-sm": "10px" },
-    light: {
-      panel: "#fbf5e8",
-      "panel-2": "#f0e4cc",
-      ink: "#2b2118",
-      muted: "#78674f",
-      line: "#dfcca8",
-      accent: "#b8501f",
-      "accent-2": "#2f5d7c",
-      gold: "#c4922c",
-      good: "#3a7f50",
-      warn: "#b27a14",
-      danger: "#b8332a",
-      "on-accent": "#fff",
-      shadow: "0 18px 36px -26px rgba(70,40,10,.55),0 2px 6px -3px rgba(70,40,10,.18)",
-      lift: "0 10px 22px -18px rgba(70,40,10,.55)",
-      texture: "radial-gradient(rgba(43,33,24,.08) 1px,transparent 1.3px) 0 0/15px 15px"
-    },
-    dark: {
-      panel: "#241c14",
-      "panel-2": "#19130d",
-      ink: "#f1e6d3",
-      muted: "#b3a189",
-      line: "#3e3226",
-      accent: "#ee8a55",
-      "accent-2": "#86b6d8",
-      gold: "#e2b456",
-      good: "#86cf98",
-      warn: "#e9bd60",
-      danger: "#f28072",
-      "on-accent": "#19130d",
-      shadow: "0 20px 40px -26px rgba(0,0,0,.85)",
-      lift: "0 10px 24px -18px rgba(0,0,0,.9)",
-      texture: "radial-gradient(rgba(241,230,211,.06) 1px,transparent 1.3px) 0 0/15px 15px"
-    },
-    fonts: []
-  },
-  solar: {
-    shared: { "font-display": `"Playfair Display",Georgia,serif`, "font-body": `"Libre Franklin","Segoe UI",system-ui,sans-serif`, "font-mono": `"Libre Franklin",system-ui,sans-serif`, "font-hand": `"Playfair Display",Georgia,serif`, radius: "0px", "r-sm": "0px", shadow: "none", lift: "none", texture: "none" },
-    light: { panel: "#ffffff", "panel-2": "#f1efe8", ink: "#111111", muted: "#595959", line: "#d9d6cd", accent: "#ffd21f", "accent-2": "#e23d28", gold: "#ffd21f", good: "#1f7a45", warn: "#a86d00", danger: "#d42f1c", "on-accent": "#111", rule: "#111111" },
-    dark: { panel: "#121212", "panel-2": "#050505", ink: "#f6f3ea", muted: "#a6a39b", line: "#2f2f2f", accent: "#ffd21f", "accent-2": "#ff6e57", gold: "#ffd21f", good: "#6fd39a", warn: "#ffc246", danger: "#ff6e57", "on-accent": "#111", rule: "#f6f3ea" },
-    fonts: ["Playfair+Display:ital,wght@0,700;0,900;1,700", "Libre+Franklin:wght@400;500;700"]
-  },
-  nocturne: {
-    shared: { "font-display": `"Cormorant Garamond",Georgia,serif`, "font-body": `"Crimson Pro",Georgia,serif`, "font-mono": `"Cormorant Garamond",Georgia,serif`, "font-hand": `"Cormorant Garamond",Georgia,serif`, radius: "10px", "r-sm": "6px" },
-    light: {
-      panel: "#f7f1ec",
-      "panel-2": "#eadcd5",
-      ink: "#28131a",
-      muted: "#7a5d64",
-      line: "#d9c2c3",
-      accent: "#8e1b2e",
-      "accent-2": "#3f2c55",
-      gold: "#9c7a3c",
-      good: "#3f6d4e",
-      warn: "#9a6a1a",
-      danger: "#8e1b2e",
-      "on-accent": "#fff",
-      shadow: "0 22px 40px -28px rgba(60,10,25,.55)",
-      lift: "0 10px 22px -18px rgba(60,10,25,.45)",
-      texture: "radial-gradient(60% 50% at 50% 0%,rgba(142,27,46,.07),transparent 70%),repeating-linear-gradient(45deg,rgba(40,19,26,.025) 0 1px,transparent 1px 9px)"
-    },
-    dark: {
-      panel: "#150c10",
-      "panel-2": "#0b0609",
-      ink: "#f0e2df",
-      muted: "#a88c91",
-      line: "#3b2229",
-      accent: "#e4495f",
-      "accent-2": "#bea6d4",
-      gold: "#d4b27a",
-      good: "#8ccaa0",
-      warn: "#e3b465",
-      danger: "#ff7a86",
-      "on-accent": "#0b0609",
-      shadow: "0 26px 50px -28px rgba(0,0,0,.95)",
-      lift: "0 14px 30px -18px rgba(0,0,0,.95)",
-      texture: "radial-gradient(60% 50% at 50% 0%,rgba(228,73,95,.09),transparent 70%),repeating-linear-gradient(45deg,rgba(240,226,223,.02) 0 1px,transparent 1px 9px)"
-    },
-    fonts: ["Crimson+Pro:ital,wght@0,400;0,600;1,400"]
-  },
-  botanical: {
-    shared: { "font-display": `"Young Serif",Georgia,serif`, "font-body": `"Source Serif 4",Georgia,serif`, "font-mono": `"Courier Prime","Courier New",monospace`, "font-hand": `"Caveat",cursive`, radius: "4px", "r-sm": "3px" },
-    light: {
-      panel: "#f6f1e3",
-      "panel-2": "#dcceab",
-      ink: "#2a291d",
-      muted: "#6c6750",
-      line: "#c9bb95",
-      accent: "#5f7222",
-      "accent-2": "#a65a1a",
-      gold: "#b3862a",
-      good: "#4f7a2a",
-      warn: "#a4701c",
-      danger: "#a8401e",
-      "on-accent": "#fff",
-      shadow: "0 1px 0 #cdbf98,0 18px 30px -24px rgba(60,50,20,.55)",
-      lift: "0 1px 0 #d8cca8",
-      texture: "radial-gradient(rgba(90,70,30,.10) .8px,transparent 1.2px) 0 0/5px 5px"
-    },
-    dark: {
-      panel: "#1c1d15",
-      "panel-2": "#12130d",
-      ink: "#ece7d2",
-      muted: "#aaa68c",
-      line: "#37382b",
-      accent: "#b7c86b",
-      "accent-2": "#e59c57",
-      gold: "#dab65e",
-      good: "#a3cf73",
-      warn: "#e6b85e",
-      danger: "#ee8266",
-      "on-accent": "#12130d",
-      shadow: "0 20px 36px -26px rgba(0,0,0,.9)",
-      lift: "none",
-      texture: "radial-gradient(rgba(236,231,210,.05) .8px,transparent 1.2px) 0 0/5px 5px"
-    },
-    fonts: ["Young+Serif", "Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400", "Courier+Prime:ital@0;1"]
-  },
-  prism: {
-    shared: { "font-display": `"Syne","Segoe UI",system-ui,sans-serif`, "font-body": `"Space Grotesk","Segoe UI",system-ui,sans-serif`, "font-mono": `"Space Mono",ui-monospace,monospace`, "font-hand": `"Space Grotesk",system-ui,sans-serif`, radius: "16px", "r-sm": "12px" },
-    light: {
-      panel: "#fcfcff",
-      "panel-2": "#eef0fa",
-      ink: "#15152c",
-      muted: "#5c5f80",
-      line: "#dcdff0",
-      accent: "#6d2fff",
-      "accent-2": "#0096ab",
-      gold: "#e0a800",
-      good: "#0f9d6a",
-      warn: "#c98600",
-      danger: "#e0245e",
-      "on-accent": "#fff",
-      holo: "linear-gradient(115deg,#ff7ac6,#ffd86b 25%,#7df3e1 50%,#8fa8ff 75%,#d78bff)",
-      shadow: "0 22px 44px -28px rgba(80,60,180,.45)",
-      lift: "0 10px 24px -18px rgba(80,60,180,.4)",
-      texture: "radial-gradient(40% 50% at 10% 0%,rgba(255,122,198,.14),transparent 70%),radial-gradient(40% 50% at 90% 100%,rgba(125,243,225,.16),transparent 70%)"
-    },
-    dark: {
-      panel: "#0c0c16",
-      "panel-2": "#05050b",
-      ink: "#eef0ff",
-      muted: "#9296b8",
-      line: "#24253c",
-      accent: "#b28cff",
-      "accent-2": "#3ef2ff",
-      gold: "#ffe45e",
-      good: "#4be39a",
-      warn: "#ffc15e",
-      danger: "#ff6b9a",
-      "on-accent": "#05050b",
-      holo: "linear-gradient(115deg,#ff4fae,#ffe45e 25%,#3ef2ff 50%,#7a8cff 75%,#c86bff)",
-      shadow: "0 26px 50px -28px rgba(0,0,0,.95),0 0 36px -20px rgba(178,140,255,.5)",
-      lift: "0 12px 28px -18px rgba(0,0,0,.95)",
-      texture: "radial-gradient(40% 50% at 10% 0%,rgba(255,79,174,.10),transparent 70%),radial-gradient(40% 50% at 90% 100%,rgba(62,242,255,.10),transparent 70%)"
-    },
-    fonts: ["Space+Grotesk:wght@400;500;700", "Space+Mono"]
-  },
-  candy: {
-    shared: { "font-display": `"Fredoka","Segoe UI Rounded",system-ui,sans-serif`, "font-body": `"Fredoka","Segoe UI Rounded",system-ui,sans-serif`, "font-mono": `"Fredoka",system-ui,sans-serif`, "font-hand": `"Fredoka",system-ui,sans-serif`, radius: "22px", "r-sm": "16px" },
-    light: {
-      panel: "#fffdf4",
-      "panel-2": "#fff1c2",
-      ink: "#1d1033",
-      muted: "#6a5e80",
-      line: "#ead9a6",
-      accent: "#ff4fa3",
-      "accent-2": "#28c994",
-      gold: "#ffc933",
-      good: "#12a978",
-      warn: "#d98a00",
-      danger: "#ff3b5c",
-      "on-accent": "#fff",
-      pop: "#1d1033",
-      shadow: "5px 5px 0 var(--alm-pop)",
-      lift: "3px 3px 0 var(--alm-pop)",
-      texture: "radial-gradient(circle at 25% 25%,#ff9fcf 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#7fe3c1 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#b7a6ff 0 2.5px,transparent 3px) 0 0/60px 60px"
-    },
-    dark: {
-      panel: "#241a40",
-      "panel-2": "#160f2b",
-      ink: "#fff4fb",
-      muted: "#c1b3df",
-      line: "#44376b",
-      accent: "#ff78bd",
-      "accent-2": "#5ef2c0",
-      gold: "#ffd84d",
-      good: "#5ef2c0",
-      warn: "#ffc04d",
-      danger: "#ff6b86",
-      "on-accent": "#160f2b",
-      pop: "#fff4fb",
-      shadow: "5px 5px 0 var(--alm-accent)",
-      lift: "3px 3px 0 #7a5cff",
-      texture: "radial-gradient(circle at 25% 25%,#ff78bd 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#5ef2c0 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#ffd84d 0 2.5px,transparent 3px) 0 0/60px 60px"
-    },
-    fonts: ["Fredoka:wght@400;500;600;700"]
-  },
-  dossier: {
-    shared: { "font-display": `"IBM Plex Serif",Georgia,serif`, "font-body": `"IBM Plex Sans","Segoe UI",system-ui,sans-serif`, "font-mono": `"IBM Plex Mono",ui-monospace,monospace`, "font-hand": `"Reenie Beanie",cursive`, radius: "4px", "r-sm": "3px" },
-    light: {
-      panel: "#fbfaf7",
-      "panel-2": "#ecebe5",
-      ink: "#17191c",
-      muted: "#5a5f67",
-      line: "#d4d1c9",
-      accent: "#8c1d1d",
-      "accent-2": "#34506a",
-      gold: "#8a7a5a",
-      good: "#2f6b4a",
-      warn: "#946412",
-      danger: "#a32020",
-      "on-accent": "#fff",
-      shadow: "0 1px 0 rgba(0,0,0,.04),0 12px 26px -22px rgba(0,0,0,.45)",
-      lift: "0 1px 2px rgba(0,0,0,.06)",
-      texture: "linear-gradient(transparent 31px,rgba(23,25,28,.05) 32px) 0 0/100% 32px"
-    },
-    dark: {
-      panel: "#17191c",
-      "panel-2": "#0e0f11",
-      ink: "#e8e6e1",
-      muted: "#9aa0a8",
-      line: "#2d3137",
-      accent: "#e0534f",
-      "accent-2": "#90b1cd",
-      gold: "#b9a67e",
-      good: "#7fc3a0",
-      warn: "#dcae57",
-      danger: "#ff6e68",
-      "on-accent": "#0e0f11",
-      shadow: "0 14px 30px -22px rgba(0,0,0,.9)",
-      lift: "none",
-      texture: "linear-gradient(transparent 31px,rgba(232,230,225,.04) 32px) 0 0/100% 32px"
-    },
-    fonts: ["IBM+Plex+Mono:wght@400;500", "IBM+Plex+Sans:wght@400;500;600", "IBM+Plex+Serif:ital,wght@0,500;0,600;1,500", "Reenie+Beanie"]
-  },
-  scriptorium: {
-    shared: { "font-display": `"IM Fell English",Georgia,serif`, "font-body": `"IM Fell English",Georgia,serif`, "font-mono": `"IM Fell English SC",Georgia,serif`, "font-hand": `"IM Fell English",Georgia,serif`, radius: "3px", "r-sm": "2px", lift: "none" },
-    light: {
-      panel: "#f3e7cb",
-      "panel-2": "#e3cfa3",
-      ink: "#2a1c10",
-      muted: "#6c573b",
-      line: "#c4a770",
-      accent: "#a8261c",
-      "accent-2": "#1f3f86",
-      gold: "#b5892a",
-      good: "#3d6b2e",
-      warn: "#a8741a",
-      danger: "#a8261c",
-      "on-accent": "#f7ecd2",
-      shadow: "0 2px 0 #c7ab77,0 22px 36px -26px rgba(60,35,10,.7)",
-      texture: "radial-gradient(40% 50% at 18% 22%,rgba(150,100,40,.10),transparent 70%),radial-gradient(35% 40% at 82% 70%,rgba(120,80,30,.09),transparent 70%),radial-gradient(rgba(90,60,20,.07) 1px,transparent 1.4px) 0 0/9px 9px"
-    },
-    dark: {
-      panel: "#221810",
-      "panel-2": "#150e08",
-      ink: "#efdfbf",
-      muted: "#b19a75",
-      line: "#4c3a24",
-      accent: "#e6614a",
-      "accent-2": "#86a3e6",
-      gold: "#e2b34f",
-      good: "#93c46f",
-      warn: "#e2b34f",
-      danger: "#ff735c",
-      "on-accent": "#150e08",
-      shadow: "0 2px 0 #3a2a18,0 26px 40px -26px rgba(0,0,0,.9)",
-      texture: "radial-gradient(40% 50% at 70% 10%,rgba(255,180,80,.10),transparent 70%),radial-gradient(rgba(239,223,191,.04) 1px,transparent 1.4px) 0 0/9px 9px"
-    },
-    fonts: ["IM+Fell+English:ital@0;1", "IM+Fell+English+SC", "UnifrakturMaguntia"]
-  },
-  arcana: {
-    shared: { "font-display": `"Cinzel",Georgia,serif`, "font-body": `"Alegreya",Georgia,serif`, "font-mono": `"Cinzel",Georgia,serif`, "font-hand": `"Alegreya",Georgia,serif`, radius: "16px", "r-sm": "10px" },
-    light: {
-      panel: "#f8f5ff",
-      "panel-2": "#e9e2fb",
-      ink: "#211848",
-      muted: "#655b8c",
-      line: "#d5cbf0",
-      accent: "#8a5c0a",
-      "accent-2": "#0d8578",
-      gold: "#c28f2c",
-      good: "#1f8a58",
-      warn: "#9a6a12",
-      danger: "#c42d52",
-      "on-accent": "#fff",
-      shadow: "0 0 0 1px rgba(194,143,44,.14),0 24px 44px -30px rgba(60,40,140,.5)",
-      lift: "0 10px 22px -18px rgba(60,40,140,.4)",
-      texture: "radial-gradient(1px 1px at 20% 30%,rgba(194,143,44,.6),transparent) 0 0/140px 140px,radial-gradient(1px 1px at 70% 80%,rgba(106,69,214,.45),transparent) 0 0/190px 190px"
-    },
-    dark: {
-      panel: "#1a1533",
-      "panel-2": "#0f0c22",
-      ink: "#ece6ff",
-      muted: "#a79fcb",
-      line: "#372d62",
-      accent: "#e7b75a",
-      "accent-2": "#63d9c6",
-      gold: "#e7b75a",
-      good: "#7fe0a8",
-      warn: "#f0c46a",
-      danger: "#ff7d93",
-      "on-accent": "#140f28",
-      shadow: "0 0 0 1px rgba(231,183,90,.12),0 28px 60px -30px rgba(0,0,0,.95),0 0 40px -18px rgba(123,97,255,.45)",
-      lift: "0 10px 26px -16px rgba(0,0,0,.9)",
-      texture: "radial-gradient(1px 1px at 20% 30%,rgba(255,240,200,.5),transparent) 0 0/140px 140px,radial-gradient(1px 1px at 70% 80%,rgba(200,220,255,.45),transparent) 0 0/190px 190px"
-    },
-    fonts: ["Alegreya:ital,wght@0,400;0,600;1,400", "Cinzel:wght@500;700", "Cinzel+Decorative:wght@700"]
-  },
-  orbital: {
-    shared: { "font-display": `"Chakra Petch","Segoe UI",system-ui,sans-serif`, "font-body": `"Inter","Segoe UI",system-ui,sans-serif`, "font-mono": `"JetBrains Mono",ui-monospace,monospace`, "font-hand": `"JetBrains Mono",ui-monospace,monospace`, radius: "2px", "r-sm": "2px", lift: "none" },
-    light: {
-      panel: "#f7f8fa",
-      "panel-2": "#e5e8ed",
-      ink: "#0b0f14",
-      muted: "#566170",
-      line: "#cdd3db",
-      accent: "#e8430a",
-      "accent-2": "#2742ff",
-      gold: "#e8430a",
-      good: "#00925f",
-      warn: "#c77800",
-      danger: "#d61f35",
-      "on-accent": "#fff",
-      shadow: "0 0 0 1px rgba(11,15,20,.04),0 24px 40px -30px rgba(11,15,20,.5)",
-      texture: "linear-gradient(90deg,rgba(11,15,20,.05) 1px,transparent 1px) 0 0/48px 100%,linear-gradient(rgba(11,15,20,.05) 1px,transparent 1px) 0 0/100% 48px"
-    },
-    dark: {
-      panel: "#11151b",
-      "panel-2": "#090c10",
-      ink: "#e8edf3",
-      muted: "#8a96a5",
-      line: "#27303b",
-      accent: "#ff6a2b",
-      "accent-2": "#7289ff",
-      gold: "#ff6a2b",
-      good: "#2fd39a",
-      warn: "#ffb13d",
-      danger: "#ff5468",
-      "on-accent": "#090c10",
-      shadow: "0 0 0 1px rgba(255,255,255,.03),0 24px 40px -30px rgba(0,0,0,.9)",
-      texture: "linear-gradient(90deg,rgba(232,237,243,.04) 1px,transparent 1px) 0 0/48px 100%,linear-gradient(rgba(232,237,243,.04) 1px,transparent 1px) 0 0/100% 48px"
-    },
-    fonts: ["Chakra+Petch:wght@500;600;700", "Inter:wght@400;500;600", "JetBrains+Mono:wght@400;500"]
-  },
-  posy: {
-    shared: { "font-display": `"DM Serif Display",Georgia,serif`, "font-body": `"Nunito","Segoe UI",system-ui,sans-serif`, "font-mono": `"DM Mono",ui-monospace,monospace`, "font-hand": `"Dancing Script",cursive`, radius: "24px", "r-sm": "16px", sprig: SPRIG },
-    light: {
-      panel: "#fff7f7",
-      "panel-2": "#f9e1e6",
-      ink: "#1f3a2b",
-      muted: "#627566",
-      line: "#eec5cf",
-      accent: "#c93d70",
-      "accent-2": "#3f7f4d",
-      gold: "#d99a4e",
-      good: "#3a8551",
-      warn: "#b87624",
-      danger: "#c43a5c",
-      "on-accent": "#fff",
-      shadow: "0 20px 40px -28px rgba(120,40,70,.45),0 2px 6px -3px rgba(31,58,43,.15)",
-      lift: "0 10px 22px -18px rgba(120,40,70,.5)",
-      texture: `linear-gradient(rgba(255,247,247,.45),rgba(255,247,247,.45)),${FLOWERS} 0 0/96px 96px`
-    },
-    dark: {
-      panel: "#172a20",
-      "panel-2": "#0f1f17",
-      ink: "#fbe9ee",
-      muted: "#b5c8b9",
-      line: "#2f4a3b",
-      accent: "#ff8fb1",
-      "accent-2": "#8fd19e",
-      gold: "#f0c07a",
-      good: "#8fd19e",
-      warn: "#f0c07a",
-      danger: "#ff7f98",
-      "on-accent": "#0f1f17",
-      shadow: "0 22px 44px -28px rgba(0,0,0,.9)",
-      lift: "0 10px 22px -18px rgba(0,0,0,.9)",
-      texture: `linear-gradient(rgba(15,31,23,.62),rgba(15,31,23,.62)),${FLOWERS} 0 0/96px 96px`
-    },
-    fonts: ["DM+Serif+Display:ital@0;1", "Nunito:wght@400;600;700", "Dancing+Script:wght@600"]
-  }
-};
-var BASE_FONTS = ["Caveat:wght@500;700", "DM+Mono:wght@400;500", "Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800", "Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600", "Syne:wght@600;700;800", "Cormorant+Garamond:ital,wght@0,500;0,700;1,500;1,600", "Oswald:wght@500;600"];
-function fontsFor(skin) {
-  const fams = [...BASE_FONTS, ...SKINS[skin]?.fonts ?? []];
-  return `@import url("https://fonts.googleapis.com/css2?${fams.map((f) => `family=${f}`).join("&")}&display=swap");`;
-}
-function isSkin(id) {
-  return id in SKINS || id === "lumiverse";
-}
-var decl = (p) => Object.entries(p).map(([k, v]) => `--alm-${k}:${v};`).join("");
-function tokens() {
-  const out = [];
-  for (const [id, s] of Object.entries(SKINS)) {
-    const at = `:root[data-alm-skin="${id}"]`;
-    out.push(`${at}{${decl(s.shared)}--alm-on-voice:#fff}`);
-    out.push(`${at},${at}[data-alm-mode="light"]{${decl(s.light)}}`);
-    out.push(`${at}[data-alm-mode="dark"]{${decl(s.dark)}}`);
-  }
-  return out.join(`
-`);
-}
-var S = (id) => `:root[data-alm-skin="${id}"]`;
-var FLAT_BUBBLE = (id) => `
-${S(id)} .alm-say__bubble::before,${S(id)} .alm-say__bubble::after{content:none!important}
-${S(id)} .alm-thk::before,${S(id)} .alm-thk::after{display:none!important}
-${S(id)} .alm-thk{animation:none!important}
-${S(id)} .alm-chapter b::before,${S(id)} .alm-chapter b::after{content:none!important}`;
-var SIGNATURES = `
+<div class="row"><button class="btn primary" data-cr-act="writeNew">Create lorebook</button>${this.bookId?'<button class="btn" data-cr-act="writeMerge">Merge into the source book</button>':""}<button class="btn" data-cr-act="export">Download JSON</button><button class="btn" data-cr-act="restart">Start over</button></div>
+${this.written?`<div class="card flat">✓ Saved: ${this.written.created} created, ${this.written.updated} updated${this.written.skipped?`, ${this.written.skipped} kept as they were (same title)`:""}.${this.written.personaKept?` Your persona keeps ${n(this.written.personaKept)}; the new book was not attached to it.`:""}</div>`:""}`}return""}renderHealth(){let e=this.health;return`<div class="card flat"><h4>Health check</h4><div class="muted">${e.constantTokens} constant tokens per turn</div><ul class="alm-list">${e.issues.slice(0,40).map((t)=>`<li class="${t.severity==="error"?"due":""}">${n(t.entry)}: ${n(t.issue)}</li>`).join("")||"<li>No issues found.</li>"}</ul></div>`}onChange(e){let t=e.dataset;if(t.cr){if(this[t.cr]=e.value,t.cr==="sourceKind"||t.cr==="bookId")this.rerender();return!0}if(t.planTitle!=null)return this.plan[+t.planTitle].title=e.value,!0;if(t.planPri!=null)return this.plan[+t.planPri].priority=Number(e.value),!0;if(t.planConst!=null)return this.plan[+t.planConst].constant=e.checked,!0;if(t.enContent!=null){let a=this.entries.find((r)=>r.uid===+t.enContent);if(a)a.content=e.value;return!0}if(t.enKeys!=null){let a=this.entries.find((r)=>r.uid===+t.enKeys);if(a)a.key=e.value.split(",").map((r)=>r.trim()).filter(Boolean);return!0}return!1}onClick(e){let t=e.closest("[data-cr-act]");if(!t)return!1;let a=t.dataset.crAct,r=t.closest(".almp"),s=async(i,o)=>{this.busy=i,this.progress="",this.error="",this.rerender();try{await o()}catch(l){this.error=String(l)}this.busy="",this.rerender()};switch(a){case"loadBooks":s("Loading books",async()=>{this.books=(await this.call({type:"books"})).books??[]});break;case"health":s("Checking",async()=>{this.health=(await this.call({type:"bookHealth",bookId:this.bookId})).result});break;case"plan":s("Planning",async()=>{let i=await this.call({type:"creator",action:"plan",req:{mode:this.mode,source:this.source(),notes:this.notes}});if(i.error)throw Error(i.error);if(this.plan=i.plan??[],this.mode==="quick"&&this.plan.length)this.busy="Writing entries",this.rerender(),await this.generate();else this.step="plan"});break;case"planDel":this.plan.splice(Number(t.dataset.i),1),this.rerender();break;case"planAdd":this.plan.push({title:"Character: New Name",priority:150}),this.rerender();break;case"back":this.step="source",this.rerender();break;case"generate":s("Writing entries",()=>this.generate());break;case"entryDel":this.entries=this.entries.filter((i)=>i.uid!==Number(t.dataset.uid)),s("Relinking",async()=>{this.report=(await this.call({type:"creator",action:"report",entries:this.entries})).report});break;case"simulate":s("Simulating",async()=>{this.activation=(await this.call({type:"creator",action:"simulate",entries:this.entries,scene:this.scene})).activation??[]});break;case"writeNew":case"writeMerge":{let i=r.querySelector("#almCrName")?.value||"ALMANAC lorebook",o=r.querySelector("#almCrAttach")?.value||"none",l=r.querySelector("#almCrBridge")?.checked;s("Saving",async()=>{let d=a==="writeMerge"?{kind:"merge",bookId:this.bookId}:{kind:"new",name:i},c=a==="writeMerge"?await _e(this.ctx,{title:"Replace entries with the same title?",message:"Entries in the source book whose title matches a new entry will be overwritten, with no copy kept. Choose Keep to add only the new titles.",confirmLabel:"Replace them",cancelLabel:"Keep them",danger:!0}):!1,u=o==="persona"?await _e(this.ctx,{title:"Replace your persona's lorebook?",message:"A persona holds one lorebook. If yours already has one, attaching this book takes its place. Choose Keep to leave the current one attached.",confirmLabel:"Replace it",cancelLabel:"Keep it",danger:!0}):!1,m=await this.call({type:"creator",action:"write",req:{entries:this.entries,target:d,attach:o,chatId:this.getView()?.chatId,bridge:l,overwrite:c,replacePersonaBook:u}});if(m.error)throw Error(m.error);this.written=m.written,this.step="done"});break}case"export":s("Exporting",async()=>{let i=await this.call({type:"creator",action:"export",entries:this.entries}),o=new Blob([JSON.stringify(i.json,null,2)],{type:"application/json"}),l=document.createElement("a");l.href=URL.createObjectURL(o),l.download="almanac-lorebook.json",l.click(),setTimeout(()=>URL.revokeObjectURL(l.href),5000)});break;case"restart":Object.assign(this,{step:"source",plan:[],entries:[],issues:{},fixes:{},report:null,activation:null,written:null}),this.rerender();break}return!0}async generate(){let e=await this.call({type:"creator",action:"generate",req:{plan:this.plan,source:this.source()}});if(e.error)throw Error(e.error);this.entries=e.entries??[],this.issues=e.issues??{},this.fixes=e.fixes??{},this.report=e.report??null,this.step="entries"}}var re=[["almanac","Almanac"],["solar","Solar Editorial"],["nocturne","Nocturne"],["botanical","Botanical"],["prism","Prism"],["candy","Candy"],["dossier","Dossier"],["scriptorium","Scriptorium"],["arcana","Arcana"],["orbital","Orbital"],["posy","Posy"],["lumiverse","Follow Lumiverse"]];var se={almanac:{shared:{"font-display":'"Fraunces",Georgia,serif',"font-body":'"Newsreader",Georgia,serif',"font-mono":'"DM Mono",ui-monospace,monospace',"font-hand":'"Caveat",cursive',radius:"14px","r-sm":"10px"},light:{panel:"#fbf5e8","panel-2":"#f0e4cc",ink:"#2b2118",muted:"#78674f",line:"#dfcca8",accent:"#b8501f","accent-2":"#2f5d7c",gold:"#c4922c",good:"#3a7f50",warn:"#b27a14",danger:"#b8332a","on-accent":"#fff",shadow:"0 18px 36px -26px rgba(70,40,10,.55),0 2px 6px -3px rgba(70,40,10,.18)",lift:"0 10px 22px -18px rgba(70,40,10,.55)",texture:"radial-gradient(rgba(43,33,24,.08) 1px,transparent 1.3px) 0 0/15px 15px"},dark:{panel:"#241c14","panel-2":"#19130d",ink:"#f1e6d3",muted:"#b3a189",line:"#3e3226",accent:"#ee8a55","accent-2":"#86b6d8",gold:"#e2b456",good:"#86cf98",warn:"#e9bd60",danger:"#f28072","on-accent":"#19130d",shadow:"0 20px 40px -26px rgba(0,0,0,.85)",lift:"0 10px 24px -18px rgba(0,0,0,.9)",texture:"radial-gradient(rgba(241,230,211,.06) 1px,transparent 1.3px) 0 0/15px 15px"},fonts:[]},solar:{shared:{"font-display":'"Playfair Display",Georgia,serif',"font-body":'"Libre Franklin","Segoe UI",system-ui,sans-serif',"font-mono":'"Libre Franklin",system-ui,sans-serif',"font-hand":'"Playfair Display",Georgia,serif',radius:"0px","r-sm":"0px",shadow:"none",lift:"none",texture:"none"},light:{panel:"#ffffff","panel-2":"#f1efe8",ink:"#111111",muted:"#595959",line:"#d9d6cd",accent:"#ffd21f","accent-2":"#e23d28",gold:"#ffd21f",good:"#1f7a45",warn:"#a86d00",danger:"#d42f1c","on-accent":"#111",rule:"#111111"},dark:{panel:"#121212","panel-2":"#050505",ink:"#f6f3ea",muted:"#a6a39b",line:"#2f2f2f",accent:"#ffd21f","accent-2":"#ff6e57",gold:"#ffd21f",good:"#6fd39a",warn:"#ffc246",danger:"#ff6e57","on-accent":"#111",rule:"#f6f3ea"},fonts:["Playfair+Display:ital,wght@0,700;0,900;1,700","Libre+Franklin:wght@400;500;700"]},nocturne:{shared:{"font-display":'"Cormorant Garamond",Georgia,serif',"font-body":'"Crimson Pro",Georgia,serif',"font-mono":'"Cormorant Garamond",Georgia,serif',"font-hand":'"Cormorant Garamond",Georgia,serif',radius:"10px","r-sm":"6px"},light:{panel:"#f7f1ec","panel-2":"#eadcd5",ink:"#28131a",muted:"#7a5d64",line:"#d9c2c3",accent:"#8e1b2e","accent-2":"#3f2c55",gold:"#9c7a3c",good:"#3f6d4e",warn:"#9a6a1a",danger:"#8e1b2e","on-accent":"#fff",shadow:"0 22px 40px -28px rgba(60,10,25,.55)",lift:"0 10px 22px -18px rgba(60,10,25,.45)",texture:"radial-gradient(60% 50% at 50% 0%,rgba(142,27,46,.07),transparent 70%),repeating-linear-gradient(45deg,rgba(40,19,26,.025) 0 1px,transparent 1px 9px)"},dark:{panel:"#150c10","panel-2":"#0b0609",ink:"#f0e2df",muted:"#a88c91",line:"#3b2229",accent:"#e4495f","accent-2":"#bea6d4",gold:"#d4b27a",good:"#8ccaa0",warn:"#e3b465",danger:"#ff7a86","on-accent":"#0b0609",shadow:"0 26px 50px -28px rgba(0,0,0,.95)",lift:"0 14px 30px -18px rgba(0,0,0,.95)",texture:"radial-gradient(60% 50% at 50% 0%,rgba(228,73,95,.09),transparent 70%),repeating-linear-gradient(45deg,rgba(240,226,223,.02) 0 1px,transparent 1px 9px)"},fonts:["Crimson+Pro:ital,wght@0,400;0,600;1,400"]},botanical:{shared:{"font-display":'"Young Serif",Georgia,serif',"font-body":'"Source Serif 4",Georgia,serif',"font-mono":'"Courier Prime","Courier New",monospace',"font-hand":'"Caveat",cursive',radius:"4px","r-sm":"3px"},light:{panel:"#f6f1e3","panel-2":"#dcceab",ink:"#2a291d",muted:"#6c6750",line:"#c9bb95",accent:"#5f7222","accent-2":"#a65a1a",gold:"#b3862a",good:"#4f7a2a",warn:"#a4701c",danger:"#a8401e","on-accent":"#fff",shadow:"0 1px 0 #cdbf98,0 18px 30px -24px rgba(60,50,20,.55)",lift:"0 1px 0 #d8cca8",texture:"radial-gradient(rgba(90,70,30,.10) .8px,transparent 1.2px) 0 0/5px 5px"},dark:{panel:"#1c1d15","panel-2":"#12130d",ink:"#ece7d2",muted:"#aaa68c",line:"#37382b",accent:"#b7c86b","accent-2":"#e59c57",gold:"#dab65e",good:"#a3cf73",warn:"#e6b85e",danger:"#ee8266","on-accent":"#12130d",shadow:"0 20px 36px -26px rgba(0,0,0,.9)",lift:"none",texture:"radial-gradient(rgba(236,231,210,.05) .8px,transparent 1.2px) 0 0/5px 5px"},fonts:["Young+Serif","Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400","Courier+Prime:ital@0;1"]},prism:{shared:{"font-display":'"Syne","Segoe UI",system-ui,sans-serif',"font-body":'"Space Grotesk","Segoe UI",system-ui,sans-serif',"font-mono":'"Space Mono",ui-monospace,monospace',"font-hand":'"Space Grotesk",system-ui,sans-serif',radius:"16px","r-sm":"12px"},light:{panel:"#fcfcff","panel-2":"#eef0fa",ink:"#15152c",muted:"#5c5f80",line:"#dcdff0",accent:"#6d2fff","accent-2":"#0096ab",gold:"#e0a800",good:"#0f9d6a",warn:"#c98600",danger:"#e0245e","on-accent":"#fff",holo:"linear-gradient(115deg,#ff7ac6,#ffd86b 25%,#7df3e1 50%,#8fa8ff 75%,#d78bff)",shadow:"0 22px 44px -28px rgba(80,60,180,.45)",lift:"0 10px 24px -18px rgba(80,60,180,.4)",texture:"radial-gradient(40% 50% at 10% 0%,rgba(255,122,198,.14),transparent 70%),radial-gradient(40% 50% at 90% 100%,rgba(125,243,225,.16),transparent 70%)"},dark:{panel:"#0c0c16","panel-2":"#05050b",ink:"#eef0ff",muted:"#9296b8",line:"#24253c",accent:"#b28cff","accent-2":"#3ef2ff",gold:"#ffe45e",good:"#4be39a",warn:"#ffc15e",danger:"#ff6b9a","on-accent":"#05050b",holo:"linear-gradient(115deg,#ff4fae,#ffe45e 25%,#3ef2ff 50%,#7a8cff 75%,#c86bff)",shadow:"0 26px 50px -28px rgba(0,0,0,.95),0 0 36px -20px rgba(178,140,255,.5)",lift:"0 12px 28px -18px rgba(0,0,0,.95)",texture:"radial-gradient(40% 50% at 10% 0%,rgba(255,79,174,.10),transparent 70%),radial-gradient(40% 50% at 90% 100%,rgba(62,242,255,.10),transparent 70%)"},fonts:["Space+Grotesk:wght@400;500;700","Space+Mono"]},candy:{shared:{"font-display":'"Fredoka","Segoe UI Rounded",system-ui,sans-serif',"font-body":'"Fredoka","Segoe UI Rounded",system-ui,sans-serif',"font-mono":'"Fredoka",system-ui,sans-serif',"font-hand":'"Fredoka",system-ui,sans-serif',radius:"22px","r-sm":"16px"},light:{panel:"#fffdf4","panel-2":"#fff1c2",ink:"#1d1033",muted:"#6a5e80",line:"#ead9a6",accent:"#ff4fa3","accent-2":"#28c994",gold:"#ffc933",good:"#12a978",warn:"#d98a00",danger:"#ff3b5c","on-accent":"#fff",pop:"#1d1033",shadow:"5px 5px 0 var(--alm-pop)",lift:"3px 3px 0 var(--alm-pop)",texture:"radial-gradient(circle at 25% 25%,#ff9fcf 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#7fe3c1 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#b7a6ff 0 2.5px,transparent 3px) 0 0/60px 60px"},dark:{panel:"#241a40","panel-2":"#160f2b",ink:"#fff4fb",muted:"#c1b3df",line:"#44376b",accent:"#ff78bd","accent-2":"#5ef2c0",gold:"#ffd84d",good:"#5ef2c0",warn:"#ffc04d",danger:"#ff6b86","on-accent":"#160f2b",pop:"#fff4fb",shadow:"5px 5px 0 var(--alm-accent)",lift:"3px 3px 0 #7a5cff",texture:"radial-gradient(circle at 25% 25%,#ff78bd 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 75% 60%,#5ef2c0 0 3px,transparent 3.5px) 0 0/60px 60px,radial-gradient(circle at 50% 90%,#ffd84d 0 2.5px,transparent 3px) 0 0/60px 60px"},fonts:["Fredoka:wght@400;500;600;700"]},dossier:{shared:{"font-display":'"IBM Plex Serif",Georgia,serif',"font-body":'"IBM Plex Sans","Segoe UI",system-ui,sans-serif',"font-mono":'"IBM Plex Mono",ui-monospace,monospace',"font-hand":'"Reenie Beanie",cursive',radius:"4px","r-sm":"3px"},light:{panel:"#fbfaf7","panel-2":"#ecebe5",ink:"#17191c",muted:"#5a5f67",line:"#d4d1c9",accent:"#8c1d1d","accent-2":"#34506a",gold:"#8a7a5a",good:"#2f6b4a",warn:"#946412",danger:"#a32020","on-accent":"#fff",shadow:"0 1px 0 rgba(0,0,0,.04),0 12px 26px -22px rgba(0,0,0,.45)",lift:"0 1px 2px rgba(0,0,0,.06)",texture:"linear-gradient(transparent 31px,rgba(23,25,28,.05) 32px) 0 0/100% 32px"},dark:{panel:"#17191c","panel-2":"#0e0f11",ink:"#e8e6e1",muted:"#9aa0a8",line:"#2d3137",accent:"#e0534f","accent-2":"#90b1cd",gold:"#b9a67e",good:"#7fc3a0",warn:"#dcae57",danger:"#ff6e68","on-accent":"#0e0f11",shadow:"0 14px 30px -22px rgba(0,0,0,.9)",lift:"none",texture:"linear-gradient(transparent 31px,rgba(232,230,225,.04) 32px) 0 0/100% 32px"},fonts:["IBM+Plex+Mono:wght@400;500","IBM+Plex+Sans:wght@400;500;600","IBM+Plex+Serif:ital,wght@0,500;0,600;1,500","Reenie+Beanie"]},scriptorium:{shared:{"font-display":'"IM Fell English",Georgia,serif',"font-body":'"IM Fell English",Georgia,serif',"font-mono":'"IM Fell English SC",Georgia,serif',"font-hand":'"IM Fell English",Georgia,serif',radius:"3px","r-sm":"2px",lift:"none"},light:{panel:"#f3e7cb","panel-2":"#e3cfa3",ink:"#2a1c10",muted:"#6c573b",line:"#c4a770",accent:"#a8261c","accent-2":"#1f3f86",gold:"#b5892a",good:"#3d6b2e",warn:"#a8741a",danger:"#a8261c","on-accent":"#f7ecd2",shadow:"0 2px 0 #c7ab77,0 22px 36px -26px rgba(60,35,10,.7)",texture:"radial-gradient(40% 50% at 18% 22%,rgba(150,100,40,.10),transparent 70%),radial-gradient(35% 40% at 82% 70%,rgba(120,80,30,.09),transparent 70%),radial-gradient(rgba(90,60,20,.07) 1px,transparent 1.4px) 0 0/9px 9px"},dark:{panel:"#221810","panel-2":"#150e08",ink:"#efdfbf",muted:"#b19a75",line:"#4c3a24",accent:"#e6614a","accent-2":"#86a3e6",gold:"#e2b34f",good:"#93c46f",warn:"#e2b34f",danger:"#ff735c","on-accent":"#150e08",shadow:"0 2px 0 #3a2a18,0 26px 40px -26px rgba(0,0,0,.9)",texture:"radial-gradient(40% 50% at 70% 10%,rgba(255,180,80,.10),transparent 70%),radial-gradient(rgba(239,223,191,.04) 1px,transparent 1.4px) 0 0/9px 9px"},fonts:["IM+Fell+English:ital@0;1","IM+Fell+English+SC","UnifrakturMaguntia"]},arcana:{shared:{"font-display":'"Cinzel",Georgia,serif',"font-body":'"Alegreya",Georgia,serif',"font-mono":'"Cinzel",Georgia,serif',"font-hand":'"Alegreya",Georgia,serif',radius:"16px","r-sm":"10px"},light:{panel:"#f8f5ff","panel-2":"#e9e2fb",ink:"#211848",muted:"#655b8c",line:"#d5cbf0",accent:"#8a5c0a","accent-2":"#0d8578",gold:"#c28f2c",good:"#1f8a58",warn:"#9a6a12",danger:"#c42d52","on-accent":"#fff",shadow:"0 0 0 1px rgba(194,143,44,.14),0 24px 44px -30px rgba(60,40,140,.5)",lift:"0 10px 22px -18px rgba(60,40,140,.4)",texture:"radial-gradient(1px 1px at 20% 30%,rgba(194,143,44,.6),transparent) 0 0/140px 140px,radial-gradient(1px 1px at 70% 80%,rgba(106,69,214,.45),transparent) 0 0/190px 190px"},dark:{panel:"#1a1533","panel-2":"#0f0c22",ink:"#ece6ff",muted:"#a79fcb",line:"#372d62",accent:"#e7b75a","accent-2":"#63d9c6",gold:"#e7b75a",good:"#7fe0a8",warn:"#f0c46a",danger:"#ff7d93","on-accent":"#140f28",shadow:"0 0 0 1px rgba(231,183,90,.12),0 28px 60px -30px rgba(0,0,0,.95),0 0 40px -18px rgba(123,97,255,.45)",lift:"0 10px 26px -16px rgba(0,0,0,.9)",texture:"radial-gradient(1px 1px at 20% 30%,rgba(255,240,200,.5),transparent) 0 0/140px 140px,radial-gradient(1px 1px at 70% 80%,rgba(200,220,255,.45),transparent) 0 0/190px 190px"},fonts:["Alegreya:ital,wght@0,400;0,600;1,400","Cinzel:wght@500;700","Cinzel+Decorative:wght@700"]},orbital:{shared:{"font-display":'"Chakra Petch","Segoe UI",system-ui,sans-serif',"font-body":'"Inter","Segoe UI",system-ui,sans-serif',"font-mono":'"JetBrains Mono",ui-monospace,monospace',"font-hand":'"JetBrains Mono",ui-monospace,monospace',radius:"2px","r-sm":"2px",lift:"none"},light:{panel:"#f7f8fa","panel-2":"#e5e8ed",ink:"#0b0f14",muted:"#566170",line:"#cdd3db",accent:"#e8430a","accent-2":"#2742ff",gold:"#e8430a",good:"#00925f",warn:"#c77800",danger:"#d61f35","on-accent":"#fff",shadow:"0 0 0 1px rgba(11,15,20,.04),0 24px 40px -30px rgba(11,15,20,.5)",texture:"linear-gradient(90deg,rgba(11,15,20,.05) 1px,transparent 1px) 0 0/48px 100%,linear-gradient(rgba(11,15,20,.05) 1px,transparent 1px) 0 0/100% 48px"},dark:{panel:"#11151b","panel-2":"#090c10",ink:"#e8edf3",muted:"#8a96a5",line:"#27303b",accent:"#ff6a2b","accent-2":"#7289ff",gold:"#ff6a2b",good:"#2fd39a",warn:"#ffb13d",danger:"#ff5468","on-accent":"#090c10",shadow:"0 0 0 1px rgba(255,255,255,.03),0 24px 40px -30px rgba(0,0,0,.9)",texture:"linear-gradient(90deg,rgba(232,237,243,.04) 1px,transparent 1px) 0 0/48px 100%,linear-gradient(rgba(232,237,243,.04) 1px,transparent 1px) 0 0/100% 48px"},fonts:["Chakra+Petch:wght@500;600;700","Inter:wght@400;500;600","JetBrains+Mono:wght@400;500"]},posy:{shared:{"font-display":'"DM Serif Display",Georgia,serif',"font-body":'"Nunito","Segoe UI",system-ui,sans-serif',"font-mono":'"DM Mono",ui-monospace,monospace',"font-hand":'"Dancing Script",cursive',radius:"24px","r-sm":"16px",sprig:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cpath d='M20 110C40 80 60 60 100 40' stroke='%234f8a5c' stroke-width='2' fill='none'/%3E%3Cpath d='M45 80c-10-8-12-20-8-26 9 4 13 16 8 26z' fill='%237fb08a'/%3E%3Cpath d='M70 58c2-12 12-20 20-20-1 10-10 18-20 20z' fill='%239cc5a5'/%3E%3Cg transform='translate(96 30)'%3E%3Cg fill='%23f0a3b9'%3E%3Cellipse rx='7' ry='11' transform='translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(72) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(144) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(216) translate(0 -9)'/%3E%3Cellipse rx='7' ry='11' transform='rotate(288) translate(0 -9)'/%3E%3C/g%3E%3Ccircle r='5' fill='%23e8b25c'/%3E%3C/g%3E%3C/svg%3E")`},light:{panel:"#fff7f7","panel-2":"#f9e1e6",ink:"#1f3a2b",muted:"#627566",line:"#eec5cf",accent:"#c93d70","accent-2":"#3f7f4d",gold:"#d99a4e",good:"#3a8551",warn:"#b87624",danger:"#c43a5c","on-accent":"#fff",shadow:"0 20px 40px -28px rgba(120,40,70,.45),0 2px 6px -3px rgba(31,58,43,.15)",lift:"0 10px 22px -18px rgba(120,40,70,.5)",texture:`linear-gradient(rgba(255,247,247,.45),rgba(255,247,247,.45)),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg transform='translate(24 26)'%3E%3Cg fill='%23f2a9bf'%3E%3Ccircle cx='0' cy='-6' r='5'/%3E%3Ccircle cx='5.7' cy='-1.9' r='5'/%3E%3Ccircle cx='3.5' cy='4.9' r='5'/%3E%3Ccircle cx='-3.5' cy='4.9' r='5'/%3E%3Ccircle cx='-5.7' cy='-1.9' r='5'/%3E%3C/g%3E%3Ccircle r='2.6' fill='%23e8b25c'/%3E%3C/g%3E%3Cpath d='M66 70c6-10 16-12 22-10-4 8-14 12-22 10z' fill='%2396c4a0'/%3E%3Cpath d='M66 70c-2-9 2-18 8-22 2 8-2 17-8 22z' fill='%23acd3b3'/%3E%3Ccircle cx='78' cy='22' r='2.4' fill='%23f2a9bf'/%3E%3Ccircle cx='14' cy='76' r='2' fill='%23acd3b3'/%3E%3C/svg%3E") 0 0/96px 96px`},dark:{panel:"#172a20","panel-2":"#0f1f17",ink:"#fbe9ee",muted:"#b5c8b9",line:"#2f4a3b",accent:"#ff8fb1","accent-2":"#8fd19e",gold:"#f0c07a",good:"#8fd19e",warn:"#f0c07a",danger:"#ff7f98","on-accent":"#0f1f17",shadow:"0 22px 44px -28px rgba(0,0,0,.9)",lift:"0 10px 22px -18px rgba(0,0,0,.9)",texture:`linear-gradient(rgba(15,31,23,.62),rgba(15,31,23,.62)),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg transform='translate(24 26)'%3E%3Cg fill='%23f2a9bf'%3E%3Ccircle cx='0' cy='-6' r='5'/%3E%3Ccircle cx='5.7' cy='-1.9' r='5'/%3E%3Ccircle cx='3.5' cy='4.9' r='5'/%3E%3Ccircle cx='-3.5' cy='4.9' r='5'/%3E%3Ccircle cx='-5.7' cy='-1.9' r='5'/%3E%3C/g%3E%3Ccircle r='2.6' fill='%23e8b25c'/%3E%3C/g%3E%3Cpath d='M66 70c6-10 16-12 22-10-4 8-14 12-22 10z' fill='%2396c4a0'/%3E%3Cpath d='M66 70c-2-9 2-18 8-22 2 8-2 17-8 22z' fill='%23acd3b3'/%3E%3Ccircle cx='78' cy='22' r='2.4' fill='%23f2a9bf'/%3E%3Ccircle cx='14' cy='76' r='2' fill='%23acd3b3'/%3E%3C/svg%3E") 0 0/96px 96px`},fonts:["DM+Serif+Display:ital@0;1","Nunito:wght@400;600;700","Dancing+Script:wght@600"]}},Rt=["Caveat:wght@500;700","DM+Mono:wght@400;500","Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800","Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600","Syne:wght@600;700;800","Cormorant+Garamond:ital,wght@0,500;0,700;1,500;1,600","Oswald:wght@500;600"];function Je(e){return`@import url("https://fonts.googleapis.com/css2?${[...Rt,...se[e]?.fonts??[]].map((a)=>`family=${a}`).join("&")}&display=swap");`}function Ot(e){return e in se||e==="lumiverse"}var be=(e)=>Object.entries(e).map(([t,a])=>`--alm-${t}:${a};`).join("");function Nt(){let e=[];for(let[t,a]of Object.entries(se)){let r=`:root[data-alm-skin="${t}"]`;e.push(`${r}{${be(a.shared)}--alm-on-voice:#fff}`),e.push(`${r},${r}[data-alm-mode="light"]{${be(a.light)}}`),e.push(`${r}[data-alm-mode="dark"]{${be(a.dark)}}`)}return e.join(`
+`)}var p=(e)=>`:root[data-alm-skin="${e}"]`,ge=(e)=>`
+${p(e)} .alm-say__bubble::before,${p(e)} .alm-say__bubble::after{content:none!important}
+${p(e)} .alm-thk::before,${p(e)} .alm-thk::after{display:none!important}
+${p(e)} .alm-thk{animation:none!important}
+${p(e)} .alm-chapter b::before,${p(e)} .alm-chapter b::after{content:none!important}`,Pt=`
 /* Almanac: the sun marks each chapter */
-${S("almanac")} .alm-chapter small::before{content:"☉  ";color:var(--alm-gold);letter-spacing:0}
+${p("almanac")} .alm-chapter small::before{content:"☉  ";color:var(--alm-gold);letter-spacing:0}
 
 /* Solar: pull quotes, ruled sections, highlighter */
-${FLAT_BUBBLE("solar")}
-${S("solar")} .alm-say__medal{border-radius:0!important;box-shadow:none!important;font-family:var(--alm-font-body)!important}
-${S("solar")} .alm-say__bubble{background:none!important;border:0!important;border-top:2px solid var(--c)!important;border-radius:0!important;box-shadow:none!important;padding:10px 0 4px!important}
-${S("solar")} .alm-say__who{position:static!important;display:flex!important;background:none!important;box-shadow:none!important;color:var(--c)!important;padding:0 0 6px!important;font-weight:700!important}
-${S("solar")} .alm-say--user .alm-say__who{justify-content:flex-end}
-${S("solar")} .alm-say__tone{color:var(--alm-muted)!important;border-left-color:var(--alm-line)!important}
-${S("solar")} .alm-say__line{font:italic 700 1.3em/1.28 var(--alm-font-display)!important}
-${S("solar")} .alm-thk{border:0!important;border-left:6px solid var(--alm-accent)!important;border-radius:0!important;background:none!important;padding:2px 0 2px 14px!important;font:italic 700 19px/1.3 var(--alm-font-hand)!important}
-${S("solar")} .alm-chapter{grid-template-columns:1fr!important;text-align:left!important;border-top:2px solid var(--alm-rule);padding-top:10px!important}
-${S("solar")} .alm-chapter::before,${S("solar")} .alm-chapter::after{display:none}
-${S("solar")} .alm-chapter b{font-style:normal!important;font-weight:900!important;background:linear-gradient(transparent 58%,var(--alm-accent) 58% 92%,transparent 92%);display:inline!important}
-${S("solar")}[data-alm-mode="dark"] .alm-chapter b{background:linear-gradient(transparent 86%,var(--alm-accent) 86% 97%,transparent 97%)}
-${S("solar")} .alm-chapter small{color:var(--alm-accent-2)!important;font-weight:700}
-${S("solar")} details.alm-drawer{border:0!important;border-top:3px solid var(--alm-rule)!important}
-${S("solar")} .alm-btn{border:2px solid var(--alm-rule)!important;box-shadow:none!important;text-transform:uppercase;letter-spacing:.06em;font-weight:700!important}
-${S("solar")} .almp .card{border:0;border-top:3px solid var(--alm-rule);box-shadow:none}
-${S("solar")} .almp .btn{border:2px solid var(--alm-rule);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+${ge("solar")}
+${p("solar")} .alm-say__medal{border-radius:0!important;box-shadow:none!important;font-family:var(--alm-font-body)!important}
+${p("solar")} .alm-say__bubble{background:none!important;border:0!important;border-top:2px solid var(--c)!important;border-radius:0!important;box-shadow:none!important;padding:10px 0 4px!important}
+${p("solar")} .alm-say__who{position:static!important;display:flex!important;background:none!important;box-shadow:none!important;color:var(--c)!important;padding:0 0 6px!important;font-weight:700!important}
+${p("solar")} .alm-say--user .alm-say__who{justify-content:flex-end}
+${p("solar")} .alm-say__tone{color:var(--alm-muted)!important;border-left-color:var(--alm-line)!important}
+${p("solar")} .alm-say__line{font:italic 700 1.3em/1.28 var(--alm-font-display)!important}
+${p("solar")} .alm-thk{border:0!important;border-left:6px solid var(--alm-accent)!important;border-radius:0!important;background:none!important;padding:2px 0 2px 14px!important;font:italic 700 19px/1.3 var(--alm-font-hand)!important}
+${p("solar")} .alm-chapter{grid-template-columns:1fr!important;text-align:left!important;border-top:2px solid var(--alm-rule);padding-top:10px!important}
+${p("solar")} .alm-chapter::before,${p("solar")} .alm-chapter::after{display:none}
+${p("solar")} .alm-chapter b{font-style:normal!important;font-weight:900!important;background:linear-gradient(transparent 58%,var(--alm-accent) 58% 92%,transparent 92%);display:inline!important}
+${p("solar")}[data-alm-mode="dark"] .alm-chapter b{background:linear-gradient(transparent 86%,var(--alm-accent) 86% 97%,transparent 97%)}
+${p("solar")} .alm-chapter small{color:var(--alm-accent-2)!important;font-weight:700}
+${p("solar")} details.alm-drawer{border:0!important;border-top:3px solid var(--alm-rule)!important}
+${p("solar")} .alm-btn{border:2px solid var(--alm-rule)!important;box-shadow:none!important;text-transform:uppercase;letter-spacing:.06em;font-weight:700!important}
+${p("solar")} .almp .card{border:0;border-top:3px solid var(--alm-rule);box-shadow:none}
+${p("solar")} .almp .btn{border:2px solid var(--alm-rule);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 
 /* Nocturne: arched portraits, whispered thoughts, filigree frames */
-${S("nocturne")} .alm-say__medal{border-radius:50% 50% 4px 4px!important;font-style:italic!important;font-weight:600!important;font-size:22px!important}
-${S("nocturne")} .alm-say__who{text-transform:none!important;font-style:italic;letter-spacing:.06em!important;font-size:13px!important}
-${S("nocturne")} .alm-say__line{font-size:1.14em!important}
-${S("nocturne")} .alm-thk{border:0!important;border-left:1px solid var(--c)!important;border-radius:0!important;background:none!important;padding:0 0 0 18px!important;font:italic 500 21px/1.3 var(--alm-font-hand)!important;animation:none!important}
-${S("nocturne")} .alm-thk::before{content:"⸙";width:auto;height:auto;left:-7px;top:-4px;border:0;border-radius:0;background:var(--alm-panel);color:var(--c);font:14px/1 serif}
-${S("nocturne")} .alm-thk::after{display:none}
-${S("nocturne")} .alm-chapter::before,${S("nocturne")} .alm-chapter::after{background:linear-gradient(90deg,transparent,var(--alm-accent) 50%,transparent) center/100% 1px no-repeat}
-${S("nocturne")} details.alm-drawer,${S("nocturne")} .almp .card{box-shadow:inset 0 0 0 4px var(--alm-panel),inset 0 0 0 5px var(--alm-line),var(--alm-lift)!important}
+${p("nocturne")} .alm-say__medal{border-radius:50% 50% 4px 4px!important;font-style:italic!important;font-weight:600!important;font-size:22px!important}
+${p("nocturne")} .alm-say__who{text-transform:none!important;font-style:italic;letter-spacing:.06em!important;font-size:13px!important}
+${p("nocturne")} .alm-say__line{font-size:1.14em!important}
+${p("nocturne")} .alm-thk{border:0!important;border-left:1px solid var(--c)!important;border-radius:0!important;background:none!important;padding:0 0 0 18px!important;font:italic 500 21px/1.3 var(--alm-font-hand)!important;animation:none!important}
+${p("nocturne")} .alm-thk::before{content:"⸙";width:auto;height:auto;left:-7px;top:-4px;border:0;border-radius:0;background:var(--alm-panel);color:var(--c);font:14px/1 serif}
+${p("nocturne")} .alm-thk::after{display:none}
+${p("nocturne")} .alm-chapter::before,${p("nocturne")} .alm-chapter::after{background:linear-gradient(90deg,transparent,var(--alm-accent) 50%,transparent) center/100% 1px no-repeat}
+${p("nocturne")} details.alm-drawer,${p("nocturne")} .almp .card{box-shadow:inset 0 0 0 4px var(--alm-panel),inset 0 0 0 5px var(--alm-line),var(--alm-lift)!important}
 
 /* Botanical: specimen labels, tape, typewriter */
-${FLAT_BUBBLE("botanical")}
-${S("botanical")} .alm-say__medal{border-radius:4px!important;box-shadow:none!important;border:1px solid var(--alm-ink);font-family:var(--alm-font-mono)!important;font-weight:400!important}
-${S("botanical")} .alm-say__bubble{border-radius:2px!important;background:var(--alm-panel)!important;box-shadow:none!important;border-left:3px solid var(--c)!important}
-${S("botanical")} .alm-say--user .alm-say__bubble{border-left-width:1px!important;border-right:3px solid var(--c)!important}
-${S("botanical")} .alm-say__who{border-radius:0!important;background:var(--alm-panel)!important;color:var(--c)!important;border:1px solid var(--c)}
-${S("botanical")} .alm-say__tone{border-left-color:var(--alm-line)!important}
-${S("botanical")} .alm-thk{border:0!important;border-radius:0!important;background:none!important;color:color-mix(in oklab,var(--alm-ink) 72%,var(--alm-panel))!important}
-${S("botanical")} .alm-chapter::before,${S("botanical")} .alm-chapter::after{background:linear-gradient(var(--alm-ink),var(--alm-ink)) center/100% 1px no-repeat}
-${S("botanical")} .alm-chapter b{font-style:normal!important}
-${S("botanical")} details.alm-drawer{position:relative;overflow:visible!important;border-color:var(--alm-ink)!important}
-${S("botanical")} details.alm-drawer::before{content:"";position:absolute;top:-9px;left:22px;width:74px;height:18px;background:color-mix(in oklab,var(--alm-gold) 38%,transparent);transform:rotate(-4deg);pointer-events:none}
-${S("botanical")} .almp .card{border-color:var(--alm-ink);box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px var(--alm-line)}
+${ge("botanical")}
+${p("botanical")} .alm-say__medal{border-radius:4px!important;box-shadow:none!important;border:1px solid var(--alm-ink);font-family:var(--alm-font-mono)!important;font-weight:400!important}
+${p("botanical")} .alm-say__bubble{border-radius:2px!important;background:var(--alm-panel)!important;box-shadow:none!important;border-left:3px solid var(--c)!important}
+${p("botanical")} .alm-say--user .alm-say__bubble{border-left-width:1px!important;border-right:3px solid var(--c)!important}
+${p("botanical")} .alm-say__who{border-radius:0!important;background:var(--alm-panel)!important;color:var(--c)!important;border:1px solid var(--c)}
+${p("botanical")} .alm-say__tone{border-left-color:var(--alm-line)!important}
+${p("botanical")} .alm-thk{border:0!important;border-radius:0!important;background:none!important;color:color-mix(in oklab,var(--alm-ink) 72%,var(--alm-panel))!important}
+${p("botanical")} .alm-chapter::before,${p("botanical")} .alm-chapter::after{background:linear-gradient(var(--alm-ink),var(--alm-ink)) center/100% 1px no-repeat}
+${p("botanical")} .alm-chapter b{font-style:normal!important}
+${p("botanical")} details.alm-drawer{position:relative;overflow:visible!important;border-color:var(--alm-ink)!important}
+${p("botanical")} details.alm-drawer::before{content:"";position:absolute;top:-9px;left:22px;width:74px;height:18px;background:color-mix(in oklab,var(--alm-gold) 38%,transparent);transform:rotate(-4deg);pointer-events:none}
+${p("botanical")} .almp .card{border-color:var(--alm-ink);box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px var(--alm-line)}
 
 /* Prism: holographic foil */
-${S("prism")} details.alm-drawer,${S("prism")} details.alm-sub,${S("prism")} .almp .card{border:1.5px solid transparent!important;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,var(--alm-holo) border-box!important}
-${S("prism")} .alm-say__medal{box-shadow:0 0 0 2.5px var(--alm-panel),0 0 0 4.5px var(--alm-accent-2),0 0 16px -2px var(--alm-accent)!important}
-${S("prism")} .alm-say__who{border-radius:99px!important}
-${S("prism")} .alm-thk{border-style:solid!important;border-radius:14px!important;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);font:italic 500 16px/1.4 var(--alm-font-hand)!important}
-${S("prism")} .alm-chapter::before,${S("prism")} .alm-chapter::after{background:var(--alm-holo) center/100% 2px no-repeat}
-${S("prism")} .alm-chapter b{font-style:normal!important;font-weight:800!important;background:var(--alm-holo);-webkit-background-clip:text;background-clip:text;color:transparent!important}
-${S("prism")} .alm-chapter b::before,${S("prism")} .alm-chapter b::after{content:none!important}
-${S("prism")} .alm-caret,${S("prism")} .alm-btn--primary,${S("prism")} .almp .btn.primary{background:var(--alm-holo)!important;color:#15152c!important;border-color:transparent!important}
+${p("prism")} details.alm-drawer,${p("prism")} details.alm-sub,${p("prism")} .almp .card{border:1.5px solid transparent!important;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,var(--alm-holo) border-box!important}
+${p("prism")} .alm-say__medal{box-shadow:0 0 0 2.5px var(--alm-panel),0 0 0 4.5px var(--alm-accent-2),0 0 16px -2px var(--alm-accent)!important}
+${p("prism")} .alm-say__who{border-radius:99px!important}
+${p("prism")} .alm-thk{border-style:solid!important;border-radius:14px!important;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);font:italic 500 16px/1.4 var(--alm-font-hand)!important}
+${p("prism")} .alm-chapter::before,${p("prism")} .alm-chapter::after{background:var(--alm-holo) center/100% 2px no-repeat}
+${p("prism")} .alm-chapter b{font-style:normal!important;font-weight:800!important;background:var(--alm-holo);-webkit-background-clip:text;background-clip:text;color:transparent!important}
+${p("prism")} .alm-chapter b::before,${p("prism")} .alm-chapter b::after{content:none!important}
+${p("prism")} .alm-caret,${p("prism")} .alm-btn--primary,${p("prism")} .almp .btn.primary{background:var(--alm-holo)!important;color:#15152c!important;border-color:transparent!important}
 
 /* Candy: stickers with hard shadows */
-${S("candy")} details.alm-drawer,${S("candy")} details.alm-sub,${S("candy")} .almp .card{border:2.5px solid var(--alm-pop)!important;box-shadow:var(--alm-lift)!important}
-${S("candy")} .alm-say__medal{border:2.5px solid var(--alm-pop);box-shadow:3px 3px 0 var(--alm-pop)!important;transform:rotate(-6deg)}
-${S("candy")} .alm-say--user .alm-say__medal{transform:rotate(6deg)}
-${S("candy")} .alm-say__bubble{border:2.5px solid var(--alm-pop)!important;box-shadow:4px 4px 0 var(--c)!important;background:color-mix(in oklab,var(--c) 14%,var(--alm-panel))!important}
-${S("candy")} .alm-say__bubble::before{content:none!important}
-${S("candy")} .alm-say__who{border:2px solid var(--alm-pop);border-radius:99px!important;transform:rotate(-2deg);font-weight:600!important}
-${S("candy")} .alm-say--user .alm-say__who{transform:rotate(2deg)}
-${S("candy")} .alm-thk{border:2.5px solid var(--alm-pop)!important;box-shadow:3px 3px 0 var(--c);font-weight:500!important;font-size:17px!important}
-${S("candy")} .alm-chapter::before,${S("candy")} .alm-chapter::after{height:12px;background:radial-gradient(circle at 6px -2px,transparent 6px,var(--alm-accent) 6.5px 8.5px,transparent 9px) 0 0/12px 12px repeat-x}
-${S("candy")} .alm-chapter b{font-style:normal!important;font-weight:700!important}
-${S("candy")} .alm-btn,${S("candy")} .almp .btn{border:2.5px solid var(--alm-pop)!important;border-radius:99px!important;box-shadow:3px 3px 0 var(--alm-pop)!important}
+${p("candy")} details.alm-drawer,${p("candy")} details.alm-sub,${p("candy")} .almp .card{border:2.5px solid var(--alm-pop)!important;box-shadow:var(--alm-lift)!important}
+${p("candy")} .alm-say__medal{border:2.5px solid var(--alm-pop);box-shadow:3px 3px 0 var(--alm-pop)!important;transform:rotate(-6deg)}
+${p("candy")} .alm-say--user .alm-say__medal{transform:rotate(6deg)}
+${p("candy")} .alm-say__bubble{border:2.5px solid var(--alm-pop)!important;box-shadow:4px 4px 0 var(--c)!important;background:color-mix(in oklab,var(--c) 14%,var(--alm-panel))!important}
+${p("candy")} .alm-say__bubble::before{content:none!important}
+${p("candy")} .alm-say__who{border:2px solid var(--alm-pop);border-radius:99px!important;transform:rotate(-2deg);font-weight:600!important}
+${p("candy")} .alm-say--user .alm-say__who{transform:rotate(2deg)}
+${p("candy")} .alm-thk{border:2.5px solid var(--alm-pop)!important;box-shadow:3px 3px 0 var(--c);font-weight:500!important;font-size:17px!important}
+${p("candy")} .alm-chapter::before,${p("candy")} .alm-chapter::after{height:12px;background:radial-gradient(circle at 6px -2px,transparent 6px,var(--alm-accent) 6.5px 8.5px,transparent 9px) 0 0/12px 12px repeat-x}
+${p("candy")} .alm-chapter b{font-style:normal!important;font-weight:700!important}
+${p("candy")} .alm-btn,${p("candy")} .almp .btn{border:2.5px solid var(--alm-pop)!important;border-radius:99px!important;box-shadow:3px 3px 0 var(--alm-pop)!important}
 
 /* Dossier: transcript speech, margin notes, stamps */
-${FLAT_BUBBLE("dossier")}
-${S("dossier")} .alm-say__medal{border-radius:3px!important;box-shadow:none!important}
-${S("dossier")} .alm-say__bubble{background:var(--alm-panel)!important;border:1px solid var(--alm-line)!important;border-left:3px solid var(--c)!important;border-radius:2px!important;box-shadow:none!important}
-${S("dossier")} .alm-say--user .alm-say__bubble{border-left-width:1px!important;border-right:3px solid var(--c)!important}
-${S("dossier")} .alm-say__who{position:static!important;display:flex!important;background:none!important;box-shadow:none!important;color:var(--c)!important;padding:0 0 8px!important}
-${S("dossier")} .alm-say--user .alm-say__who{justify-content:flex-end}
-${S("dossier")} .alm-say__tone{color:var(--alm-muted)!important;border-left-color:var(--alm-line)!important}
-${S("dossier")} .alm-thk{border:0!important;border-left:2px solid var(--c)!important;border-radius:0!important;background:none!important;padding:4px 0 4px 14px!important;font-size:25px!important}
-${S("dossier")} .alm-chapter::before,${S("dossier")} .alm-chapter::after{background:linear-gradient(var(--alm-ink),var(--alm-ink)) center/100% 1px no-repeat}
-${S("dossier")} .alm-chapter b{font-style:normal!important;font-size:19px!important;text-transform:uppercase;letter-spacing:.12em}
-${S("dossier")} .alm-list li.due::after{content:"due";display:inline-block;margin-left:8px;padding:1px 6px;border:1.5px solid var(--alm-accent);color:var(--alm-accent);font:600 9.5px/1.4 var(--alm-font-mono);letter-spacing:.2em;text-transform:uppercase;transform:rotate(-3deg)}
+${ge("dossier")}
+${p("dossier")} .alm-say__medal{border-radius:3px!important;box-shadow:none!important}
+${p("dossier")} .alm-say__bubble{background:var(--alm-panel)!important;border:1px solid var(--alm-line)!important;border-left:3px solid var(--c)!important;border-radius:2px!important;box-shadow:none!important}
+${p("dossier")} .alm-say--user .alm-say__bubble{border-left-width:1px!important;border-right:3px solid var(--c)!important}
+${p("dossier")} .alm-say__who{position:static!important;display:flex!important;background:none!important;box-shadow:none!important;color:var(--c)!important;padding:0 0 8px!important}
+${p("dossier")} .alm-say--user .alm-say__who{justify-content:flex-end}
+${p("dossier")} .alm-say__tone{color:var(--alm-muted)!important;border-left-color:var(--alm-line)!important}
+${p("dossier")} .alm-thk{border:0!important;border-left:2px solid var(--c)!important;border-radius:0!important;background:none!important;padding:4px 0 4px 14px!important;font-size:25px!important}
+${p("dossier")} .alm-chapter::before,${p("dossier")} .alm-chapter::after{background:linear-gradient(var(--alm-ink),var(--alm-ink)) center/100% 1px no-repeat}
+${p("dossier")} .alm-chapter b{font-style:normal!important;font-size:19px!important;text-transform:uppercase;letter-spacing:.12em}
+${p("dossier")} .alm-list li.due::after{content:"due";display:inline-block;margin-left:8px;padding:1px 6px;border:1.5px solid var(--alm-accent);color:var(--alm-accent);font:600 9.5px/1.4 var(--alm-font-mono);letter-spacing:.2em;text-transform:uppercase;transform:rotate(-3deg)}
 
 /* Scriptorium: seals, ribbons, blackletter initials */
-${S("scriptorium")} .alm-say__medal{border-radius:50% 50% 8px 8px!important;font:400 24px/1 "UnifrakturMaguntia",serif!important;box-shadow:0 0 0 2px var(--alm-panel),0 0 0 3.5px var(--alm-gold)!important}
-${S("scriptorium")} .alm-say__bubble{background:color-mix(in oklab,var(--c) 8%,var(--alm-panel))!important;box-shadow:none!important}
-${S("scriptorium")} .alm-say__who{border-radius:0!important;clip-path:polygon(0 0,100% 0,calc(100% - 7px) 50%,100% 100%,0 100%);padding-right:16px!important;letter-spacing:.06em!important;font-size:12px!important}
-${S("scriptorium")} .alm-say--user .alm-say__who{clip-path:polygon(0 0,100% 0,100% 100%,0 100%,7px 50%);padding-left:16px!important;padding-right:9px!important}
-${S("scriptorium")} .alm-say__line{font-size:1.14em!important}
-${S("scriptorium")} .alm-thk{border-style:dotted!important;font:italic 400 19px/1.3 var(--alm-font-hand)!important}
-${S("scriptorium")} .alm-chapter::before,${S("scriptorium")} .alm-chapter::after{background:linear-gradient(var(--alm-accent),var(--alm-accent)) center 3px/100% 1px no-repeat,linear-gradient(var(--alm-accent),var(--alm-accent)) center 6px/100% 1px no-repeat}
-${S("scriptorium")} .alm-chapter b{font-weight:400!important}
-${S("scriptorium")} .alm-chapter+p::first-letter{float:left;font:400 3.6em/.82 "UnifrakturMaguntia",serif;color:var(--alm-accent);padding:.08em .12em 0 0;text-shadow:1px 1px 0 var(--alm-gold)}
-${S("scriptorium")} details.alm-drawer{outline:1px solid var(--alm-line);outline-offset:-5px}
-${S("scriptorium")} .almp .card{box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px var(--alm-line)}
+${p("scriptorium")} .alm-say__medal{border-radius:50% 50% 8px 8px!important;font:400 24px/1 "UnifrakturMaguntia",serif!important;box-shadow:0 0 0 2px var(--alm-panel),0 0 0 3.5px var(--alm-gold)!important}
+${p("scriptorium")} .alm-say__bubble{background:color-mix(in oklab,var(--c) 8%,var(--alm-panel))!important;box-shadow:none!important}
+${p("scriptorium")} .alm-say__who{border-radius:0!important;clip-path:polygon(0 0,100% 0,calc(100% - 7px) 50%,100% 100%,0 100%);padding-right:16px!important;letter-spacing:.06em!important;font-size:12px!important}
+${p("scriptorium")} .alm-say--user .alm-say__who{clip-path:polygon(0 0,100% 0,100% 100%,0 100%,7px 50%);padding-left:16px!important;padding-right:9px!important}
+${p("scriptorium")} .alm-say__line{font-size:1.14em!important}
+${p("scriptorium")} .alm-thk{border-style:dotted!important;font:italic 400 19px/1.3 var(--alm-font-hand)!important}
+${p("scriptorium")} .alm-chapter::before,${p("scriptorium")} .alm-chapter::after{background:linear-gradient(var(--alm-accent),var(--alm-accent)) center 3px/100% 1px no-repeat,linear-gradient(var(--alm-accent),var(--alm-accent)) center 6px/100% 1px no-repeat}
+${p("scriptorium")} .alm-chapter b{font-weight:400!important}
+${p("scriptorium")} .alm-chapter+p::first-letter{float:left;font:400 3.6em/.82 "UnifrakturMaguntia",serif;color:var(--alm-accent);padding:.08em .12em 0 0;text-shadow:1px 1px 0 var(--alm-gold)}
+${p("scriptorium")} details.alm-drawer{outline:1px solid var(--alm-line);outline-offset:-5px}
+${p("scriptorium")} .almp .card{box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px var(--alm-line)}
 
 /* Arcana: glowing voices, gold frames */
-${S("arcana")} .alm-say__medal{box-shadow:0 0 0 2px var(--alm-panel),0 0 0 3.5px color-mix(in oklab,var(--c) 70%,transparent),0 0 20px -2px var(--c)!important}
-${S("arcana")} .alm-say__who{border-radius:99px!important;letter-spacing:.2em!important;font-size:10px!important}
-${S("arcana")} .alm-say__tone{font-family:var(--alm-font-body)!important}
-${S("arcana")} .alm-thk{border-style:solid!important;border-color:color-mix(in oklab,var(--c) 40%,transparent)!important;box-shadow:0 0 24px -8px var(--c);font:italic 400 18px/1.35 var(--alm-font-hand)!important}
-${S("arcana")} .alm-chapter::before,${S("arcana")} .alm-chapter::after{background:linear-gradient(90deg,transparent,var(--alm-gold) 40%,transparent) center/100% 1px no-repeat,radial-gradient(circle,var(--alm-gold) 0 2px,transparent 2.5px) center/8px 8px no-repeat}
-${S("arcana")} .alm-chapter b{font-family:"Cinzel Decorative",serif!important;font-style:normal!important;font-size:22px!important;color:var(--alm-accent)!important}
-${S("arcana")} details.alm-drawer,${S("arcana")} .almp .card{box-shadow:inset 0 0 0 5px var(--alm-panel),inset 0 0 0 6px color-mix(in oklab,var(--alm-gold) 30%,transparent),var(--alm-lift)!important}
-@media (prefers-reduced-motion:no-preference){${S("arcana")} .alm-say__medal{animation:alm-glow 4s ease-in-out infinite alternate}}
+${p("arcana")} .alm-say__medal{box-shadow:0 0 0 2px var(--alm-panel),0 0 0 3.5px color-mix(in oklab,var(--c) 70%,transparent),0 0 20px -2px var(--c)!important}
+${p("arcana")} .alm-say__who{border-radius:99px!important;letter-spacing:.2em!important;font-size:10px!important}
+${p("arcana")} .alm-say__tone{font-family:var(--alm-font-body)!important}
+${p("arcana")} .alm-thk{border-style:solid!important;border-color:color-mix(in oklab,var(--c) 40%,transparent)!important;box-shadow:0 0 24px -8px var(--c);font:italic 400 18px/1.35 var(--alm-font-hand)!important}
+${p("arcana")} .alm-chapter::before,${p("arcana")} .alm-chapter::after{background:linear-gradient(90deg,transparent,var(--alm-gold) 40%,transparent) center/100% 1px no-repeat,radial-gradient(circle,var(--alm-gold) 0 2px,transparent 2.5px) center/8px 8px no-repeat}
+${p("arcana")} .alm-chapter b{font-family:"Cinzel Decorative",serif!important;font-style:normal!important;font-size:22px!important;color:var(--alm-accent)!important}
+${p("arcana")} details.alm-drawer,${p("arcana")} .almp .card{box-shadow:inset 0 0 0 5px var(--alm-panel),inset 0 0 0 6px color-mix(in oklab,var(--alm-gold) 30%,transparent),var(--alm-lift)!important}
+@media (prefers-reduced-motion:no-preference){${p("arcana")} .alm-say__medal{animation:alm-glow 4s ease-in-out infinite alternate}}
 @keyframes alm-glow{to{box-shadow:0 0 0 2px var(--alm-panel),0 0 0 3.5px color-mix(in oklab,var(--c) 90%,transparent),0 0 28px 0 var(--c)}}
 
 /* Orbital: clipped corners, terminal thoughts */
-${FLAT_BUBBLE("orbital")}
-${S("orbital")} details.alm-drawer,${S("orbital")} .almp .card{clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
-${S("orbital")} details.alm-drawer{border-top:3px solid var(--alm-accent)!important}
-${S("orbital")} .alm-say__medal{border-radius:0!important;clip-path:polygon(0 0,70% 0,100% 30%,100% 100%,30% 100%,0 70%);box-shadow:none!important;font-family:var(--alm-font-mono)!important;font-weight:500!important}
-${S("orbital")} .alm-say__bubble{border-radius:0!important;background:var(--alm-panel)!important;border:1px solid var(--alm-line)!important;border-left:3px solid var(--c)!important;box-shadow:none!important}
-${S("orbital")} .alm-say--user .alm-say__bubble{border-left-width:1px!important;border-right:3px solid var(--c)!important}
-${S("orbital")} .alm-say__who{border-radius:0!important;letter-spacing:.14em!important}
-${S("orbital")} .alm-say__tone{font:500 10px/1 var(--alm-font-mono)!important;font-style:normal!important;text-transform:uppercase!important;letter-spacing:.1em!important}
-${S("orbital")} .alm-thk{border-radius:0!important;border:1px dashed var(--c)!important;font:400 13.5px/1.5 var(--alm-font-hand)!important;padding:8px 14px!important}
-${S("orbital")} .alm-thk__lab::before{content:"> ";letter-spacing:0}
-${S("orbital")} .alm-chapter::before,${S("orbital")} .alm-chapter::after{background:repeating-linear-gradient(90deg,var(--alm-ink) 0 6px,transparent 6px 10px) center/100% 2px no-repeat}
-${S("orbital")} .alm-chapter b{font-style:normal!important;font-weight:700!important;text-transform:uppercase;letter-spacing:.06em}
-${S("orbital")} .alm-pill,${S("orbital")} .alm-caret,${S("orbital")} .alm-btn,${S("orbital")} .alm-tag,${S("orbital")} .alm-seg i,${S("orbital")} .almp .btn,${S("orbital")} .almp .pill{border-radius:0!important}
-${S("orbital")} .alm-btn{text-transform:uppercase;letter-spacing:.08em}
+${ge("orbital")}
+${p("orbital")} details.alm-drawer,${p("orbital")} .almp .card{clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
+${p("orbital")} details.alm-drawer{border-top:3px solid var(--alm-accent)!important}
+${p("orbital")} .alm-say__medal{border-radius:0!important;clip-path:polygon(0 0,70% 0,100% 30%,100% 100%,30% 100%,0 70%);box-shadow:none!important;font-family:var(--alm-font-mono)!important;font-weight:500!important}
+${p("orbital")} .alm-say__bubble{border-radius:0!important;background:var(--alm-panel)!important;border:1px solid var(--alm-line)!important;border-left:3px solid var(--c)!important;box-shadow:none!important}
+${p("orbital")} .alm-say--user .alm-say__bubble{border-left-width:1px!important;border-right:3px solid var(--c)!important}
+${p("orbital")} .alm-say__who{border-radius:0!important;letter-spacing:.14em!important}
+${p("orbital")} .alm-say__tone{font:500 10px/1 var(--alm-font-mono)!important;font-style:normal!important;text-transform:uppercase!important;letter-spacing:.1em!important}
+${p("orbital")} .alm-thk{border-radius:0!important;border:1px dashed var(--c)!important;font:400 13.5px/1.5 var(--alm-font-hand)!important;padding:8px 14px!important}
+${p("orbital")} .alm-thk__lab::before{content:"> ";letter-spacing:0}
+${p("orbital")} .alm-chapter::before,${p("orbital")} .alm-chapter::after{background:repeating-linear-gradient(90deg,var(--alm-ink) 0 6px,transparent 6px 10px) center/100% 2px no-repeat}
+${p("orbital")} .alm-chapter b{font-style:normal!important;font-weight:700!important;text-transform:uppercase;letter-spacing:.06em}
+${p("orbital")} .alm-pill,${p("orbital")} .alm-caret,${p("orbital")} .alm-btn,${p("orbital")} .alm-tag,${p("orbital")} .alm-seg i,${p("orbital")} .almp .btn,${p("orbital")} .almp .pill{border-radius:0!important}
+${p("orbital")} .alm-btn{text-transform:uppercase;letter-spacing:.08em}
 
 /* Posy: floral print, a sprig of roses, round pills */
-${S("posy")} .alm-say__who{border-radius:99px!important;padding:5px 11px!important}
-${S("posy")} .alm-say__medal{box-shadow:0 0 0 3px var(--alm-panel),0 0 0 5px color-mix(in oklab,var(--c) 35%,transparent)!important}
-${S("posy")} .alm-thk{border-style:dotted!important;border-width:2px!important;font-size:25px!important}
-${S("posy")} .alm-thk__lab::after{content:" ✿";color:var(--alm-accent)}
-${S("posy")} .alm-chapter::before,${S("posy")} .alm-chapter::after{background:radial-gradient(circle,var(--alm-accent) 0 3px,transparent 3.5px) center/12px 12px no-repeat,linear-gradient(var(--alm-accent-2),var(--alm-accent-2)) center/100% 1px no-repeat}
-${S("posy")} .alm-chapter b{font-style:normal!important;font-weight:400!important}
-${S("posy")} .alm-drawer__body{position:relative}
-${S("posy")} .alm-drawer__body::after{content:"";position:absolute;right:-6px;bottom:-6px;width:84px;height:84px;background:var(--alm-sprig) center/contain no-repeat;opacity:.6;pointer-events:none}
-${S("posy")} .alm-btn,${S("posy")} .almp .btn,${S("posy")} .alm-caret{border-radius:99px!important}
-${S("posy")} .alm-btn--primary,${S("posy")} .almp .btn.primary{background:var(--alm-accent-2)!important;border-color:color-mix(in oklab,var(--alm-accent-2) 70%,#000)!important}
-`;
-var SKIN_CSS = tokens() + `
-` + SIGNATURES;
-var SKIN_COLORS = [
-  ["panel", "Paper", "cards, bubbles, the drawer"],
-  ["panel-2", "Shade", "fields and insets"],
-  ["ink", "Text", ""],
-  ["muted", "Quiet text", "labels and notes"],
-  ["line", "Lines", "borders and rules"],
-  ["accent", "Accent", "buttons and highlights"],
-  ["accent-2", "Second accent", ""],
-  ["gold", "Gold", "ornaments"],
-  ["good", "Good", ""],
-  ["warn", "Warning", ""],
-  ["danger", "Danger", ""]
-];
-var HEX = /^#[0-9a-f]{6}$/i;
-var INK_TOKENS = ["rule", "pop"];
-function skinPalette(skin, mode) {
-  return SKINS[skin]?.[mode] ?? null;
-}
-function readableOn(hex) {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 140 ? "#15120f" : "#fff";
-}
-function customCss(custom) {
-  const out = [];
-  for (const [id, modes] of Object.entries(custom ?? {})) {
-    if (!isSkin(id) || !modes)
-      continue;
-    for (const mode of ["light", "dark"]) {
-      const pal = {};
-      for (const [k] of SKIN_COLORS) {
-        const v = modes[mode]?.[k];
-        if (typeof v === "string" && HEX.test(v))
-          pal[k] = v.toLowerCase();
-      }
-      if (!Object.keys(pal).length)
-        continue;
-      if (pal.accent)
-        pal["on-accent"] = readableOn(pal.accent);
-      if (pal.ink) {
-        for (const t of INK_TOKENS)
-          if (SKINS[id]?.[mode][t])
-            pal[t] = pal.ink;
-      }
-      out.push(`html:root[data-alm-skin="${id}"][data-alm-mode="${mode}"]{${decl(pal)}}`);
-    }
-  }
-  return out.join(`
-`);
-}
-
-// src/core/knowparse.ts
-var CHANNEL_WORDS = "aloud|out loud|openly|announced|shouted|whisper(?:ed|s|ing)?|murmured|quietly|privately|in private|in secret|aside|in a letter|letter|written|wrote|a note|text(?:ed)?|message|shown|showed|showing|in plain sight|overheard|signed|mouthed|telepathically";
-var CHANNEL_ANY = new RegExp(`\\b(${CHANNEL_WORDS})\\b`, "i");
-var CHANNEL_ANY_G = new RegExp(`\\b(?:${CHANNEL_WORDS})\\b`, "gi");
-
-// src/core/facts.ts
-var STOP = new Set(("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no " + "you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out").split(" "));
-var SPEECH_STOP = new Set("said says told tells asked calls called named know knows like just really very yes yeah okay ok well now then here there what who how why when where".split(" "));
-var WH = new Set("who whom whose what which why how when where whether if".split(" "));
-
-// src/core/traits.ts
-var COLOUR = "(?:(?:pale|light|dark|deep|bright|clear|cold|warm|steel|ice|storm|sea|ocean|sky|forest|bottle|moss|grey|gray|blue|green|brown|hazel|amber|gold(?:en)?|violet|purple|lilac|indigo|amethyst|black|silver|white|red|auburn|copper|chestnut|honey|ash|platinum|strawberry|dirty|sandy|mousy|jet|raven|emerald|jade|sapphire|blonde|blond|fair|ginger|mahogany|salt-and-pepper)[- ]?){1,3}";
-var HAIR_SHAPE = "(?:(?:short|long|cropped|shoulder-length|waist-length|curly|wavy|straight|thick|thin|messy|tousled|braided|close-cropped|shaved|greying|graying|silvering|streaked)[ ,-]*){0,3}";
-var EYES = new RegExp(`\\b(${COLOUR})[- ]?eyed\\b|\\b(${COLOUR})\\s+eyes\\b|\\beyes\\s+(?:are|were|of)\\s+(?:a\\s+)?(${COLOUR})\\b`, "i");
-var HAIR = new RegExp(`\\b(${HAIR_SHAPE}${COLOUR})[- ]haired\\b|\\b(${HAIR_SHAPE}${COLOUR})\\s+(?:hair|curls|locks|braids?)\\b|\\bhair\\s+(?:is|was)\\s+(${HAIR_SHAPE}${COLOUR})\\b`, "i");
-var NUM_WORDS = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ");
-
-// src/core/dsl.ts
-var SUBJECT_OPS = new Set([
-  "mood",
-  "body",
-  "look",
-  "bond",
-  "ladder",
-  "know",
-  "unaware",
-  "item",
-  "thread",
-  "owe",
-  "cons",
-  "clockf",
-  "rep",
-  "journal",
-  "keys",
-  "artifact",
-  "status",
-  "gauge",
-  "deadline",
-  "trait"
-]);
-
-// src/core/state.ts
-var NOT_A_PERSON = "-";
-var CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "unaware", "status", "journal"]);
-var STOP2 = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
-
-// src/frontend/orrery.ts
-var GROUPS = [
-  { id: "people", label: "People", color: "#ff8fa3", icon: "cast", pages: ["cast", "bonds", "knowledge"] },
-  { id: "story", label: "Story", color: "#5fcfc0", icon: "chronicle", pages: ["chronicle", "timeline", "world"] },
-  { id: "library", label: "Library", color: "#a99bff", icon: "codex", pages: ["codex", "lore", "creator"] },
-  { id: "engine", label: "Engine", color: "#ffc46b", icon: "settings", pages: ["recall", "craft", "settings"] }
-];
-var PAGES = ["now", ...GROUPS.flatMap((g) => g.pages)];
-var LABEL = {
-  now: "Now",
-  cast: "Cast",
-  bonds: "Bonds",
-  knowledge: "Knowledge",
-  chronicle: "Chronicle",
-  timeline: "Timeline",
-  world: "World",
-  codex: "Codex",
-  lore: "Lore",
-  creator: "Creator",
-  recall: "Recall",
-  craft: "Craft",
-  settings: "Settings"
-};
-var groupOf = (p) => GROUPS.find((g) => g.pages.includes(p));
-var IC = {
-  now: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
-  cast: '<circle cx="9" cy="8" r="3"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.3-.3 4.3 1 5 3.8"/>',
-  bonds: '<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 7h7M7.2 9.2l3.6 6.6M16.8 9.2l-3.6 6.6"/>',
-  knowledge: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
-  chronicle: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5Z"/><path d="M12 6.5v13"/>',
-  timeline: '<path d="M7 3v18"/><circle cx="7" cy="7" r="2"/><circle cx="7" cy="16" r="2"/><path d="M11 7h9M11 16h6"/>',
-  world: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5Z"/>',
-  codex: '<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M9 8h6M9 12h6M9 16h3"/>',
-  lore: '<path d="M7 4h11v13a3 3 0 0 1-3 3H6"/><path d="M7 4a2 2 0 0 0-2 2v2h2M6 20a2 2 0 0 0 2-2v-1h10"/><path d="M10 9h5M10 12.5h5"/>',
-  creator: '<path d="M20 4c-7 1-12 6-13.5 13.5L5 20"/><path d="M20 4c-.5 5-3.5 9.5-9 11"/><path d="m9 13.5 3 3"/>',
-  recall: '<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5.5 5.5"/><path d="M10.5 7.5v3l2 1.5"/>',
-  craft: '<path d="M4 20 15 9"/><path d="m14 5 1-2 1 2 2 1-2 1-1 2-1-2-2-1Z"/><path d="m19 12 .6 1.4L21 14l-1.4.6L19 16l-.6-1.4L17 14l1.4-.6Z"/>',
-  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'
-};
-var icon = (p) => `<svg class="almo-ic" viewBox="0 0 24 24" aria-hidden="true">${IC[p]}</svg>`;
-var BAND_SKY = {
-  "deep night": "linear-gradient(175deg,#070a1c,#161c3e)",
-  "small hours": "linear-gradient(175deg,#0c1230,#252b58)",
-  "pre-dawn": "linear-gradient(175deg,#1d2352,#5a4a78)",
-  dawn: "linear-gradient(175deg,#3a3570,#e58b72)",
-  sunrise: "linear-gradient(175deg,#6f7fb8,#ffc48a)",
-  morning: "linear-gradient(175deg,#4f86c4,#9fc9e8)",
-  midday: "linear-gradient(175deg,#3f86d0,#8cc3ea)",
-  afternoon: "linear-gradient(175deg,#4a86c4,#a9c4dc)",
-  "golden hour": "linear-gradient(175deg,#5b7cb4,#f0b865)",
-  sunset: "linear-gradient(175deg,#4b3f7c,#e87a52)",
-  dusk: "linear-gradient(175deg,#252459,#94507e)",
-  evening: "linear-gradient(175deg,#141a44,#3b3566)"
-};
-var n = (x, one, many = `${one}s`) => `${x} ${x === 1 ? one : many}`;
-function summary(p, v) {
-  const w = v.world ?? {};
-  const present = (v.cast ?? []).filter((c) => c.tier === "spot" || c.tier === "peri").length;
-  switch (p) {
-    case "now":
-      return v.now?.time ? `Day ${v.now.day ?? "?"} · ${v.now.time}` : "not started";
-    case "cast":
-      return `${n((v.cast ?? []).length, "person", "people")} · ${present} present`;
-    case "bonds":
-      return n((v.bonds ?? []).length, "bond");
-    case "knowledge":
-      return n((v.knowledge ?? []).length, "fact");
-    case "chronicle": {
-      const c = v.chronicle?.counts ?? { chapter: v.counts?.chapters ?? 0 };
-      return `${n(c.volume ?? 0, "volume")} · ${n(c.arc ?? 0, "arc")} · ${n(c.chapter ?? 0, "chapter")} · ${v.chronicle?.coverage?.raw ?? 100}% raw`;
-    }
-    case "timeline":
-      return n((v.timeline ?? []).length, "milestone");
-    case "world": {
-      const due = dueCount(v);
-      return `${n((w.threads ?? []).length, "thread")}${due ? ` · ${due} due` : ""}`;
-    }
-    case "codex":
-      return n((v.codex ?? []).length, "record");
-    case "lore": {
-      const books = Object.keys(v.lore?.books ?? {}).length;
-      const review = v.lore?.review?.length ?? 0;
-      return `${n(books, "book")}${review ? ` · ${review} to review` : ""}`;
-    }
-    case "creator":
-      return "build a lorebook";
-    case "recall": {
-      const f = v.feed?.[0];
-      return f ? `${f.items.filter((i) => i.injected).length} of ${f.items.length} injected` : "after the next reply";
-    }
-    case "craft":
-      return v.telemetry?.technique ? `try: ${v.telemetry.technique}` : "after a few replies";
-    case "settings":
-      return v.enabled ? "Ledger on" : "Ledger off";
-  }
-}
-function dueCount(v) {
-  const w = v.world ?? {};
-  return (w.cons ?? []).filter((c) => c.status === "due").length + (w.deadlines ?? []).filter((d) => d.passed && !d.done).length;
-}
-function engineKeys(v) {
-  const checks = (v?.checks?.issues ?? []).filter((x) => x.level === "warn").map((x) => `c${v.checks.msg}:${x.text}`);
-  return [...(v?.unverifiedIdx ?? []).map((i) => `u${i}`), ...(v?.rejected ?? []).map((r) => `r${r.msgIndex}:${r.raw}`), ...checks];
-}
-function engineNew(v, seen = new Set) {
-  const fresh = engineKeys(v).filter((k) => !seen.has(k));
-  return fresh.filter((k) => k[0] === "u").length + (fresh.some((k) => k[0] === "r") ? 1 : 0) + (fresh.some((k) => k[0] === "c") ? 1 : 0);
-}
-function attention(g, v, seen) {
-  if (!v)
-    return 0;
-  if (g === "story")
-    return dueCount(v);
-  if (g === "library")
-    return v.lore?.review?.length ?? 0;
-  if (g === "engine")
-    return engineNew(v, seen);
-  return 0;
-}
-function attentionNote(g, v, seen) {
-  if (!v)
-    return "";
-  if (g === "story") {
-    const due = dueCount(v);
-    return due ? `${n(due, "promise or deadline", "promises and deadlines")} due or overdue` : "";
-  }
-  if (g === "library") {
-    const r = v.lore?.review?.length ?? 0;
-    return r ? `${n(r, "lorebook entry", "lorebook entries")} to review` : "";
-  }
-  if (g === "engine") {
-    const fresh = engineKeys(v).filter((k) => !seen?.has(k));
-    const u = fresh.filter((k) => k[0] === "u").length;
-    const r = fresh.filter((k) => k[0] === "r").length;
-    const c = fresh.filter((k) => k[0] === "c").length;
-    return [
-      c ? `the check found ${n(c, "slip", "slips")} in the last reply (see Recall)` : "",
-      u ? `${n(u, "reply", "replies")} whose ledger had to be repaired or guessed (see the counts on Now)` : "",
-      r ? `${n(r, "ledger line")} rejected or corrected (listed on Recall)` : ""
-    ].filter(Boolean).join("; ");
-  }
-  return "";
-}
-function moon(m) {
-  if (!m)
-    return "";
-  const lit = Math.max(0, Math.min(1, Number(m.illumination ?? 0.5)));
-  const dir = /wan/i.test(m.name ?? "") ? -1 : 1;
-  const shadow = Math.round((1 - lit) * 34) * dir;
-  return `<span class="almo-moon" style="--sh:${shadow}px" title="${escapeHtml(m.name ?? "")}" aria-label="${escapeHtml(m.name ?? "")}"></span>`;
-}
-function skyHeader(v, page) {
-  const now = v.now ?? {};
-  const sky = BAND_SKY[now.band] ?? BAND_SKY.evening;
-  const clock = String(now.clock ?? "");
-  const cut = clock.lastIndexOf(", ");
-  const date = now.time && cut > 0 ? clock.slice(0, cut) : now.time ? clock : "The clock starts with the first scene";
-  const [weekday, ...rest] = date.split(" ");
-  const place = now.place ?? [];
-  const g = groupOf(page);
-  const chips = [
-    now.weather ? `${escapeHtml(now.weather.glyph)} ${escapeHtml(now.weather.text ?? now.weather.condition)}` : "",
-    place.length ? `\uD83D\uDCCD ${escapeHtml(place.slice(-2).join(" › "))}` : "",
-    now.mode ? escapeHtml(now.mode) : ""
-  ].filter(Boolean);
-  const rain = /rain|storm|drizzle|shower|sleet/i.test(now.weather?.condition ?? "") ? " almo-rain" : /snow/i.test(now.weather?.condition ?? "") ? " almo-snow" : "";
-  const night = /night|hours|pre-dawn|evening|dusk/.test(now.band ?? "evening") ? " almo-night" : "";
-  return `<header class="almo-sky${rain}${night}" style="background:${sky}">
-  <div class="almo-sky__row"><div class="almo-clock">${escapeHtml(now.time ?? "--:--")}</div><div class="almo-date">${rest.length ? `${escapeHtml(weekday)}<br>${escapeHtml(rest.join(" "))}` : escapeHtml(date)}</div>${moon(now.moon)}</div>
-  ${page === "now" && now.title ? `<div class="almo-title">${escapeHtml(now.title)}</div>` : ""}
-  ${chips.length ? `<div class="almo-chips">${chips.map((c) => `<span>${c}</span>`).join("")}</div>` : ""}
-  ${g ? `<div class="almo-seg" role="tablist" aria-label="${escapeHtml(g.label)}" style="--pc:${g.color}">${g.pages.map((p) => `<button role="tab" data-page="${p}" aria-selected="${p === page}">${icon(p)}<span>${LABEL[p]}</span></button>`).join("")}</div>` : ""}
-</header>`;
-}
-function pageTitle(v, page) {
-  if (page === "now")
-    return "";
-  const g = groupOf(page);
-  return `<div class="almo-head"><span class="almo-eyebrow" style="color:${g?.color}">${escapeHtml(g?.label ?? "")}</span><h3>${LABEL[page]}</h3><small>${escapeHtml(summary(page, v))}</small></div>`;
-}
-function dock(v, page, orbit, seen) {
-  const cur = groupOf(page);
-  const planet = (g) => {
-    const a = attention(g.id, v, seen);
-    const why = a ? attentionNote(g.id, v, seen) : "";
-    return `<button class="almo-pl${cur === g ? " on" : ""}${a ? " alert" : ""}" style="--pc:${g.color}" data-orbit="${g.id}" aria-expanded="${orbit === g.id}" aria-label="${escapeHtml(g.label)}${why ? ` (${escapeHtml(why)})` : ""}"${why ? ` title="${escapeHtml(why)}"` : ""}><span class="almo-orb">${icon(g.icon)}${a ? `<b>${a > 9 ? "9+" : a}</b>` : ""}</span><span>${escapeHtml(g.label)}</span></button>`;
-  };
-  const og = GROUPS.find((g) => g.id === orbit);
-  const pos = [[0, 50], [96, 0], [192, 50]];
-  const ring = og ? `<div class="almo-orbit" style="--pc:${og.color}" role="menu" aria-label="${escapeHtml(og.label)}">${og.pages.map((p, i) => `<button class="almo-moonb" role="menuitem" style="left:${pos[i][0]}px;top:${pos[i][1]}px;animation-delay:${i * 40}ms" data-page="${p}"><span class="almo-m">${icon(p)}</span><b>${LABEL[p]}</b><small>${escapeHtml(v ? summary(p, v) : "")}</small></button>`).join("")}<div class="almo-orbit__t">${escapeHtml(og.label)}</div></div>` : "";
-  return `<div class="almo-dockwrap">${ring}<nav class="almo-dock" aria-label="Almanac pages">${planet(GROUPS[0])}${planet(GROUPS[1])}<button class="almo-sun${page === "now" ? " on" : ""}" data-page="now" aria-label="Now"><span>${icon("now")}<small>NOW</small></span></button>${planet(GROUPS[2])}${planet(GROUPS[3])}</nav></div>`;
-}
-function emptySky(status) {
-  const [title, text] = status === "nochat" ? ["No sky yet", "Open a chat to set the clock turning."] : status === "stalled" ? ["The Ledger hasn't answered", "Check that ALMANAC Ledger is enabled in Extensions and has its permissions, then retry."] : ["Reading this chat…", "Setting up the sky."];
-  return `<div class="almo-empty"><div class="almo-dial${status === "waiting" ? " spin" : ""}"></div><h4>${title}</h4><p>${text}</p>${status === "stalled" ? `<button class="btn primary" data-act="retryState">Retry</button>` : ""}</div>`;
-}
-
-// src/frontend/app.ts
-var TABS = PAGES;
-var RANK = { chapter: 1, arc: 2, volume: 3 };
-var LEVEL_COLOR = { volume: "#7b5bd6", arc: "var(--alm-accent-2)", chapter: "var(--alm-accent)" };
-var cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-var KIND_HELP = {
-  secret: "Someone keeps it, or someone lacks it while someone else has it",
-  belief: "Someone suspects, believes, doubts or is wrong about it",
-  shared: "Two or more people have it",
-  noted: "One person noticed it; no one is known to lack it (never sent to the model)"
-};
-var WEAVER_BOOK = {
-  governance: ["rules book", "Always-on rules and the re-anchor that keep the character on spec. Left to Lumiverse: the Ledger never folds, forces or switches these entries off."],
-  lore: ["lore book", "The world's deep lore, surfacing when relevant."],
-  npc: ["NPC book", "The people the narrator can voice, one entry per person."],
-  depth: ["depth book", `More about the card's character. Entries that script a scene ("When she learns…", "It happens in the kitchen…") are read as playbooks: never sent as lore, and sent as "not history" only when a turn comes close.`],
-  persona: ["persona depth", "More about your persona, surfacing when relevant."]
-};
-var LORE_KINDS = [
-  ["directive", "always-on rule", "always-on rules"],
-  ["person", "person", "people"],
-  ["place", "place", "places"],
-  ["group", "group", "groups"],
-  ["object", "object", "objects"],
-  ["law", "world rule", "world rules"],
-  ["history", "history", "history"],
-  ["situation", "situation", "situations"],
-  ["belief", "belief", "beliefs"],
-  ["forecast", "upcoming event", "upcoming events"],
-  ["boundary", "canon point", "canon points"],
-  ["texture", "custom or detail", "customs & detail"],
-  ["playbook", "scripted scene", "scripted scenes"],
-  ["meta", "instruction", "instructions"]
-];
-function worldPanel(w, simulator) {
-  if (!w)
-    return "";
-  const agency = w.agenda || w.holds?.length;
-  return `<div class="rec" style="margin-bottom:10px"><div class="hd"><b class="grow">${escapeHtml(w.name)}</b><span class="pill" title="A world built in Lumiverse's Dream Weaver: you chat with a narrator that runs this place and voices its people">Dream Weaver · world</span><span class="pill">${agency ? "agency on" : "cozy"}</span></div>
-${w.premise ? `<div class="alm-cc__row"><b>premise</b>${escapeHtml(w.premise)}</div>` : ""}${w.tension ? `<div class="alm-cc__row"><b>tension</b>${escapeHtml(w.tension)}</div>` : ""}${w.agenda ? `<div class="alm-cc__row"><b>agenda</b>${escapeHtml(w.agenda)}</div>` : ""}${w.holds?.length ? `<div class="alm-cc__row"><b>holds</b>${w.holds.map((h) => escapeHtml(h)).join("<br>")}</div>` : ""}
-<p class="muted">The card is the narrator, and the place is a Codex record. Chapters call its replies the Narrator's.${agency ? simulator ? " Between scenes, the off-screen simulator moves the world's agenda and never breaks its holds." : " Turn on the off-screen simulator (Settings) to have the world's agenda move between scenes." : ""}</p></div>`;
-}
-function loreKinds(kinds) {
-  if (!kinds)
-    return "";
-  const known = new Map(LORE_KINDS.map(([k, one, many]) => [k, [one, many]]));
-  const label = (k) => known.get(k)?.[kinds[k] === 1 ? 0 : 1] ?? k;
-  const parts = [...LORE_KINDS.map(([k]) => k), ...Object.keys(kinds).filter((k) => !known.has(k))].filter((k) => kinds[k]).map((k) => `${kinds[k]} ${label(k)}`);
-  return parts.length ? `<div class="muted" style="margin:4px 0">Read as: ${escapeHtml(parts.join(" · "))}</div>` : "";
-}
-var PERSON_OPTS = [["", "as the story says"], ["knows", "knows it"], ["believes", "believes it"], ["suspects", "suspects it"], ["doubts", "doubts it"], ["wrong", "has it wrong"], ["unaware", "doesn't know"], ["none", "no record either way"]];
-
-class AlmanacApp {
-  ctx;
-  root;
-  view = null;
-  tab = "now";
-  asOf = Infinity;
-  graphAxis = "";
-  npcOnly = false;
-  factQuery = "";
-  factKind = "play";
-  factPerson = "";
-  editingFact = null;
-  editingChar = null;
-  openFacts = new Set;
-  clerkProgress = "";
-  chronFilter = "all";
-  chronOpen = new Set;
-  codexFilter = "";
-  codexKind = "";
-  editing = null;
-  orbit = "";
-  creator;
-  status = "nochat";
-  hudProblem = "";
-  versionWarning = "";
-  engineSeen = {};
-  onSeen = () => {};
-  constructor(ctx, root) {
-    this.ctx = ctx;
-    this.root = root;
-    this.root.classList.add("almp");
-    this.creator = new CreatorUI(ctx, () => this.view, () => this.render());
-    try {
-      const t = localStorage.getItem("alm-tab");
-      if (t && TABS.includes(t))
-        this.tab = t;
-    } catch {}
-    try {
-      this.engineSeen = JSON.parse(localStorage.getItem("alm-engine-seen") || "{}") ?? {};
-    } catch {
-      this.engineSeen = {};
-    }
-    this.root.addEventListener("click", (ev) => this.onClick(ev));
-    this.root.addEventListener("change", (ev) => this.onChange(ev));
-    this.root.addEventListener("input", (ev) => {
-      const t = ev.target;
-      if (t?.dataset?.skinColor)
-        this.ctx.events.emit("almanac:skinColors", this.withSkinColor(t.dataset.skinColor, t.value));
-    });
-    this.root.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape" && this.orbit) {
-        this.orbit = "";
-        this.render();
-      }
-    });
-  }
-  send(msg) {
-    this.ctx.sendToBackend({ chatId: this.view?.chatId, ...msg });
-  }
-  setStatus(s) {
-    if (s === this.status)
-      return;
-    this.status = s;
-    if (!this.view || s === "nochat")
-      this.render();
-  }
-  setView(v) {
-    this.view = v;
-    this.render();
-  }
-  seenSet() {
-    return new Set(this.view?.chatId ? this.engineSeen[this.view.chatId] ?? [] : []);
-  }
-  markEngineSeen() {
-    const v = this.view;
-    if (!v?.chatId)
-      return;
-    const keys = engineKeys(v);
-    const had = this.engineSeen[v.chatId] ?? [];
-    if (keys.every((k) => had.includes(k)))
-      return;
-    delete this.engineSeen[v.chatId];
-    this.engineSeen[v.chatId] = keys;
-    const chats = Object.keys(this.engineSeen);
-    if (chats.length > 60)
-      for (const c of chats.slice(0, chats.length - 60))
-        delete this.engineSeen[c];
-    try {
-      localStorage.setItem("alm-engine-seen", JSON.stringify(this.engineSeen));
-    } catch {}
-    this.onSeen();
-  }
-  render() {
-    const v = this.view;
-    if (!v) {
-      this.root.innerHTML = `<div class="almo">${emptySky(this.status)}</div>`;
-      return;
-    }
-    let body = "";
-    try {
-      body = this[`tab_${this.tab}`]?.(v) ?? "";
-    } catch (err) {
-      body = `<div class="empty">Could not draw this page: ${escapeHtml(String(err))}</div>`;
-    }
-    const stale = this.versionWarning ? `<div class="card flat alm-warnbox"><b>The Ledger's background process is running ${escapeHtml(this.versionWarning)}, but this page loaded ${VERSION}.</b><p class="muted">In Extensions, turn ALMANAC Ledger off and on again (or press Update), then reload the page. If this stays, check Extensions for a second copy of ALMANAC Ledger and remove the older one.</p></div>` : "";
-    const pe = v.enabled ? v.planError : null;
-    const planErr = pe ? `<div class="card flat alm-warnbox"><b>The last ${pe.genType === "normal" ? "turn" : escapeHtml(pe.genType)} went to the model without the Almanac.</b><p class="muted">At ${escapeHtml(new Date(pe.at).toLocaleString())}, ${escapeHtml(pe.where)} failed, so the reply was written without the ledger note, recall or mirror entries. This clears itself on the next turn that works. If it keeps coming back, update the extension, and report the error below if an update doesn't fix it.</p><p><code>${escapeHtml(pe.message)}</code></p>${pe.stack ? `<details><summary class="muted">Details for a bug report</summary><pre>ALMANAC Ledger ${escapeHtml(v.version)}
-${escapeHtml(pe.stack)}</pre></details>` : ""}</div>` : "";
-    const banner = !v.enabled ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block). You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button></div>` : "";
-    const scroll = this.root.scrollTop;
-    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${planErr}${banner}${body}</main>${dock(v, this.tab, this.orbit, this.seenSet())}</div>`;
-    this.root.scrollTop = scroll;
-  }
-  go(page) {
-    const changed = page !== this.tab;
-    this.tab = page;
-    this.orbit = "";
-    if (groupOf(page)?.id === "engine")
-      this.markEngineSeen();
-    try {
-      localStorage.setItem("alm-tab", this.tab);
-    } catch {}
-    this.render();
-    if (changed)
-      this.root.scrollTop = 0;
-  }
-  tab_now(v) {
-    const n = v.now;
-    const present = v.cast.filter((c) => c.tier === "spot" || c.tier === "peri");
-    const fc = (n.forecastHours ?? []).filter((_, i) => i % 2 === 0).slice(0, 6);
-    const facts = [
-      n.place.length ? `<b>Where</b><span>${escapeHtml(n.place.join(" › "))}</span>` : "",
-      n.sun ? `<b>Sun</b><span>${escapeHtml(n.sun.text)}</span>` : "",
-      n.moon ? `<b>Moon</b><span>${escapeHtml(n.moon.glyph)} ${escapeHtml(n.moon.name)}</span>` : "",
-      n.season ? `<b>Season</b><span>${escapeHtml(n.season)}</span>` : "",
-      `<b>Scene</b><span>${n.scene} · ${escapeHtml(n.mode)}</span>`
-    ].join("");
-    return `<div class="card flat almo-facts"><div class="kv">${facts}</div></div>
-${fc.length ? `<div class="card flat"><h4>Next hours</h4><div class="alm-fc" style="grid-template-columns:repeat(${fc.length},1fr)">${fc.map((h) => `<div><small>${escapeHtml(h.t)}</small><span>${escapeHtml(h.glyph)}</span><b>${h.temp}°</b></div>`).join("")}</div><div class="muted">${escapeHtml(n.forecast)}</div></div>` : ""}
+${p("posy")} .alm-say__who{border-radius:99px!important;padding:5px 11px!important}
+${p("posy")} .alm-say__medal{box-shadow:0 0 0 3px var(--alm-panel),0 0 0 5px color-mix(in oklab,var(--c) 35%,transparent)!important}
+${p("posy")} .alm-thk{border-style:dotted!important;border-width:2px!important;font-size:25px!important}
+${p("posy")} .alm-thk__lab::after{content:" ✿";color:var(--alm-accent)}
+${p("posy")} .alm-chapter::before,${p("posy")} .alm-chapter::after{background:radial-gradient(circle,var(--alm-accent) 0 3px,transparent 3.5px) center/12px 12px no-repeat,linear-gradient(var(--alm-accent-2),var(--alm-accent-2)) center/100% 1px no-repeat}
+${p("posy")} .alm-chapter b{font-style:normal!important;font-weight:400!important}
+${p("posy")} .alm-drawer__body{position:relative}
+${p("posy")} .alm-drawer__body::after{content:"";position:absolute;right:-6px;bottom:-6px;width:84px;height:84px;background:var(--alm-sprig) center/contain no-repeat;opacity:.6;pointer-events:none}
+${p("posy")} .alm-btn,${p("posy")} .almp .btn,${p("posy")} .alm-caret{border-radius:99px!important}
+${p("posy")} .alm-btn--primary,${p("posy")} .almp .btn.primary{background:var(--alm-accent-2)!important;border-color:color-mix(in oklab,var(--alm-accent-2) 70%,#000)!important}
+`,Xe=Nt()+`
+`+Pt,Ce=[["panel","Paper","cards, bubbles, the drawer"],["panel-2","Shade","fields and insets"],["ink","Text",""],["muted","Quiet text","labels and notes"],["line","Lines","borders and rules"],["accent","Accent","buttons and highlights"],["accent-2","Second accent",""],["gold","Gold","ornaments"],["good","Good",""],["warn","Warning",""],["danger","Danger",""]],Ft=/^#[0-9a-f]{6}$/i,zt=["rule","pop"];function Qe(e,t){return se[e]?.[t]??null}function Kt(e){let[t,a,r]=[1,3,5].map((s)=>parseInt(e.slice(s,s+2),16));return 0.2126*t+0.7152*a+0.0722*r>140?"#15120f":"#fff"}function et(e){let t=[];for(let[a,r]of Object.entries(e??{})){if(!Ot(a)||!r)continue;for(let s of["light","dark"]){let i={};for(let[o]of Ce){let l=r[s]?.[o];if(typeof l==="string"&&Ft.test(l))i[o]=l.toLowerCase()}if(!Object.keys(i).length)continue;if(i.accent)i["on-accent"]=Kt(i.accent);if(i.ink){for(let o of zt)if(se[a]?.[s][o])i[o]=i.ink}t.push(`html:root[data-alm-skin="${a}"][data-alm-mode="${s}"]{${be(i)}}`)}}return t.join(`
+`)}var tt="aloud|out loud|openly|announced|shouted|whisper(?:ed|s|ing)?|murmured|quietly|privately|in private|in secret|aside|in a letter|letter|written|wrote|a note|text(?:ed)?|message|shown|showed|showing|in plain sight|overheard|signed|mouthed|telepathically",Xa=new RegExp(`\\b(${tt})\\b`,"i"),Qa=new RegExp(`\\b(?:${tt})\\b`,"gi");var sn=new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they him them has had have not no you your yours i me my we our us are were been being do does did don doesn didn isn wasn can will would could should just so too very as up out".split(" "));var on=new Set("said says told tells asked calls called named know knows like just really very yes yeah okay ok well now then here there what who how why when where".split(" "));var ln=new Set("who whom whose what which why how when where whether if".split(" "));var te="(?:(?:pale|light|dark|deep|bright|clear|cold|warm|steel|ice|storm|sea|ocean|sky|forest|bottle|moss|grey|gray|blue|green|brown|hazel|amber|gold(?:en)?|violet|purple|lilac|indigo|amethyst|black|silver|white|red|auburn|copper|chestnut|honey|ash|platinum|strawberry|dirty|sandy|mousy|jet|raven|emerald|jade|sapphire|blonde|blond|fair|ginger|mahogany|salt-and-pepper)[- ]?){1,3}",Me="(?:(?:short|long|cropped|shoulder-length|waist-length|curly|wavy|straight|thick|thin|messy|tousled|braided|close-cropped|shaved|greying|graying|silvering|streaked)[ ,-]*){0,3}",pn=new RegExp(`\\b(${te})[- ]?eyed\\b|\\b(${te})\\s+eyes\\b|\\beyes\\s+(?:are|were|of)\\s+(?:a\\s+)?(${te})\\b`,"i"),mn=new RegExp(`\\b(${Me}${te})[- ]haired\\b|\\b(${Me}${te})\\s+(?:hair|curls|locks|braids?)\\b|\\bhair\\s+(?:is|was)\\s+(${Me}${te})\\b`,"i"),un="one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ");var Le="-";var nr=new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));var X=[{id:"people",label:"People",color:"#ff8fa3",icon:"cast",pages:["cast","bonds","knowledge"]},{id:"story",label:"Story",color:"#5fcfc0",icon:"chronicle",pages:["chronicle","timeline","world"]},{id:"library",label:"Library",color:"#a99bff",icon:"codex",pages:["codex","lore","creator"]},{id:"engine",label:"Engine",color:"#ffc46b",icon:"settings",pages:["recall","craft","settings"]}],at=["now",...X.flatMap((e)=>e.pages)],je={now:"Now",cast:"Cast",bonds:"Bonds",knowledge:"Knowledge",chronicle:"Chronicle",timeline:"Timeline",world:"World",codex:"Codex",lore:"Lore",creator:"Creator",recall:"Recall",craft:"Craft",settings:"Settings"},oe=(e)=>X.find((t)=>t.pages.includes(e)),Ht={now:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',cast:'<circle cx="9" cy="8" r="3"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.3-.3 4.3 1 5 3.8"/>',bonds:'<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 7h7M7.2 9.2l3.6 6.6M16.8 9.2l-3.6 6.6"/>',knowledge:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',chronicle:'<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5Z"/><path d="M12 6.5v13"/>',timeline:'<path d="M7 3v18"/><circle cx="7" cy="7" r="2"/><circle cx="7" cy="16" r="2"/><path d="M11 7h9M11 16h6"/>',world:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5Z"/>',codex:'<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M9 8h6M9 12h6M9 16h3"/>',lore:'<path d="M7 4h11v13a3 3 0 0 1-3 3H6"/><path d="M7 4a2 2 0 0 0-2 2v2h2M6 20a2 2 0 0 0 2-2v-1h10"/><path d="M10 9h5M10 12.5h5"/>',creator:'<path d="M20 4c-7 1-12 6-13.5 13.5L5 20"/><path d="M20 4c-.5 5-3.5 9.5-9 11"/><path d="m9 13.5 3 3"/>',recall:'<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5.5 5.5"/><path d="M10.5 7.5v3l2 1.5"/>',craft:'<path d="M4 20 15 9"/><path d="m14 5 1-2 1 2 2 1-2 1-1 2-1-2-2-1Z"/><path d="m19 12 .6 1.4L21 14l-1.4.6L19 16l-.6-1.4L17 14l1.4-.6Z"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'},xe=(e)=>`<svg class="almo-ic" viewBox="0 0 24 24" aria-hidden="true">${Ht[e]}</svg>`,ae={"deep night":"linear-gradient(175deg,#070a1c,#161c3e)","small hours":"linear-gradient(175deg,#0c1230,#252b58)","pre-dawn":"linear-gradient(175deg,#1d2352,#5a4a78)",dawn:"linear-gradient(175deg,#3a3570,#e58b72)",sunrise:"linear-gradient(175deg,#6f7fb8,#ffc48a)",morning:"linear-gradient(175deg,#4f86c4,#9fc9e8)",midday:"linear-gradient(175deg,#3f86d0,#8cc3ea)",afternoon:"linear-gradient(175deg,#4a86c4,#a9c4dc)","golden hour":"linear-gradient(175deg,#5b7cb4,#f0b865)",sunset:"linear-gradient(175deg,#4b3f7c,#e87a52)",dusk:"linear-gradient(175deg,#252459,#94507e)",evening:"linear-gradient(175deg,#141a44,#3b3566)"},D=(e,t,a=`${t}s`)=>`${e} ${e===1?t:a}`;function nt(e,t){let a=t.world??{},r=(t.cast??[]).filter((s)=>s.tier==="spot"||s.tier==="peri").length;switch(e){case"now":return t.now?.time?`Day ${t.now.day??"?"} · ${t.now.time}`:"not started";case"cast":return`${D((t.cast??[]).length,"person","people")} · ${r} present`;case"bonds":return D((t.bonds??[]).length,"bond");case"knowledge":return D((t.knowledge??[]).length,"fact");case"chronicle":{let s=t.chronicle?.counts??{chapter:t.counts?.chapters??0};return`${D(s.volume??0,"volume")} · ${D(s.arc??0,"arc")} · ${D(s.chapter??0,"chapter")} · ${t.chronicle?.coverage?.raw??100}% raw`}case"timeline":return D((t.timeline??[]).length,"milestone");case"world":{let s=Ee(t);return`${D((a.threads??[]).length,"thread")}${s?` · ${s} due`:""}`}case"codex":return D((t.codex??[]).length,"record");case"lore":{let s=Object.keys(t.lore?.books??{}).length,i=t.lore?.review?.length??0;return`${D(s,"book")}${i?` · ${i} to review`:""}`}case"creator":return"build a lorebook";case"recall":{let s=t.feed?.[0];return s?`${s.items.filter((i)=>i.injected).length} of ${s.items.length} injected`:"after the next reply"}case"craft":return t.telemetry?.technique?`try: ${t.telemetry.technique}`:"after a few replies";case"settings":return t.enabled?"Ledger on":"Ledger off"}}function Ee(e){let t=e.world??{};return(t.cons??[]).filter((a)=>a.status==="due").length+(t.deadlines??[]).filter((a)=>a.passed&&!a.done).length}function ye(e){let t=(e?.checks?.issues??[]).filter((a)=>a.level==="warn").map((a)=>`c${e.checks.msg}:${a.text}`);return[...(e?.unverifiedIdx??[]).map((a)=>`u${a}`),...(e?.rejected??[]).map((a)=>`r${a.msgIndex}:${a.raw}`),...t]}function Ae(e,t=new Set){let a=ye(e).filter((r)=>!t.has(r));return a.filter((r)=>r[0]==="u").length+(a.some((r)=>r[0]==="r")?1:0)+(a.some((r)=>r[0]==="c")?1:0)}function Wt(e,t,a){if(!t)return 0;if(e==="story")return Ee(t);if(e==="library")return t.lore?.review?.length??0;if(e==="engine")return Ae(t,a);return 0}function Te(e,t,a){if(!t)return"";if(e==="story"){let r=Ee(t);return r?`${D(r,"promise or deadline","promises and deadlines")} due or overdue`:""}if(e==="library"){let r=t.lore?.review?.length??0;return r?`${D(r,"lorebook entry","lorebook entries")} to review`:""}if(e==="engine"){let r=ye(t).filter((l)=>!a?.has(l)),s=r.filter((l)=>l[0]==="u").length,i=r.filter((l)=>l[0]==="r").length,o=r.filter((l)=>l[0]==="c").length;return[o?`the check found ${D(o,"slip","slips")} in the last reply (see Recall)`:"",s?`${D(s,"reply","replies")} whose ledger had to be repaired or guessed (see the counts on Now)`:"",i?`${D(i,"ledger line")} rejected or corrected (listed on Recall)`:""].filter(Boolean).join("; ")}return""}function Bt(e){if(!e)return"";let t=Math.max(0,Math.min(1,Number(e.illumination??0.5))),a=/wan/i.test(e.name??"")?-1:1;return`<span class="almo-moon" style="--sh:${Math.round((1-t)*34)*a}px" title="${n(e.name??"")}" aria-label="${n(e.name??"")}"></span>`}function rt(e,t){let a=e.now??{},r=ae[a.band]??ae.evening,s=String(a.clock??""),i=s.lastIndexOf(", "),o=a.time&&i>0?s.slice(0,i):a.time?s:"The clock starts with the first scene",[l,...d]=o.split(" "),c=a.place??[],u=oe(t),m=[a.weather?`${n(a.weather.glyph)} ${n(a.weather.text??a.weather.condition)}`:"",c.length?`\uD83D\uDCCD ${n(c.slice(-2).join(" › "))}`:"",a.mode?n(a.mode):""].filter(Boolean),g=/rain|storm|drizzle|shower|sleet/i.test(a.weather?.condition??"")?" almo-rain":/snow/i.test(a.weather?.condition??"")?" almo-snow":"",y=/night|hours|pre-dawn|evening|dusk/.test(a.band??"evening")?" almo-night":"";return`<header class="almo-sky${g}${y}" style="background:${r}">
+  <div class="almo-sky__row"><div class="almo-clock">${n(a.time??"--:--")}</div><div class="almo-date">${d.length?`${n(l)}<br>${n(d.join(" "))}`:n(o)}</div>${Bt(a.moon)}</div>
+  ${t==="now"&&a.title?`<div class="almo-title">${n(a.title)}</div>`:""}
+  ${m.length?`<div class="almo-chips">${m.map((S)=>`<span>${S}</span>`).join("")}</div>`:""}
+  ${u?`<div class="almo-seg" role="tablist" aria-label="${n(u.label)}" style="--pc:${u.color}">${u.pages.map((S)=>`<button role="tab" data-page="${S}" aria-selected="${S===t}">${xe(S)}<span>${je[S]}</span></button>`).join("")}</div>`:""}
+</header>`}function st(e,t){if(t==="now")return"";let a=oe(t);return`<div class="almo-head"><span class="almo-eyebrow" style="color:${a?.color}">${n(a?.label??"")}</span><h3>${je[t]}</h3><small>${n(nt(t,e))}</small></div>`}function ot(e,t,a,r){let s=oe(t),i=(c)=>{let u=Wt(c.id,e,r),m=u?Te(c.id,e,r):"";return`<button class="almo-pl${s===c?" on":""}${u?" alert":""}" style="--pc:${c.color}" data-orbit="${c.id}" aria-expanded="${a===c.id}" aria-label="${n(c.label)}${m?` (${n(m)})`:""}"${m?` title="${n(m)}"`:""}><span class="almo-orb">${xe(c.icon)}${u?`<b>${u>9?"9+":u}</b>`:""}</span><span>${n(c.label)}</span></button>`},o=X.find((c)=>c.id===a),l=[[0,50],[96,0],[192,50]];return`<div class="almo-dockwrap">${o?`<div class="almo-orbit" style="--pc:${o.color}" role="menu" aria-label="${n(o.label)}">${o.pages.map((c,u)=>`<button class="almo-moonb" role="menuitem" style="left:${l[u][0]}px;top:${l[u][1]}px;animation-delay:${u*40}ms" data-page="${c}"><span class="almo-m">${xe(c)}</span><b>${je[c]}</b><small>${n(e?nt(c,e):"")}</small></button>`).join("")}<div class="almo-orbit__t">${n(o.label)}</div></div>`:""}<nav class="almo-dock" aria-label="Almanac pages">${i(X[0])}${i(X[1])}<button class="almo-sun${t==="now"?" on":""}" data-page="now" aria-label="Now"><span>${xe("now")}<small>NOW</small></span></button>${i(X[2])}${i(X[3])}</nav></div>`}function it(e){let[t,a]=e==="nochat"?["No sky yet","Open a chat to set the clock turning."]:e==="stalled"?["The Ledger hasn't answered","Check that ALMANAC Ledger is enabled in Extensions and has its permissions, then retry."]:["Reading this chat…","Setting up the sky."];return`<div class="almo-empty"><div class="almo-dial${e==="waiting"?" spin":""}"></div><h4>${t}</h4><p>${a}</p>${e==="stalled"?'<button class="btn primary" data-act="retryState">Retry</button>':""}</div>`}var Ut=at,lt={chapter:1,arc:2,volume:3},ie={volume:"#7b5bd6",arc:"var(--alm-accent-2)",chapter:"var(--alm-accent)"},Gt=(e)=>e.charAt(0).toUpperCase()+e.slice(1),qt={secret:"Someone keeps it, or someone lacks it while someone else has it",belief:"Someone suspects, believes, doubts or is wrong about it",shared:"Two or more people have it",noted:"One person noticed it; no one is known to lack it (never sent to the model)"},ct={governance:["rules book","Always-on rules and the re-anchor that keep the character on spec. Left to Lumiverse: the Ledger never folds, forces or switches these entries off."],lore:["lore book","The world's deep lore, surfacing when relevant."],npc:["NPC book","The people the narrator can voice, one entry per person."],depth:["depth book",`More about the card's character. Entries that script a scene ("When she learns…", "It happens in the kitchen…") are read as playbooks: never sent as lore, and sent as "not history" only when a turn comes close.`],persona:["persona depth","More about your persona, surfacing when relevant."]},dt=[["directive","always-on rule","always-on rules"],["person","person","people"],["place","place","places"],["group","group","groups"],["object","object","objects"],["law","world rule","world rules"],["history","history","history"],["situation","situation","situations"],["belief","belief","beliefs"],["forecast","upcoming event","upcoming events"],["boundary","canon point","canon points"],["texture","custom or detail","customs & detail"],["playbook","scripted scene","scripted scenes"],["meta","instruction","instructions"]];function Zt(e,t){if(!e)return"";let a=e.agenda||e.holds?.length;return`<div class="rec" style="margin-bottom:10px"><div class="hd"><b class="grow">${n(e.name)}</b><span class="pill" title="A world built in Lumiverse's Dream Weaver: you chat with a narrator that runs this place and voices its people">Dream Weaver · world</span><span class="pill">${a?"agency on":"cozy"}</span></div>
+${e.premise?`<div class="alm-cc__row"><b>premise</b>${n(e.premise)}</div>`:""}${e.tension?`<div class="alm-cc__row"><b>tension</b>${n(e.tension)}</div>`:""}${e.agenda?`<div class="alm-cc__row"><b>agenda</b>${n(e.agenda)}</div>`:""}${e.holds?.length?`<div class="alm-cc__row"><b>holds</b>${e.holds.map((r)=>n(r)).join("<br>")}</div>`:""}
+<p class="muted">The card is the narrator, and the place is a Codex record. Chapters call its replies the Narrator's.${a?t?" Between scenes, the off-screen simulator moves the world's agenda and never breaks its holds.":" Turn on the off-screen simulator (Settings) to have the world's agenda move between scenes.":""}</p></div>`}function Yt(e){if(!e)return"";let t=new Map(dt.map(([s,i,o])=>[s,[i,o]])),a=(s)=>t.get(s)?.[e[s]===1?0:1]??s,r=[...dt.map(([s])=>s),...Object.keys(e).filter((s)=>!t.has(s))].filter((s)=>e[s]).map((s)=>`${e[s]} ${a(s)}`);return r.length?`<div class="muted" style="margin:4px 0">Read as: ${n(r.join(" · "))}</div>`:""}var pt=[["","as the story says"],["knows","knows it"],["believes","believes it"],["suspects","suspects it"],["doubts","doubts it"],["wrong","has it wrong"],["unaware","doesn't know"],["none","no record either way"]];class Ie{ctx;root;view=null;tab="now";asOf=1/0;graphAxis="";npcOnly=!1;factQuery="";factKind="play";factPerson="";editingFact=null;editingChar=null;openFacts=new Set;clerkProgress="";chronFilter="all";chronOpen=new Set;codexFilter="";codexKind="";editing=null;orbit="";creator;status="nochat";hudProblem="";versionWarning="";notice=null;engineSeen={};onSeen=()=>{};constructor(e,t){this.ctx=e,this.root=t,this.root.classList.add("almp"),this.creator=new Se(e,()=>this.view,()=>this.render());try{let a=localStorage.getItem("alm-tab");if(a&&Ut.includes(a))this.tab=a}catch{}try{this.engineSeen=JSON.parse(localStorage.getItem("alm-engine-seen")||"{}")??{}}catch{this.engineSeen={}}this.root.addEventListener("click",(a)=>this.onClick(a)),this.root.addEventListener("change",(a)=>this.onChange(a)),this.root.addEventListener("input",(a)=>{let r=a.target;if(r?.dataset?.skinColor)this.ctx.events.emit("almanac:skinColors",this.withSkinColor(r.dataset.skinColor,r.value))}),this.root.addEventListener("keydown",(a)=>{if(a.key==="Escape"&&this.orbit)this.orbit="",this.render()})}send(e){this.ctx.sendToBackend({chatId:this.view?.chatId,...e})}setStatus(e){if(e===this.status)return;if(this.status=e,!this.view||e==="nochat")this.render()}setView(e){this.view=e,this.render()}seenSet(){return new Set(this.view?.chatId?this.engineSeen[this.view.chatId]??[]:[])}markEngineSeen(){let e=this.view;if(!e?.chatId)return;let t=ye(e),a=this.engineSeen[e.chatId]??[];if(t.every((s)=>a.includes(s)))return;delete this.engineSeen[e.chatId],this.engineSeen[e.chatId]=t;let r=Object.keys(this.engineSeen);if(r.length>60)for(let s of r.slice(0,r.length-60))delete this.engineSeen[s];try{localStorage.setItem("alm-engine-seen",JSON.stringify(this.engineSeen))}catch{}this.onSeen()}render(){let e=this.view;if(!e){this.root.innerHTML=`<div class="almo">${it(this.status)}</div>`;return}let t="";try{t=this[`tab_${this.tab}`]?.(e)??""}catch(g){t=`<div class="empty">Could not draw this page: ${n(String(g))}</div>`}let a=this.versionWarning?`<div class="card flat alm-warnbox"><b>The Ledger's background process is running ${n(this.versionWarning)}, but this page loaded ${J}.</b><p class="muted">In Extensions, turn ALMANAC Ledger off and on again (or press Update), then reload the page. If this stays, check Extensions for a second copy of ALMANAC Ledger and remove the older one.</p></div>`:"",r=e.enabled?e.planError:null,s=r?`<div class="card flat alm-warnbox"><b>The last ${r.genType==="normal"?"turn":n(r.genType)} went to the model without the Almanac.</b><p class="muted">At ${n(new Date(r.at).toLocaleString())}, ${n(r.where)} failed, so the reply was written without the ledger note, recall or mirror entries. This clears itself on the next turn that works. If it keeps coming back, update the extension, and report the error below if an update doesn't fix it.</p><p><code>${n(r.message)}</code></p>${r.stack?`<details><summary class="muted">Details for a bug report</summary><pre>ALMANAC Ledger ${n(e.version)}
+${n(r.stack)}</pre></details>`:""}</div>`:"",i=!e.enabled?`<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block), and off again when the chat moves to another preset. You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button>${e.hiddenTurns?`<p class="muted">${e.hiddenTurns} turn${e.hiddenTurns===1?" is":"s are"} still hidden under summaries. <button class="btn" data-act="releaseHidden">Show them again</button></p>`:""}</div>`:"",o=e.detected?.presetVersion,l=e.enabled&&o&&Ze(String(o),$e)?`<div class="card flat alm-warnbox"><b>This chat uses ALMANAC preset ${n(o)}; the extension expects ${$e} or newer.</b><p class="muted">Import <code>preset/ALMANAC.json</code> from the repository again (Presets → Import) so both halves speak the same version.</p></div>`:"",d=e.enabled?(e.problems??[]).slice(0,3):[],c=d.length?`<div class="card flat alm-warnbox"><div class="row"><b class="grow">Something in the background didn't work</b><button class="btn" data-act="clearProblems">Clear</button></div><ul class="alm-list">${d.map((g)=>`<li><b>${n(g.where)}</b> <small class="muted">${n(new Date(g.at).toLocaleString())}</small><br><small>${n(g.message)}</small></li>`).join("")}</ul><p class="muted"><small>The story still goes on; this is what didn't happen. If it repeats, check the connection set for that job in Settings.</small></p></div>`:"",u=this.notice&&Date.now()-this.notice.at<60000?`<div class="card flat${this.notice.tone==="error"||this.notice.tone==="warning"?" alm-warnbox":""}"><div class="row"><span class="grow">${n(this.notice.text)}</span><button class="btn" data-act="dismissNotice">OK</button></div></div>`:"",m=this.root.scrollTop;this.root.innerHTML=`<div class="almo${this.orbit?" orbiting":""}">${rt(e,this.tab)}<main class="almo-body">${st(e,this.tab)}${u}${a}${l}${s}${c}${i}${t}</main>${ot(e,this.tab,this.orbit,this.seenSet())}</div>`,this.root.scrollTop=m}go(e){let t=e!==this.tab;if(this.tab=e,this.orbit="",oe(e)?.id==="engine")this.markEngineSeen();try{localStorage.setItem("alm-tab",this.tab)}catch{}if(this.render(),t)this.root.scrollTop=0}tab_now(e){let t=e.now,a=e.cast.filter((i)=>i.tier==="spot"||i.tier==="peri"),r=(t.forecastHours??[]).filter((i,o)=>o%2===0).slice(0,6);return`<div class="card flat almo-facts"><div class="kv">${[t.place.length?`<b>Where</b><span>${n(t.place.join(" › "))}</span>`:"",t.sun?`<b>Sun</b><span>${n(t.sun.text)}</span>`:"",t.moon?`<b>Moon</b><span>${n(t.moon.glyph)} ${n(t.moon.name)}</span>`:"",t.season?`<b>Season</b><span>${n(t.season)}</span>`:"",`<b>Scene</b><span>${t.scene} · ${n(t.mode)}</span>`].join("")}</div></div>
+${r.length?`<div class="card flat"><h4>Next hours</h4><div class="alm-fc" style="grid-template-columns:repeat(${r.length},1fr)">${r.map((i)=>`<div><small>${n(i.t)}</small><span>${n(i.glyph)}</span><b>${i.temp}°</b></div>`).join("")}</div><div class="muted">${n(t.forecast)}</div></div>`:""}
 <h4>Present</h4>
-${present.length ? `<div class="alm-cast">${present.map((c) => this.castCard(c, true)).join("")}</div>` : `<div class="empty">No one else is here.</div>`}
-${v.world.cons.filter((c) => c.status === "open" || c.status === "due").length ? `<h4>Owed and due</h4><div class="card flat"><ul class="alm-list">${v.world.cons.filter((c) => c.status === "open" || c.status === "due").slice(-8).map((c) => `<li>${escapeHtml(c.whoName)}${c.whomName ? ` → ${escapeHtml(c.whomName)}` : ""}: ${escapeHtml(c.what)}${c.dueText ? ` <small class="muted">due ${escapeHtml(c.dueText)}</small>` : ""}</li>`).join("")}</ul></div>` : ""}
+${a.length?`<div class="alm-cast">${a.map((i)=>this.castCard(i,!0)).join("")}</div>`:'<div class="empty">No one else is here.</div>'}
+${e.world.cons.filter((i)=>i.status==="open"||i.status==="due").length?`<h4>Owed and due</h4><div class="card flat"><ul class="alm-list">${e.world.cons.filter((i)=>i.status==="open"||i.status==="due").slice(-8).map((i)=>`<li>${n(i.whoName)}${i.whomName?` → ${n(i.whomName)}`:""}: ${n(i.what)}${i.dueText?` <small class="muted">due ${n(i.dueText)}</small>`:""}</li>`).join("")}</ul></div>`:""}
 <h4>What the model will be told next</h4>
-${v.note ? `<pre>${escapeHtml(v.note)}</pre>` : `<div class="empty">The note appears after the next generation starts.</div>`}
-${v.recall ? `<details><summary class="muted">Recall block</summary><pre>${escapeHtml(v.recall)}</pre></details>` : ""}
+${e.note?`<pre>${n(e.note)}</pre>`:'<div class="empty">The note appears after the next generation starts.</div>'}
+${e.recall?`<details><summary class="muted">Recall block</summary><pre>${n(e.recall)}</pre></details>`:""}
 <div class="row" style="margin-top:10px"><button class="btn" data-act="sessionZero">\uD83C\uDFB2 Session Zero</button><button class="btn" data-act="repairLast">\uD83E\uDE79 Repair last ledger</button><button class="btn" data-act="rebuild">↻ Rebuild from transcript</button></div>
-<p class="muted" style="margin-top:8px">${v.counts.messages} messages · ${v.counts.ledgers} ledgers · ${v.counts.chapters} chapters${v.counts.unverified ? ` · ${v.counts.unverified} unverified turns` : ""}</p>`;
-  }
-  castCard(c, compact = false) {
-    const meters = Object.entries(c.meters ?? {}).filter(([, x]) => x != null);
-    const seg = (x) => `<span class="alm-seg">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= x ? "on" : ""}"></i>`).join("")}</span>`;
-    const vad = c.mood && (c.mood.v != null || c.mood.a != null) ? `<div class="alm-vad">${c.mood.v != null ? `<span>V</span><div class="alm-slider"><i style="--v:${((c.mood.v + 3) / 6).toFixed(2)}"></i></div>` : ""}${c.mood.a != null ? `<span>A</span><div class="alm-slider"><i style="--v:${(c.mood.a / 5).toFixed(2)}"></i></div>` : ""}${c.mood.d != null ? `<span>D</span><div class="alm-slider"><i style="--v:${((c.mood.d + 3) / 6).toFixed(2)}"></i></div>` : ""}</div>` : "";
-    return `<article class="alm-cc" style="--c:${escapeHtml(c.color)}"><div class="alm-cc__band"><span class="alm-cc__tier">${c.dead ? "dead" : c.isUser ? "you" : escapeHtml(c.tier === "spot" ? "spotlight" : c.tier === "peri" ? "periphery" : "away")}</span></div><span class="alm-say__medal alm-cc__medal" style="--c:${escapeHtml(c.color)}">${escapeHtml(initials(c.name))}</span>
-<div class="alm-cc__bd"><div class="alm-cc__nm">${escapeHtml(c.name)}</div>${c.mood?.name ? `<div class="alm-cc__em">${escapeHtml(c.mood.name)}</div>` : ""}${vad}
-${meters.length ? `<div class="alm-meters">${meters.map(([k, x]) => `<span>${escapeHtml(k)}</span>${seg(x)}`).join("")}</div>` : ""}
-<div class="alm-tags">${(c.flags ?? []).slice(-4).map((f) => `<span class="alm-tag">${escapeHtml(f)}</span>`).join("")}${(c.injuries ?? []).map((i) => `<span class="alm-tag warn">${escapeHtml(i.where)}</span>`).join("")}${(c.held ?? []).slice(0, 3).map((h) => `<span class="alm-tag">holds: ${escapeHtml(h)}</span>`).join("")}</div>
-${c.fixed ? `<div class="alm-cc__row" title="Sent to the model every turn while they're present: eyes, hair, age and the appearance you set"><b>always</b>${escapeHtml(c.fixed)}</div>` : ""}${c.activity ? `<div class="alm-cc__row"><b>doing</b>${escapeHtml(c.activity)}</div>` : ""}${!compact && c.age ? `<div class="alm-cc__row"><b>age</b>${escapeHtml(c.age)}${c.ageSet ? "" : ` <small class="muted" title="From the lore">(lore)</small>`}</div>` : ""}${!compact && c.appearance ? `<div class="alm-cc__row"><b>appearance</b>${escapeHtml(c.appearance)}</div>` : ""}${!compact && c.look ? `<div class="alm-cc__row"><b>wearing</b>${escapeHtml(c.look)}</div>` : ""}${!compact && c.place ? `<div class="alm-cc__row"><b>where</b>${escapeHtml(c.place)}</div>` : ""}
-</div></article>`;
-  }
-  tab_cast(v) {
-    const add = this.editingChar === "__new" ? this.charEditor(null) : `<div class="row" style="margin-bottom:8px"><span class="grow"></span><button class="btn" data-act="charAdd" title="Add someone the story hasn't named yet, or who should be tracked from now on">+ Add a person</button></div>`;
-    return `${add}<div class="list">${v.cast.map((c) => `<div class="card">
-<div class="row"><span class="alm-mini" style="--c:${escapeHtml(c.color)}">${escapeHtml(initials(c.name))}</span><b class="grow">${escapeHtml(c.name)}${c.aliases?.length ? ` <small class="muted">(${escapeHtml(c.aliases.join(", "))})</small>` : ""}</b><span class="pill">slot ${c.slot}</span><button class="btn" data-act="charEdit" data-id="${escapeHtml(c.id)}" title="${c.isUser ? "Age and appearance" : "Name, age and appearance"}">edit</button><input type="color" class="swatch" data-color="${escapeHtml(c.id)}" value="${escapeHtml(toHex(c.color))}" title="${c.isUser ? "Your persona's colour" : "Voice colour"}" aria-label="${escapeHtml(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}"></div>
-${this.editingChar === c.id ? this.charEditor(c) : this.castCard(c)}
-${c.journal?.length ? `<h4>In their own words</h4>${c.journal.map((j) => `<div class="muted">“${escapeHtml(j.text)}”</div>`).join("")}` : ""}
-${c.isUser ? "" : `<h4>Hidden pressure (narrator-only)</h4><div class="row"><span class="spoiler grow" tabindex="0">${escapeHtml(c.pressure || "— none drawn yet —")}</span><button class="btn" data-act="editPressure" data-id="${escapeHtml(c.id)}">edit</button></div>`}
-${this.mergeRow(v, c)}
-${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn danger" data-act="notPerson" data-name="${escapeHtml(c.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button></div>`}
-</div>`).join("") || `<div class="empty">No one has appeared yet.</div>`}</div>${this.removedRow(v)}`;
-  }
-  charEditor(c) {
-    const id = c?.id ?? "__new";
-    const name = c?.isUser ? `<p class="muted"><small>Your persona's name comes from Lumiverse.</small></p>` : `<label class="f">Name<input type="text" id="almCharName" value="${escapeHtml(c?.name ?? "")}" placeholder="${c ? "" : "Walter Hale"}"></label>${c ? `<p class="muted"><small>The old name keeps working in the story's lines.</small></p>` : ""}`;
-    return `<div class="card almk--edit">${name}
-<label class="f">Age<input type="text" id="almCharAge" value="${escapeHtml(c?.ageSet ? c.age : "")}" placeholder="${escapeHtml(c?.age && !c.ageSet ? `${c.age} (from the lore)` : "e.g. 24, early fifties, ageless")}"></label>
-<label class="f">Appearance<textarea id="almCharLook" placeholder="${escapeHtml(c?.fixed && !c?.appearance ? `Now: ${c.fixed}` : "Build, hair, eyes, what people notice first")}">${escapeHtml(c?.appearance ?? "")}</textarea></label>
+<p class="muted" style="margin-top:8px">${e.counts.messages} messages · ${e.counts.ledgers} ledgers · ${e.counts.chapters} chapters${e.counts.unverified?` · ${e.counts.unverified} unverified turns`:""}</p>`}castCard(e,t=!1){let a=Object.entries(e.meters??{}).filter(([,i])=>i!=null),r=(i)=>`<span class="alm-seg">${[1,2,3,4,5].map((o)=>`<i class="${o<=i?"on":""}"></i>`).join("")}</span>`,s=e.mood&&(e.mood.v!=null||e.mood.a!=null)?`<div class="alm-vad">${e.mood.v!=null?`<span>V</span><div class="alm-slider"><i style="--v:${((e.mood.v+3)/6).toFixed(2)}"></i></div>`:""}${e.mood.a!=null?`<span>A</span><div class="alm-slider"><i style="--v:${(e.mood.a/5).toFixed(2)}"></i></div>`:""}${e.mood.d!=null?`<span>D</span><div class="alm-slider"><i style="--v:${((e.mood.d+3)/6).toFixed(2)}"></i></div>`:""}</div>`:"";return`<article class="alm-cc" style="--c:${n(e.color)}"><div class="alm-cc__band"><span class="alm-cc__tier">${e.dead?"dead":e.isUser?"you":n(e.tier==="spot"?"spotlight":e.tier==="peri"?"periphery":"away")}</span></div><span class="alm-say__medal alm-cc__medal" style="--c:${n(e.color)}">${n(q(e.name))}</span>
+<div class="alm-cc__bd"><div class="alm-cc__nm">${n(e.name)}</div>${e.mood?.name?`<div class="alm-cc__em">${n(e.mood.name)}</div>`:""}${s}
+${a.length?`<div class="alm-meters">${a.map(([i,o])=>`<span>${n(i)}</span>${r(o)}`).join("")}</div>`:""}
+<div class="alm-tags">${(e.flags??[]).slice(-4).map((i)=>`<span class="alm-tag">${n(i)}</span>`).join("")}${(e.injuries??[]).map((i)=>`<span class="alm-tag warn">${n(i.where)}</span>`).join("")}${(e.held??[]).slice(0,3).map((i)=>`<span class="alm-tag">holds: ${n(i)}</span>`).join("")}</div>
+${e.fixed?`<div class="alm-cc__row" title="Sent to the model every turn while they're present: eyes, hair, age and the appearance you set"><b>always</b>${n(e.fixed)}</div>`:""}${e.activity?`<div class="alm-cc__row"><b>doing</b>${n(e.activity)}</div>`:""}${!t&&e.age?`<div class="alm-cc__row"><b>age</b>${n(e.age)}${e.ageSet?"":' <small class="muted" title="From the lore">(lore)</small>'}</div>`:""}${!t&&e.appearance?`<div class="alm-cc__row"><b>appearance</b>${n(e.appearance)}</div>`:""}${!t&&e.look?`<div class="alm-cc__row"><b>wearing</b>${n(e.look)}</div>`:""}${!t&&e.place?`<div class="alm-cc__row"><b>where</b>${n(e.place)}</div>`:""}
+</div></article>`}tab_cast(e){return`${this.editingChar==="__new"?this.charEditor(null):`<div class="row" style="margin-bottom:8px"><span class="grow"></span><button class="btn" data-act="charAdd" title="Add someone the story hasn't named yet, or who should be tracked from now on">+ Add a person</button></div>`}<div class="list">${e.cast.map((a)=>`<div class="card">
+<div class="row"><span class="alm-mini" style="--c:${n(a.color)}">${n(q(a.name))}</span><b class="grow">${n(a.name)}${a.aliases?.length?` <small class="muted">(${n(a.aliases.join(", "))})</small>`:""}</b><span class="pill">slot ${a.slot}</span><button class="btn" data-act="charEdit" data-id="${n(a.id)}" title="${a.isUser?"Age and appearance":"Name, age and appearance"}">edit</button><input type="color" class="swatch" data-color="${n(a.id)}" value="${n(mt(a.color))}" title="${a.isUser?"Your persona's colour":"Voice colour"}" aria-label="${n(a.isUser?"Your persona's colour":`${a.name}'s colour`)}"></div>
+${this.editingChar===a.id?this.charEditor(a):this.castCard(a)}
+${a.journal?.length?`<h4>In their own words</h4>${a.journal.map((r)=>`<div class="muted">“${n(r.text)}”</div>`).join("")}`:""}
+${a.isUser?"":`<h4>Hidden pressure (narrator-only)</h4><div class="row"><span class="spoiler grow" tabindex="0">${n(a.pressure||"— none drawn yet —")}</span><button class="btn" data-act="editPressure" data-id="${n(a.id)}">edit</button></div>`}
+${this.mergeRow(e,a)}
+${a.isUser?"":`<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn danger" data-act="notPerson" data-name="${n(a.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button></div>`}
+</div>`).join("")||'<div class="empty">No one has appeared yet.</div>'}</div>${this.removedRow(e)}`}charEditor(e){let t=e?.id??"__new";return`<div class="card almk--edit">${e?.isUser?`<p class="muted"><small>Your persona's name comes from Lumiverse.</small></p>`:`<label class="f">Name<input type="text" id="almCharName" value="${n(e?.name??"")}" placeholder="${e?"":"Walter Hale"}"></label>${e?`<p class="muted"><small>The old name keeps working in the story's lines.</small></p>`:""}`}
+<label class="f">Age<input type="text" id="almCharAge" value="${n(e?.ageSet?e.age:"")}" placeholder="${n(e?.age&&!e.ageSet?`${e.age} (from the lore)`:"e.g. 24, early fifties, ageless")}"></label>
+<label class="f">Appearance<textarea id="almCharLook" placeholder="${n(e?.fixed&&!e?.appearance?`Now: ${e.fixed}`:"Build, hair, eyes, what people notice first")}">${n(e?.appearance??"")}</textarea></label>
 <p class="muted"><small>What you set here is sent with them every turn and holds whatever the story writes.</small></p>
-<div class="row"><button class="btn primary" data-act="charSave" data-id="${escapeHtml(id)}">${c ? "Save" : "Add"}</button><button class="btn" data-act="charCancel">Cancel</button></div></div>`;
-  }
-  removedRow(v) {
-    const gone = Object.entries(v.config?.merges ?? {}).filter(([, to]) => to === NOT_A_PERSON).map(([n]) => n);
-    if (!gone.length)
-      return "";
-    return `<h4>Removed from the cast</h4><div class="card flat"><p class="muted" style="margin:0 0 8px"><small>Not characters: the story's lines about them as people are ignored, and the model is told to leave them out.</small></p><div class="row">${gone.map((n) => `<span class="pill">${escapeHtml(n)} <button class="btn" data-act="restorePerson" data-name="${escapeHtml(n)}" title="Put it back in the cast" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div></div>`;
-  }
-  mergeRow(v, c) {
-    const merges = v.config?.merges ?? {};
-    const mine = Object.entries(merges).filter(([, to]) => c.isUser ? to === "user" : to.toLowerCase() === c.name.toLowerCase()).map(([from]) => from);
-    const chips = mine.map((n) => `<span class="pill">${escapeHtml(n)} <button class="btn" data-act="unmerge" data-name="${escapeHtml(n)}" title="Split this name off again" style="padding:0 6px;margin-left:4px">✕</button></span>`).join("");
-    const pick = c.isUser ? "" : `<label class="f">Same person as…<select data-merge="${escapeHtml(c.name)}"><option value="">— no, a different person —</option><option value="user">${escapeHtml(v.names?.user || "You")} (you)</option>${v.cast.filter((o) => !o.isUser && o.id !== c.id).map((o) => `<option value="${escapeHtml(o.name)}">${escapeHtml(o.name)}</option>`).join("")}</select></label>`;
-    return pick || chips ? `<div class="alm-merge">${chips ? `<div class="row"><small class="muted">Also written as:</small>${chips}</div>` : ""}${pick}</div>` : "";
-  }
-  tab_bonds(v) {
-    const nodes = v.cast.filter((c) => !c.dead || v.bonds.some((b) => b.from === c.id || b.to === c.id)).map((c) => ({ id: c.id, name: c.isUser ? v.names.user || "You" : c.name, color: c.color, spot: c.tier === "spot", user: c.isUser }));
-    const lastIdx = Math.max(0, ...v.bonds.map((b) => b.lastMsg));
-    const edges = v.bonds.map((b) => ({ from: b.from, to: b.to, axes: b.axes, label: b.label, changedAt: b.lastMsg, changedNow: b.lastMsg === lastIdx, history: b.history }));
-    const maxIdx = Math.max(1, ...v.bonds.flatMap((b) => b.history.map((h) => h.msgIndex)));
-    const axes = ["", "trust", "affection", "respect", "attraction", "fear", "resentment", "rivalry", "obligation"];
-    return `<div class="row"><select data-set="graphAxis">${axes.map((a) => `<option value="${a}"${a === this.graphAxis ? " selected" : ""}>${a || "strongest axis"}</option>`).join("")}</select><label class="chk"><input type="checkbox" data-set="npcOnly"${this.npcOnly ? " checked" : ""}> NPC↔NPC only</label></div>
-<div style="margin:8px 0">${renderGraph(nodes, edges, { asOf: this.asOf, filterAxis: this.graphAxis || undefined, npcOnly: this.npcOnly })}</div>
-<label class="f">Timeline scrubber — ${this.asOf === Infinity ? "now" : `as of message ${this.asOf + 1}`}<input type="range" min="0" max="${maxIdx}" value="${this.asOf === Infinity ? maxIdx : this.asOf}" data-set="asOf"></label>
-<h4>All bonds</h4><div class="list">${v.bonds.map((b) => `<div class="rec"><div class="hd"><b>${escapeHtml(b.fromName)} → ${escapeHtml(b.toName)}</b>${b.label ? `<span class="pill">${escapeHtml(b.label)}</span>` : ""}${b.ladder ? `<span class="pill">♡ tier ${b.ladder.tier}</span>` : ""}</div><div class="muted">${Object.entries(b.axes).map(([k, x]) => `${k} ${x > 0 ? "+" : ""}${x}`).join(" · ")}</div>${b.history.slice(-2).map((h) => `<div class="muted"><small>${escapeHtml(h.axis)} ${h.delta > 0 ? "+" : ""}${h.delta}${h.cause ? ` — ${escapeHtml(h.cause)}` : ""}</small></div>`).join("")}</div>`).join("") || `<div class="empty">No bonds yet.</div>`}</div>`;
-  }
-  tab_knowledge(v) {
-    const hidden = v.hiddenFacts ?? [];
-    const clerk = this.clerkBar(v);
-    const adding = this.editingFact === "__new" ? this.factEditor(v, null) : `<div class="row" style="margin-bottom:8px"><span class="grow"></span><button class="btn" data-act="factAdd" title="Add a fact the story hasn't recorded, and say who knows it">+ Add a fact</button></div>`;
-    if (!v.knowledge.length && !hidden.length)
-      return `${clerk}${adding}<div class="empty">No facts yet. The model records them with <code>reveal</code>, <code>know</code> and <code>secret</code> lines; each fact collects who has it, how it reached them, and who it's kept from.</div>`;
-    const people = new Map(v.cast.map((c) => [c.id, c]));
-    const q = this.factQuery.trim().toLowerCase();
-    const who = this.factPerson;
-    const kinds = {
-      play: (f) => f.kind === "secret" || f.kind === "belief" || f.inPlay || f.added,
-      shared: (f) => f.kind === "shared",
-      noted: (f) => f.kind === "noted",
-      all: () => true
-    };
-    const counts = Object.fromEntries(Object.entries(kinds).map(([k, fn]) => [k, v.knowledge.filter(fn).length]));
-    const touches = (f) => !who || f.stances.some((s) => s.id === who) || f.lacks.some((l) => l.id === who) || f.keepers.some((k) => k.id === who);
-    const shown = v.knowledge.filter((f) => kinds[this.factKind](f) && touches(f) && (!q || `${f.key} ${f.statement} ${f.stances.map((s) => s.name).join(" ")}`.toLowerCase().includes(q)));
-    const mini = (id, name) => `<span class="alm-mini" style="--c:${escapeHtml(people.get(id)?.color ?? "#888")}">${escapeHtml(initials(name))}</span>`;
-    const chip = (s) => {
-      const cls = s.status === "wrong" ? "wrong" : s.status === "knows" ? "knows" : "sus";
-      const icon = s.status === "wrong" ? "✗" : s.status === "knows" ? "✓" : "?";
-      const label = s.status === "wrong" ? "wrong" : s.verb;
-      const worked = s.derived === "witness" ? "was there when it came out" : s.derived === "source" ? "their own words or deed" : s.derived === "secret" ? "keeps it" : "";
-      return `<div class="almk-h">${mini(s.id, s.name)}<div class="almk-h__b"><b>${escapeHtml(s.name)}</b><span class="alm-kp ${cls}"${worked ? ` title="Worked out by the Almanac: ${escapeHtml(worked)}"` : ""}>${icon} ${escapeHtml(label)}</span>${s.version ? `<small class="almk-ver">thinks “${escapeHtml(s.version)}”</small>` : ""}${s.how && !s.derived && !s.verb.includes(s.how) ? kpNote(s.how) : ""}</div></div>`;
-    };
-    const lackChip = (l) => `<div class="almk-h">${mini(l.id, l.name)}<div class="almk-h__b"><b>${escapeHtml(l.name)}</b><span class="alm-kp un">— ${escapeHtml(l.text)}</span></div></div>`;
-    const KIND = { secret: "secret", belief: "belief", shared: "shared", noted: "noted" };
-    const cards = shown.map((f) => {
-      if (this.editingFact === f.key)
-        return this.factEditor(v, f);
-      const truth = f.truth !== "unknown" ? `<span class="pill${f.truth === "false" ? " warn" : ""}" title="Whether the fact is true">${f.truth === "true" ? "true" : f.truth === "false" ? "false" : "partly true"}</span>` : "";
-      const hist = f.history.map((h) => `<li><time>${escapeHtml(h.when)}</time> <b>${escapeHtml(h.name)}</b> ${escapeHtml(h.verb)}${h.version ? `: “${escapeHtml(h.version)}”` : ""}${h.how && !h.derived && !h.verb.toLowerCase().includes(h.how.toLowerCase()) ? ` <span class="muted">— ${escapeHtml(h.how)}</span>` : ""}${h.note ? `<small class="almk-note">${escapeHtml(h.note)}</small>` : ""}</li>`).join("");
-      const kept = f.keepers.length ? `<div class="almk-un">\uD83E\uDD2B Kept by ${escapeHtml(f.keepers.map((k) => k.name).join(", "))}${f.keptFrom.length ? ` from ${escapeHtml(f.keptFrom.map((k) => k.name).join(", "))}` : ""}</div>` : "";
-      return `<div class="card flat almk almk--${escapeHtml(f.kind)}"><div class="almk-top"><span class="almk-key" title="The model refers to this fact as #${escapeHtml(f.key)}">#${escapeHtml(f.key)}</span><span class="pill almk-kind" title="${escapeHtml(KIND_HELP[f.kind] ?? "")}">${escapeHtml(KIND[f.kind] ?? f.kind)}</span>${truth}${f.locked ? `<span class="pill" title="You set this statement">✎ yours</span>` : ""}${f.offPage ? `<span class="pill${f.offPage.live ? " warn" : ""}" title="${escapeHtml(f.offPage.live ? `Kept off the page${f.offPage.words.length ? `: never "${f.offPage.words.join('", "')}"` : ""}${f.offPage.wording ? `; alluded to as "${f.offPage.wording}"` : ""}` : "It has come out; no longer kept off the page")}">${f.offPage.live ? "\uD83D\uDD12 off the page" : "off the page · out now"}</span>` : ""}<span class="grow"></span><button class="btn" data-act="factEdit" data-id="${escapeHtml(f.key)}" title="Rename, set the truth, set who knows it, or merge">edit</button><button class="btn danger" data-act="factDelete" data-id="${escapeHtml(f.key)}" title="Delete this fact from the page and the model's note (you can restore it below)">delete</button></div>
-<b class="almk-stmt">${escapeHtml(f.statement)}</b>
-<div class="almk-st">${f.stances.map(chip).join("") || `<div class="muted">No one has it yet.</div>`}${f.lacks.map(lackChip).join("")}</div>
-${kept}
-<details class="almk-hist"${this.openFacts.has(f.key) ? " open" : ""} data-fact="${escapeHtml(f.key)}"><summary>How it came out · ${f.history.length}</summary><ol>${hist}</ol></details></div>`;
-    }).join("");
-    const irony = v.knowledge.flatMap((f) => f.stances.filter((s) => s.status === "wrong" || s.status !== "unaware" && f.truth === "false").map((s) => ({ f, s }))).slice(0, 3);
-    const ironyHtml = irony.map(({ f, s }) => `<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${escapeHtml(s.name)} ${s.version ? `thinks “${escapeHtml(s.version)}”, but ${escapeHtml(f.statement)}` : `is certain that “${escapeHtml(f.statement)}”, which isn't true`}.</span></div>`).join("");
-    const seg = (k, lab) => `<button class="pill${this.factKind === k ? " on" : ""}" data-act="factKind" data-id="${k}" aria-pressed="${this.factKind === k}">${lab} <b>${counts[k]}</b></button>`;
-    const filters = `<div class="row almk-filters">${seg("play", "In play")}${seg("shared", "Shared")}${seg("noted", "Noted")}${seg("all", "All")}<span class="grow"></span><select data-set="factPerson" aria-label="Show one person"><option value="">everyone</option>${(v.knowers ?? []).map((p) => `<option value="${escapeHtml(p.id)}"${p.id === who ? " selected" : ""}>${escapeHtml(p.name)}${p.here ? " · here" : ""}</option>`).join("")}</select></div>`;
-    const search = `<div class="row" style="margin-bottom:8px"><input type="text" data-set="factQuery" value="${escapeHtml(this.factQuery)}" placeholder="Find a fact or a person…" aria-label="Find a fact or a person" class="grow"><span class="muted"><small>${shown.length} of ${v.knowledge.length}</small></span></div>`;
-    const person = who ? this.personKnowledge(v, who) : "";
-    const hiddenHtml = hidden.length ? `<h4>Deleted facts</h4><div class="row">${hidden.map((h) => `<span class="pill">${escapeHtml(h.statement)} <button class="btn" data-act="factRestore" data-id="${escapeHtml(h.key)}" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div>` : "";
-    const empty = this.factKind === "play" ? "No secrets or beliefs in play. <b>Shared</b> and <b>Noted</b> hold the rest." : "Nothing matches.";
-    return `${clerk}${ironyHtml}${filters}${search}${person}${adding}<div class="list">${cards || `<div class="empty">${empty}</div>`}</div>${hiddenHtml}`;
-  }
-  personKnowledge(v, id) {
-    const p = (v.knowers ?? []).find((x) => x.id === id);
-    if (!p)
-      return "";
-    const has = v.knowledge.flatMap((f) => f.stances.filter((s) => s.id === id).map((s) => `<li><b>${escapeHtml(f.statement)}</b> <span class="muted">— ${escapeHtml(s.status === "wrong" && s.version ? `thinks “${s.version}”` : s.verb)}</span></li>`));
-    const lacks = v.knowledge.flatMap((f) => f.lacks.filter((l) => l.id === id).map((l) => `<li><b>${escapeHtml(f.statement)}</b> <span class="muted">— ${escapeHtml(l.text)}</span></li>`));
-    const gaps = (v.knowGaps ?? []).find((g) => g.id === id)?.gaps ?? [];
-    return `<div class="card flat almk-person"><h4>${escapeHtml(p.name)}</h4>
-<details open><summary>Has · ${has.length}</summary><ul>${has.slice(0, 40).join("") || '<li class="muted">Nothing recorded.</li>'}</ul></details>
-<details${lacks.length ? " open" : ""}><summary>Lacks · ${lacks.length}</summary><ul>${lacks.join("") || '<li class="muted">Nothing recorded as kept from them or missed.</li>'}</ul></details>
-<details${gaps.length ? " open" : ""}><summary>Doesn't know, in the story's words · ${gaps.length}</summary><ul>${gaps.map((g) => `<li${g.stale ? ' class="muted" title="Not restated in the last 40 messages"' : ""}>${escapeHtml(g.text)}</li>`).join("") || '<li class="muted">No gaps recorded.</li>'}</ul></details></div>`;
-  }
-  clerkBar(v) {
-    const c = v.clerk ?? {};
-    const mode = c.mode === "off" ? "off for new replies" : c.mode === "always" ? "reads every new reply" : "reads new replies whose lines need it";
-    const unread = Number(c.unread ?? 0);
-    const read = Math.max(0, Number(c.replies ?? 0) - unread);
-    const status = c.replies ? ` ${read} of ${c.replies} replies read.` : "";
-    const button = c.running ? `<span class="pill on">reading…${this.clerkProgress ? ` ${escapeHtml(this.clerkProgress)}` : ""}</span><button class="btn" data-act="clerkStop" title="Stop after the reply it's reading; tidying again carries on from there">Stop</button>` : unread ? `<button class="btn" data-act="clerkTidy" title="Read every reply the clerk hasn't read yet, oldest first, and rewrite its knowledge lines cleanly: one quiet generation each. You can stop and carry on later.">Tidy the whole chat · ${unread} to read</button>` : c.replies ? `<span class="pill">every reply read</span>` : "";
-    return `<div class="card flat almk-clerk"><div class="row"><span class="grow"><b>Knowledge clerk</b> <span class="muted">— ${escapeHtml(mode)}.${escapeHtml(status)}</span></span>${button}</div></div>`;
-  }
-  factEditor(v, fact) {
-    const f = fact ?? { key: "__new", statement: "", stances: [], lacks: [] };
-    const others = fact ? v.knowledge.filter((o) => o.key !== f.key) : [];
-    const truthOpts = [["", fact ? "as the story says" : "not said"], ["true", "true"], ["false", "false"], ["partial", "partly true"], ["unknown", "unknown"]];
-    const cur = fact ? v.config?.factEdits?.[f.key] ?? {} : {};
-    return `<div class="card almk almk--edit"><label class="f">The fact, in a few words<input type="text" id="almFactStmt" value="${escapeHtml(f.statement)}" placeholder="${fact ? "" : "Walter is Gabriel's Watcher"}"></label>
-<label class="f">Is it true?<select id="almFactTruth">${truthOpts.map(([k, l]) => `<option value="${k}"${(cur.truth ?? "") === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
-<fieldset class="almk-off"><legend>Off the page</legend><label class="chk"><input type="checkbox" id="almFactOffOn"${fact?.offPage && cur.offPage !== null || cur.offPage ? " checked" : ""}> Keep it out of the narration, thoughts and summaries until it comes out</label>
-<label class="f">Words never to use yet<input type="text" id="almFactOffWords" value="${escapeHtml((cur.offPage?.words ?? fact?.offPage?.words ?? []).join(", "))}" placeholder="Heaven, paradise"></label>
-<label class="f">How the story may allude to it<input type="text" id="almFactOffAs" value="${escapeHtml(cur.offPage?.wording ?? fact?.offPage?.wording ?? "")}" placeholder="somewhere warm and finished"></label></fieldset>
-${others.length ? `<label class="f">Same fact as…<select id="almFactInto"><option value="">— a separate fact —</option>${others.map((o) => `<option value="${escapeHtml(o.key)}">#${escapeHtml(o.key)} ${escapeHtml(o.statement)}</option>`).join("")}</select></label>` : ""}
-<h4>Who knows it</h4><div class="list">${(v.knowers ?? []).map((p) => {
-      const now = f.stances.find((s) => s.id === p.id);
-      const lack = f.lacks.find((l) => l.id === p.id);
-      const said = now ? now.verb : lack ? lack.text : "no record";
-      if (!fact)
-        return `<label class="f">${escapeHtml(p.name)}<select data-person="${escapeHtml(p.id)}">${PERSON_OPTS.filter(([k]) => k !== "none").map(([k, l]) => `<option value="${k}">${k ? l : "—"}</option>`).join("")}</select></label>`;
-      const want = cur.people?.[p.id] ?? "";
-      return `<label class="f">${escapeHtml(p.name)} <small class="muted">— now: ${escapeHtml(said)}</small><select data-person="${escapeHtml(p.id)}">${PERSON_OPTS.map(([k, l]) => `<option value="${k}"${want === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>`;
-    }).join("")}</div>
-<div class="row"><button class="btn primary" data-act="factSave" data-id="${escapeHtml(f.key)}">${fact ? "Save" : "Add"}</button><button class="btn" data-act="factCancel">Cancel</button><span class="grow"></span>${fact ? `<button class="btn danger" data-act="factHide" data-id="${escapeHtml(f.key)}" title="Delete it from this page and from the model's note">Delete</button>` : ""}</div></div>`;
-  }
-  tab_codex(v) {
-    const kinds = [...new Set(v.codex.map((r) => r.kind))];
-    const q = this.codexFilter.toLowerCase();
-    const recs = v.codex.filter((r) => (!this.codexKind || r.kind === this.codexKind) && (!q || `${r.name} ${r.summary} ${r.keys.join(" ")}`.toLowerCase().includes(q)));
-    return `<div class="row"><input type="text" placeholder="Search the Codex…" data-set="codexFilter" value="${escapeHtml(this.codexFilter)}" class="grow"><select data-set="codexKind"><option value="">all kinds</option>${kinds.map((k) => `<option${k === this.codexKind ? " selected" : ""}>${escapeHtml(k)}</option>`).join("")}</select></div>
-<p class="muted">${recs.length} of ${v.codex.length} records. Edits lock a record so the archivist never overwrites it. Keys are real retrieval keys.</p>
-<div class="list">${recs.slice(0, 200).map((r) => this.editing === r.id ? this.codexEditor(r) : `<div class="rec"><div class="hd"><span class="kind">${escapeHtml(r.kind)}</span><b class="grow">${escapeHtml(r.name)}</b>${r.locked ? `<span class="pill">\uD83D\uDD12 locked</span>` : ""}${r.narratorOnly ? `<span class="pill">narrator-only</span>` : ""}<span class="pill">${escapeHtml(r.source)}</span><button class="btn" data-act="edit" data-id="${escapeHtml(r.id)}">edit</button></div><div>${escapeHtml(r.summary)}</div>${r.keys.length ? `<div>${r.keys.map((k) => `<span class="pill">${escapeHtml(k)}</span>`).join("")}</div>` : ""}${r.body?.divergedNote ? `<div class="alm-tag warn">moved past: ${escapeHtml(r.body.divergedNote)}</div>` : ""}</div>`).join("")}</div>
-<details><summary class="muted">Add a record or a correction</summary><div class="card flat"><label class="f">New record name<input type="text" id="almNewName"></label><label class="f">Kind<select id="almNewKind">${["person", "place", "object", "group", "law", "texture", "history", "situation"].map((k) => `<option>${k}</option>`).join("")}</select></label><label class="f">Summary<textarea id="almNewSummary"></textarea></label><button class="btn primary" data-act="newRecord">Add record</button>
-<h4>Correct the state with ledger lines</h4><textarea id="almOps" placeholder="bond Mara>Kael: trust -1 — she caught him lying&#10;item Locket: Mara → Kael — stolen back"></textarea><button class="btn" data-act="userOps">Record correction</button></div></details>`;
-  }
-  codexEditor(r) {
-    return `<div class="rec"><div class="hd"><span class="kind">${escapeHtml(r.kind)}</span><b class="grow">${escapeHtml(r.name)}</b></div>
-<label class="f">Summary<textarea id="almEdSummary">${escapeHtml(r.summary)}</textarea></label>
-<label class="f">Keys (comma-separated)<input type="text" id="almEdKeys" value="${escapeHtml(r.keys.join(", "))}"></label>
-${r.kind === "person" ? `<label class="f">Routine (e.g. 06:00–09:00 docks (unloading); 09:00–18:00 harbour office)<input type="text" id="almEdRoutine" value="${escapeHtml(r.body?.routine ?? "")}"></label>` : ""}
-${r.kind === "place" ? `<label class="f">Hours (e.g. open 20:00 to 02:00)<input type="text" id="almEdHours" value="${escapeHtml(r.body?.hours ?? "")}"></label>` : ""}
-<label class="chk"><input type="checkbox" id="almEdNarr"${r.narratorOnly ? " checked" : ""}> narrator-only (characters cannot know it)</label>
-<div class="row"><button class="btn primary" data-act="saveRecord" data-id="${escapeHtml(r.id)}">Save &amp; lock</button><button class="btn" data-act="unlock" data-id="${escapeHtml(r.id)}">Unlock</button><button class="btn" data-act="cancelEdit">Cancel</button>${r.source !== "story" ? `<button class="btn danger" data-act="deleteRecord" data-id="${escapeHtml(r.id)}">Delete</button>` : ""}</div></div>`;
-  }
-  tab_chronicle(v) {
-    const ch = v.chronicle;
-    const cov = ch.coverage;
-    const tok = ch.tokens ?? {};
-    const cnt = ch.counts ?? {};
-    const all = ch.units;
-    const byId = new Map(all.map((u) => [u.id, u]));
-    const newest = (a, b) => b.startIdx - a.startIdx || RANK[b.level] - RANK[a.level];
-    const t = (n) => `~${Math.round(n || 0).toLocaleString()}`;
-    const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
-    const label = (u) => `${cap(u.level)} ${u.no}`;
-    const block = (u, depth) => {
-      const kids = u.children.map((id) => byId.get(id)).filter(Boolean).sort(newest);
-      const parent = u.parent ? byId.get(u.parent) : null;
-      const open = this.chronOpen.has(u.id);
-      const relevant = v.chronicle.mode === "relevant";
-      const status = u.stale ? `<span class="pill">stale</span>` : u.ghost ? `<span class="pill">ghost</span>` : v.chronicle.mode === "off" ? `<span class="pill" title="Summaries are switched off in Settings">not in prompt</span>` : u.inPrompt ? `<span class="pill on-prompt" title="${relevant ? "The last prompt carried this summary" : "This summary is in every prompt"}">in prompt</span>` : relevant && u.folded ? `<span class="pill" title="Only when relevant: the prompt reads the chapters, not the ${escapeHtml(u.level)}">chapters used instead</span>` : relevant ? `<span class="pill" title="Goes in the prompt when a turn touches it">when relevant</span>` : `<span class="pill" title="The prompt uses ${escapeHtml(parent ? label(parent) : "a coarser summary")} for these turns instead (a turn that touches this chapter can still bring it back through recall)">folded${parent ? ` into ${escapeHtml(label(parent))}` : ""}</span>`;
-      const nested = this.chronFilter === "all" && kids.length ? `<button class="chron-kids-t" data-act="chronToggle" data-id="${escapeHtml(u.id)}" aria-expanded="${open}">${open ? "▾" : "▸"} ${plural(kids.length, kids[0].level)} folded in</button>${open ? `<div class="chron-kids">${kids.map((k) => block(k, depth + 1)).join("")}</div>` : ""}` : "";
-      return `<div class="rec chron chron--${u.level}${u.folded || u.stale || u.ghost ? " chron--folded" : ""}" style="--lv:${LEVEL_COLOR[u.level]}"><div class="hd"><span class="kind">${escapeHtml(label(u))}</span><b class="grow">${escapeHtml(u.title)}</b>${u.locked ? `<span class="pill" title="Locked">\uD83D\uDD12</span>` : ""}</div>
-<div class="muted"><small>messages ${u.startIdx + 1}–${u.endIdx + 1}${u.storyStart ? ` · ${escapeHtml(u.storyStart)}${u.storyEnd && u.storyEnd !== u.storyStart ? ` – ${escapeHtml(u.storyEnd)}` : ""}` : ""}</small></div>
-<div class="chron-tags">${status}<span class="pill tok" title="Estimated tokens in this summary">${t(u.tokens)} tokens</span>${u.detail ? `<span class="pill">${escapeHtml(u.detail)}</span>` : ""}</div>
-<details><summary class="muted">read / edit</summary><textarea data-unit="${escapeHtml(u.id)}" style="min-height:140px">${escapeHtml(u.text)}</textarea><div class="row"><button class="btn" data-act="unitSave" data-id="${escapeHtml(u.id)}">Save</button><button class="btn" data-act="unitLock" data-id="${escapeHtml(u.id)}">${u.locked ? "Unlock" : "Lock"}</button><button class="btn" data-act="unitGhost" data-id="${escapeHtml(u.id)}">${u.ghost ? "Unghost" : "Ghost"}</button><button class="btn" data-act="unitRegen" data-id="${escapeHtml(u.id)}">Regenerate</button><button class="btn danger" data-act="unitUnhide" data-id="${escapeHtml(u.id)}">Unhide span</button></div></details>${nested}</div>`;
-    };
-    const f = this.chronFilter;
-    const shown = f === "all" ? all.filter((u) => !u.parent || !byId.has(u.parent)).sort(newest) : all.filter((u) => u.level === f).sort(newest);
-    const prompt = (tok.chapter ?? 0) + (tok.arc ?? 0) + (tok.volume ?? 0);
-    const saved = (tok.replaced ?? 0) - prompt;
-    const seg = (k, lab, n) => `<button class="pill${f === k ? " on" : ""}" data-act="chronFilter" data-id="${k}" aria-pressed="${f === k}">${lab}${n != null ? ` <b>${n}</b>` : ""}</button>`;
-    const legend = (lv, lab, n) => `<div class="chron-lg"><i style="background:${lv === "raw" ? "var(--alm-line)" : LEVEL_COLOR[lv]}"></i><span class="grow">${lab}</span><span>${cov[lv] ?? 0}%</span><span class="muted">${t(tok[lv])} tok</span>${lv === "raw" ? "<span></span>" : `<span class="muted">${n}</span>`}</div>`;
-    return `<div class="card flat"><h4>Coverage</h4><div class="bar"><i style="width:${cov.volume}%;background:${LEVEL_COLOR.volume}"></i><i style="width:${cov.arc}%;background:${LEVEL_COLOR.arc}"></i><i style="width:${cov.chapter}%;background:${LEVEL_COLOR.chapter}"></i><i style="width:${cov.raw}%;background:var(--alm-line)"></i></div>
-<div class="chron-legend">${legend("volume", "Volumes", cnt.volume ?? 0)}${legend("arc", "Arcs", cnt.arc ?? 0)}${legend("chapter", "Chapters", cnt.chapter ?? 0)}${legend("raw", "Raw turns", 0)}</div>
-<p class="muted" style="margin:8px 0"><small>In the ${v.chronicle.mode === "relevant" ? "last " : ""}prompt: <b>${t(prompt)}</b> tokens of summaries and <b>${t(tok.raw)}</b> of raw turns.${tok.replaced ? ` The summaries stand in for ${t(tok.replaced)} tokens of old turns${saved > 0 ? `, saving ${t(saved)}` : ""}.` : ""}</small></p>
-<p class="muted">Old turns are summarised at scene boundaries, hidden, and replaced in the prompt by their summaries. Chapters fold into arcs and arcs into volumes as the story grows. The last ${v.settings.rawTail} messages stay raw, or fewer if they pass ~${Number(v.settings.rawTailTokens ?? 12000).toLocaleString()} tokens (never fewer than 6); raise the raw tail cap in Settings to keep more.</p>
-<div class="row"><span class="muted grow"><small>Detail: <b>${escapeHtml(v.settings.summaryDetail ?? "detailed")}</b> · In the prompt: <b>${v.chronicle.mode === "relevant" ? "only when relevant" : v.chronicle.mode === "off" ? "off" : "the whole story"}</b> (change them in Settings)</small></span><button class="btn" data-act="chronicleRewrite" title="Redo every unlocked chapter, arc and volume at the current detail">Rewrite all</button><button class="btn primary" data-act="chronicleRun">Summarise now</button></div></div>
-<div class="row chron-filter" role="group" aria-label="Show">${seg("all", "All")}${seg("volume", "Volumes", cnt.volume ?? 0)}${seg("arc", "Arcs", cnt.arc ?? 0)}${seg("chapter", "Chapters", cnt.chapter ?? 0)}</div>
-<div class="list">${shown.map((u) => block(u, 0)).join("") || `<div class="empty">${all.length ? `No ${f}s yet.` : "No chapters yet. They appear once enough scenes have scrolled past the raw tail."}</div>`}</div>`;
-  }
-  tab_timeline(v) {
-    const ev = [...v.timeline].reverse();
-    const forecasts = v.codex.filter((r) => r.kind === "forecast");
-    return `${forecasts.length ? `<h4>Ahead</h4><div class="list">${forecasts.map((f) => `<div class="rec">\uD83D\uDD2E ${escapeHtml(f.summary)}${f.status === "diverged" ? ` <span class="alm-tag warn">diverged</span>` : ""}</div>`).join("")}</div>` : ""}
-<h4>Milestones</h4><div class="timeline">${ev.map((m) => `<div class="ev"><small>${escapeHtml(m.at || `message ${m.msgIndex + 1}`)} · ${escapeHtml(m.kind)}</small>${escapeHtml(m.text)}</div>`).join("") || `<div class="empty">Nothing yet.</div>`}</div>`;
-  }
-  tab_world(v) {
-    const w = v.world;
-    const ring = (n, of, c) => `<div class="alm-clock__face"><div class="alm-ring" style="--n:${n};--of:${Math.max(1, of)};--rc:${c}"></div><b>${n}/${of}</b></div>`;
-    return `<div class="card flat"><div class="kv"><b>Calendar</b><span>${escapeHtml(w.calendar ? `${w.calendar.date} · ${w.calendar.season}` : "not started")}</span><b>Climate</b><span>${escapeHtml(w.climate)}</span></div>
+<div class="row"><button class="btn primary" data-act="charSave" data-id="${n(t)}">${e?"Save":"Add"}</button><button class="btn" data-act="charCancel">Cancel</button></div></div>`}removedRow(e){let t=Object.entries(e.config?.merges??{}).filter(([,a])=>a===Le).map(([a])=>a);if(!t.length)return"";return`<h4>Removed from the cast</h4><div class="card flat"><p class="muted" style="margin:0 0 8px"><small>Not characters: the story's lines about them as people are ignored, and the model is told to leave them out.</small></p><div class="row">${t.map((a)=>`<span class="pill">${n(a)} <button class="btn" data-act="restorePerson" data-name="${n(a)}" title="Put it back in the cast" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div></div>`}mergeRow(e,t){let a=e.config?.merges??{},s=Object.entries(a).filter(([,o])=>t.isUser?o==="user":o.toLowerCase()===t.name.toLowerCase()).map(([o])=>o).map((o)=>`<span class="pill">${n(o)} <button class="btn" data-act="unmerge" data-name="${n(o)}" title="Split this name off again" style="padding:0 6px;margin-left:4px">✕</button></span>`).join(""),i=t.isUser?"":`<label class="f">Same person as…<select data-merge="${n(t.name)}"><option value="">— no, a different person —</option><option value="user">${n(e.names?.user||"You")} (you)</option>${e.cast.filter((o)=>!o.isUser&&o.id!==t.id).map((o)=>`<option value="${n(o.name)}">${n(o.name)}</option>`).join("")}</select></label>`;return i||s?`<div class="alm-merge">${s?`<div class="row"><small class="muted">Also written as:</small>${s}</div>`:""}${i}</div>`:""}tab_bonds(e){let t=e.cast.filter((o)=>!o.dead||e.bonds.some((l)=>l.from===o.id||l.to===o.id)).map((o)=>({id:o.id,name:o.isUser?e.names.user||"You":o.name,color:o.color,spot:o.tier==="spot",user:o.isUser})),a=Math.max(0,...e.bonds.map((o)=>o.lastMsg)),r=e.bonds.map((o)=>({from:o.from,to:o.to,axes:o.axes,label:o.label,changedAt:o.lastMsg,changedNow:o.lastMsg===a,history:o.history})),s=Math.max(1,...e.bonds.flatMap((o)=>o.history.map((l)=>l.msgIndex)));return`<div class="row"><select data-set="graphAxis">${["","trust","affection","respect","attraction","fear","resentment","rivalry","obligation"].map((o)=>`<option value="${o}"${o===this.graphAxis?" selected":""}>${o||"strongest axis"}</option>`).join("")}</select><label class="chk"><input type="checkbox" data-set="npcOnly"${this.npcOnly?" checked":""}> NPC↔NPC only</label></div>
+<div style="margin:8px 0">${Ve(t,r,{asOf:this.asOf,filterAxis:this.graphAxis||void 0,npcOnly:this.npcOnly})}</div>
+<label class="f">Timeline scrubber — ${this.asOf===1/0?"now":`as of message ${this.asOf+1}`}<input type="range" min="0" max="${s}" value="${this.asOf===1/0?s:this.asOf}" data-set="asOf"></label>
+<h4>All bonds</h4><div class="list">${e.bonds.map((o)=>`<div class="rec"><div class="hd"><b>${n(o.fromName)} → ${n(o.toName)}</b>${o.label?`<span class="pill">${n(o.label)}</span>`:""}${o.ladder?`<span class="pill">♡ tier ${o.ladder.tier}</span>`:""}</div><div class="muted">${Object.entries(o.axes).map(([l,d])=>`${l} ${d>0?"+":""}${d}`).join(" · ")}</div>${o.history.slice(-2).map((l)=>`<div class="muted"><small>${n(l.axis)} ${l.delta>0?"+":""}${l.delta}${l.cause?` — ${n(l.cause)}`:""}</small></div>`).join("")}</div>`).join("")||'<div class="empty">No bonds yet.</div>'}</div>`}tab_knowledge(e){let t=e.hiddenFacts??[],a=this.clerkBar(e),r=this.editingFact==="__new"?this.factEditor(e,null):`<div class="row" style="margin-bottom:8px"><span class="grow"></span><button class="btn" data-act="factAdd" title="Add a fact the story hasn't recorded, and say who knows it">+ Add a fact</button></div>`;if(!e.knowledge.length&&!t.length)return`${a}${r}<div class="empty">No facts yet. The model records them with <code>reveal</code>, <code>know</code> and <code>secret</code> lines; each fact collects who has it, how it reached them, and who it's kept from.</div>`;let s=new Map(e.cast.map((f)=>[f.id,f])),i=this.factQuery.trim().toLowerCase(),o=this.factPerson,l={play:(f)=>f.kind==="secret"||f.kind==="belief"||f.inPlay||f.added,shared:(f)=>f.kind==="shared",noted:(f)=>f.kind==="noted",all:()=>!0},d=Object.fromEntries(Object.entries(l).map(([f,A])=>[f,e.knowledge.filter(A).length])),c=(f)=>!o||f.stances.some((A)=>A.id===o)||f.lacks.some((A)=>A.id===o)||f.keepers.some((A)=>A.id===o),u=e.knowledge.filter((f)=>l[this.factKind](f)&&c(f)&&(!i||`${f.key} ${f.statement} ${f.stances.map((A)=>A.name).join(" ")}`.toLowerCase().includes(i))),m=(f,A)=>`<span class="alm-mini" style="--c:${n(s.get(f)?.color??"#888")}">${n(q(A))}</span>`,g=(f)=>{let A=f.status==="wrong"?"wrong":f.status==="knows"?"knows":"sus",I=f.status==="wrong"?"✗":f.status==="knows"?"✓":"?",K=f.status==="wrong"?"wrong":f.verb,N=f.derived==="witness"?"was there when it came out":f.derived==="source"?"their own words or deed":f.derived==="secret"?"keeps it":"";return`<div class="almk-h">${m(f.id,f.name)}<div class="almk-h__b"><b>${n(f.name)}</b><span class="alm-kp ${A}"${N?` title="Worked out by the Almanac: ${n(N)}"`:""}>${I} ${n(K)}</span>${f.version?`<small class="almk-ver">thinks “${n(f.version)}”</small>`:""}${f.how&&!f.derived&&!f.verb.includes(f.how)?qe(f.how):""}</div></div>`},y=(f)=>`<div class="almk-h">${m(f.id,f.name)}<div class="almk-h__b"><b>${n(f.name)}</b><span class="alm-kp un">— ${n(f.text)}</span></div></div>`,S={secret:"secret",belief:"belief",shared:"shared",noted:"noted"},_=u.map((f)=>{if(this.editingFact===f.key)return this.factEditor(e,f);let A=f.truth!=="unknown"?`<span class="pill${f.truth==="false"?" warn":""}" title="Whether the fact is true">${f.truth==="true"?"true":f.truth==="false"?"false":"partly true"}</span>`:"",I=f.history.map((N)=>`<li><time>${n(N.when)}</time> <b>${n(N.name)}</b> ${n(N.verb)}${N.version?`: “${n(N.version)}”`:""}${N.how&&!N.derived&&!N.verb.toLowerCase().includes(N.how.toLowerCase())?` <span class="muted">— ${n(N.how)}</span>`:""}${N.note?`<small class="almk-note">${n(N.note)}</small>`:""}</li>`).join(""),K=f.keepers.length?`<div class="almk-un">\uD83E\uDD2B Kept by ${n(f.keepers.map((N)=>N.name).join(", "))}${f.keptFrom.length?` from ${n(f.keptFrom.map((N)=>N.name).join(", "))}`:""}</div>`:"";return`<div class="card flat almk almk--${n(f.kind)}"><div class="almk-top"><span class="almk-key" title="The model refers to this fact as #${n(f.key)}">#${n(f.key)}</span><span class="pill almk-kind" title="${n(qt[f.kind]??"")}">${n(S[f.kind]??f.kind)}</span>${A}${f.locked?'<span class="pill" title="You set this statement">✎ yours</span>':""}${f.offPage?`<span class="pill${f.offPage.live?" warn":""}" title="${n(f.offPage.live?`Kept off the page${f.offPage.words.length?`: never "${f.offPage.words.join('", "')}"`:""}${f.offPage.wording?`; alluded to as "${f.offPage.wording}"`:""}`:"It has come out; no longer kept off the page")}">${f.offPage.live?"\uD83D\uDD12 off the page":"off the page · out now"}</span>`:""}<span class="grow"></span><button class="btn" data-act="factEdit" data-id="${n(f.key)}" title="Rename, set the truth, set who knows it, or merge">edit</button><button class="btn danger" data-act="factDelete" data-id="${n(f.key)}" title="Delete this fact from the page and the model's note (you can restore it below)">delete</button></div>
+<b class="almk-stmt">${n(f.statement)}</b>
+<div class="almk-st">${f.stances.map(g).join("")||'<div class="muted">No one has it yet.</div>'}${f.lacks.map(y).join("")}</div>
+${K}
+<details class="almk-hist"${this.openFacts.has(f.key)?" open":""} data-fact="${n(f.key)}"><summary>How it came out · ${f.history.length}</summary><ol>${I}</ol></details></div>`}).join(""),C=e.knowledge.flatMap((f)=>f.stances.filter((A)=>A.status==="wrong"||A.status!=="unaware"&&f.truth==="false").map((A)=>({f,s:A}))).slice(0,3).map(({f,s:A})=>`<div class="alm-irony"><span class="i">\uD83C\uDFAD</span><span><b>Dramatic irony:</b> ${n(A.name)} ${A.version?`thinks “${n(A.version)}”, but ${n(f.statement)}`:`is certain that “${n(f.statement)}”, which isn't true`}.</span></div>`).join(""),x=(f,A)=>`<button class="pill${this.factKind===f?" on":""}" data-act="factKind" data-id="${f}" aria-pressed="${this.factKind===f}">${A} <b>${d[f]}</b></button>`,v=`<div class="row almk-filters">${x("play","In play")}${x("shared","Shared")}${x("noted","Noted")}${x("all","All")}<span class="grow"></span><select data-set="factPerson" aria-label="Show one person"><option value="">everyone</option>${(e.knowers??[]).map((f)=>`<option value="${n(f.id)}"${f.id===o?" selected":""}>${n(f.name)}${f.here?" · here":""}</option>`).join("")}</select></div>`,b=`<div class="row" style="margin-bottom:8px"><input type="text" data-set="factQuery" value="${n(this.factQuery)}" placeholder="Find a fact or a person…" aria-label="Find a fact or a person" class="grow"><span class="muted"><small>${u.length} of ${e.knowledge.length}</small></span></div>`,E=o?this.personKnowledge(e,o):"",T=t.length?`<h4>Deleted facts</h4><div class="row">${t.map((f)=>`<span class="pill">${n(f.statement)} <button class="btn" data-act="factRestore" data-id="${n(f.key)}" style="padding:0 6px;margin-left:4px">restore</button></span>`).join("")}</div>`:"",j=this.factKind==="play"?"No secrets or beliefs in play. <b>Shared</b> and <b>Noted</b> hold the rest.":"Nothing matches.";return`${a}${C}${v}${b}${E}${r}<div class="list">${_||`<div class="empty">${j}</div>`}</div>${T}`}personKnowledge(e,t){let a=(e.knowers??[]).find((o)=>o.id===t);if(!a)return"";let r=e.knowledge.flatMap((o)=>o.stances.filter((l)=>l.id===t).map((l)=>`<li><b>${n(o.statement)}</b> <span class="muted">— ${n(l.status==="wrong"&&l.version?`thinks “${l.version}”`:l.verb)}</span></li>`)),s=e.knowledge.flatMap((o)=>o.lacks.filter((l)=>l.id===t).map((l)=>`<li><b>${n(o.statement)}</b> <span class="muted">— ${n(l.text)}</span></li>`)),i=(e.knowGaps??[]).find((o)=>o.id===t)?.gaps??[];return`<div class="card flat almk-person"><h4>${n(a.name)}</h4>
+<details open><summary>Has · ${r.length}</summary><ul>${r.slice(0,40).join("")||'<li class="muted">Nothing recorded.</li>'}</ul></details>
+<details${s.length?" open":""}><summary>Lacks · ${s.length}</summary><ul>${s.join("")||'<li class="muted">Nothing recorded as kept from them or missed.</li>'}</ul></details>
+<details${i.length?" open":""}><summary>Doesn't know, in the story's words · ${i.length}</summary><ul>${i.map((o)=>`<li${o.stale?' class="muted" title="Not restated in the last 40 messages"':""}>${n(o.text)}</li>`).join("")||'<li class="muted">No gaps recorded.</li>'}</ul></details></div>`}clerkBar(e){let t=e.clerk??{},a=t.mode==="off"?"off for new replies":t.mode==="always"?"reads every new reply":"reads new replies whose lines need it",r=Number(t.unread??0),s=Math.max(0,Number(t.replies??0)-r),i=t.replies?` ${s} of ${t.replies} replies read.`:"",o=t.running?`<span class="pill on">reading…${this.clerkProgress?` ${n(this.clerkProgress)}`:""}</span><button class="btn" data-act="clerkStop" title="Stop after the reply it's reading; tidying again carries on from there">Stop</button>`:r?`<button class="btn" data-act="clerkTidy" title="Read every reply the clerk hasn't read yet, oldest first, and rewrite its knowledge lines cleanly: one quiet generation each. You can stop and carry on later.">Tidy the whole chat · ${r} to read</button>`:t.replies?'<span class="pill">every reply read</span>':"";return`<div class="card flat almk-clerk"><div class="row"><span class="grow"><b>Knowledge clerk</b> <span class="muted">— ${n(a)}.${n(i)}</span></span>${o}</div></div>`}factEditor(e,t){let a=t??{key:"__new",statement:"",stances:[],lacks:[]},r=t?e.knowledge.filter((o)=>o.key!==a.key):[],s=[["",t?"as the story says":"not said"],["true","true"],["false","false"],["partial","partly true"],["unknown","unknown"]],i=t?e.config?.factEdits?.[a.key]??{}:{};return`<div class="card almk almk--edit"><label class="f">The fact, in a few words<input type="text" id="almFactStmt" value="${n(a.statement)}" placeholder="${t?"":"Walter is Gabriel's Watcher"}"></label>
+<label class="f">Is it true?<select id="almFactTruth">${s.map(([o,l])=>`<option value="${o}"${(i.truth??"")===o?" selected":""}>${l}</option>`).join("")}</select></label>
+<fieldset class="almk-off"><legend>Off the page</legend><label class="chk"><input type="checkbox" id="almFactOffOn"${t?.offPage&&i.offPage!==null||i.offPage?" checked":""}> Keep it out of the narration, thoughts and summaries until it comes out</label>
+<label class="f">Words never to use yet<input type="text" id="almFactOffWords" value="${n((i.offPage?.words??t?.offPage?.words??[]).join(", "))}" placeholder="Heaven, paradise"></label>
+<label class="f">How the story may allude to it<input type="text" id="almFactOffAs" value="${n(i.offPage?.wording??t?.offPage?.wording??"")}" placeholder="somewhere warm and finished"></label></fieldset>
+${r.length?`<label class="f">Same fact as…<select id="almFactInto"><option value="">— a separate fact —</option>${r.map((o)=>`<option value="${n(o.key)}">#${n(o.key)} ${n(o.statement)}</option>`).join("")}</select></label>`:""}
+<h4>Who knows it</h4><div class="list">${(e.knowers??[]).map((o)=>{let l=a.stances.find((m)=>m.id===o.id),d=a.lacks.find((m)=>m.id===o.id),c=l?l.verb:d?d.text:"no record";if(!t)return`<label class="f">${n(o.name)}<select data-person="${n(o.id)}">${pt.filter(([m])=>m!=="none").map(([m,g])=>`<option value="${m}">${m?g:"—"}</option>`).join("")}</select></label>`;let u=i.people?.[o.id]??"";return`<label class="f">${n(o.name)} <small class="muted">— now: ${n(c)}</small><select data-person="${n(o.id)}">${pt.map(([m,g])=>`<option value="${m}"${u===m?" selected":""}>${g}</option>`).join("")}</select></label>`}).join("")}</div>
+<div class="row"><button class="btn primary" data-act="factSave" data-id="${n(a.key)}">${t?"Save":"Add"}</button><button class="btn" data-act="factCancel">Cancel</button><span class="grow"></span>${t?`<button class="btn danger" data-act="factHide" data-id="${n(a.key)}" title="Delete it from this page and from the model's note">Delete</button>`:""}</div></div>`}tab_codex(e){let t=[...new Set(e.codex.map((s)=>s.kind))],a=this.codexFilter.toLowerCase(),r=e.codex.filter((s)=>(!this.codexKind||s.kind===this.codexKind)&&(!a||`${s.name} ${s.summary} ${s.keys.join(" ")}`.toLowerCase().includes(a)));return`<div class="row"><input type="text" placeholder="Search the Codex…" data-set="codexFilter" value="${n(this.codexFilter)}" class="grow"><select data-set="codexKind"><option value="">all kinds</option>${t.map((s)=>`<option${s===this.codexKind?" selected":""}>${n(s)}</option>`).join("")}</select></div>
+<p class="muted">${r.length} of ${e.codex.length} records. Edits lock a record so the archivist never overwrites it. Keys are real retrieval keys.</p>
+<div class="list">${r.slice(0,200).map((s)=>this.editing===s.id?this.codexEditor(s):`<div class="rec"><div class="hd"><span class="kind">${n(s.kind)}</span><b class="grow">${n(s.name)}</b>${s.locked?'<span class="pill">\uD83D\uDD12 locked</span>':""}${s.narratorOnly?'<span class="pill">narrator-only</span>':""}<span class="pill">${n(s.source)}</span><button class="btn" data-act="edit" data-id="${n(s.id)}">edit</button></div><div>${n(s.summary)}</div>${s.keys.length?`<div>${s.keys.map((i)=>`<span class="pill">${n(i)}</span>`).join("")}</div>`:""}${s.body?.divergedNote?`<div class="alm-tag warn">moved past: ${n(s.body.divergedNote)}</div>`:""}</div>`).join("")}</div>
+<details><summary class="muted">Add a record or a correction</summary><div class="card flat"><label class="f">New record name<input type="text" id="almNewName"></label><label class="f">Kind<select id="almNewKind">${["person","place","object","group","law","texture","history","situation"].map((s)=>`<option>${s}</option>`).join("")}</select></label><label class="f">Summary<textarea id="almNewSummary"></textarea></label><button class="btn primary" data-act="newRecord">Add record</button>
+<h4>Correct the state with ledger lines</h4><textarea id="almOps" placeholder="bond Mara>Kael: trust -1 — she caught him lying&#10;item Locket: Mara → Kael — stolen back"></textarea><button class="btn" data-act="userOps">Record correction</button><p class="muted"><small>A correction applies from the latest reply on, and holds if you regenerate or swipe it.</small></p>
+${e.corrections?.length?`<h4>Your corrections</h4><div class="list">${e.corrections.slice(0,40).map((s)=>`<div class="rec"><div class="hd"><small class="muted grow">from message ${s.index+1}${s.at?` · ${n(new Date(s.at).toLocaleString())}`:""}</small><button class="btn" data-act="userOpsRemove" data-key="${n(s.key)}" data-id="${n(s.id)}">remove</button></div>${s.lines.map((i)=>`<code>${n(i)}</code>`).join("<br>")}</div>`).join("")}</div>`:""}</div></details>`}codexEditor(e){return`<div class="rec"><div class="hd"><span class="kind">${n(e.kind)}</span><b class="grow">${n(e.name)}</b></div>
+<label class="f">Summary<textarea id="almEdSummary">${n(e.summary)}</textarea></label>
+<label class="f">Keys (comma-separated)<input type="text" id="almEdKeys" value="${n(e.keys.join(", "))}"></label>
+${e.kind==="person"?`<label class="f">Routine (e.g. 06:00–09:00 docks (unloading); 09:00–18:00 harbour office)<input type="text" id="almEdRoutine" value="${n(e.body?.routine??"")}"></label>`:""}
+${e.kind==="place"?`<label class="f">Hours (e.g. open 20:00 to 02:00)<input type="text" id="almEdHours" value="${n(e.body?.hours??"")}"></label>`:""}
+<label class="chk"><input type="checkbox" id="almEdNarr"${e.narratorOnly?" checked":""}> narrator-only (characters cannot know it)</label>
+<div class="row"><button class="btn primary" data-act="saveRecord" data-id="${n(e.id)}">Save &amp; lock</button><button class="btn" data-act="unlock" data-id="${n(e.id)}">Unlock</button><button class="btn" data-act="cancelEdit">Cancel</button>${e.source!=="story"?`<button class="btn danger" data-act="deleteRecord" data-id="${n(e.id)}">Delete</button>`:""}</div></div>`}tab_chronicle(e){let t=e.chronicle,a=t.coverage,r=t.tokens??{},s=t.counts??{},i=t.units,o=new Map(i.map((x)=>[x.id,x])),l=(x,v)=>v.startIdx-x.startIdx||lt[v.level]-lt[x.level],d=(x)=>`~${Math.round(x||0).toLocaleString()}`,c=(x,v)=>`${x} ${v}${x===1?"":"s"}`,u=(x)=>`${Gt(x.level)} ${x.no}`,m=(x,v)=>{let b=x.children.map((I)=>o.get(I)).filter(Boolean).sort(l),E=x.parent?o.get(x.parent):null,T=this.chronOpen.has(x.id),j=e.chronicle.mode==="relevant",f=x.stale?'<span class="pill">stale</span>':x.ghost?'<span class="pill">ghost</span>':e.chronicle.mode==="off"?'<span class="pill" title="Summaries are switched off in Settings">not in prompt</span>':x.inPrompt?`<span class="pill on-prompt" title="${j?"The last prompt carried this summary":"This summary is in every prompt"}">in prompt</span>`:j&&x.folded?`<span class="pill" title="Only when relevant: the prompt reads the chapters, not the ${n(x.level)}">chapters used instead</span>`:j?'<span class="pill" title="Goes in the prompt when a turn touches it">when relevant</span>':`<span class="pill" title="The prompt uses ${n(E?u(E):"a coarser summary")} for these turns instead (a turn that touches this chapter can still bring it back through recall)">folded${E?` into ${n(u(E))}`:""}</span>`,A=this.chronFilter==="all"&&b.length?`<button class="chron-kids-t" data-act="chronToggle" data-id="${n(x.id)}" aria-expanded="${T}">${T?"▾":"▸"} ${c(b.length,b[0].level)} folded in</button>${T?`<div class="chron-kids">${b.map((I)=>m(I,v+1)).join("")}</div>`:""}`:"";return`<div class="rec chron chron--${x.level}${x.folded||x.stale||x.ghost?" chron--folded":""}" style="--lv:${ie[x.level]}"><div class="hd"><span class="kind">${n(u(x))}</span><b class="grow">${n(x.title)}</b>${x.locked?'<span class="pill" title="Locked">\uD83D\uDD12</span>':""}</div>
+<div class="muted"><small>messages ${x.startIdx+1}–${x.endIdx+1}${x.storyStart?` · ${n(x.storyStart)}${x.storyEnd&&x.storyEnd!==x.storyStart?` – ${n(x.storyEnd)}`:""}`:""}</small></div>
+<div class="chron-tags">${f}<span class="pill tok" title="Estimated tokens in this summary">${d(x.tokens)} tokens</span>${x.detail?`<span class="pill">${n(x.detail)}</span>`:""}</div>
+<details><summary class="muted">read / edit</summary><textarea data-unit="${n(x.id)}" style="min-height:140px">${n(x.text)}</textarea><div class="row"><button class="btn" data-act="unitSave" data-id="${n(x.id)}">Save</button><button class="btn" data-act="unitLock" data-id="${n(x.id)}">${x.locked?"Unlock":"Lock"}</button><button class="btn" data-act="unitGhost" data-id="${n(x.id)}">${x.ghost?"Unghost":"Ghost"}</button><button class="btn" data-act="unitRegen" data-id="${n(x.id)}">Regenerate</button><button class="btn danger" data-act="unitUnhide" data-id="${n(x.id)}">Unhide span</button></div></details>${A}</div>`},g=this.chronFilter,y=g==="all"?i.filter((x)=>!x.parent||!o.has(x.parent)).sort(l):i.filter((x)=>x.level===g).sort(l),S=(r.chapter??0)+(r.arc??0)+(r.volume??0),_=(r.replaced??0)-S,L=(x,v,b)=>`<button class="pill${g===x?" on":""}" data-act="chronFilter" data-id="${x}" aria-pressed="${g===x}">${v}${b!=null?` <b>${b}</b>`:""}</button>`,C=(x,v,b)=>`<div class="chron-lg"><i style="background:${x==="raw"?"var(--alm-line)":ie[x]}"></i><span class="grow">${v}</span><span>${a[x]??0}%</span><span class="muted">${d(r[x])} tok</span>${x==="raw"?"<span></span>":`<span class="muted">${b}</span>`}</div>`;return`<div class="card flat"><h4>Coverage</h4><div class="bar"><i style="width:${a.volume}%;background:${ie.volume}"></i><i style="width:${a.arc}%;background:${ie.arc}"></i><i style="width:${a.chapter}%;background:${ie.chapter}"></i><i style="width:${a.raw}%;background:var(--alm-line)"></i></div>
+<div class="chron-legend">${C("volume","Volumes",s.volume??0)}${C("arc","Arcs",s.arc??0)}${C("chapter","Chapters",s.chapter??0)}${C("raw","Raw turns",0)}</div>
+<p class="muted" style="margin:8px 0"><small>In the ${e.chronicle.mode==="relevant"?"last ":""}prompt: <b>${d(S)}</b> tokens of summaries and <b>${d(r.raw)}</b> of raw turns.${r.replaced?` The summaries stand in for ${d(r.replaced)} tokens of old turns${_>0?`, saving ${d(_)}`:""}.`:""}</small></p>
+<p class="muted">Old turns are summarised at scene boundaries, hidden, and replaced in the prompt by their summaries. Chapters fold into arcs and arcs into volumes as the story grows. The last ${e.settings.rawTail} messages stay raw, or fewer if they pass ~${Number(e.settings.rawTailTokens??12000).toLocaleString()} tokens (never fewer than 6); raise the raw tail cap in Settings to keep more.</p>
+<div class="row"><span class="muted grow"><small>Detail: <b>${n(e.settings.summaryDetail??"detailed")}</b> · In the prompt: <b>${e.chronicle.mode==="relevant"?"only when relevant":e.chronicle.mode==="off"?"off":"the whole story"}</b> (change them in Settings)</small></span><button class="btn" data-act="chronicleRewrite" title="Redo every unlocked chapter, arc and volume at the current detail">Rewrite all</button><button class="btn primary" data-act="chronicleRun">Summarise now</button></div></div>
+<div class="row chron-filter" role="group" aria-label="Show">${L("all","All")}${L("volume","Volumes",s.volume??0)}${L("arc","Arcs",s.arc??0)}${L("chapter","Chapters",s.chapter??0)}</div>
+<div class="list">${y.map((x)=>m(x,0)).join("")||`<div class="empty">${i.length?`No ${g}s yet.`:"No chapters yet. They appear once enough scenes have scrolled past the raw tail."}</div>`}</div>`}tab_timeline(e){let t=[...e.timeline].reverse(),a=e.codex.filter((r)=>r.kind==="forecast");return`${a.length?`<h4>Ahead</h4><div class="list">${a.map((r)=>`<div class="rec">\uD83D\uDD2E ${n(r.summary)}${r.status==="diverged"?' <span class="alm-tag warn">diverged</span>':""}</div>`).join("")}</div>`:""}
+<h4>Milestones</h4><div class="timeline">${t.map((r)=>`<div class="ev"><small>${n(r.at||`message ${r.msgIndex+1}`)} · ${n(r.kind)}</small>${n(r.text)}</div>`).join("")||'<div class="empty">Nothing yet.</div>'}</div>`}tab_world(e){let t=e.world,a=(r,s,i)=>`<div class="alm-clock__face"><div class="alm-ring" style="--n:${r};--of:${Math.max(1,s)};--rc:${i}"></div><b>${r}/${s}</b></div>`;return`<div class="card flat"><div class="kv"><b>Calendar</b><span>${n(t.calendar?`${t.calendar.date} · ${t.calendar.season}`:"not started")}</span><b>Climate</b><span>${n(t.climate)}</span></div>
 <details><summary class="muted">Schedule weather</summary><div class="row"><input type="number" id="almWxDay" placeholder="day" style="width:70px"><input type="number" id="almWxHour" placeholder="hour" style="width:70px"><input type="number" id="almWxLen" placeholder="hours" style="width:70px"><input type="text" id="almWxCond" placeholder="thunderstorm" class="grow"><button class="btn" data-act="scheduleWx">Schedule</button></div></details></div>
-${w.factions.length ? `<h4>Factions</h4><div class="alm-clocks">${w.factions.flatMap((f) => f.clocks.map((c) => `<div class="alm-clock">${ring(c.cur, c.max, "var(--alm-danger)")}<div><strong>${escapeHtml(f.name)}: ${escapeHtml(c.name)}</strong></div></div>`)).join("")}</div>` : ""}
-${w.deadlines.length ? `<h4>Deadlines</h4><ul class="alm-list">${w.deadlines.map((d) => `<li class="${d.passed && !d.done ? "due" : ""}">${escapeHtml(d.title)} — ${escapeHtml(d.at)}${d.done ? " (done)" : d.passed ? " (passed)" : ` · ${escapeHtml(d.left)} left`}</li>`).join("")}</ul>` : ""}
-${w.threads.length ? `<h4>Threads</h4><div class="list">${w.threads.map((t) => `<div class="rec"><div class="hd"><b class="grow">${escapeHtml(t.title)}</b><span class="pill">${escapeHtml(t.status)}</span></div>${t.latest ? `<div class="muted">${escapeHtml(t.latest)}</div>` : ""}${t.blocker ? `<div class="alm-tag warn">blocked: ${escapeHtml(t.blocker)}</div>` : ""}</div>`).join("")}</div>` : ""}
-${w.items.length ? `<h4>Items</h4><div class="alm-inv">${w.items.map((i) => `<div class="alm-it"><span class="alm-it__ic">${i.gone ? "✗" : "✦"}</span><div><b>${escapeHtml(i.name)}</b><span class="alm-it__h">${escapeHtml(i.gone ? "gone" : i.holder || "?")}${i.where && !i.gone ? ` · ${escapeHtml(i.where)}` : ""}</span>${i.custody.map((c) => `<small class="muted">${escapeHtml(c.from || "?")} → ${escapeHtml(c.to || "?")}${c.how ? ` (${escapeHtml(c.how)})` : ""}</small>`).join("<br>")}</div></div>`).join("")}</div>` : ""}
-${w.rumors.length ? `<h4>Rumours</h4><ul class="alm-list">${w.rumors.map((r) => `<li>\uD83D\uDDE3 ${escapeHtml(r.text)} <small class="muted">(${r.hops} hop${r.hops === 1 ? "" : "s"})</small></li>`).join("")}</ul>` : ""}
-${w.rep.length ? `<h4>Reputation</h4>${w.rep.map((r) => `<span class="pill">${escapeHtml(r.group)} ${r.score > 0 ? "+" : ""}${r.score}${r.tags.length ? ` · ${escapeHtml(r.tags.join(", "))}` : ""}</span>`).join("")}` : ""}
-${w.gauges.length ? `<h4>Gauges</h4><div class="alm-clocks">${w.gauges.map((g) => `<div class="alm-clock">${ring(g.cur, g.max, "var(--alm-accent)")}<div><strong>${escapeHtml(g.name)}</strong><span>${escapeHtml(g.cause ?? "")}</span></div></div>`).join("")}</div>` : ""}
-${w.clues.length ? `<h4>Clue board</h4><ul class="alm-list">${w.clues.map((c) => `<li>\uD83D\uDD0E ${escapeHtml(c.text)}${c.pointsTo ? ` → ${escapeHtml(c.pointsTo)}` : ""}${c.reliability ? ` <small class="muted">(${escapeHtml(c.reliability)})</small>` : ""}</li>`).join("")}</ul>` : ""}
-${w.plants.length ? `<h4>Plants &amp; payoffs</h4><ul class="alm-list">${w.plants.map((p) => `<li>${p.paidAt != null ? "✓" : "○"} ${escapeHtml(p.text)}${p.payoff ? ` <small class="muted">(${escapeHtml(p.payoff)})</small>` : ""}</li>`).join("")}</ul>` : ""}
-${(v.bits ?? []).length ? `<h4>Running bits</h4><p class="muted">Jokes, pet names, catchphrases and keepsakes. The note offers a few not used lately as callbacks.</p><ul class="alm-list">${v.bits.map((b) => `<li>\uD83D\uDD01 ${escapeHtml(b.text)}${b.who ? ` <small class="muted">(${escapeHtml(b.who)})</small>` : ""}${b.uses > 1 ? ` <small class="muted">×${b.uses}</small>` : ""}${b.by === "chronicle" ? ` <small class="muted" title="From a chapter summary">· chronicle</small>` : ""}</li>`).join("")}</ul>` : ""}
-${w.canon.length ? `<h4>Minted canon</h4><ul class="alm-list">${w.canon.map((c) => `<li>${escapeHtml(c.text)}</li>`).join("")}</ul>` : ""}
-<div class="row" style="margin-top:10px"><button class="btn" data-act="simulate">⏭ Run the off-screen world now</button></div>`;
-  }
-  tab_lore(v) {
-    const books = Object.entries(v.lore.books ?? {});
-    return `<p class="muted">The Lore Bridge reads the character, persona, chat and global lorebooks into the Codex. Your books are never edited unless you allow it.</p>
-${worldPanel(v.lore.world, !!v.settings?.simulator)}
-<div class="row"><button class="btn primary" data-act="loreScan">Re-read lorebooks</button>${v.lore.review?.length ? `<button class="btn" data-act="loreClassify">Classify ${v.lore.review.length} unclear entries with the model</button>` : ""}<button class="btn" data-act="mirrorSync">Sync mirror book</button></div>
-<div class="list" style="margin-top:10px">${books.map(([id, b]) => `<div class="rec"><div class="hd"><b class="grow">${escapeHtml(b.name)}</b>${b.weaver ? `<span class="pill" title="${escapeHtml(WEAVER_BOOK[b.weaver]?.[1] ?? "")}">Dream Weaver · ${escapeHtml(WEAVER_BOOK[b.weaver]?.[0] ?? b.weaver)}</span>` : ""}<span class="pill">${escapeHtml(b.scope)}</span><span class="pill">${b.count} entries</span></div>
-${loreKinds(b.kinds)}
-<div class="row"><label class="f grow">Activation<select data-lore-mode="${escapeHtml(id)}">${["native", "assisted", "managed"].map((m) => `<option value="${m}"${m === b.mode ? " selected" : ""}>${m}</option>`).join("")}</select></label><label class="f grow">Permission<select data-lore-perm="${escapeHtml(id)}">${["read", "overlay", "write"].map((m) => `<option value="${m}"${m === b.permission ? " selected" : ""}>${m === "read" ? "read-only" : m}</option>`).join("")}</select></label></div></div>`).join("") || `<div class="empty">No lorebooks are attached to this chat.</div>`}</div>
-<p class="muted"><b>Native</b>: your keywords decide; the Ledger only annotates lore the story has moved past. <b>Assisted</b>: plus the entries Recall picks. <b>Managed</b>: the Ledger is the only retrieval owner for that book.</p>
-${(v.playbooks ?? []).length ? `<h4>Playbooks</h4><p class="muted">Scripted scenes from depth books: how someone would act if the story reaches a moment. They are never sent as lore, because the model took them for things that had happened. When a turn comes close to one, it goes in once, marked "not history". Mark one played once the story has had that scene.</p><div class="list">${v.playbooks.map((p) => `<div class="rec"><div class="hd"><b class="grow">${escapeHtml(p.name)}</b>${p.subject ? `<span class="pill">${escapeHtml(p.subject)}</span>` : ""}<button class="btn" data-act="playbookPlayed" data-id="${escapeHtml(p.id)}" data-played="${p.played ? "1" : ""}">${p.played ? "✓ played · undo" : "mark played"}</button></div><details><summary class="muted">The scene</summary><div class="muted">${escapeHtml(p.summary)}</div></details></div>`).join("")}</div>` : ""}
-${v.lore.review?.length ? `<h4>Review queue</h4><ul class="alm-list">${v.lore.review.slice(0, 40).map((r) => `<li>${escapeHtml(r.title)} — read as <b>${escapeHtml(r.kind)}</b> (${Math.round(r.confidence * 100)}%)</li>`).join("")}</ul>` : ""}`;
-  }
-  tab_creator(v) {
-    return this.creator.render(v);
-  }
-  tab_recall(v) {
-    const f = v.feed?.[0];
-    const via = (i) => !i.injected ? "" : i.via === "mirror" ? ` <span class="pill" title="Sent as a forced entry of the chat's mirror lorebook: the Prompt Breakdown lists it under World Info, not under ALMANAC · Recall">lorebook</span>` : i.via === "recall" ? ` <span class="pill" title="Sent inside the ALMANAC · Recall block">recall</span>` : "";
-    const ck = v.checks?.issues ?? [];
-    const checkCard = `<div class="card flat"><div class="row"><b class="grow">Check of the latest reply</b><button class="btn" data-act="recheck" title="Run the check again on the latest reply">Check again</button></div>${ck.length ? `<ul class="alm-list">${ck.map((i) => `<li class="${i.level === "warn" ? "due" : ""}">${i.level === "warn" ? "⚠" : "ⓘ"} ${escapeHtml(i.text)}${i.quote && !i.text.includes(i.quote) ? ` <small class="muted">«${escapeHtml(i.quote)}»</small>` : ""}</li>`).join("")}</ul><p class="muted"><small>The next turn's note tells the model about the ⚠ ones. If a slip matters, swipe for a new take.</small></p>` : `<p class="muted">${v.settings?.replyCheck === "off" ? "The reply check is off (Settings › Knowledge)." : "Nothing found."}</p>`}</div>`;
-    return `${checkCard}<p class="muted">What Recall considered for the latest generation, with scores and reasons. Green = injected. Records the chat's mirror lorebook holds go in as its entries (the Prompt Breakdown shows them under World Info); the rest go in the ALMANAC · Recall block.</p>
-${f ? `<div class="card flat"><div class="row"><span class="pill">tier: ${escapeHtml(f.tier)}</span><span class="pill">≈ ${f.tokens} tokens injected</span><span class="pill">${new Date(f.at).toLocaleTimeString()}</span></div>
-${f.chronicle?.length ? `<p class="muted"><small>Story so far in this prompt: ${f.chronicle.map((c) => escapeHtml(c.name)).join(" · ")}</small></p>` : ""}
-<div class="feed">${f.items.map((i) => `<div class="it${i.injected ? " in" : ""}"><span class="sc">${i.score}</span><div><b>${escapeHtml(i.name)}</b>${via(i)} <small class="muted">${escapeHtml(i.id)}</small><br><small class="muted">${escapeHtml(i.reasons.join(" · "))}</small></div></div>`).join("")}</div></div>` : `<div class="empty">No retrieval yet.</div>`}
-${v.rejected.length ? `<h4>Rejected or corrected ledger lines</h4><div class="list">${v.rejected.slice().reverse().map((r) => `<div class="rec"><code>${escapeHtml(r.raw)}</code><div class="muted"><small>message ${r.msgIndex + 1} · ${escapeHtml(r.verdict)} — ${escapeHtml(r.reason ?? "")}</small></div></div>`).join("")}</div>` : ""}`;
-  }
-  tab_craft(v) {
-    const t = v.telemetry;
-    if (!t)
-      return `<div class="empty">Craft telemetry appears after a few replies.</div>`;
-    return `<div class="card flat"><h4>Next reply is told</h4><div>Avoid: ${t.avoids.map((a) => `<span class="pill">${escapeHtml(a)}</span>`).join("") || "—"}</div><div style="margin-top:6px">Try: <b>${escapeHtml(t.technique)}</b></div>${t.agency.length ? `<div class="alm-tag warn" style="margin-top:8px">${escapeHtml(t.agency.join("; "))}</div>` : ""}</div>
-<div class="card flat"><h4>Last six replies</h4><div class="kv">${Object.entries(t.metrics).map(([k, x]) => `<b>${escapeHtml(k)}</b><span>${escapeHtml(String(x))}</span>`).join("")}</div></div>
-${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repeated.map((r) => `<span class="pill">“${escapeHtml(r.phrase)}” ×${r.count}</span>`).join("")}</div>` : ""}
-<div class="card flat"><h4>Openings</h4>${t.openings.map((o) => `<span class="pill">${escapeHtml(o)}</span>`).join("")}</div>`;
-  }
-  tab_settings(v) {
-    const s = v.settings;
-    const sel = (k, opts) => `<select data-setting="${k}">${opts.map(([val, lab]) => `<option value="${val}"${String(s[k]) === val ? " selected" : ""}>${lab}</option>`).join("")}</select>`;
-    const num = (k, min = 0, max = 99999) => `<input type="number" data-setting="${k}" value="${s[k]}" min="${min}" max="${max}">`;
-    const chk = (k, lab) => `<label class="chk"><input type="checkbox" data-setting="${k}"${s[k] ? " checked" : ""}> ${lab}</label>`;
-    const txt = (k, ph = "") => `<input type="text" data-setting="${k}" value="${escapeHtml(s[k] ?? "")}" placeholder="${escapeHtml(ph)}">`;
-    return `<h3>This chat</h3><div class="card flat"><div class="row"><span class="grow">Ledger in this chat: <b>${v.enabled ? "on" : "off"}</b>${v.config.enabledOverride == null ? " (automatic)" : ""}</span><button class="btn" data-act="enable">On</button><button class="btn" data-act="disable">Off</button><button class="btn" data-act="auto">Automatic</button></div>
-<label class="f">Story truths <small class="muted">— one a line; sent every turn and held over the source material and older chat</small><textarea id="almTruths" rows="3" placeholder="Jaime and Cersei are strictly family.&#10;Rhaegar is bald and wears a wig.">${escapeHtml((v.config.truths ?? []).join(`
+${t.factions.length?`<h4>Factions</h4><div class="alm-clocks">${t.factions.flatMap((r)=>r.clocks.map((s)=>`<div class="alm-clock">${a(s.cur,s.max,"var(--alm-danger)")}<div><strong>${n(r.name)}: ${n(s.name)}</strong></div></div>`)).join("")}</div>`:""}
+${t.deadlines.length?`<h4>Deadlines</h4><ul class="alm-list">${t.deadlines.map((r)=>`<li class="${r.passed&&!r.done?"due":""}">${n(r.title)} — ${n(r.at)}${r.done?" (done)":r.passed?" (passed)":` · ${n(r.left)} left`}</li>`).join("")}</ul>`:""}
+${t.threads.length?`<h4>Threads</h4><div class="list">${t.threads.map((r)=>`<div class="rec"><div class="hd"><b class="grow">${n(r.title)}</b><span class="pill">${n(r.status)}</span></div>${r.latest?`<div class="muted">${n(r.latest)}</div>`:""}${r.blocker?`<div class="alm-tag warn">blocked: ${n(r.blocker)}</div>`:""}</div>`).join("")}</div>`:""}
+${t.items.length?`<h4>Items</h4><div class="alm-inv">${t.items.map((r)=>`<div class="alm-it"><span class="alm-it__ic">${r.gone?"✗":"✦"}</span><div><b>${n(r.name)}</b><span class="alm-it__h">${n(r.gone?"gone":r.holder||"?")}${r.where&&!r.gone?` · ${n(r.where)}`:""}</span>${r.custody.map((s)=>`<small class="muted">${n(s.from||"?")} → ${n(s.to||"?")}${s.how?` (${n(s.how)})`:""}</small>`).join("<br>")}</div></div>`).join("")}</div>`:""}
+${t.rumors.length?`<h4>Rumours</h4><ul class="alm-list">${t.rumors.map((r)=>`<li>\uD83D\uDDE3 ${n(r.text)} <small class="muted">(${r.hops} hop${r.hops===1?"":"s"})</small></li>`).join("")}</ul>`:""}
+${t.rep.length?`<h4>Reputation</h4>${t.rep.map((r)=>`<span class="pill">${n(r.group)} ${r.score>0?"+":""}${r.score}${r.tags.length?` · ${n(r.tags.join(", "))}`:""}</span>`).join("")}`:""}
+${t.gauges.length?`<h4>Gauges</h4><div class="alm-clocks">${t.gauges.map((r)=>`<div class="alm-clock">${a(r.cur,r.max,"var(--alm-accent)")}<div><strong>${n(r.name)}</strong><span>${n(r.cause??"")}</span></div></div>`).join("")}</div>`:""}
+${t.clues.length?`<h4>Clue board</h4><ul class="alm-list">${t.clues.map((r)=>`<li>\uD83D\uDD0E ${n(r.text)}${r.pointsTo?` → ${n(r.pointsTo)}`:""}${r.reliability?` <small class="muted">(${n(r.reliability)})</small>`:""}</li>`).join("")}</ul>`:""}
+${t.plants.length?`<h4>Plants &amp; payoffs</h4><ul class="alm-list">${t.plants.map((r)=>`<li>${r.paidAt!=null?"✓":"○"} ${n(r.text)}${r.payoff?` <small class="muted">(${n(r.payoff)})</small>`:""}</li>`).join("")}</ul>`:""}
+${(e.bits??[]).length?`<h4>Running bits</h4><p class="muted">Jokes, pet names, catchphrases and keepsakes. The note offers a few not used lately as callbacks.</p><ul class="alm-list">${e.bits.map((r)=>`<li>\uD83D\uDD01 ${n(r.text)}${r.who?` <small class="muted">(${n(r.who)})</small>`:""}${r.uses>1?` <small class="muted">×${r.uses}</small>`:""}${r.by==="chronicle"?' <small class="muted" title="From a chapter summary">· chronicle</small>':""}</li>`).join("")}</ul>`:""}
+${t.canon.length?`<h4>Minted canon</h4><ul class="alm-list">${t.canon.map((r)=>`<li>${n(r.text)}</li>`).join("")}</ul>`:""}
+<div class="row" style="margin-top:10px"><button class="btn" data-act="simulate">⏭ Run the off-screen world now</button></div>`}tab_lore(e){let t=Object.entries(e.lore.books??{});return`<p class="muted">The Lore Bridge reads the character, persona, chat and global lorebooks into the Codex. Your books are never edited unless you allow it.</p>
+${Zt(e.lore.world,!!e.settings?.simulator)}
+<div class="row"><button class="btn primary" data-act="loreScan">Re-read lorebooks</button>${e.lore.review?.length?`<button class="btn" data-act="loreClassify">Classify ${e.lore.review.length} unclear entries with the model</button>`:""}<button class="btn" data-act="mirrorSync">Sync mirror book</button></div>
+<div class="list" style="margin-top:10px">${t.map(([a,r])=>`<div class="rec"><div class="hd"><b class="grow">${n(r.name)}</b>${r.weaver?`<span class="pill" title="${n(ct[r.weaver]?.[1]??"")}">Dream Weaver · ${n(ct[r.weaver]?.[0]??r.weaver)}</span>`:""}<span class="pill">${n(r.scope)}</span><span class="pill">${r.count} entries</span></div>
+${Yt(r.kinds)}
+<div class="row"><label class="f grow">Activation<select data-lore-mode="${n(a)}">${["native","assisted","managed"].map((s)=>`<option value="${s}"${s===r.mode?" selected":""}>${s}</option>`).join("")}</select></label></div></div>`).join("")||'<div class="empty">No lorebooks are attached to this chat.</div>'}</div>
+<p class="muted"><b>Native</b>: your keywords decide; the Ledger only annotates lore the story has moved past. <b>Assisted</b>: plus the entries Recall picks. <b>Managed</b>: the Ledger is the only retrieval owner for that book. The Ledger reads these books and never writes to them.</p>
+${(e.playbooks??[]).length?`<h4>Playbooks</h4><p class="muted">Scripted scenes from depth books: how someone would act if the story reaches a moment. They are never sent as lore, because the model took them for things that had happened. When a turn comes close to one, it goes in once, marked "not history". Mark one played once the story has had that scene.</p><div class="list">${e.playbooks.map((a)=>`<div class="rec"><div class="hd"><b class="grow">${n(a.name)}</b>${a.subject?`<span class="pill">${n(a.subject)}</span>`:""}<button class="btn" data-act="playbookPlayed" data-id="${n(a.id)}" data-played="${a.played?"1":""}">${a.played?"✓ played · undo":"mark played"}</button></div><details><summary class="muted">The scene</summary><div class="muted">${n(a.summary)}</div></details></div>`).join("")}</div>`:""}
+${e.lore.review?.length?`<h4>Review queue</h4><ul class="alm-list">${e.lore.review.slice(0,40).map((a)=>`<li>${n(a.title)} — read as <b>${n(a.kind)}</b> (${Math.round(a.confidence*100)}%)</li>`).join("")}</ul>`:""}`}tab_creator(e){return this.creator.render(e)}tab_recall(e){let t=e.feed?.[0],a=(i)=>!i.injected?"":i.via==="mirror"?` <span class="pill" title="Sent as a forced entry of the chat's mirror lorebook: the Prompt Breakdown lists it under World Info, not under ALMANAC · Recall">lorebook</span>`:i.via==="recall"?' <span class="pill" title="Sent inside the ALMANAC · Recall block">recall</span>':"",r=e.checks?.issues??[];return`${`<div class="card flat"><div class="row"><b class="grow">Check of the latest reply</b><button class="btn" data-act="recheck" title="Run the check again on the latest reply">Check again</button></div>${r.length?`<ul class="alm-list">${r.map((i)=>`<li class="${i.level==="warn"?"due":""}">${i.level==="warn"?"⚠":"ⓘ"} ${n(i.text)}${i.quote&&!i.text.includes(i.quote)?` <small class="muted">«${n(i.quote)}»</small>`:""}</li>`).join("")}</ul><p class="muted"><small>The next turn's note tells the model about the ⚠ ones. If a slip matters, swipe for a new take.</small></p>`:`<p class="muted">${e.settings?.replyCheck==="off"?"The reply check is off (Settings › Knowledge).":"Nothing found."}</p>`}</div>`}<p class="muted">What Recall considered for the latest generation, with scores and reasons. Green = injected. Records the chat's mirror lorebook holds go in as its entries (the Prompt Breakdown shows them under World Info); the rest go in the ALMANAC · Recall block.</p>
+${t?`<div class="card flat"><div class="row"><span class="pill">tier: ${n(t.tier)}</span><span class="pill">≈ ${t.tokens} tokens injected</span><span class="pill">${new Date(t.at).toLocaleTimeString()}</span></div>
+${t.chronicle?.length?`<p class="muted"><small>Story so far in this prompt: ${t.chronicle.map((i)=>n(i.name)).join(" · ")}</small></p>`:""}
+${t.ceiling?`<p class="muted"><small>Ceiling ${t.ceiling.limit} tokens: this turn ≈${t.ceiling.after}${t.ceiling.trimmed?.length?` (≈${t.ceiling.before} before trimming; ${t.ceiling.trimmed.map((i)=>n(i)).join("; ")})`:""}.</small></p>`:""}
+<div class="feed">${t.items.map((i)=>`<div class="it${i.injected?" in":""}"><span class="sc">${i.score}</span><div><b>${n(i.name)}</b>${a(i)} <small class="muted">${n(i.id)}</small><br><small class="muted">${n(i.reasons.join(" · "))}</small></div></div>`).join("")}</div></div>`:'<div class="empty">No retrieval yet.</div>'}
+${e.rejected.length?`<h4>Rejected or corrected ledger lines</h4><div class="list">${e.rejected.slice().reverse().map((i)=>`<div class="rec"><code>${n(i.raw)}</code><div class="muted"><small>message ${i.msgIndex+1} · ${n(i.verdict)} — ${n(i.reason??"")}</small></div></div>`).join("")}</div>`:""}`}tab_craft(e){let t=e.telemetry;if(!t)return'<div class="empty">Craft telemetry appears after a few replies.</div>';return`<div class="card flat"><h4>Next reply is told</h4><div>Avoid: ${t.avoids.map((a)=>`<span class="pill">${n(a)}</span>`).join("")||"—"}</div><div style="margin-top:6px">Try: <b>${n(t.technique)}</b></div>${t.agency.length?`<div class="alm-tag warn" style="margin-top:8px">${n(t.agency.join("; "))}</div>`:""}</div>
+<div class="card flat"><h4>Last six replies</h4><div class="kv">${Object.entries(t.metrics).map(([a,r])=>`<b>${n(a)}</b><span>${n(String(r))}</span>`).join("")}</div></div>
+${t.repeated.length?`<div class="card flat"><h4>Repeated phrases</h4>${t.repeated.map((a)=>`<span class="pill">“${n(a.phrase)}” ×${a.count}</span>`).join("")}</div>`:""}
+<div class="card flat"><h4>Openings</h4>${t.openings.map((a)=>`<span class="pill">${n(a)}</span>`).join("")}</div>`}tab_settings(e){let t=e.settings,a=(o,l)=>`<select data-setting="${o}">${l.map(([d,c])=>`<option value="${d}"${String(t[o])===d?" selected":""}>${c}</option>`).join("")}</select>`,r=(o,l=0,d=99999)=>`<input type="number" data-setting="${o}" value="${t[o]}" min="${l}" max="${d}">`,s=(o,l)=>`<label class="chk"><input type="checkbox" data-setting="${o}"${t[o]?" checked":""}> ${l}</label>`,i=(o,l="")=>`<input type="text" data-setting="${o}" value="${n(t[o]??"")}" placeholder="${n(l)}">`;return`<h3>This chat</h3><div class="card flat"><div class="row"><span class="grow">Ledger in this chat: <b>${e.enabled?"on":"off"}</b>${e.config.enabledOverride==null?" (automatic)":""}</span><button class="btn" data-act="enable">On</button><button class="btn" data-act="disable">Off</button><button class="btn" data-act="auto">Automatic</button></div>${e.hiddenTurns?`<div class="row"><span class="grow muted"><small>${e.hiddenTurns} turn${e.hiddenTurns===1?" is":"s are"} hidden under summaries. Switching the chat off shows them again; so does this button (do it before uninstalling).</small></span><button class="btn" data-act="releaseHidden">Show hidden turns</button></div>`:""}
+<label class="f">Story truths <small class="muted">— one a line; sent every turn and held over the source material and older chat</small><textarea id="almTruths" rows="3" placeholder="Jaime and Cersei are strictly family.&#10;Rhaegar is bald and wears a wig.">${n((e.config.truths??[]).join(`
 `))}</textarea></label><div class="row"><span class="grow muted"><small>You can also pin one from a message: <code>((truth: …))</code>.</small></span><button class="btn" data-act="saveTruths">Save truths</button></div></div>
-<h3>Core</h3><div class="card flat"><label class="f">Enable<select data-setting="enabled"><option value="auto"${s.enabled === "auto" ? " selected" : ""}>automatic (ALMANAC chats)</option><option value="on"${s.enabled === "on" ? " selected" : ""}>every chat</option><option value="off"${s.enabled === "off" ? " selected" : ""}>off</option></select></label>
-<label class="f">Validation${sel("strictness", [["strict", "strict — reject impossible changes"], ["lenient", "lenient — warn only"]])}</label>${chk("autoRepair", "Repair missing ledgers automatically")}${chk("formatAid", "Show the model last turn's ledger as a format example")}${chk("debug", "Debug logging")}</div>
-<h3>Chronicle</h3><div class="card flat">${chk("chronicle", "Summarise old turns into chapters, arcs and volumes")}${chk("hideCovered", "Hide covered turns")}<label class="f">Summaries in the prompt${sel("chronicleInject", [["all", "the whole story, every turn"], ["relevant", "only when relevant"]])}</label><p class="muted"><b>The whole story</b> puts every stretch before the raw tail in each prompt, once, at its most compact level (volumes, then arcs, then chapters), and brings back a folded chapter in full when a turn touches it. <b>Only when relevant</b> sends the latest chapter, which leads into the turns the model sees, and up to three earlier chapters that share names, places or other distinctive words with the turn. It costs fewer tokens, but the model forgets what isn't picked.</p><label class="f">Raw tail (messages)${num("rawTail", 6, 400)}</label><label class="f">Raw tail cap (tokens)${num("rawTailTokens", 1000)}</label><label class="f">Chapter size (tokens)${num("chapterThresholdTokens", 1000)}</label><label class="f">Fan-in (chapters per arc, arcs per volume)${num("fanIn", 2, 12)}</label><label class="f">Summary detail${sel("summaryDetail", [["brief", "brief — the essentials (≈100–200 words a chapter)"], ["standard", "standard — facts and changes (≈150–350)"], ["detailed", "detailed — scene by scene, where things stand (≈350–650)"], ["exhaustive", "exhaustive — beats, texture, voices (≈700–1200)"]])}</label><label class="f">Always keep in summaries (optional)${txt("summaryFocus", "outfits, injuries, Buffy's lies, pet names…")}</label><p class="muted">More detail keeps more of the story in memory, at the cost of prompt tokens. New chapters use the new setting; <b>Rewrite all</b> on the Chronicle page redoes the old ones.</p><label class="f">Summariser connection id (empty = your default)${txt("summarizerConnection")}</label></div>
-<h3>Knowledge</h3><div class="card flat"><label class="f">Knowledge clerk${sel("knowledgeClerk", [["auto", "when a reply's lines need it (bundled, untagged, diary-like)"], ["always", "every reply"], ["off", "off"]])}</label><p class="muted">After a reply, a quiet call rewrites its knowledge lines cleanly: one fact a line, the #keys in play, information rather than what someone noticed. It runs in the background; the next turn waits for it up to 8 seconds.</p><label class="f">Clerk connection id (empty = the summariser's)${txt("clerkConnection")}</label>
-${chk("secretsOffPage", "Keep secrets off the page when the model names words to avoid (<code>secret … | never say: …</code>)")}<p class="muted">A secret you mark on the Knowledge page is always kept off the page until it comes out.</p>
-<label class="f">Check each reply${sel("replyCheck", [["rules", "rules: secrets named, leaks, the dead or absent speaking, looks contradicted"], ["model", "rules, plus a quiet model read for past events the record doesn't hold"], ["off", "off"]])}</label><label class="f">Check connection id (empty = the summariser's)${txt("replyCheckConnection")}</label>
-<label class="f">Facts in your own messages${sel("playerFacts", [["rules", `rules: dates ("it's day 12"), looks ("X has violet eyes"), ((truth: …))`], ["model", "rules, plus a quiet model read of what you state"], ["off", "off"]])}</label><p class="muted">What you state is your word: the story can't overwrite a look you set, and a date you give moves the clock, even backwards.</p></div>
-<h3>Recall</h3><div class="card flat"><label class="f">Injection budget (tokens)${num("recallBudget", 400, 20000)}</label><label class="f">Recall placement${sel("recallPlacement", [["before_history", "before chat history"], ["depth4", "4 messages from the end"]])}</label>${chk("keyHeat", "Demote keys that fire without being used")}<label class="f">Max keys per record${num("maxKeys", 4, 24)}</label></div>
-<h3>Storage (hybrid)</h3><div class="card flat"><p class="muted">The extension's storage is the source of truth (branch-safe, rebuildable). The mirror lorebook is a readable, editable projection attached to this chat only.</p><label class="f">Mirror lorebook${sel("mirror", [["off", "off"], ["summaries", "summaries"], ["full", "full records"]])}</label>${chk("mirrorVectorize", "Vectorise mirror entries (semantic recall; needs an embedding provider)")}</div>
-<h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
-<h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "Westeros · Roshar · Harptos · Shire Reckoning · or months: Name (30), …; weekdays: …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 1e4)}</label><label class="f">Simulator connection id${txt("simConnection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
-<h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection id${txt("sidecarConnection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label></div>
-<p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${escapeHtml(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ...SKIN_LIST])}</label><label class="f">Light or dark${sel("skinMode", [["auto", "Auto (follow Lumiverse)"], ["light", "Light"], ["dark", "Dark"]])}</label>${this.skinColors(v)}${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${escapeHtml(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
-  }
-  lookTarget() {
-    const mode = document.documentElement.getAttribute?.("data-alm-mode") === "dark" ? "dark" : "light";
-    return { skin: this.view?.theme || "almanac", mode };
-  }
-  withSkinColor(token, value) {
-    const { skin, mode } = this.lookTarget();
-    const all = { ...this.view?.settings?.skinColors ?? {} };
-    const pal = token ? { ...all[skin]?.[mode] ?? {} } : {};
-    if (token && value)
-      pal[token] = value;
-    else if (token)
-      delete pal[token];
-    all[skin] = { ...all[skin] ?? {}, [mode]: pal };
-    if (!Object.keys(pal).length)
-      delete all[skin][mode];
-    if (!Object.keys(all[skin]).length)
-      delete all[skin];
-    return all;
-  }
-  saveSkinColors(colors) {
-    this.send({ type: "settings", patch: { skinColors: colors } });
-    if (this.view?.settings)
-      this.view.settings.skinColors = colors;
-    this.ctx.events.emit("almanac:skinColors", colors);
-    this.render();
-  }
-  skinColors(v) {
-    const { skin, mode } = this.lookTarget();
-    const mine = v.settings?.skinColors?.[skin]?.[mode] ?? {};
-    const own = skinPalette(skin, mode);
-    const name = SKIN_LIST.find(([id]) => id === skin)?.[1] ?? skin;
-    const rows = SKIN_COLORS.map(([k, lab, what]) => `<div class="almc-row"><label><input type="color" class="swatch" data-skin-color="${k}" value="${escapeHtml(toHex(mine[k] ?? own?.[k] ?? liveHex(k)))}"><span>${lab}${what ? ` <small class="muted">${what}</small>` : ""}</span></label>${mine[k] ? `<button class="btn" data-act="skinColorReset" data-id="${k}" title="Back to the skin's own colour" aria-label="Reset ${escapeHtml(lab)}">reset</button>` : ""}</div>`).join("");
-    return `<div class="almc"><div class="row"><span class="grow"><b>Colours</b> <span class="muted">— ${escapeHtml(skin === "lumiverse" ? "Lumiverse's theme" : name)}, ${mode}</span></span>${Object.keys(mine).length ? `<button class="btn" data-act="skinColorsReset" title="Put back every colour of this palette">Reset all</button>` : ""}</div>
-<div class="almc-grid">${rows}</div>
-<p class="muted" style="margin:0"><small>Your colours are kept for each skin, and for its light and its dark palette separately. To change the other palette, switch <b>Light or dark</b> above.</small></p></div>`;
-  }
-  onClick(ev) {
-    const t = ev.target;
-    const hist = t.closest("summary")?.parentElement;
-    if (hist?.dataset.fact) {
-      if (hist.open)
-        this.openFacts.delete(hist.dataset.fact);
-      else
-        this.openFacts.add(hist.dataset.fact);
-    }
-    const pageBtn = t.closest("[data-page]");
-    if (pageBtn) {
-      this.go(pageBtn.dataset.page);
-      return;
-    }
-    const planet = t.closest("[data-orbit]");
-    if (planet) {
-      this.orbit = this.orbit === planet.dataset.orbit ? "" : planet.dataset.orbit;
-      if (this.orbit === "engine")
-        this.markEngineSeen();
-      this.render();
-      this.root.querySelector(".almo-moonb")?.focus();
-      return;
-    }
-    if (this.orbit && !t.closest(".almo-orbit")) {
-      this.orbit = "";
-      this.render();
-      return;
-    }
-    if (this.creator.onClick(t))
-      return;
-    const act = t.closest("[data-act]")?.dataset;
-    if (!act)
-      return;
-    const id = act.id;
-    const val = (sel) => this.root.querySelector(sel)?.value ?? "";
-    switch (act.act) {
-      case "enable":
-        this.send({ type: "enable", value: true });
-        break;
-      case "disable":
-        this.send({ type: "enable", value: false });
-        break;
-      case "auto":
-        this.send({ type: "enable", value: null });
-        break;
-      case "sessionZero":
-        this.ctx.events.emit("almanac:sessionZero", { chatId: this.view?.chatId });
-        break;
-      case "repairLast":
-        this.send({ type: "repairLast" });
-        break;
-      case "rebuild":
-        this.send({ type: "rebuild" });
-        break;
-      case "retryState":
-        this.ctx.events.emit("almanac:retryState", {});
-        break;
-      case "grantPanels":
-        this.ctx.events.emit("almanac:grantPanels", {});
-        break;
-      case "edit":
-        this.editing = id ?? null;
-        this.render();
-        break;
-      case "cancelEdit":
-        this.editing = null;
-        this.render();
-        break;
-      case "chronFilter":
-        this.chronFilter = id || "all";
-        this.render();
-        break;
-      case "factKind":
-        this.factKind = id || "play";
-        this.render();
-        break;
-      case "clerkTidy":
-        this.clerkProgress = "";
-        this.send({ type: "clerkTidy" });
-        if (this.view)
-          this.view.clerk = { ...this.view.clerk, running: true };
-        this.render();
-        break;
-      case "clerkStop":
-        this.send({ type: "clerkStop" });
-        this.clerkProgress = "stopping…";
-        this.render();
-        break;
-      case "chronToggle":
-        if (!id)
-          break;
-        if (this.chronOpen.has(id))
-          this.chronOpen.delete(id);
-        else
-          this.chronOpen.add(id);
-        this.render();
-        break;
-      case "saveRecord": {
-        const body = {};
-        if (this.root.querySelector("#almEdRoutine"))
-          body.routine = val("#almEdRoutine");
-        if (this.root.querySelector("#almEdHours"))
-          body.hours = val("#almEdHours");
-        this.send({ type: "codexEdit", id, patch: { summary: val("#almEdSummary"), keys: val("#almEdKeys").split(",").map((s) => s.trim()).filter(Boolean), locked: true, body, narratorOnly: this.root.querySelector("#almEdNarr")?.checked } });
-        this.editing = null;
-        break;
-      }
-      case "unlock":
-        this.send({ type: "codexEdit", id, patch: { locked: false } });
-        this.editing = null;
-        break;
-      case "deleteRecord":
-        this.send({ type: "codexEdit", id, patch: { delete: true } });
-        this.editing = null;
-        break;
-      case "newRecord": {
-        const name = val("#almNewName").trim();
-        if (!name)
-          return;
-        const kind = val("#almNewKind");
-        const prefix = { person: "char:", place: "loc:", object: "item:", group: "fac:" };
-        this.send({ type: "codexEdit", id: `${prefix[kind] ?? "custom:"}${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "_")}`, patch: { create: true, kind, name, summary: val("#almNewSummary"), locked: true } });
-        break;
-      }
-      case "userOps":
-        this.send({ type: "userOps", lines: val("#almOps").split(`
-`).filter((l) => l.trim()) });
-        break;
-      case "editPressure": {
-        const cur = this.view?.cast.find((c) => c.id === id)?.pressure ?? "";
-        const text = window.prompt("Hidden pressure (narrator-only). Empty to clear.", cur);
-        if (text !== null)
-          this.send({ type: "pressure", charId: id, text });
-        break;
-      }
-      case "chronicleRun":
-        this.send({ type: "chronicle", action: "run" });
-        break;
-      case "factEdit":
-        this.editingFact = id ?? null;
-        this.render();
-        break;
-      case "factAdd":
-        this.editingFact = "__new";
-        this.render();
-        break;
-      case "charAdd":
-        this.editingChar = "__new";
-        this.render();
-        break;
-      case "charEdit":
-        this.editingChar = this.editingChar === id ? null : id ?? null;
-        this.render();
-        break;
-      case "charCancel":
-        this.editingChar = null;
-        this.render();
-        break;
-      case "charSave": {
-        if (!id)
-          break;
-        const val = (sel) => this.root.querySelector(sel)?.value?.trim();
-        const name = val("#almCharName");
-        const age = val("#almCharAge") ?? "";
-        const appearance = val("#almCharLook") ?? "";
-        const edits = { ...this.view?.config?.castEdits ?? {} };
-        const cast = this.view?.cast ?? [];
-        if (id === "__new") {
-          if (!name)
-            break;
-          const low = name.toLowerCase();
-          const taken = cast.find((c) => c.name.toLowerCase() === low || c.aliases?.some((a) => a.toLowerCase() === low));
-          if (taken) {
-            window.alert(`${taken.name} is already in the cast.`);
-            break;
-          }
-          let key = low.normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "person";
-          while (cast.some((c) => c.id === key) || edits[key])
-            key += "_";
-          edits[key] = { name, ...age ? { age } : {}, ...appearance ? { appearance } : {}, added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
-        } else {
-          const c = cast.find((x) => x.id === id);
-          const next = { ...edits[id] ?? {} };
-          if (name && !c?.isUser && name !== c?.name)
-            next.name = name;
-          next.age = age;
-          next.appearance = appearance;
-          edits[id] = next;
-        }
-        this.editingChar = null;
-        this.send({ type: "config", patch: { castEdits: edits } });
-        break;
-      }
-      case "factCancel":
-        this.editingFact = null;
-        this.render();
-        break;
-      case "factSave": {
-        if (!id)
-          break;
-        const val = (sel) => this.root.querySelector(sel)?.value?.trim() ?? "";
-        const f = this.view?.knowledge.find((x) => x.key === id);
-        const edits = { ...this.view?.config?.factEdits ?? {} };
-        let key = id;
-        if (id === "__new") {
-          const words = val("#almFactStmt");
-          if (!words)
-            break;
-          const taken = new Set([...(this.view?.knowledge ?? []).map((x) => x.key), ...(this.view?.hiddenFacts ?? []).map((x) => x.key), ...Object.keys(edits)]);
-          const base = words.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").split(" ").filter((w) => w.length > 2 && !/^(the|and|that|was|his|her|their|with|from|has|have|who|for)$/.test(w)).slice(0, 3).join("-") || "fact";
-          key = base;
-          for (let i = 2;taken.has(key); i++)
-            key = `${base}-${i}`;
-          edits[key] = { added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
-        }
-        const next = { ...edits[key] ?? {} };
-        const stmt = val("#almFactStmt");
-        if (stmt && stmt !== f?.statement)
-          next.statement = stmt;
-        const truth = val("#almFactTruth");
-        if (truth)
-          next.truth = truth;
-        else
-          delete next.truth;
-        const into = val("#almFactInto");
-        if (into)
-          next.into = into;
-        const people = {};
-        this.root.querySelectorAll("select[data-person]").forEach((sel) => {
-          if (sel.value)
-            people[sel.dataset.person] = sel.value;
-        });
-        if (Object.keys(people).length)
-          next.people = people;
-        else
-          delete next.people;
-        const offOn = this.root.querySelector("#almFactOffOn")?.checked;
-        const offWords = val("#almFactOffWords").split(/\s*,\s*/).filter(Boolean);
-        const offAs = val("#almFactOffAs");
-        if (offOn)
-          next.offPage = { words: offWords, ...offAs ? { wording: offAs } : {} };
-        else if (f?.offPage || next.offPage)
-          next.offPage = null;
-        if (id === "__new")
-          next.statement = stmt;
-        edits[key] = next;
-        this.editingFact = null;
-        this.send({ type: "config", patch: { factEdits: edits } });
-        break;
-      }
-      case "factDelete": {
-        const b = t.closest("button");
-        if (b && b.dataset.armed !== "1") {
-          b.dataset.armed = "1";
-          b.textContent = "Click again to delete";
-          setTimeout(() => {
-            if (b.isConnected) {
-              b.dataset.armed = "";
-              b.textContent = "delete";
-            }
-          }, 4000);
-          break;
-        }
-      }
-      case "factHide":
-      case "factRestore": {
-        if (!id)
-          break;
-        const edits = { ...this.view?.config?.factEdits ?? {} };
-        const next = { ...edits[id] ?? {} };
-        if (act.act !== "factRestore")
-          next.hidden = true;
-        else
-          delete next.hidden;
-        edits[id] = next;
-        this.editingFact = null;
-        this.send({ type: "config", patch: { factEdits: edits } });
-        break;
-      }
-      case "notPerson": {
-        const b = t.closest("button");
-        if (b && b.dataset.armed !== "1") {
-          b.dataset.armed = "1";
-          b.textContent = "Click again to remove";
-          setTimeout(() => {
-            if (b.isConnected) {
-              b.dataset.armed = "";
-              b.textContent = "Not a person — remove";
-            }
-          }, 4000);
-          break;
-        }
-        const c = this.view?.cast.find((x) => x.name === act.name);
-        const merges = { ...this.view?.config?.merges ?? {} };
-        for (const n of [act.name, ...c?.aliases ?? []])
-          if (n)
-            merges[String(n).toLowerCase()] = NOT_A_PERSON;
-        this.send({ type: "config", patch: { merges } });
-        break;
-      }
-      case "restorePerson": {
-        const merges = { ...this.view?.config?.merges ?? {} };
-        delete merges[String(act.name ?? "").toLowerCase()];
-        this.send({ type: "config", patch: { merges } });
-        break;
-      }
-      case "unmerge": {
-        const merges = { ...this.view?.config?.merges ?? {} };
-        delete merges[String(act.name ?? "").toLowerCase()];
-        this.send({ type: "config", patch: { merges } });
-        break;
-      }
-      case "chronicleRewrite": {
-        const b = t.closest("button");
-        if (b && b.dataset.armed !== "1") {
-          b.dataset.armed = "1";
-          b.textContent = "Click again to rewrite";
-          setTimeout(() => {
-            if (b.isConnected) {
-              b.dataset.armed = "";
-              b.textContent = "Rewrite all";
-            }
-          }, 4000);
-          break;
-        }
-        this.send({ type: "chronicle", action: "rewriteAll" });
-        break;
-      }
-      case "unitSave":
-        this.send({ type: "chronicle", action: "edit", unitId: id, text: this.root.querySelector(`textarea[data-unit="${id}"]`)?.value });
-        break;
-      case "unitLock":
-        this.send({ type: "chronicle", action: "lock", unitId: id });
-        break;
-      case "unitGhost":
-        this.send({ type: "chronicle", action: "ghost", unitId: id });
-        break;
-      case "unitRegen":
-        this.send({ type: "chronicle", action: "regenerate", unitId: id });
-        break;
-      case "unitUnhide":
-        this.send({ type: "chronicle", action: "unhide", unitId: id });
-        break;
-      case "loreScan":
-        this.send({ type: "lore", action: "scan" });
-        break;
-      case "playbookPlayed":
-        this.send({ type: "codexEdit", id, patch: { status: t.closest("button")?.dataset.played ? "active" : "resolved" } });
-        break;
-      case "recheck":
-        this.send({ type: "recheck" });
-        break;
-      case "skinColorReset":
-        if (id)
-          this.saveSkinColors(this.withSkinColor(id, null));
-        break;
-      case "skinColorsReset":
-        this.saveSkinColors(this.withSkinColor(null, null));
-        break;
-      case "saveTruths":
-        this.send({ type: "config", patch: { truths: val("#almTruths").split(`
-`).map((s) => s.trim()).filter(Boolean) } });
-        break;
-      case "loreClassify":
-        this.send({ type: "lore", action: "classify" });
-        break;
-      case "mirrorSync":
-        this.send({ type: "mirrorSync" });
-        break;
-      case "simulate":
-        this.send({ type: "simulate" });
-        break;
-      case "scheduleWx": {
-        const day = parseInt(val("#almWxDay"), 10);
-        const hour = parseInt(val("#almWxHour"), 10);
-        const hours = parseInt(val("#almWxLen"), 10) || 6;
-        const condition = val("#almWxCond").trim();
-        if (day > 0 && hour >= 0 && hour < 24 && condition)
-          this.send({ type: "schedule", spec: { day, hour, hours, condition } });
-        break;
-      }
-    }
-  }
-  onChange(ev) {
-    const t = ev.target;
-    if (this.creator.onChange(t))
-      return;
-    const d = t.dataset;
-    if (d.setting) {
-      const cur = this.view?.settings?.[d.setting];
-      const value = t.type === "checkbox" ? t.checked : typeof cur === "number" ? Number(t.value) : t.value;
-      this.send({ type: "settings", patch: { [d.setting]: value } });
-      if (this.view)
-        this.view.settings[d.setting] = value;
-      this.ctx.events.emit("almanac:settings", { [d.setting]: value });
-      return;
-    }
-    if (d.skinColor) {
-      this.saveSkinColors(this.withSkinColor(d.skinColor, t.value));
-      return;
-    }
-    if (d.set) {
-      if (d.set === "asOf") {
-        const max = Number(t.max);
-        this.asOf = Number(t.value) >= max ? Infinity : Number(t.value);
-      } else if (d.set === "npcOnly")
-        this.npcOnly = t.checked;
-      else
-        this[d.set] = t.value;
-      this.render();
-      return;
-    }
-    if (d.color) {
-      this.send({ type: "color", charId: d.color, color: t.value });
-      return;
-    }
-    if (d.merge != null && t.value) {
-      const c = this.view?.cast.find((x) => x.name === d.merge);
-      const merges = { ...this.view?.config?.merges ?? {} };
-      for (const n of [d.merge, ...c?.aliases ?? []])
-        merges[String(n).toLowerCase()] = t.value;
-      this.send({ type: "config", patch: { merges } });
-      return;
-    }
-    if (d.loreMode)
-      this.send({ type: "lore", action: "mode", bookId: d.loreMode, value: t.value });
-    if (d.lorePerm)
-      this.send({ type: "lore", action: "permission", bookId: d.lorePerm, value: t.value });
-  }
-}
-function toHex(c) {
-  return /^#[0-9a-f]{6}$/i.test(c) ? c : "#888888";
-}
-function liveHex(token) {
-  try {
-    const probe = document.createElement("span");
-    probe.style.color = `var(--alm-${token})`;
-    document.body.append(probe);
-    const color = getComputedStyle(probe).color;
-    probe.remove();
-    const g = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d");
-    g.fillStyle = color;
-    g.fillRect(0, 0, 1, 1);
-    const [r, gr, b] = g.getImageData(0, 0, 1, 1).data;
-    return `#${[r, gr, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
-  } catch {
-    return "";
-  }
-}
-
-// src/frontend/styles.ts
-var TOKENS = `
+<h3>Core</h3><div class="card flat"><label class="f">Enable<select data-setting="enabled"><option value="auto"${t.enabled==="auto"?" selected":""}>automatic (ALMANAC chats)</option><option value="on"${t.enabled==="on"?" selected":""}>every chat</option><option value="off"${t.enabled==="off"?" selected":""}>off</option></select></label>
+<label class="f">Validation${a("strictness",[["strict","strict — reject impossible changes"],["lenient","lenient — warn only"]])}</label>${s("autoRepair","Repair missing ledgers automatically")}${s("formatAid","Show the model last turn's ledger as a format example")}${s("debug","Debug logging")}</div>
+<h3>Chronicle</h3><div class="card flat">${s("chronicle","Summarise old turns into chapters, arcs and volumes")}${s("hideCovered","Hide covered turns")}<label class="f">Summaries in the prompt${a("chronicleInject",[["all","the whole story, every turn"],["relevant","only when relevant"]])}</label><p class="muted"><b>The whole story</b> puts every stretch before the raw tail in each prompt, once, at its most compact level (volumes, then arcs, then chapters), and brings back a folded chapter in full when a turn touches it. <b>Only when relevant</b> sends the latest chapter, which leads into the turns the model sees, and up to three earlier chapters that share names, places or other distinctive words with the turn. It costs fewer tokens, but the model forgets what isn't picked.</p><label class="f">Raw tail (messages)${r("rawTail",6,400)}</label><label class="f">Raw tail cap (tokens)${r("rawTailTokens",1000)}</label><label class="f">Chapter size (tokens)${r("chapterThresholdTokens",1000)}</label><label class="f">Fan-in (chapters per arc, arcs per volume)${r("fanIn",2,12)}</label><label class="f">Summary detail${a("summaryDetail",[["brief","brief — the essentials (≈100–200 words a chapter)"],["standard","standard — facts and changes (≈150–350)"],["detailed","detailed — scene by scene, where things stand (≈350–650)"],["exhaustive","exhaustive — beats, texture, voices (≈700–1200)"]])}</label><label class="f">Always keep in summaries (optional)${i("summaryFocus","outfits, injuries, Buffy's lies, pet names…")}</label><p class="muted">More detail keeps more of the story in memory, at the cost of prompt tokens. New chapters use the new setting; <b>Rewrite all</b> on the Chronicle page redoes the old ones.</p><label class="f">Summariser connection id (empty = your default)${i("summarizerConnection")}</label></div>
+<h3>Knowledge</h3><div class="card flat"><label class="f">Knowledge clerk${a("knowledgeClerk",[["auto","when a reply's lines need it (bundled, untagged, diary-like)"],["always","every reply"],["off","off"]])}</label><p class="muted">After a reply, a quiet call rewrites its knowledge lines cleanly: one fact a line, the #keys in play, information rather than what someone noticed. It runs in the background; the next turn waits for it up to 8 seconds.</p><label class="f">Clerk connection id (empty = the summariser's)${i("clerkConnection")}</label>
+${s("secretsOffPage","Keep secrets off the page when the model names words to avoid (<code>secret … | never say: …</code>)")}<p class="muted">A secret you mark on the Knowledge page is always kept off the page until it comes out.</p>
+<label class="f">Check each reply${a("replyCheck",[["rules","rules: secrets named, leaks, the dead or absent speaking, looks contradicted"],["model","rules, plus a quiet model read for past events the record doesn't hold"],["off","off"]])}</label><label class="f">Check connection id (empty = the summariser's)${i("replyCheckConnection")}</label>
+<label class="f">Facts in your own messages${a("playerFacts",[["rules",`rules: dates ("it's day 12"), looks ("X has violet eyes"), ((truth: …))`],["model","rules, plus a quiet model read of what you state"],["off","off"]])}</label><p class="muted">What you state is your word: the story can't overwrite a look you set, and a date you give moves the clock, even backwards.</p></div>
+<h3>Prompt size</h3><div class="card flat"><label class="f">Ceiling for everything the Almanac adds to a prompt (tokens; 0 = no ceiling)${r("injectCeiling",0,1e6)}</label><div class="row">${[["8000","8K"],["16000","16K"],["24000","24K"],["48000","48K"],["0","none"]].map(([o,l])=>`<button class="btn${String(t.injectCeiling)===o?" primary":""}" data-act="ceiling" data-id="${o}">${l}</button>`).join("")}</div><p class="muted">The note, recall, the mirror lorebook's cards and the chapter summaries together. Over the ceiling, the summaries narrow to the ones this turn touches, then the oldest of those are left out, then the lowest-ranked recall records. The note and the latest chapter always go in. Lumiverse fits the rest of the prompt to your model's context before the Almanac adds its part, so leave room: with a 32K model, try 8K. The Recall page shows what the last turn cost and what was cut.${e.feed?.[0]?.ceiling?` Last turn: ≈${e.feed[0].ceiling.after} tokens${e.feed[0].ceiling.before>e.feed[0].ceiling.after?` (≈${e.feed[0].ceiling.before} before trimming)`:""}.`:e.feed?.[0]?` Last turn: ≈${e.feed[0].tokens} tokens.`:""}</p></div>
+<h3>Recall</h3><div class="card flat"><label class="f">Note and recall budget (tokens)${r("recallBudget",400,20000)}</label><label class="f">Recall placement${a("recallPlacement",[["before_history","before chat history"],["depth4","4 messages from the end"]])}</label>${s("keyHeat","Demote keys that fire without being used")}<label class="f">Max keys per record${r("maxKeys",4,24)}</label><label class="f">Words never used as keys <small class="muted">— comma-separated</small><input type="text" data-list-setting="stopList" value="${n((t.stopList??[]).join(", "))}" placeholder="house, door, tea"></label></div>
+<h3>Storage (hybrid)</h3><div class="card flat"><p class="muted">The extension's storage is the source of truth (branch-safe, rebuildable). The mirror lorebook is a readable, editable projection attached to this chat only.</p><label class="f">Mirror lorebook${a("mirror",[["off","off"],["summaries","summaries"],["full","full records"]])}</label>${s("mirrorVectorize","Vectorise mirror entries (semantic recall; needs an embedding provider)")}</div>
+<h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${a("loreDefaultMode",[["native","native"],["assisted","assisted"],["managed","managed"]])}</label><p class="muted">Your lorebooks are only read, never written to.</p></div>
+<h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${i("climate","temperate maritime")}</label><label class="f">Latitude${i("latitude","temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${i("calendar","Westeros · Roshar · Harptos · Shire Reckoning · or months: Name (30), …; weekdays: …")}</label>${s("simulator","Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${r("simStep",30,1e4)}</label><label class="f">Simulator connection id${i("simConnection")}</label>${s("pressures","Hidden pressures for new characters")}${s("chekhov","Chekhov nudges for unused plants")}${s("telemetry","Craft telemetry")}</div>
+<h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection id${i("sidecarConnection")}</label><label class="f">Planner timeout (seconds)${r("sidecarTimeout",5,90)}</label></div>
+<p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${J}${e.version&&e.version!==J?` · background process ${n(e.version)}`:""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${a("theme",[["preset","follow the preset (Auto by genre)"],...re])}</label><label class="f">Light or dark${a("skinMode",[["auto","Auto (follow Lumiverse)"],["light","Light"],["dark","Dark"]])}</label>${this.skinColors(e)}${s("fonts","Load the skins' web fonts from Google Fonts (your browser contacts Google)")}${s("hud","Floating Now widget")}${this.hudProblem==="permission"?'<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>':this.hudProblem?`<p class="muted">The floating widget could not open: ${n(this.hudProblem)}</p>`:""}${s("narratorOnlyToTools","Let LLM tools see narrator-only records")}</div>`}lookTarget(){let e=document.documentElement.getAttribute?.("data-alm-mode")==="dark"?"dark":"light";return{skin:this.view?.theme||"almanac",mode:e}}withSkinColor(e,t){let{skin:a,mode:r}=this.lookTarget(),s={...this.view?.settings?.skinColors??{}},i=e?{...s[a]?.[r]??{}}:{};if(e&&t)i[e]=t;else if(e)delete i[e];if(s[a]={...s[a]??{},[r]:i},!Object.keys(i).length)delete s[a][r];if(!Object.keys(s[a]).length)delete s[a];return s}saveSkinColors(e){if(this.send({type:"settings",patch:{skinColors:e}}),this.view?.settings)this.view.settings.skinColors=e;this.ctx.events.emit("almanac:skinColors",e),this.render()}skinColors(e){let{skin:t,mode:a}=this.lookTarget(),r=e.settings?.skinColors?.[t]?.[a]??{},s=Qe(t,a),i=re.find(([l])=>l===t)?.[1]??t,o=Ce.map(([l,d,c])=>`<div class="almc-row"><label><input type="color" class="swatch" data-skin-color="${l}" value="${n(mt(r[l]??s?.[l]??Vt(l)))}"><span>${d}${c?` <small class="muted">${c}</small>`:""}</span></label>${r[l]?`<button class="btn" data-act="skinColorReset" data-id="${l}" title="Back to the skin's own colour" aria-label="Reset ${n(d)}">reset</button>`:""}</div>`).join("");return`<div class="almc"><div class="row"><span class="grow"><b>Colours</b> <span class="muted">— ${n(t==="lumiverse"?"Lumiverse's theme":i)}, ${a}</span></span>${Object.keys(r).length?'<button class="btn" data-act="skinColorsReset" title="Put back every colour of this palette">Reset all</button>':""}</div>
+<div class="almc-grid">${o}</div>
+<p class="muted" style="margin:0"><small>Your colours are kept for each skin, and for its light and its dark palette separately. To change the other palette, switch <b>Light or dark</b> above.</small></p></div>`}onClick(e){let t=e.target,a=t.closest("summary")?.parentElement;if(a?.dataset.fact)if(a.open)this.openFacts.delete(a.dataset.fact);else this.openFacts.add(a.dataset.fact);let r=t.closest("[data-page]");if(r){this.go(r.dataset.page);return}let s=t.closest("[data-orbit]");if(s){if(this.orbit=this.orbit===s.dataset.orbit?"":s.dataset.orbit,this.orbit==="engine")this.markEngineSeen();this.render(),this.root.querySelector(".almo-moonb")?.focus();return}if(this.orbit&&!t.closest(".almo-orbit")){this.orbit="",this.render();return}if(this.creator.onClick(t))return;let i=t.closest("[data-act]")?.dataset;if(!i)return;let o=i.id,l=(d)=>this.root.querySelector(d)?.value??"";switch(i.act){case"enable":this.send({type:"enable",value:!0});break;case"disable":this.send({type:"enable",value:!1});break;case"releaseHidden":this.send({type:"releaseHidden"});break;case"clearProblems":if(this.send({type:"clearProblems"}),this.view)this.view.problems=[];this.render();break;case"dismissNotice":this.notice=null,this.render();break;case"userOpsRemove":this.send({type:"userOpsRemove",key:t.closest("[data-key]")?.dataset.key,id:o});break;case"ceiling":{let d=Number(o??0);if(this.send({type:"settings",patch:{injectCeiling:d}}),this.view)this.view.settings.injectCeiling=d;this.render();break}case"auto":this.send({type:"enable",value:null});break;case"sessionZero":this.ctx.events.emit("almanac:sessionZero",{chatId:this.view?.chatId});break;case"repairLast":this.send({type:"repairLast"});break;case"rebuild":this.send({type:"rebuild"});break;case"retryState":this.ctx.events.emit("almanac:retryState",{});break;case"grantPanels":this.ctx.events.emit("almanac:grantPanels",{});break;case"edit":this.editing=o??null,this.render();break;case"cancelEdit":this.editing=null,this.render();break;case"chronFilter":this.chronFilter=o||"all",this.render();break;case"factKind":this.factKind=o||"play",this.render();break;case"clerkTidy":if(this.clerkProgress="",this.send({type:"clerkTidy"}),this.view)this.view.clerk={...this.view.clerk,running:!0};this.render();break;case"clerkStop":this.send({type:"clerkStop"}),this.clerkProgress="stopping…",this.render();break;case"chronToggle":if(!o)break;if(this.chronOpen.has(o))this.chronOpen.delete(o);else this.chronOpen.add(o);this.render();break;case"saveRecord":{let d={};if(this.root.querySelector("#almEdRoutine"))d.routine=l("#almEdRoutine");if(this.root.querySelector("#almEdHours"))d.hours=l("#almEdHours");this.send({type:"codexEdit",id:o,patch:{summary:l("#almEdSummary"),keys:l("#almEdKeys").split(",").map((c)=>c.trim()).filter(Boolean),locked:!0,body:d,narratorOnly:this.root.querySelector("#almEdNarr")?.checked}}),this.editing=null;break}case"unlock":this.send({type:"codexEdit",id:o,patch:{locked:!1}}),this.editing=null;break;case"deleteRecord":this.send({type:"codexEdit",id:o,patch:{delete:!0}}),this.editing=null;break;case"newRecord":{let d=l("#almNewName").trim();if(!d)return;let c=l("#almNewKind"),u={person:"char:",place:"loc:",object:"item:",group:"fac:"};this.send({type:"codexEdit",id:`${u[c]??"custom:"}${d.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,"_")}`,patch:{create:!0,kind:c,name:d,summary:l("#almNewSummary"),locked:!0}});break}case"userOps":this.send({type:"userOps",lines:l("#almOps").split(`
+`).filter((d)=>d.trim())});break;case"editPressure":{let d=this.view?.cast.find((u)=>u.id===o)?.pressure??"",c=window.prompt("Hidden pressure (narrator-only). Empty to clear.",d);if(c!==null)this.send({type:"pressure",charId:o,text:c});break}case"chronicleRun":this.send({type:"chronicle",action:"run"});break;case"factEdit":this.editingFact=o??null,this.render();break;case"factAdd":this.editingFact="__new",this.render();break;case"charAdd":this.editingChar="__new",this.render();break;case"charEdit":this.editingChar=this.editingChar===o?null:o??null,this.render();break;case"charCancel":this.editingChar=null,this.render();break;case"charSave":{if(!o)break;let d=(S)=>this.root.querySelector(S)?.value?.trim(),c=d("#almCharName"),u=d("#almCharAge")??"",m=d("#almCharLook")??"",g={...this.view?.config?.castEdits??{}},y=this.view?.cast??[];if(o==="__new"){if(!c)break;let S=c.toLowerCase(),_=y.find((C)=>C.name.toLowerCase()===S||C.aliases?.some((x)=>x.toLowerCase()===S));if(_){window.alert(`${_.name} is already in the cast.`);break}let L=S.normalize("NFKD").replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")||"person";while(y.some((C)=>C.id===L)||g[L])L+="_";g[L]={name:c,...u?{age:u}:{},...m?{appearance:m}:{},added:Math.max(0,(this.view?.counts?.messages??1)-1)}}else{let S=y.find((L)=>L.id===o),_={...g[o]??{}};if(c&&!S?.isUser&&c!==S?.name)_.name=c;_.age=u,_.appearance=m,g[o]=_}this.editingChar=null,this.send({type:"config",patch:{castEdits:g}});break}case"factCancel":this.editingFact=null,this.render();break;case"factSave":{if(!o)break;let d=(b)=>this.root.querySelector(b)?.value?.trim()??"",c=this.view?.knowledge.find((b)=>b.key===o),u={...this.view?.config?.factEdits??{}},m=o;if(o==="__new"){let b=d("#almFactStmt");if(!b)break;let E=new Set([...(this.view?.knowledge??[]).map((j)=>j.key),...(this.view?.hiddenFacts??[]).map((j)=>j.key),...Object.keys(u)]),T=b.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").split(" ").filter((j)=>j.length>2&&!/^(the|and|that|was|his|her|their|with|from|has|have|who|for)$/.test(j)).slice(0,3).join("-")||"fact";m=T;for(let j=2;E.has(m);j++)m=`${T}-${j}`;u[m]={added:Math.max(0,(this.view?.counts?.messages??1)-1)}}let g={...u[m]??{}},y=d("#almFactStmt");if(y&&y!==c?.statement)g.statement=y;let S=d("#almFactTruth");if(S)g.truth=S;else delete g.truth;let _=d("#almFactInto");if(_)g.into=_;let L={};if(this.root.querySelectorAll("select[data-person]").forEach((b)=>{if(b.value)L[b.dataset.person]=b.value}),Object.keys(L).length)g.people=L;else delete g.people;let C=this.root.querySelector("#almFactOffOn")?.checked,x=d("#almFactOffWords").split(/\s*,\s*/).filter(Boolean),v=d("#almFactOffAs");if(C)g.offPage={words:x,...v?{wording:v}:{}};else if(c?.offPage||g.offPage)g.offPage=null;if(o==="__new")g.statement=y;u[m]=g,this.editingFact=null,this.send({type:"config",patch:{factEdits:u}});break}case"factDelete":{let d=t.closest("button");if(d&&d.dataset.armed!=="1"){d.dataset.armed="1",d.textContent="Click again to delete",setTimeout(()=>{if(d.isConnected)d.dataset.armed="",d.textContent="delete"},4000);break}}case"factHide":case"factRestore":{if(!o)break;let d={...this.view?.config?.factEdits??{}},c={...d[o]??{}};if(i.act!=="factRestore")c.hidden=!0;else delete c.hidden;d[o]=c,this.editingFact=null,this.send({type:"config",patch:{factEdits:d}});break}case"notPerson":{let d=t.closest("button");if(d&&d.dataset.armed!=="1"){d.dataset.armed="1",d.textContent="Click again to remove",setTimeout(()=>{if(d.isConnected)d.dataset.armed="",d.textContent="Not a person — remove"},4000);break}let c=this.view?.cast.find((m)=>m.name===i.name),u={...this.view?.config?.merges??{}};for(let m of[i.name,...c?.aliases??[]])if(m)u[String(m).toLowerCase()]=Le;this.send({type:"config",patch:{merges:u}});break}case"restorePerson":{let d={...this.view?.config?.merges??{}};delete d[String(i.name??"").toLowerCase()],this.send({type:"config",patch:{merges:d}});break}case"unmerge":{let d={...this.view?.config?.merges??{}};delete d[String(i.name??"").toLowerCase()],this.send({type:"config",patch:{merges:d}});break}case"chronicleRewrite":{let d=t.closest("button");if(d&&d.dataset.armed!=="1"){d.dataset.armed="1",d.textContent="Click again to rewrite",setTimeout(()=>{if(d.isConnected)d.dataset.armed="",d.textContent="Rewrite all"},4000);break}this.send({type:"chronicle",action:"rewriteAll"});break}case"unitSave":this.send({type:"chronicle",action:"edit",unitId:o,text:this.root.querySelector(`textarea[data-unit="${o}"]`)?.value});break;case"unitLock":this.send({type:"chronicle",action:"lock",unitId:o});break;case"unitGhost":this.send({type:"chronicle",action:"ghost",unitId:o});break;case"unitRegen":this.send({type:"chronicle",action:"regenerate",unitId:o});break;case"unitUnhide":this.send({type:"chronicle",action:"unhide",unitId:o});break;case"loreScan":this.send({type:"lore",action:"scan"});break;case"playbookPlayed":this.send({type:"codexEdit",id:o,patch:{status:t.closest("button")?.dataset.played?"active":"resolved"}});break;case"recheck":this.send({type:"recheck"});break;case"skinColorReset":if(o)this.saveSkinColors(this.withSkinColor(o,null));break;case"skinColorsReset":this.saveSkinColors(this.withSkinColor(null,null));break;case"saveTruths":this.send({type:"config",patch:{truths:l("#almTruths").split(`
+`).map((d)=>d.trim()).filter(Boolean)}});break;case"loreClassify":this.send({type:"lore",action:"classify"});break;case"mirrorSync":this.send({type:"mirrorSync"});break;case"simulate":this.send({type:"simulate"});break;case"scheduleWx":{let d=parseInt(l("#almWxDay"),10),c=parseInt(l("#almWxHour"),10),u=parseInt(l("#almWxLen"),10)||6,m=l("#almWxCond").trim();if(d>0&&c>=0&&c<24&&m)this.send({type:"schedule",spec:{day:d,hour:c,hours:u,condition:m}});break}}}onChange(e){let t=e.target;if(this.creator.onChange(t))return;let a=t.dataset;if(a.setting){let r=this.view?.settings?.[a.setting],s=t.type==="checkbox"?t.checked:typeof r==="number"?Number(t.value):t.value;if(this.send({type:"settings",patch:{[a.setting]:s}}),this.view)this.view.settings[a.setting]=s;this.ctx.events.emit("almanac:settings",{[a.setting]:s});return}if(a.listSetting){let r=t.value.split(",").map((s)=>s.trim()).filter(Boolean);if(this.send({type:"settings",patch:{[a.listSetting]:r}}),this.view)this.view.settings[a.listSetting]=r;return}if(a.skinColor){this.saveSkinColors(this.withSkinColor(a.skinColor,t.value));return}if(a.set){if(a.set==="asOf"){let r=Number(t.max);this.asOf=Number(t.value)>=r?1/0:Number(t.value)}else if(a.set==="npcOnly")this.npcOnly=t.checked;else this[a.set]=t.value;this.render();return}if(a.color){this.send({type:"color",charId:a.color,color:t.value});return}if(a.merge!=null&&t.value){let r=this.view?.cast.find((i)=>i.name===a.merge),s={...this.view?.config?.merges??{}};for(let i of[a.merge,...r?.aliases??[]])s[String(i).toLowerCase()]=t.value;this.send({type:"config",patch:{merges:s}});return}if(a.loreMode)this.send({type:"lore",action:"mode",bookId:a.loreMode,value:t.value})}}function mt(e){return/^#[0-9a-f]{6}$/i.test(e)?e:"#888888"}function Vt(e){try{let t=document.createElement("span");t.style.color=`var(--alm-${e})`,document.body.append(t);let a=getComputedStyle(t).color;t.remove();let r=Object.assign(document.createElement("canvas"),{width:1,height:1}).getContext("2d");r.fillStyle=a,r.fillRect(0,0,1,1);let[s,i,o]=r.getImageData(0,0,1,1).data;return`#${[s,i,o].map((l)=>l.toString(16).padStart(2,"0")).join("")}`}catch{return""}}var ut=`
 :root{
   --alm-ink:var(--lumiverse-text,#2a231d);
   --alm-muted:var(--lumiverse-text-muted,#76695a);
@@ -2229,8 +300,7 @@ var TOKENS = `
   --alm-texture:radial-gradient(color-mix(in oklab,var(--alm-ink) 7%,transparent) 1px,transparent 1.3px) 0 0/15px 15px;
   --alm-on-voice:#fff; --alm-on-accent:#fff;
 }
-`;
-var MESSAGE_CSS = `
+`,ht=`
 .alm-sr{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important}
 
 /* ── Voice cards (Blocks) ── */
@@ -2532,8 +602,7 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
   .alm-km__c .alm-kp__n{flex-basis:100%;max-width:none;margin-top:0}
   .alm-km__c[data-who]::before{content:attr(data-who);font:500 10.5px/1 var(--alm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--alm-muted)}
 }
-`;
-var PANEL_CSS = `
+`,ft=`
 .almp{--c:var(--alm-accent);color:var(--alm-ink);font-family:var(--alm-font-body);font-size:14px;line-height:1.5;padding:0}
 .almp *{box-sizing:border-box}
 .almp h3{margin:14px 0 8px;font:600 17px/1.2 var(--alm-font-display)}
@@ -2723,969 +792,127 @@ var PANEL_CSS = `
 .almo-dial.spin::after{animation:almo-orbit 3s linear infinite}
 @keyframes almo-orbit{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.almo-moonb,.almo-dial.spin::after{animation:none}.almo.orbiting .almo-body,.almo.orbiting .almo-sky{transition:none}}
-`;
-
-// src/core/engines/calendars.ts
-var m = (name, days) => ({ name, days });
-var fest = (name, weekless = false) => ({ name, days: 1, festival: true, ...weekless ? { weekless } : {} });
-var ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth", "Eleventh", "Twelfth"];
-var MOON_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-var VORIN = ["Jes", "Nan", "Chach", "Vev", "Palah", "Shash", "Betab", "Kak", "Tanat", "Ishi"];
-var CALENDAR_PRESETS = [
-  {
-    id: "westeros",
-    label: "Westeros (A Song of Ice and Fire)",
-    name: "Westeros",
-    start: "Day 1 · 14th day of the Fifth Moon, 299 AC · 18:40",
-    match: /\bwesteros|song of ice and fire|\basoiaf\b|game of thrones|after (the )?conquest|\bseven kingdoms\b/i,
-    build: () => ({
-      months: ORDINALS.map((o, i) => m(`${o} Moon`, MOON_DAYS[i])),
-      weekdays: [],
-      yearLabel: "AC",
-      format: "{ord} day of the {month}, {year} {era}",
-      seasons: "story",
-      note: "Westerosi reckoning: years After the Conquest (AC), months counted as moons. Seasons last years, not months, and turn only when the Citadel sends its white ravens."
-    })
-  },
-  {
-    id: "roshar",
-    label: "Roshar (The Stormlight Archive)",
-    name: "Roshar",
-    start: "Day 1 · 23 Tanat 1174 · 18:40",
-    match: /\broshar|stormlight|\bvorin\b|\balethkar\b|\burithiru\b/i,
-    build: () => ({
-      months: VORIN.map((n) => m(n, 50)),
-      weekdays: [],
-      format: "{day} {month} {year}",
-      seasons: "story",
-      named: [{ name: "the Weeping", month: 9, day: 31, days: 40 }],
-      moons: [{ name: "Salas", period: 19 }, { name: "Nomon", period: 31 }, { name: "Mishim", period: 43 }],
-      note: "Rosharan reckoning: ten months of fifty days (five weeks of ten), five hundred days a year. Seasons are irregular and last weeks, not months. The Weeping, four weeks of unbroken rain, straddles the new year; highstorms sweep in from the east every few days, and people plan around them."
-    })
-  },
-  {
-    id: "harptos",
-    label: "Calendar of Harptos (Forgotten Realms)",
-    name: "Harptos",
-    start: "Day 1 · 14 Marpenoth 1492 DR · 18:40",
-    match: /\bharptos|forgotten realms|faer[uû]n|\bdalereckoning\b|\bD\.?R\.?\s*$/i,
-    build: () => ({
-      months: [
-        m("Hammer", 30),
-        fest("Midwinter"),
-        m("Alturiak", 30),
-        m("Ches", 30),
-        m("Tarsakh", 30),
-        fest("Greengrass"),
-        m("Mirtul", 30),
-        m("Kythorn", 30),
-        m("Flamerule", 30),
-        fest("Midsummer"),
-        m("Eleasis", 30),
-        m("Eleint", 30),
-        fest("Highharvestide"),
-        m("Marpenoth", 30),
-        m("Uktar", 30),
-        fest("Feast of the Moon"),
-        m("Nightal", 30)
-      ],
-      weekdays: [],
-      yearLabel: "DR",
-      leap: { after: 9, name: "Shieldmeet", every: 4 },
-      note: "Calendar of Harptos: twelve months of thirty days in three tendays each, with five festival days between months and Shieldmeet after Midsummer every fourth year. Years are Dalereckoning (DR)."
-    })
-  },
-  {
-    id: "shire",
-    label: "Shire Reckoning (Middle-earth)",
-    name: "Shire Reckoning",
-    start: "Day 1 · 22 Halimath 1418 S.R. · 18:40",
-    match: /\bshire reckoning|\bshire\b|middle[- ]earth|\bS\.?R\.?\s*$/i,
-    build: () => ({
-      months: [
-        fest("2 Yule"),
-        m("Afteryule", 30),
-        m("Solmath", 30),
-        m("Rethe", 30),
-        m("Astron", 30),
-        m("Thrimidge", 30),
-        m("Forelithe", 30),
-        fest("1 Lithe"),
-        fest("Mid-year's Day", true),
-        fest("2 Lithe"),
-        m("Afterlithe", 30),
-        m("Wedmath", 30),
-        m("Halimath", 30),
-        m("Winterfilth", 30),
-        m("Blotmath", 30),
-        m("Foreyule", 30),
-        fest("1 Yule")
-      ],
-      weekdays: ["Sterday", "Sunday", "Monday", "Trewsday", "Hevensday", "Mersday", "Highday"],
-      yearStartWeekday: 0,
-      yearLabel: "S.R.",
-      leap: { after: 8, name: "Overlithe", every: 4, skipCentury: true, weekless: true },
-      note: "Shire Reckoning: twelve months of thirty days with the Yule and Lithe days between them. Every year begins on a Sterday, because Mid-year's Day and Overlithe belong to no week."
-    })
-  }
-];
-function presetFor(text) {
-  const t = (text ?? "").split(/[;\n]/)[0];
-  return t.trim() ? CALENDAR_PRESETS.find((p) => p.match.test(t)) : undefined;
-}
-
-// src/core/engines/calendar.ts
-var GREG_MONTHS = [
-  ["January", 31],
-  ["February", 28],
-  ["March", 31],
-  ["April", 30],
-  ["May", 31],
-  ["June", 30],
-  ["July", 31],
-  ["August", 31],
-  ["September", 30],
-  ["October", 31],
-  ["November", 30],
-  ["December", 31]
-];
-var GREG_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-function defaultCalendar() {
-  return {
-    months: GREG_MONTHS.map(([name, days]) => ({ name, days })),
-    weekdays: [...GREG_DAYS],
-    startDoy: 284,
-    startWeekday: 0,
-    hemisphere: "north",
-    custom: false,
-    named: [],
-    seasons: "solar"
-  };
-}
-function yearLength(cal) {
-  return cal.months.reduce((s, m) => s + m.days, 0) || 365;
-}
-function isLeap(y) {
-  return y % 4 === 0 && y % 100 !== 0 || y % 400 === 0;
-}
-function monthsFor(cal, year) {
-  if (year == null)
-    return cal.months;
-  if (!cal.custom) {
-    if (!isLeap(year))
-      return cal.months;
-    return cal.months.map((m, i) => i === 1 ? { ...m, days: m.days + 1 } : m);
-  }
-  const lp = cal.leap;
-  if (!lp || year % lp.every !== 0 || lp.skipCentury && year % 100 === 0 && year % 400 !== 0)
-    return cal.months;
-  const out = cal.months.slice();
-  out.splice(lp.after + 1, 0, { name: lp.name, days: 1, festival: true, ...lp.weekless ? { weekless: true } : {} });
-  return out;
-}
-var sumDays = (months) => months.reduce((s, m) => s + m.days, 0) || 365;
-function weekedDays(months, from, to) {
-  let n = 0;
-  let at = 0;
-  for (const m of months) {
-    const a = Math.max(from, at);
-    const b = Math.min(to, at + m.days);
-    if (b > a && !m.weekless)
-      n += b - a;
-    at += m.days;
-  }
-  return n;
-}
-function gregWeekday(y, m, d) {
-  const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
-  let yy = y;
-  if (m < 3)
-    yy -= 1;
-  const sun0 = (yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) + t[m - 1] + d) % 7;
-  return (sun0 + 6) % 7;
-}
-var SEASON_DOY = [
-  [/\bearly spring\b/i, 75],
-  [/\blate spring\b/i, 150],
-  [/\bspring\b/i, 110],
-  [/\bearly summer\b/i, 165],
-  [/\blate summer\b/i, 225],
-  [/\bmidsummer\b/i, 172],
-  [/\bsummer\b/i, 195],
-  [/\bearly autumn\b|\bearly fall\b/i, 258],
-  [/\blate autumn\b|\blate fall\b/i, 318],
-  [/\bautumn\b|\bfall\b/i, 288],
-  [/\bearly winter\b/i, 345],
-  [/\blate winter\b/i, 50],
-  [/\bmidwinter\b/i, 355],
-  [/\bwinter\b/i, 20]
-];
-function seasonOf(text) {
-  const m = /(spring|summer|autumn|fall|winter)/i.exec(text ?? "");
-  if (!m)
-    return;
-  const s = m[1].toLowerCase();
-  return s === "fall" ? "autumn" : s;
-}
-var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-function findDate(cal, text) {
-  let best = null;
-  const yearTail = `(?:,?\\s+(\\d{1,5})(?![:.]?\\d))?`;
-  const consider = (re, month, dayGroup, yearGroup) => {
-    const r = re.exec(text);
-    if (!r || best && best.at <= r.index)
-      return;
-    const day = dayGroup ? parseInt(r[dayGroup], 10) : 1;
-    if (day < 1 || day > cal.months[month].days)
-      return;
-    best = { at: r.index, month, day, year: r[yearGroup] ? parseInt(r[yearGroup], 10) : undefined };
-  };
-  cal.months.forEach((mo, i) => {
-    const n = esc(mo.name);
-    if (mo.festival && mo.days === 1) {
-      consider(new RegExp(`(?<![\\w'])${n}(?![\\w'])${yearTail}`, "i"), i, null, 1);
-      return;
-    }
-    consider(new RegExp(`(?<![\\w:])(\\d{1,3})(?:st|nd|rd|th)?\\s+(?:day\\s+)?(?:of\\s+)?(?:the\\s+)?${n}(?![\\w'])${yearTail}`, "i"), i, 1, 2);
-    consider(new RegExp(`(?<![\\w'])${n}\\s+(\\d{1,3})(?:st|nd|rd|th)?(?![:.]?\\d)${yearTail}`, "i"), i, 1, 2);
-  });
-  return best;
-}
-function parseMonth(raw) {
-  let s = raw.trim();
-  let festival = false;
-  let weekless = false;
-  let days;
-  const br = /^\[(.+)\]$/.exec(s);
-  if (br) {
-    festival = true;
-    s = br[1].trim();
-  }
-  const pm = /^(.+?)\s*\(([^)]*)\)$/.exec(s);
-  if (pm) {
-    s = pm[1].trim();
-    for (const f of pm[2].split(/\s*,\s*/)) {
-      if (/^\d+$/.test(f))
-        days = parseInt(f, 10);
-      else if (/festival|holiday|intercalary/i.test(f))
-        festival = true;
-      else if (/weekless|no week/i.test(f))
-        weekless = true;
-    }
-  }
-  if (!s)
-    return null;
-  return { name: s, days: days ?? (festival ? 1 : 30), ...festival ? { festival } : {}, ...weekless ? { weekless } : {} };
-}
-var splitList = (s) => s.split(/\s*,\s*(?![^()[\]]*[)\]])/).map((x) => x.trim()).filter(Boolean);
-function buildCalendar(opts) {
-  let cal = defaultCalendar();
-  let text = opts.calendar ?? "";
-  const preset = presetFor(text);
-  if (preset) {
-    cal = { ...cal, startDoy: 0, ...preset.build(), custom: true, preset: preset.id };
-    cal.named = cal.named.map((h) => ({ ...h }));
-  }
-  if (/\bsouth(ern)?\b|-\d/.test(opts.latitude ?? ""))
-    cal.hemisphere = "south";
-  const fm = /\bformat\s*[:=]\s*([^;\n]+)/i.exec(text);
-  if (fm) {
-    cal.format = fm[1].trim();
-    text = text.replace(fm[0], "");
-  }
-  const wd = /weekdays?\s*[:=]?\s*([^;\n]+)/i.exec(text);
-  if (wd) {
-    const list = wd[1].split(/\s*[,/·]\s*/).filter(Boolean);
-    if (/^(none|no names?|unnamed|nameless)\b/i.test(wd[1].trim())) {
-      cal.weekdays = [];
-      cal.custom = true;
-    } else if (list.length >= 3) {
-      cal.weekdays = list.map((s) => s.trim());
-      cal.custom = true;
-    } else {
-      const range = /([A-Z][a-z]+)\s*[–-]\s*([A-Z][a-z]+)/.exec(wd[1]);
-      if (range && !GREG_DAYS.includes(range[1])) {
-        cal.weekdays = [range[1], ...GREG_DAYS.slice(1, 6), range[2]];
-        cal.custom = true;
-      }
-    }
-  }
-  const mo = /months?\s*[:=]?\s*([^;\n]+)/i.exec(text);
-  let monthsSet = false;
-  if (mo) {
-    const list = splitList(mo[1]).map(parseMonth).filter((x) => !!x);
-    if (list.length >= 2) {
-      cal.months = list;
-      cal.custom = true;
-      monthsSet = true;
-      if (cal.leap && cal.leap.after >= list.length)
-        cal.leap = undefined;
-      cal.named = [];
-    }
-  }
-  const yl = /(?:^|[;\n,])\s*(?:year(?:\s*label)?|era)\b\s*[:=]?\s*([^;\n]+)/i.exec(text);
-  if (yl) {
-    const v = yl[1].trim();
-    const num = /^(\d{1,5})\b\s*(.*)$/.exec(v);
-    if (num) {
-      cal.startYear = parseInt(num[1], 10);
-      if (num[2].trim())
-        cal.yearLabel = num[2].trim();
-    } else
-      cal.yearLabel = v;
-  }
-  const lp = /\bleap(?:\s*day)?\s*[:=]?\s*(.+?)\s+after\s+(.+?)\s+every\s+(\d+)/i.exec(text);
-  if (lp) {
-    const after = cal.months.findIndex((x) => x.name.toLowerCase() === lp[2].trim().toLowerCase());
-    if (after >= 0)
-      cal.leap = { after, name: lp[1].trim(), every: parseInt(lp[3], 10), weekless: /weekless|no week/i.test(/[^;\n]*/.exec(text.slice(lp.index))[0]) };
-  }
-  const se = /\bseasons?\s*[:=]\s*([^;\n]+)/i.exec(text);
-  if (se)
-    cal.seasons = /story|irregular|declared|set|years?\b/i.test(se[1]) ? "story" : "solar";
-  const mn = /\bmoons?\s*[:=]\s*([^;\n]+)/i.exec(text);
-  if (mn) {
-    const moons = splitList(mn[1]).map((s) => {
-      const x = /^(.+?)\s*\(\s*(\d+(?:\.\d+)?)[^)]*\)$/.exec(s);
-      return x ? { name: x[1].trim(), period: parseFloat(x[2]) } : { name: s, period: 29.530588 };
-    }).filter((x) => x.name && x.period > 0);
-    if (moons.length)
-      cal.moons = moons;
-  }
-  const named = /holidays?\s*[:=]\s*([^;\n]+)/i.exec(text);
-  const namedMonths = !!preset || monthsSet;
-  const sp = `${opts.startPoint ?? ""} ${opts.headerDate ?? ""}`;
-  let placed = false;
-  if (namedMonths) {
-    const f = findDate(cal, sp);
-    if (f) {
-      if (f.year != null)
-        cal.startYear = f.year;
-      const months = monthsFor(cal, cal.startYear);
-      const mi = months.findIndex((x) => x.name === cal.months[f.month].name);
-      cal.startDoy = months.slice(0, mi).reduce((s, x) => s + x.days, 0) + f.day - 1;
-      placed = true;
-    }
-  } else {
-    const dm = /(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Z][a-zA-Z]+)(?:,?\s+(\d{1,5}))?/.exec(sp) || /([A-Z][a-zA-Z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{1,5}))?/.exec(sp);
-    if (dm) {
-      const [dStr, mStr] = /^\d/.test(dm[1]) ? [dm[1], dm[2]] : [dm[2], dm[1]];
-      const mi = cal.months.findIndex((m) => m.name.toLowerCase().startsWith(mStr.toLowerCase().slice(0, 3)));
-      if (mi >= 0) {
-        const day = parseInt(dStr, 10);
-        if (dm[3])
-          cal.startYear = parseInt(dm[3], 10);
-        cal.startDoy = monthsFor(cal, cal.startYear).slice(0, mi).reduce((s, m) => s + m.days, 0) + day - 1;
-        placed = true;
-        if (!cal.custom && cal.startYear)
-          cal.startWeekday = gregWeekday(cal.startYear, mi + 1, day);
-      } else if (!GREG_DAYS.some((d) => d.toLowerCase() === mStr.toLowerCase())) {
-        cal.custom = true;
-        cal.months = Array.from({ length: 12 }, (_, i) => ({ name: i === 0 ? mStr : `Month ${i + 1}`, days: 30 }));
-        cal.startDoy = parseInt(dStr, 10) - 1;
-        placed = true;
-      }
-    }
-  }
-  if (!placed && namedMonths)
-    cal.startDoy = 0;
-  if (!placed && cal.seasons === "solar") {
-    const txt = `${opts.climate ?? ""} ${opts.startPoint ?? ""}`;
-    for (const [re, doy] of SEASON_DOY)
-      if (re.test(txt)) {
-        cal.startDoy = Math.round(doy / 365 * yearLength(cal));
-        break;
-      }
-  }
-  if (cal.seasons === "story")
-    cal.season0 = seasonOf(`${opts.startPoint ?? ""} ${opts.climate ?? ""}`) ?? "summer";
-  const wname = cal.weekdays.findIndex((w) => new RegExp(`\\b${w}\\b`, "i").test(sp));
-  if (wname >= 0)
-    cal.startWeekday = wname;
-  const fromHeader = !!opts.headerDate && !/(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?[A-Z][a-zA-Z]+|[A-Z][a-zA-Z]+\s+\d{1,2}\b|day\s*\d+/i.test(opts.startPoint ?? "");
-  const shift = fromHeader && opts.anchorDay && opts.anchorDay > 1 ? opts.anchorDay - 1 : 0;
-  if (shift && cal.weekdays.length)
-    cal.startWeekday = ((cal.startWeekday - shift) % cal.weekdays.length + cal.weekdays.length) % cal.weekdays.length;
-  if (shift) {
-    cal.startDoy -= shift;
-    while (cal.startDoy < 0) {
-      if (cal.startYear != null)
-        cal.startYear--;
-      cal.startDoy += sumDays(monthsFor(cal, cal.startYear));
-    }
-  }
-  if (named) {
-    for (const h of splitList(named[1])) {
-      const paren = /^(.+?)\s*\((.+)\)$/.exec(h);
-      const name = paren ? paren[1] : /^(.+?)\s+(?=\d)/.exec(h)?.[1];
-      const when = paren ? paren[2] : h.slice(name?.length ?? 0);
-      if (!name)
-        continue;
-      const f = findDate(cal, when) ?? (() => {
-        const x = /(\d{1,2})\s+([A-Za-z]+)/.exec(when);
-        const mi = x ? cal.months.findIndex((m) => m.name.toLowerCase().startsWith(x[2].toLowerCase().slice(0, 3))) : -1;
-        return x && mi >= 0 ? { month: mi, day: parseInt(x[1], 10) } : null;
-      })();
-      const span = /(\d+)\s*days?\b/i.exec(when);
-      if (f)
-        cal.named.push({ name: name.trim(), month: f.month, day: f.day, ...span ? { days: parseInt(span[1], 10) } : {} });
-    }
-  }
-  return cal;
-}
-function dateFor(cal, day, storySeason) {
-  const offset = day - 1;
-  let year = cal.startYear;
-  let months = monthsFor(cal, year);
-  let yl = sumDays(months);
-  let doy = cal.startDoy + offset;
-  let from = cal.startDoy;
-  let weeked = 0;
-  while (doy >= yl) {
-    weeked += weekedDays(months, from, yl);
-    doy -= yl;
-    from = 0;
-    if (year != null)
-      year++;
-    months = monthsFor(cal, year);
-    yl = sumDays(months);
-  }
-  weeked += weekedDays(months, from, doy);
-  let rem = doy;
-  let mi = 0;
-  for (;mi < months.length; mi++) {
-    if (rem < months[mi].days)
-      break;
-    rem -= months[mi].days;
-  }
-  if (mi >= months.length)
-    mi = months.length - 1;
-  const month = months[mi];
-  const n = cal.weekdays.length;
-  const wIdx = cal.yearStartWeekday != null ? cal.yearStartWeekday + weekedDays(months, 0, doy) : cal.startWeekday + weeked;
-  const weekday = n && !month.weekless ? cal.weekdays[(wIdx % n + n) % n] : "";
-  let season;
-  let seasonDetail;
-  if (cal.seasons === "story") {
-    season = seasonOf(storySeason) ?? cal.season0 ?? "summer";
-    seasonDetail = storySeason?.trim().toLowerCase() || season;
-  } else {
-    const frac = doy / yl;
-    const northSeason = frac < 0.214 || frac >= 0.97 ? "winter" : frac < 0.47 ? "spring" : frac < 0.72 ? "summer" : "autumn";
-    const flip = { winter: "summer", summer: "winter", spring: "autumn", autumn: "spring" };
-    season = cal.hemisphere === "south" ? flip[northSeason] : northSeason;
-    seasonDetail = `${seasonPhase(frac)} ${season}`;
-  }
-  const holiday = cal.named.find((h) => {
-    const hm = months.findIndex((x) => x.name === cal.months[h.month]?.name);
-    if (hm < 0)
-      return false;
-    const start = months.slice(0, hm).reduce((s, x) => s + x.days, 0) + h.day - 1;
-    return ((doy - start) % yl + yl) % yl < (h.days ?? 1);
-  })?.name;
-  return {
-    day,
-    weekday,
-    dayOfMonth: rem + 1,
-    month: month.name,
-    monthIndex: mi,
-    ...month.festival ? { festival: true } : {},
-    year,
-    doy,
-    season,
-    seasonDetail,
-    holiday
-  };
-}
-function seasonPhase(frac) {
-  const windows = [[-0.03, 0.214], [0.214, 0.47], [0.47, 0.72], [0.72, 0.97]];
-  const f = frac >= 0.97 ? frac - 1 : frac;
-  const w = windows.find(([s, e]) => f >= s && f < e) ?? windows[0];
-  const p = (f - w[0]) / (w[1] - w[0]);
-  return p < 0.33 ? "early" : p < 0.67 ? "mid" : "late";
-}
-function ordinal(n) {
-  const t = n % 100;
-  const s = t >= 11 && t <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";
-  return `${n}${s}`;
-}
-var DEFAULT_FORMAT = "{weekday} {day} {month} {year} {era}";
-function fmtDate(cal, day) {
-  const d = dateFor(cal, day);
-  const f = d.festival ? "{weekday} {month} {year} {era}" : cal.format ?? DEFAULT_FORMAT;
-  const tokens = {
-    weekday: d.weekday,
-    day: String(d.dayOfMonth),
-    ord: ordinal(d.dayOfMonth),
-    month: d.month,
-    year: d.year != null ? String(d.year) : "",
-    era: d.year != null ? cal.yearLabel ?? "" : ""
-  };
-  const out = f.replace(/\{(\w+)\}/g, (_, k) => tokens[k] ?? "").replace(/\s+,/g, ",").replace(/,(\s*,)+/g, ",").replace(/\s{2,}/g, " ").replace(/^[\s,]+|[\s,]+$/g, "");
-  return `${out}${d.holiday ? ` (${d.holiday})` : ""}`;
-}
-
-// src/frontend/sessionzero.ts
-var GENRES = [
-  ["slice_of_life", "Slice of life"],
-  ["romance", "Romance"],
-  ["drama", "Drama"],
-  ["comedy", "Comedy"],
-  ["mystery", "Mystery"],
-  ["thriller", "Thriller"],
-  ["horror", "Horror"],
-  ["fantasy", "Fantasy"],
-  ["dark_fantasy", "Dark fantasy"],
-  ["scifi", "Science fiction"],
-  ["adventure", "Adventure"],
-  ["noir", "Noir"],
-  ["intrigue", "Political intrigue"],
-  ["tragedy", "Tragedy"],
-  ["action", "Action"],
-  ["cozy", "Cozy"],
-  ["survival", "Survival"],
-  ["erotic", "Erotic romance"]
-];
-var TONES = [["", "(preset setting)"], ["balanced", "Balanced"], ["warm", "Warm"], ["wry", "Wry"], ["melancholy", "Melancholy"], ["tense", "Tense"], ["lurid", "Lurid"], ["austere", "Austere"]];
-var PERSONA = [["", "(preset setting)"], ["sealed", "Sealed — only I write my persona"], ["continuity", "Continuity — finish my obvious actions"], ["director", "Director — perform what I direct"], ["full_cast", "Full cast — write my persona too"]];
-var NSFW = [["", "(preset setting)"], ["off", "Off"], ["fade", "Fade to black"], ["sensual", "Sensual"], ["explicit", "Explicit (adults only)"]];
-var ROMANCE = [["", "(preset setting)"], ["off", "Off"], ["slow", "Slow burn"], ["measured", "Measured"], ["fast", "Fast"], ["established", "Established couple"]];
-var DIFFICULTY = [["", "(preset setting)"], ["gentle", "Gentle"], ["grounded", "Grounded"], ["hard", "Hard"], ["brutal", "Brutal"]];
-var THEMES = [["", "Auto (by genre)"], ...SKIN_LIST];
-var ORIGINAL_CALENDAR = "months: Thaw (30), Bloom (30), [Greenfest], Highsun (30), Harvest (30), Fade (30), Deepwinter (30); weekdays: Firstday, Seconday, Midday, Fourthday, Restday; year: 1 AR; seasons: solar";
-var CAL_START_DEFAULT = "Day 1 · 14 October 1923 · 18:40";
-function calendarKind(text) {
-  if (!text?.trim() || /^gregorian\b/i.test(text.trim()))
-    return "";
-  return presetFor(text)?.id ?? "original";
-}
-function calendarPreview(calendar, startPoint, climate, latitude) {
-  try {
-    const cal = buildCalendar({ calendar, startPoint, climate, latitude });
-    return `Day 1 is ${fmtDate(cal, 1)} · ${dateFor(cal, 1).seasonDetail}`;
-  } catch {
-    return "";
-  }
-}
-var TRACKERS = [["scene", "Scene"], ["cast", "Cast"], ["bonds", "Bonds"], ["thoughts", "Thoughts"], ["inventory", "Inventory"], ["threads", "Threads & clocks"], ["knowledge", "Knowledge"], ["consequences", "Consequences"], ["world", "World"]];
-function openSessionZero(ctx, chatId, current) {
-  let modal;
-  try {
-    modal = ctx.ui.showModal({ title: "Session Zero · ALMANAC", width: 640, maxHeight: 760 });
-  } catch {
-    return;
-  }
-  const cfg = current ?? {};
-  const sel = (id, opts, val) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${k}"${(val ?? "") === k ? " selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select>`;
-  const genres = new Set(cfg.genres ?? []);
-  const trackers = new Set(cfg.trackers ?? ["scene", "cast", "bonds", "thoughts", "inventory", "threads", "knowledge"]);
-  modal.root.innerHTML = `<div class="almp alm-sz">
+`;var O=(e,t)=>({name:e,days:t}),U=(e,t=!1)=>({name:e,days:1,festival:!0,...t?{weekless:t}:{}}),Jt=["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth","Eleventh","Twelfth"],Xt=[31,28,31,30,31,30,31,31,30,31,30,31],Qt=["Jes","Nan","Chach","Vev","Palah","Shash","Betab","Kak","Tanat","Ishi"],we=[{id:"westeros",label:"Westeros (A Song of Ice and Fire)",name:"Westeros",start:"Day 1 · 14th day of the Fifth Moon, 299 AC · 18:40",match:/\bwesteros|song of ice and fire|\basoiaf\b|game of thrones|after (the )?conquest|\bseven kingdoms\b/i,build:()=>({months:Jt.map((e,t)=>O(`${e} Moon`,Xt[t])),weekdays:[],yearLabel:"AC",format:"{ord} day of the {month}, {year} {era}",seasons:"story",note:"Westerosi reckoning: years After the Conquest (AC), months counted as moons. Seasons last years, not months, and turn only when the Citadel sends its white ravens."})},{id:"roshar",label:"Roshar (The Stormlight Archive)",name:"Roshar",start:"Day 1 · 23 Tanat 1174 · 18:40",match:/\broshar|stormlight|\bvorin\b|\balethkar\b|\burithiru\b/i,build:()=>({months:Qt.map((e)=>O(e,50)),weekdays:[],format:"{day} {month} {year}",seasons:"story",named:[{name:"the Weeping",month:9,day:31,days:40}],moons:[{name:"Salas",period:19},{name:"Nomon",period:31},{name:"Mishim",period:43}],note:"Rosharan reckoning: ten months of fifty days (five weeks of ten), five hundred days a year. Seasons are irregular and last weeks, not months. The Weeping, four weeks of unbroken rain, straddles the new year; highstorms sweep in from the east every few days, and people plan around them."})},{id:"harptos",label:"Calendar of Harptos (Forgotten Realms)",name:"Harptos",start:"Day 1 · 14 Marpenoth 1492 DR · 18:40",match:/\bharptos|forgotten realms|faer[uû]n|\bdalereckoning\b|\bD\.?R\.?\s*$/i,build:()=>({months:[O("Hammer",30),U("Midwinter"),O("Alturiak",30),O("Ches",30),O("Tarsakh",30),U("Greengrass"),O("Mirtul",30),O("Kythorn",30),O("Flamerule",30),U("Midsummer"),O("Eleasis",30),O("Eleint",30),U("Highharvestide"),O("Marpenoth",30),O("Uktar",30),U("Feast of the Moon"),O("Nightal",30)],weekdays:[],yearLabel:"DR",leap:{after:9,name:"Shieldmeet",every:4},note:"Calendar of Harptos: twelve months of thirty days in three tendays each, with five festival days between months and Shieldmeet after Midsummer every fourth year. Years are Dalereckoning (DR)."})},{id:"shire",label:"Shire Reckoning (Middle-earth)",name:"Shire Reckoning",start:"Day 1 · 22 Halimath 1418 S.R. · 18:40",match:/\bshire reckoning|\bshire\b|middle[- ]earth|\bS\.?R\.?\s*$/i,build:()=>({months:[U("2 Yule"),O("Afteryule",30),O("Solmath",30),O("Rethe",30),O("Astron",30),O("Thrimidge",30),O("Forelithe",30),U("1 Lithe"),U("Mid-year's Day",!0),U("2 Lithe"),O("Afterlithe",30),O("Wedmath",30),O("Halimath",30),O("Winterfilth",30),O("Blotmath",30),O("Foreyule",30),U("1 Yule")],weekdays:["Sterday","Sunday","Monday","Trewsday","Hevensday","Mersday","Highday"],yearStartWeekday:0,yearLabel:"S.R.",leap:{after:8,name:"Overlithe",every:4,skipCentury:!0,weekless:!0},note:"Shire Reckoning: twelve months of thirty days with the Yule and Lithe days between them. Every year begins on a Sterday, because Mid-year's Day and Overlithe belong to no week."})}];function le(e){let t=(e??"").split(/[;\n]/)[0];return t.trim()?we.find((a)=>a.match.test(t)):void 0}var ea=[["January",31],["February",28],["March",31],["April",30],["May",31],["June",30],["July",31],["August",31],["September",30],["October",31],["November",30],["December",31]],ve=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];function ta(){return{months:ea.map(([e,t])=>({name:e,days:t})),weekdays:[...ve],startDoy:284,startWeekday:0,hemisphere:"north",custom:!1,named:[],seasons:"solar"}}function aa(e){return e.months.reduce((t,a)=>t+a.days,0)||365}function na(e){return e%4===0&&e%100!==0||e%400===0}function ce(e,t){if(t==null)return e.months;if(!e.custom){if(!na(t))return e.months;return e.months.map((s,i)=>i===1?{...s,days:s.days+1}:s)}let a=e.leap;if(!a||t%a.every!==0||a.skipCentury&&t%100===0&&t%400!==0)return e.months;let r=e.months.slice();return r.splice(a.after+1,0,{name:a.name,days:1,festival:!0,...a.weekless?{weekless:!0}:{}}),r}var Ne=(e)=>e.reduce((t,a)=>t+a.days,0)||365;function Re(e,t,a){let r=0,s=0;for(let i of e){let o=Math.max(t,s),l=Math.min(a,s+i.days);if(l>o&&!i.weekless)r+=l-o;s+=i.days}return r}function ra(e,t,a){let r=[0,3,2,5,0,3,5,1,4,6,2,4],s=e;if(t<3)s-=1;return((s+Math.floor(s/4)-Math.floor(s/100)+Math.floor(s/400)+r[t-1]+a)%7+6)%7}var sa=[[/\bearly spring\b/i,75],[/\blate spring\b/i,150],[/\bspring\b/i,110],[/\bearly summer\b/i,165],[/\blate summer\b/i,225],[/\bmidsummer\b/i,172],[/\bsummer\b/i,195],[/\bearly autumn\b|\bearly fall\b/i,258],[/\blate autumn\b|\blate fall\b/i,318],[/\bautumn\b|\bfall\b/i,288],[/\bearly winter\b/i,345],[/\blate winter\b/i,50],[/\bmidwinter\b/i,355],[/\bwinter\b/i,20]];function bt(e){let t=/(spring|summer|autumn|fall|winter)/i.exec(e??"");if(!t)return;let a=t[1].toLowerCase();return a==="fall"?"autumn":a}var oa=(e)=>e.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/\s+/g,"\\s+");function gt(e,t){let a=null,r="(?:,?\\s+(\\d{1,5})(?![:.]?\\d))?",s=(i,o,l,d)=>{let c=i.exec(t);if(!c||a&&a.at<=c.index)return;let u=l?parseInt(c[l],10):1;if(u<1||u>e.months[o].days)return;a={at:c.index,month:o,day:u,year:c[d]?parseInt(c[d],10):void 0}};return e.months.forEach((i,o)=>{let l=oa(i.name);if(i.festival&&i.days===1){s(new RegExp(`(?<![\\w'])${l}(?![\\w'])${r}`,"i"),o,null,1);return}s(new RegExp(`(?<![\\w:])(\\d{1,3})(?:st|nd|rd|th)?\\s+(?:day\\s+)?(?:of\\s+)?(?:the\\s+)?${l}(?![\\w'])${r}`,"i"),o,1,2),s(new RegExp(`(?<![\\w'])${l}\\s+(\\d{1,3})(?:st|nd|rd|th)?(?![:.]?\\d)${r}`,"i"),o,1,2)}),a}function ia(e){let t=e.trim(),a=!1,r=!1,s,i=/^\[(.+)\]$/.exec(t);if(i)a=!0,t=i[1].trim();let o=/^(.+?)\s*\(([^)]*)\)$/.exec(t);if(o){t=o[1].trim();for(let l of o[2].split(/\s*,\s*/))if(/^\d+$/.test(l))s=parseInt(l,10);else if(/festival|holiday|intercalary/i.test(l))a=!0;else if(/weekless|no week/i.test(l))r=!0}if(!t)return null;return{name:t,days:s??(a?1:30),...a?{festival:a}:{},...r?{weekless:r}:{}}}var Oe=(e)=>e.split(/\s*,\s*(?![^()[\]]*[)\]])/).map((t)=>t.trim()).filter(Boolean);function xt(e){let t=ta(),a=e.calendar??"",r=le(a);if(r)t={...t,startDoy:0,...r.build(),custom:!0,preset:r.id},t.named=t.named.map((v)=>({...v}));if(/\bsouth(ern)?\b|-\d/.test(e.latitude??""))t.hemisphere="south";let s=/\bformat\s*[:=]\s*([^;\n]+)/i.exec(a);if(s)t.format=s[1].trim(),a=a.replace(s[0],"");let i=/weekdays?\s*[:=]?\s*([^;\n]+)/i.exec(a);if(i){let v=i[1].split(/\s*[,/·]\s*/).filter(Boolean);if(/^(none|no names?|unnamed|nameless)\b/i.test(i[1].trim()))t.weekdays=[],t.custom=!0;else if(v.length>=3)t.weekdays=v.map((b)=>b.trim()),t.custom=!0;else{let b=/([A-Z][a-z]+)\s*[–-]\s*([A-Z][a-z]+)/.exec(i[1]);if(b&&!ve.includes(b[1]))t.weekdays=[b[1],...ve.slice(1,6),b[2]],t.custom=!0}}let o=/months?\s*[:=]?\s*([^;\n]+)/i.exec(a),l=!1;if(o){let v=Oe(o[1]).map(ia).filter((b)=>!!b);if(v.length>=2){if(t.months=v,t.custom=!0,l=!0,t.leap&&t.leap.after>=v.length)t.leap=void 0;t.named=[]}}let d=/(?:^|[;\n,])\s*(?:year(?:\s*label)?|era)\b\s*[:=]?\s*([^;\n]+)/i.exec(a);if(d){let v=d[1].trim(),b=/^(\d{1,5})\b\s*(.*)$/.exec(v);if(b){if(t.startYear=parseInt(b[1],10),b[2].trim())t.yearLabel=b[2].trim()}else t.yearLabel=v}let c=/\bleap(?:\s*day)?\s*[:=]?\s*(.+?)\s+after\s+(.+?)\s+every\s+(\d+)/i.exec(a);if(c){let v=t.months.findIndex((b)=>b.name.toLowerCase()===c[2].trim().toLowerCase());if(v>=0)t.leap={after:v,name:c[1].trim(),every:parseInt(c[3],10),weekless:/weekless|no week/i.test(/[^;\n]*/.exec(a.slice(c.index))[0])}}let u=/\bseasons?\s*[:=]\s*([^;\n]+)/i.exec(a);if(u)t.seasons=/story|irregular|declared|set|years?\b/i.test(u[1])?"story":"solar";let m=/\bmoons?\s*[:=]\s*([^;\n]+)/i.exec(a);if(m){let v=Oe(m[1]).map((b)=>{let E=/^(.+?)\s*\(\s*(\d+(?:\.\d+)?)[^)]*\)$/.exec(b);return E?{name:E[1].trim(),period:parseFloat(E[2])}:{name:b,period:29.530588}}).filter((b)=>b.name&&b.period>0);if(v.length)t.moons=v}let g=/holidays?\s*[:=]\s*([^;\n]+)/i.exec(a),y=!!r||l,S=`${e.startPoint??""} ${e.headerDate??""}`,_=!1;if(y){let v=gt(t,S);if(v){if(v.year!=null)t.startYear=v.year;let b=ce(t,t.startYear),E=b.findIndex((T)=>T.name===t.months[v.month].name);t.startDoy=b.slice(0,E).reduce((T,j)=>T+j.days,0)+v.day-1,_=!0}}else{let v=/(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Z][a-zA-Z]+)(?:,?\s+(\d{1,5}))?/.exec(S)||/([A-Z][a-zA-Z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{1,5}))?/.exec(S);if(v){let[b,E]=/^\d/.test(v[1])?[v[1],v[2]]:[v[2],v[1]],T=t.months.findIndex((j)=>j.name.toLowerCase().startsWith(E.toLowerCase().slice(0,3)));if(T>=0){let j=parseInt(b,10);if(v[3])t.startYear=parseInt(v[3],10);if(t.startDoy=ce(t,t.startYear).slice(0,T).reduce((f,A)=>f+A.days,0)+j-1,_=!0,!t.custom&&t.startYear)t.startWeekday=ra(t.startYear,T+1,j)}else if(!ve.some((j)=>j.toLowerCase()===E.toLowerCase()))t.custom=!0,t.months=Array.from({length:12},(j,f)=>({name:f===0?E:`Month ${f+1}`,days:30})),t.startDoy=parseInt(b,10)-1,_=!0}}if(!_&&y)t.startDoy=0;if(!_&&t.seasons==="solar"){let v=`${e.climate??""} ${e.startPoint??""}`;for(let[b,E]of sa)if(b.test(v)){t.startDoy=Math.round(E/365*aa(t));break}}if(t.seasons==="story")t.season0=bt(`${e.startPoint??""} ${e.climate??""}`)??"summer";let L=t.weekdays.findIndex((v)=>new RegExp(`\\b${v}\\b`,"i").test(S));if(L>=0)t.startWeekday=L;let x=!!e.headerDate&&!/(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?[A-Z][a-zA-Z]+|[A-Z][a-zA-Z]+\s+\d{1,2}\b|day\s*\d+/i.test(e.startPoint??"")&&e.anchorDay&&e.anchorDay>1?e.anchorDay-1:0;if(x&&t.weekdays.length)t.startWeekday=((t.startWeekday-x)%t.weekdays.length+t.weekdays.length)%t.weekdays.length;if(x){t.startDoy-=x;while(t.startDoy<0){if(t.startYear!=null)t.startYear--;t.startDoy+=Ne(ce(t,t.startYear))}}if(g)for(let v of Oe(g[1])){let b=/^(.+?)\s*\((.+)\)$/.exec(v),E=b?b[1]:/^(.+?)\s+(?=\d)/.exec(v)?.[1],T=b?b[2]:v.slice(E?.length??0);if(!E)continue;let j=gt(t,T)??(()=>{let A=/(\d{1,2})\s+([A-Za-z]+)/.exec(T),I=A?t.months.findIndex((K)=>K.name.toLowerCase().startsWith(A[2].toLowerCase().slice(0,3))):-1;return A&&I>=0?{month:I,day:parseInt(A[1],10)}:null})(),f=/(\d+)\s*days?\b/i.exec(T);if(j)t.named.push({name:E.trim(),month:j.month,day:j.day,...f?{days:parseInt(f[1],10)}:{}})}return t}function Pe(e,t,a){let r=t-1,s=e.startYear,i=ce(e,s),o=Ne(i),l=e.startDoy+r,d=e.startDoy,c=0;while(l>=o){if(c+=Re(i,d,o),l-=o,d=0,s!=null)s++;i=ce(e,s),o=Ne(i)}c+=Re(i,d,l);let u=l,m=0;for(;m<i.length;m++){if(u<i[m].days)break;u-=i[m].days}if(m>=i.length)m=i.length-1;let g=i[m],y=e.weekdays.length,S=e.yearStartWeekday!=null?e.yearStartWeekday+Re(i,0,l):e.startWeekday+c,_=y&&!g.weekless?e.weekdays[(S%y+y)%y]:"",L,C;if(e.seasons==="story")L=bt(a)??e.season0??"summer",C=a?.trim().toLowerCase()||L;else{let v=l/o,b=v<0.214||v>=0.97?"winter":v<0.47?"spring":v<0.72?"summer":"autumn",E={winter:"summer",summer:"winter",spring:"autumn",autumn:"spring"};L=e.hemisphere==="south"?E[b]:b,C=`${la(v)} ${L}`}let x=e.named.find((v)=>{let b=i.findIndex((T)=>T.name===e.months[v.month]?.name);if(b<0)return!1;let E=i.slice(0,b).reduce((T,j)=>T+j.days,0)+v.day-1;return((l-E)%o+o)%o<(v.days??1)})?.name;return{day:t,weekday:_,dayOfMonth:u+1,month:g.name,monthIndex:m,...g.festival?{festival:!0}:{},year:s,doy:l,season:L,seasonDetail:C,holiday:x}}function la(e){let t=[[-0.03,0.214],[0.214,0.47],[0.47,0.72],[0.72,0.97]],a=e>=0.97?e-1:e,r=t.find(([i,o])=>a>=i&&a<o)??t[0],s=(a-r[0])/(r[1]-r[0]);return s<0.33?"early":s<0.67?"mid":"late"}function ca(e){let t=e%100,a=t>=11&&t<=13?"th":["th","st","nd","rd"][e%10]??"th";return`${e}${a}`}var da="{weekday} {day} {month} {year} {era}";function yt(e,t){let a=Pe(e,t),r=a.festival?"{weekday} {month} {year} {era}":e.format??da,s={weekday:a.weekday,day:String(a.dayOfMonth),ord:ca(a.dayOfMonth),month:a.month,year:a.year!=null?String(a.year):"",era:a.year!=null?e.yearLabel??"":""};return`${r.replace(/\{(\w+)\}/g,(o,l)=>s[l]??"").replace(/\s+,/g,",").replace(/,(\s*,)+/g,",").replace(/\s{2,}/g," ").replace(/^[\s,]+|[\s,]+$/g,"")}${a.holiday?` (${a.holiday})`:""}`}var pa=[["slice_of_life","Slice of life"],["romance","Romance"],["drama","Drama"],["comedy","Comedy"],["mystery","Mystery"],["thriller","Thriller"],["horror","Horror"],["fantasy","Fantasy"],["dark_fantasy","Dark fantasy"],["scifi","Science fiction"],["adventure","Adventure"],["noir","Noir"],["intrigue","Political intrigue"],["tragedy","Tragedy"],["action","Action"],["cozy","Cozy"],["survival","Survival"],["erotic","Erotic romance"]],ma=[["","(preset setting)"],["balanced","Balanced"],["warm","Warm"],["wry","Wry"],["melancholy","Melancholy"],["tense","Tense"],["lurid","Lurid"],["austere","Austere"]],ua=[["","(preset setting)"],["sealed","Sealed — only I write my persona"],["continuity","Continuity — finish my obvious actions"],["director","Director — perform what I direct"],["full_cast","Full cast — write my persona too"]],ha=[["","(preset setting)"],["off","Off"],["fade","Fade to black"],["sensual","Sensual"],["explicit","Explicit (adults only)"]],fa=[["","(preset setting)"],["off","Off"],["slow","Slow burn"],["measured","Measured"],["fast","Fast"],["established","Established couple"]],ga=[["","(preset setting)"],["gentle","Gentle"],["grounded","Grounded"],["hard","Hard"],["brutal","Brutal"]],ba=[["","Auto (by genre)"],...re],xa="months: Thaw (30), Bloom (30), [Greenfest], Highsun (30), Harvest (30), Fade (30), Deepwinter (30); weekdays: Firstday, Seconday, Midday, Fourthday, Restday; year: 1 AR; seasons: solar",wt="Day 1 · 14 October 1923 · 18:40";function ya(e){if(!e?.trim()||/^gregorian\b/i.test(e.trim()))return"";return le(e)?.id??"original"}function wa(e,t,a,r){try{let s=xt({calendar:e,startPoint:t,climate:a,latitude:r});return`Day 1 is ${yt(s,1)} · ${Pe(s,1).seasonDetail}`}catch{return""}}var va=[["scene","Scene"],["cast","Cast"],["bonds","Bonds"],["thoughts","Thoughts"],["inventory","Inventory"],["threads","Threads & clocks"],["knowledge","Knowledge"],["consequences","Consequences"],["world","World"]];function Fe(e,t,a){let r;try{r=e.ui.showModal({title:"Session Zero · ALMANAC",width:640,maxHeight:760})}catch{return}let s=a??{},i=(m,g,y)=>`<select id="${m}">${g.map(([S,_])=>`<option value="${S}"${(y??"")===S?" selected":""}>${n(_)}</option>`).join("")}</select>`,o=new Set(s.genres??[]),l=new Set(s.trackers??["scene","cast","bonds","thoughts","inventory","threads","knowledge"]);r.root.innerHTML=`<div class="almp alm-sz">
 <p class="muted">Set the story up once. These override the preset's settings for this chat only (you can change them any time here or in the Almanac tab).</p>
-<h4>Genres (first = lead)</h4><div id="almSzGenres">${GENRES.map(([k, l]) => `<button type="button" class="pill${genres.has(k) ? " on" : ""}" data-g="${k}">${escapeHtml(l)}</button>`).join("")}</div>
+<h4>Genres (first = lead)</h4><div id="almSzGenres">${pa.map(([m,g])=>`<button type="button" class="pill${o.has(m)?" on":""}" data-g="${m}">${n(g)}</button>`).join("")}</div>
 <div class="grid" style="margin-top:10px">
-<label class="f">Tone${sel("szTone", TONES, cfg.tone)}</label>
-<label class="f">Your persona${sel("szPersona", PERSONA, cfg.personaMode)}</label>
-<label class="f">Romance pace${sel("szRomance", ROMANCE, cfg.romance)}</label>
-<label class="f">Difficulty${sel("szDifficulty", DIFFICULTY, cfg.difficulty)}</label>
-<label class="f">Intimacy${sel("szNsfw", NSFW, cfg.nsfw)}</label>
-<label class="f">Skin${sel("szTheme", THEMES, cfg.theme)}</label>
+<label class="f">Tone${i("szTone",ma,s.tone)}</label>
+<label class="f">Your persona${i("szPersona",ua,s.personaMode)}</label>
+<label class="f">Romance pace${i("szRomance",fa,s.romance)}</label>
+<label class="f">Difficulty${i("szDifficulty",ga,s.difficulty)}</label>
+<label class="f">Intimacy${i("szNsfw",ha,s.nsfw)}</label>
+<label class="f">Skin${i("szTheme",ba,s.theme)}</label>
 </div>
-<label class="f">Hard limits (never depict)<input type="text" id="szLimits" value="${escapeHtml(cfg.limits ?? "")}" placeholder="e.g. animal harm, body horror"></label>
+<label class="f">Hard limits (never depict)<input type="text" id="szLimits" value="${n(s.limits??"")}" placeholder="e.g. animal harm, body horror"></label>
 <h4>World</h4><div class="grid">
-<label class="f">Climate and season<input type="text" id="szClimate" value="${escapeHtml(cfg.climate ?? "")}" placeholder="temperate maritime, late autumn"></label>
-<label class="f">Latitude<input type="text" id="szLatitude" value="${escapeHtml(cfg.latitude ?? "")}" placeholder="temperate · 51 N · southern subpolar"></label>
-<label class="f">Calendar${sel("szCalKind", [["", "Gregorian"], ...CALENDAR_PRESETS.map((p) => [p.id, p.label]), ["original", "An original world's calendar"]], calendarKind(cfg.calendar))}</label>
-<label class="f">Start point<input type="text" id="szStart" value="${escapeHtml(cfg.startPoint ?? "")}" placeholder="${escapeHtml(presetFor(cfg.calendar)?.start ?? CAL_START_DEFAULT)}"></label>
+<label class="f">Climate and season<input type="text" id="szClimate" value="${n(s.climate??"")}" placeholder="temperate maritime, late autumn"></label>
+<label class="f">Latitude<input type="text" id="szLatitude" value="${n(s.latitude??"")}" placeholder="temperate · 51 N · southern subpolar"></label>
+<label class="f">Calendar${i("szCalKind",[["","Gregorian"],...we.map((m)=>[m.id,m.label]),["original","An original world's calendar"]],ya(s.calendar))}</label>
+<label class="f">Start point<input type="text" id="szStart" value="${n(s.startPoint??"")}" placeholder="${n(le(s.calendar)?.start??wt)}"></label>
 </div>
-<label class="f">Calendar details<input type="text" id="szCalendar" value="${escapeHtml(cfg.calendar ?? "")}" placeholder="months: Name (30), [Festival], …; weekdays: … or none; year: 1 AR; seasons: solar or story; moons: Name (days)"></label>
+<label class="f">Calendar details<input type="text" id="szCalendar" value="${n(s.calendar??"")}" placeholder="months: Name (30), [Festival], …; weekdays: … or none; year: 1 AR; seasons: solar or story; moons: Name (days)"></label>
 <p class="muted" id="szCalPreview"></p>
-<h4>Trackers under each reply</h4><div id="almSzTrackers">${TRACKERS.map(([k, l]) => `<button type="button" class="pill${trackers.has(k) ? " on" : ""}" data-t="${k}">${escapeHtml(l)}</button>`).join("")}</div>
+<h4>Trackers under each reply</h4><div id="almSzTrackers">${va.map(([m,g])=>`<button type="button" class="pill${l.has(m)?" on":""}" data-t="${m}">${n(g)}</button>`).join("")}</div>
 <label class="chk" style="margin-top:10px"><input type="checkbox" id="szSaveChar"> Use these as defaults for new chats with this character</label>
 <div class="row" style="margin-top:12px"><button class="btn primary" id="szSave">Begin the story</button><button class="btn" id="szSkip">Skip</button></div>
-</div>`;
-  const order = [...cfg.genres ?? []];
-  const field = (id) => modal.root.querySelector(`#${id}`);
-  const preview = () => {
-    const out = field("szCalPreview");
-    if (out)
-      out.textContent = calendarPreview(field("szCalendar")?.value ?? "", field("szStart")?.value || field("szStart")?.placeholder || "", field("szClimate")?.value ?? "", field("szLatitude")?.value ?? "");
-  };
-  modal.root.addEventListener("input", (ev) => {
-    if (/^sz(Calendar|Start|Climate|Latitude)$/.test(ev.target.id))
-      preview();
-  });
-  modal.root.addEventListener("change", (ev) => {
-    if (ev.target.id !== "szCalKind")
-      return;
-    const kind = ev.target.value;
-    const p = CALENDAR_PRESETS.find((x) => x.id === kind);
-    const cal = field("szCalendar");
-    cal.value = p ? p.name : kind === "original" ? ORIGINAL_CALENDAR : "";
-    field("szStart").placeholder = p?.start ?? (kind === "original" ? "Day 1 · 14 Harvest 312 AR · 18:40" : CAL_START_DEFAULT);
-    preview();
-  });
-  preview();
-  modal.root.addEventListener("click", (ev) => {
-    const t = ev.target;
-    const g = t.closest("[data-g]");
-    if (g) {
-      const k = g.dataset.g;
-      const i = order.indexOf(k);
-      if (i >= 0)
-        order.splice(i, 1);
-      else
-        order.push(k);
-      g.classList.toggle("on", order.includes(k));
-      return;
-    }
-    const tr = t.closest("[data-t]");
-    if (tr) {
-      const k = tr.dataset.t;
-      if (trackers.has(k))
-        trackers.delete(k);
-      else
-        trackers.add(k);
-      tr.classList.toggle("on", trackers.has(k));
-      return;
-    }
-    const v = (id) => modal.root.querySelector(`#${id}`)?.value?.trim() || undefined;
-    if (t.id === "szSave") {
-      ctx.sendToBackend({
-        type: "sessionZero",
-        chatId,
-        saveForCharacter: modal.root.querySelector("#szSaveChar")?.checked,
-        config: {
-          genres: order,
-          tone: v("szTone"),
-          personaMode: v("szPersona"),
-          romance: v("szRomance"),
-          difficulty: v("szDifficulty"),
-          nsfw: v("szNsfw"),
-          theme: v("szTheme"),
-          limits: v("szLimits"),
-          climate: v("szClimate"),
-          latitude: v("szLatitude"),
-          calendar: v("szCalendar"),
-          startPoint: v("szStart"),
-          trackers: [...trackers]
-        }
-      });
-      modal.dismiss();
-    } else if (t.id === "szSkip") {
-      ctx.sendToBackend({ type: "config", chatId, patch: { sessionZeroDone: true } });
-      modal.dismiss();
-    }
-  });
-}
-
-// src/frontend/hud.ts
-var HUD_SIZE = { w: 360, h: 540, minW: 300, minH: 380, maxW: 720, maxH: 960 };
-var HUD_TABS = ["changed", "stakes", "cast", "threads", "unspoken", "backstage"];
-var PIN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>`;
-var ICON = {
-  changed: `<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8 1.8.7-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/>`,
-  stakes: `<path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9"/>`,
-  cast: `<circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 20c.6-3.6 3-5.5 6-5.5s5.4 1.9 6 5.5M15 15c2.8-.3 5 1.2 5.6 4.5"/>`,
-  threads: `<path d="M4 7c4-4 7 4 11 0s5 2 5 2M4 13c4-4 7 4 11 0s5 2 5 2"/><circle cx="6" cy="19" r="1.5"/><path d="M7.5 19H20"/>`,
-  unspoken: `<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6.5L20.5 7"/><circle cx="12" cy="13.5" r="2.2" fill="currentColor"/>`,
-  backstage: `<path d="M4 5h16v10H4z"/><path d="M8 19h8M12 15v4"/><path d="M8 9h5M8 12h8"/>`,
-  book: `<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/>`,
-  eye: `<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/>`
-};
-var TAB_LABEL = { changed: "What changed", stakes: "Stakes", cast: "Who is here", threads: "Threads", unspoken: "Unspoken", backstage: "Backstage" };
-var svg = (k, size = 19) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
-var NIGHT = /night|hours|pre-dawn|evening|dusk/;
-var skyOf = (v) => BAND_SKY[v?.now?.band] ?? BAND_SKY.evening;
-var presentOf = (v) => (v.cast ?? []).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead);
-var hm = (s) => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(s ?? "");
-  return m ? +m[1] * 60 + +m[2] : null;
-};
-var span = (min) => min < 60 ? `${min}m` : min < 1440 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ""}` : `${Math.floor(min / 1440)}d ${Math.floor(min % 1440 / 60)}h`;
-function moodDot(c) {
-  const v = c.mood?.v;
-  if (typeof v !== "number")
-    return c.mood ? "var(--alm-accent-2)" : "transparent";
-  return v > 0.2 ? "var(--alm-gold)" : v < -0.2 ? "var(--alm-danger)" : "var(--alm-accent-2)";
-}
-var med = (c, big = false) => `<span class="alm-om${big ? " alm-om--big" : ""}" style="--c:${escapeHtml(c.color)}" title="${escapeHtml(c.name)}${c.mood?.name ? ` · ${escapeHtml(c.mood.name)}` : ""}">${escapeHtml(initials(c.name))}${c.mood ? `<i class="alm-om__md${c.moodFresh ? " is-fresh" : ""}" style="--m:${moodDot(c)}"></i>` : ""}</span>`;
-function track(v, was, color, lo = -5) {
-  if (v == null)
-    return `<span class="alm-otrk is-empty"></span>`;
-  const pct = (x) => (x - lo) / (5 - lo) * 100;
-  const moved = was != null && was !== v;
-  return `<span class="alm-otrk" style="--c:${escapeHtml(color)}">${lo < 0 ? `<i class="alm-otrk__mid"></i>` : ""}${moved ? `<i class="alm-otrk__trail" style="left:${pct(Math.min(was, v))}%;width:${Math.abs(pct(v) - pct(was))}%"></i><i class="alm-otrk__ghost" style="left:${pct(was)}%"></i>` : ""}<i class="alm-otrk__knob${moved ? " is-moved" : ""}" style="left:${pct(v)}%"></i></span>`;
-}
-function ring(cur, max, color, size = 52) {
-  const n = Math.max(1, Math.min(12, max));
-  const k = Math.round(Math.max(0, Math.min(cur, max)) / Math.max(1, max) * n);
-  const r = (size - 10) / 2;
-  const c = size / 2;
-  const C = 2 * Math.PI * r;
-  const step = C / n;
-  const seg = Math.max(1, step - (n > 8 ? 2.5 : 4));
-  let out = `<svg class="alm-oring" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="${cur} of ${max}">`;
-  for (let i = 0;i < n; i++)
-    out += `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${i < k ? color : "var(--alm-line)"}" stroke-width="6" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-i * step).toFixed(2)}" transform="rotate(-90 ${c} ${c})"/>`;
-  return `${out}<text x="50%" y="52%" text-anchor="middle" dominant-baseline="middle" fill="${color}">${cur}/${max}</text></svg>`;
-}
-var clockColor = (name) => /suspicio|alert|threat|heat|doom|danger|wrath|hunt|alarm|war|fear|dread|pursuit|exposure/i.test(name) ? "var(--alm-danger)" : /trust|favou?r|hope|progress|support|loyal|alliance|ready|repair|heal/i.test(name) ? "var(--alm-good)" : "var(--alm-accent-2)";
-function urgent(v) {
-  const out = [];
-  for (const d of v.world?.deadlines ?? []) {
-    if (d.done || d.passed || d.leftMin == null || d.leftMin > 72 * 60)
-      continue;
-    out.push({ w: d.leftMin, t: `⏳ ${d.title} · ${span(d.leftMin)}` });
-  }
-  for (const c of v.world?.cons ?? [])
-    if (c.status === "due")
-      out.push({ w: 90, t: `⚖ ${c.whoName}${c.whomName ? ` → ${c.whomName}` : ""} due` });
-  const n = v.now ?? {};
-  const set = hm(n.sun?.set);
-  const rise = hm(n.sun?.rise);
-  if (n.minute != null) {
-    const toSet = set != null ? set - n.minute : -1;
-    const toRise = rise != null ? (rise - n.minute + 1440) % 1440 : -1;
-    if (toSet > 0 && toSet <= 60)
-      out.push({ w: 200 + toSet, t: `☀ sets in ${toSet}m` });
-    else if (toRise > 0 && toRise <= 60)
-      out.push({ w: 200 + toRise, t: `☀ rises in ${toRise}m` });
-  }
-  return out.sort((a, b) => a.w - b.w).slice(0, 3).map((x) => x.t);
-}
-function hudPill(v, note, ui) {
-  if (note || !v) {
-    return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" title="Open the Almanac"><span class="alm-hudw__dial" style="background:${BAND_SKY.evening}"><b class="moon"></b></span><b class="alm-hudw__brand">ALMANAC</b><span class="alm-hudw__dim">${escapeHtml(note ?? "connecting…")}</span></div>`;
-  }
-  const n = v.now ?? {};
-  const place = n.place ?? [];
-  const present = presentOf(v).slice(0, 4);
-  const chips = urgent(v);
-  const night = NIGHT.test(n.band ?? "evening");
-  const unseen = ui?.unseen ?? 0;
-  return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" aria-expanded="false" title="Open the Now window">
-<span class="alm-hudw__dial" style="background:${skyOf(v)}"><b class="${night ? "moon" : "sun"}"></b></span><b class="alm-hudw__t">${escapeHtml(n.time ?? "--:--")}</b>${n.weather ? `<span class="alm-hudw__wx">${escapeHtml(n.weather.glyph)}${n.weather.tempC != null ? ` ${Math.round(n.weather.tempC)}°` : ` ${escapeHtml(n.weather.condition)}`}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${escapeHtml(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-hudw__who">${present.map((c) => med(c)).join("")}</span>` : ""}${chips.length ? `<span class="alm-hudw__chip"><span class="alm-hudw__rot" data-n="${chips.length}">${chips.map((c) => `<span>${escapeHtml(c)}</span>`).join("")}</span></span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}${unseen ? `<span class="alm-hudw__badge" title="${unseen} change${unseen === 1 ? "" : "s"} since you last looked">${unseen > 9 ? "9+" : unseen}</span>` : ""}</div>`;
-}
-function skyArc(v) {
-  const n = v.now ?? {};
-  const rise = hm(n.sun?.rise) ?? 360;
-  const set = hm(n.sun?.set) ?? 1080;
-  const now = n.minute ?? 720;
-  const W = 360;
-  const H = 150;
-  const cx = 270;
-  const base = 132;
-  const rx = 78;
-  const ry = 86;
-  const at = (t) => ({ x: cx - rx * Math.cos(Math.PI * t), y: base - ry * Math.sin(Math.PI * t) });
-  const day = set > rise && now >= rise && now < set;
-  const nightLen = (rise + 1440 - set) % 1440 || 1;
-  const t = day ? (now - rise) / (set - rise) : (now - set + 1440) % 1440 / nightLen;
-  const p = at(Math.min(0.97, Math.max(0.03, t)));
-  const moon = n.moon;
-  const lit = typeof moon?.illumination === "number" ? moon.illumination : 0.5;
-  const body = day ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="26" fill="rgba(255,190,110,.22)"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="11" fill="#ffcf73"/>` : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="16" fill="rgba(244,236,214,.14)"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="#f4ecd6"/><circle cx="${(p.x + 3 + (1 - lit) * 6).toFixed(1)}" cy="${(p.y - 1).toFixed(1)}" r="${(8 * (1 - lit) + 0.01).toFixed(1)}" fill="rgba(20,22,60,.8)"/>`;
-  return `<svg class="alm-hudc__arc" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMaxYMax meet" aria-hidden="true"><path d="M${cx - rx} ${base} A${rx} ${ry} 0 0 1 ${cx + rx} ${base}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2" stroke-dasharray="2 5"/>${body}</svg>`;
-}
-var HILLS = `<svg class="alm-hudc__land" viewBox="0 0 360 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 40V26c30-8 60-12 96-6 20 3 30-6 44-6h6v-7h6v7h10v-4l7-5 7 5v8c26 2 52-10 86-8 34 2 60 8 98 2v24z"/><rect x="160" y="15" width="3" height="3" fill="#ffc86b"/><rect x="170" y="17" width="3" height="3" fill="#ffc86b"/></svg>`;
-function precip(v) {
-  const c = String(v.now?.weather?.condition ?? "").toLowerCase();
-  if (/snow|sleet|blizzard|flurr/.test(c))
-    return `<span class="alm-hudc__fx is-snow"></span>`;
-  if (/rain|drizzle|storm|shower|thunder|downpour/.test(c))
-    return `<span class="alm-hudc__fx is-rain"></span>`;
-  if (/fog|mist|haze/.test(c))
-    return `<span class="alm-hudc__fx is-fog"></span>`;
-  return "";
-}
-var empty = (t) => `<p class="alm-hudc__empty">${t}</p>`;
-var h6 = (t, right = "") => `<h6><span>${t}</span>${right ? `<span>${right}</span>` : ""}</h6>`;
-function paneChanged(v) {
-  const rows = v.changes?.rows ?? [];
-  const warns = (v.checks?.issues ?? []).filter((x) => x.level === "warn");
-  const check = warns.length ? h6("The check found", `${warns.length}`) + warns.slice(0, 4).map((x) => `<div class="alm-hudc__row"><span class="alm-hudc__ic">⚠</span><div><span>${escapeHtml(x.text)}</span>${x.quote && !x.text.includes(x.quote) ? `<small>«${escapeHtml(x.quote.slice(0, 90))}»</small>` : ""}</div></div>`).join("") : "";
-  if (!rows.length)
-    return check + h6("Since the last reply") + empty("The last reply didn't change anything the Almanac tracks.");
-  return check + h6("Since the last reply", `${rows.length} change${rows.length === 1 ? "" : "s"}`) + rows.map((r, i) => {
-    const delta = r.bond ? `<span class="alm-hudc__d ${r.bond.delta > 0 ? "up" : "dn"}">${r.bond.delta > 0 ? "▲ +" : "▼ "}${r.bond.delta}</span>` : r.tone === "due" ? `<span class="alm-hudc__d due">due</span>` : "";
-    const body = r.bond ? `<b>${escapeHtml(r.text)}</b>${track(r.bond.to, r.bond.from, r.bond.color, r.bond.lo)}${r.sub ? `<small>${escapeHtml(r.sub)}</small>` : ""}` : `<span>${escapeHtml(r.text)}</span>${r.sub ? `<small>${escapeHtml(r.sub)}</small>` : ""}`;
-    return `<div class="alm-hudc__row" style="--i:${i}"><span class="alm-hudc__ic">${escapeHtml(r.icon)}</span><div>${body}</div>${delta}</div>`;
-  }).join("");
-}
-function paneStakes(v) {
-  const w = v.world ?? {};
-  const out = [];
-  const dl = (w.deadlines ?? []).filter((d) => !d.done && !d.passed && d.leftMin != null).sort((a, b) => a.leftMin - b.leftMin);
-  if (dl.length) {
-    const d = dl[0];
-    out.push(h6("Nearest deadline"), `<div class="alm-hudc__count"><b>${escapeHtml(span(d.leftMin))}</b><span>${escapeHtml(d.title)}</span><small>${escapeHtml(d.at)}</small><i style="--p:${Math.max(4, Math.min(100, 100 - d.leftMin / (72 * 60) * 100)).toFixed(0)}%"></i></div>`);
-    if (dl.length > 1)
-      out.push(dl.slice(1, 4).map((x) => `<div class="alm-hudc__row"><span class="alm-hudc__ic">⏳</span><div><span>${escapeHtml(x.title)}</span><small>${escapeHtml(x.at)}</small></div><span class="alm-hudc__d">${escapeHtml(span(x.leftMin))}</span></div>`).join(""));
-  }
-  const clocks = (w.factions ?? []).flatMap((f) => (f.clocks ?? []).map((c) => ({ ...c, faction: f.name }))).slice(0, 6);
-  if (clocks.length)
-    out.push(h6("Clocks"), `<div class="alm-hudc__rings">${clocks.map((c) => `<div>${ring(c.cur, c.max, clockColor(c.name))}<small>${escapeHtml(c.faction)}<br>${escapeHtml(c.name)}</small></div>`).join("")}</div>`);
-  const gauges = w.gauges ?? [];
-  if (gauges.length)
-    out.push(h6("Gauges"), gauges.slice(0, 4).map((g) => {
-      const prev = g.history?.length > 1 ? g.history[g.history.length - 2].v : null;
-      const trend = prev == null || prev === g.cur ? "" : g.cur > prev ? `<span class="alm-hudc__d dn">▲</span>` : `<span class="alm-hudc__d up">▼</span>`;
-      const segs = g.max <= 12 ? `<span class="alm-hudc__segs">${Array.from({ length: g.max }, (_, i) => `<i class="${i < g.cur ? "on" : ""}"></i>`).join("")}</span>` : `<span class="alm-hudc__bar"><i style="width:${Math.round(g.cur / Math.max(1, g.max) * 100)}%"></i></span>`;
-      return `<div class="alm-hudc__gauge"><span title="${escapeHtml(g.cause ?? "")}">${escapeHtml(g.name)}</span>${segs}<span class="alm-hudc__n">${g.cur}/${g.max}</span>${trend}</div>`;
-    }).join(""));
-  const owed = (w.cons ?? []).filter((c) => c.status === "due" || c.status === "open").sort((a, b) => (a.status === "due" ? -1 : 0) - (b.status === "due" ? -1 : 0) || b.msgIndex - a.msgIndex).slice(0, 5);
-  if (owed.length)
-    out.push(h6("Owed and due"), owed.map((c) => `<div class="alm-hudc__row"><span class="alm-hudc__ic">${c.kind === "owe" ? "⚖" : "⛓"}</span><div><span><b>${escapeHtml(c.whoName)}${c.whomName ? ` → ${escapeHtml(c.whomName)}` : ""}</b>: ${escapeHtml(c.what ?? "")}</span>${c.dueText ? `<small>due ${escapeHtml(c.dueText)}</small>` : ""}</div>${c.status === "due" ? `<span class="alm-hudc__d due">due</span>` : ""}</div>`).join(""));
-  const clues = (w.clues ?? []).slice(-5).reverse();
-  if (clues.length) {
-    const rel = (r) => !r ? 0 : /solid|confirm|certain|strong|reliable|high/i.test(r) ? 3 : /likely|probable|good|medium|fair/i.test(r) ? 2 : 1;
-    out.push(h6("Clue board"), clues.map((c) => `<div class="alm-hudc__clue"><span>\uD83D\uDCCC</span><div>${escapeHtml(c.text)}${c.pointsTo ? ` <em>→ ${escapeHtml(c.pointsTo)}</em>` : ""}${c.reliability ? `<span class="alm-hudc__rel" title="${escapeHtml(c.reliability)}">${[1, 2, 3].map((k) => `<i class="${k <= rel(c.reliability) ? "on" : ""}"></i>`).join("")}</span>` : ""}</div></div>`).join(""));
-  }
-  const rep = (w.rep ?? []).filter((r) => r.score).slice(0, 4);
-  if (rep.length)
-    out.push(h6("Standing"), `<div class="alm-hudc__tags">${rep.map((r) => `<span class="alm-hudc__tag ${r.score > 0 ? "up" : "dn"}">${escapeHtml(r.group)} ${r.score > 0 ? "+" : ""}${r.score}</span>`).join("")}</div>`);
-  return out.length ? out.join("") : h6("Stakes") + empty("No deadlines, clocks, gauges or debts yet.");
-}
-function paneCast(v, ui) {
-  const who = presentOf(v);
-  const narrBtn = `<button class="alm-hudc__narr${ui.narr ? " is-on" : ""}" data-hud="narr" aria-pressed="${ui.narr}" title="${ui.narr ? "Hide the narrator's secrets" : "Show the narrator's secrets (spoilers)"}">${svg("eye", 14)}${ui.narr ? "Narrator" : "Player"}</button>`;
-  const head = `<h6><span>Present${(v.now?.place ?? []).length ? ` · ${escapeHtml(v.now.place[v.now.place.length - 1])}` : ""}</span>${narrBtn}</h6>`;
-  if (!who.length)
-    return head + empty("No one else is here.");
-  const cards = who.slice(0, 8).map((c) => {
-    const tags = [
-      c.mood ? `<span class="alm-hudc__tag" title="${escapeHtml(c.mood.prev && c.moodFresh ? `${c.mood.prev} → ` : "")}${escapeHtml(c.mood.name)}">${c.mood.prev && c.moodFresh ? `<s>${escapeHtml(c.mood.prev)}</s> → ` : ""}${escapeHtml(c.mood.name)}</span>` : "",
-      ...(c.held ?? []).slice(0, 2).map((h) => `<span class="alm-hudc__tag" title="${escapeHtml(h)}">✋ ${escapeHtml(h)}</span>`),
-      ...(c.injuries ?? []).slice(0, 2).map((i) => `<span class="alm-hudc__tag dn" title="${escapeHtml(i.where)}${i.note ? `, ${escapeHtml(i.note)}` : ""}">\uD83E\uDE78 ${escapeHtml(i.where)}${i.note ? `, ${escapeHtml(i.note)}` : ""}</span>`)
-    ].join("");
-    const y = c.toYou;
-    const bars = y ? `<div class="alm-hudc__bars">${y.trust != null ? `<span>trust</span>${track(y.trust, y.trustWas, c.color)}` : ""}${y.affection != null ? `<span>affection</span>${track(y.affection, y.affectionWas, c.color)}` : ""}</div>` : "";
-    const secret = ui.narr && c.pressure ? `<div class="alm-hudc__secret"><b>Hidden pressure</b>${escapeHtml(c.name)} ${escapeHtml(c.pressure)}</div>` : "";
-    return `<div class="alm-hudc__per" style="--c:${escapeHtml(c.color)}"><div class="alm-hudc__perh">${med(c, true)}<div><b>${escapeHtml(c.name)}</b>${c.activity ? `<small>${escapeHtml(c.activity)}</small>` : ""}</div></div>${tags ? `<div class="alm-hudc__tags">${tags}</div>` : ""}${bars}${secret}</div>`;
-  }).join("");
-  const irony = v.irony ?? [];
-  const hidden = presentOf(v).filter((c) => c.pressure).length + irony.length;
-  const tail = ui.narr ? irony.map((x) => `<div class="alm-hudc__irony"><b>\uD83C\uDFAD Dramatic irony</b>${escapeHtml(x.name)} is certain of something false: ${escapeHtml(x.statement)}</div>`).join("") : hidden ? `<p class="alm-hudc__locked">\uD83D\uDD12 ${hidden} secret${hidden === 1 ? "" : "s"} the narrator keeps. Narrator view shows ${hidden === 1 ? "it" : "them"}.</p>` : "";
-  return head + `<div class="alm-hudc__who">${cards}</div>` + tail;
-}
-function paneThreads(v) {
-  const w = v.world ?? {};
-  const out = [];
-  const threads = (w.threads ?? []).filter((t) => t.status !== "resolved").sort((a, b) => b.lastMsg - a.lastMsg).slice(0, 6);
-  if (threads.length)
-    out.push(h6("Threads"), threads.map((t) => `<div class="alm-hudc__thr"><div><b>${escapeHtml(t.title)}</b><span class="alm-hudc__st ${t.status === "stalled" ? "stall" : ""}">${t.status === "stalled" ? `stalled${t.stalls ? ` · ${t.stalls}` : ""}` : "open"}</span></div>${t.latest ? `<small>${escapeHtml(t.latest)}</small>` : ""}${t.blocker ? `<small>Blocked: ${escapeHtml(t.blocker)}</small>` : ""}</div>`).join(""));
-  const scene = v.now?.scene ?? 0;
-  const plants = (w.plants ?? []).filter((p) => p.paidAt == null).slice(-3).reverse();
-  if (plants.length)
-    out.push(h6("Chekhov's shelf"), plants.map((p) => {
-      const ago = Math.max(0, scene - (p.plantedScene ?? scene));
-      return `<div class="alm-hudc__chek"><span>\uD83D\uDD2B</span><div><b>${escapeHtml(p.text)}</b><small>${ago ? `planted ${ago} scene${ago === 1 ? "" : "s"} ago` : "planted this scene"}${p.payoff ? ` · payoff: ${escapeHtml(p.payoff)}` : ""}</small></div></div>`;
-    }).join(""));
-  const rumors = (w.rumors ?? []).slice(-2).reverse();
-  if (rumors.length)
-    out.push(h6("Word going round"), rumors.map((r) => `<p class="alm-hudc__rumor">“${escapeHtml(r.text)}”<small>${r.hops ? `passed through ${r.hops} mouth${r.hops === 1 ? "" : "s"}` : "first-hand"}</small></p>`).join(""));
-  return out.length ? out.join("") : h6("Threads") + empty("No open threads, plants or rumours yet.");
-}
-function hasThoughtsTab(v) {
-  const iv = v?.thoughts?.innerVoice ?? "";
-  if (iv === "off")
-    return false;
-  return !!iv || (v?.thoughts?.list ?? []).length > 0;
-}
-function paneUnspoken(v, ui) {
-  const t = v.thoughts ?? { list: [] };
-  const list = t.list ?? [];
-  const fresh = t.msg >= 0 && t.msg === v.changes?.msg;
-  if (!list.length)
-    return h6("Unspoken") + empty(t.innerVoice === "prose" ? "No one thought aloud in the last reply." : "The last reply kept its thoughts to itself.");
-  const sealed = list.map((x, i) => {
-    const key = `${t.msg}:${i}`;
-    const nm = x.isUser ? `${x.name} · you` : x.name;
-    if (x.kind === "inline" || !x.cue)
-      return `<div class="alm-hudc__bub" style="--c:${escapeHtml(x.color)}"><b>${escapeHtml(nm)} thinks</b>${escapeHtml(x.text)}</div>`;
-    const open = ui.opened.has(key);
-    return `<button class="alm-hudc__env${open ? " is-open" : ""}" style="--c:${escapeHtml(x.color)}" data-hud="env" data-key="${escapeHtml(key)}" aria-expanded="${open}">${open ? `<span class="alm-hudc__note">${escapeHtml(x.text)}<em>— ${escapeHtml(x.name)}</em></span>` : `<span class="alm-hudc__front"><span class="alm-hudc__seal">${escapeHtml(initials(x.name))}</span><span class="alm-hudc__cue">“${escapeHtml(x.cue)}”</span><span class="alm-hudc__envwho">${escapeHtml(nm)} · break the seal</span></span>`}</button>`;
-  }).join("");
-  return h6(fresh ? "Unspoken · the last reply" : "Unspoken · an earlier reply", `${list.length}`) + `<p class="alm-hudc__lockcap">\uD83D\uDD12 No one else in the story knows these.</p>` + sealed;
-}
-function paneBackstage(v) {
-  const f = (v.feed ?? [])[0];
-  const out = [];
-  const noteTok = Math.round(String(v.note ?? "").length / 4);
-  const chron = v.chronicle?.tokens ? (v.chronicle.tokens.chapter ?? 0) + (v.chronicle.tokens.arc ?? 0) + (v.chronicle.tokens.volume ?? 0) : 0;
-  const lore = f?.tokens ?? 0;
-  const parts = [["Lore & recall", lore, "var(--alm-gold)"], ["Chronicle", chron, "var(--alm-accent-2)"], ["Scene note", noteTok, "var(--alm-accent)"]];
-  const total = parts.reduce((a, p) => a + p[1], 0);
-  if (total)
-    out.push(h6("Fed to the model", `~${total.toLocaleString()} tokens`), `<div class="alm-hudc__tok">${parts.filter((p) => p[1]).map((p) => `<i style="flex:${p[1]};background:${p[2]}"></i>`).join("")}</div><div class="alm-hudc__legend">${parts.filter((p) => p[1]).map((p) => `<span style="--c:${p[2]}">${p[0]} ${p[1].toLocaleString()}</span>`).join("")}</div>`);
-  const items = (f?.items ?? []).filter((i) => i.injected).slice(0, 8);
-  const chapters = (f?.chronicle ?? []).slice(0, 4);
-  if (items.length || chapters.length)
-    out.push(h6("What went in this turn"), [...items.map((i) => `<div class="alm-hudc__fed"><span class="alm-hudc__via">${escapeHtml(i.via ?? "recall")}</span><span>${escapeHtml(i.name)}</span></div>`), ...chapters.map((c) => `<div class="alm-hudc__fed"><span class="alm-hudc__via">chronicle</span><span>${escapeHtml(c.name)}</span></div>`)].join(""));
-  const k = v.clerk ?? {};
-  const clerk = k.running ? "⏳ The knowledge clerk is reading replies…" : k.unread ? `${k.unread} repl${k.unread === 1 ? "y" : "ies"} the clerk hasn't read yet` : "✓ The clerk is idle; every reply read";
-  out.push(h6("Health"), v.planError ? `<p class="alm-hudc__ok is-warn">The last turn went out without the Almanac (${escapeHtml(v.planError.where)}).</p>` : `<p class="alm-hudc__ok">✓ The last turn went out with the Almanac</p>`, `<p class="alm-hudc__ok${k.unread ? " is-warn" : ""}">${escapeHtml(clerk)}</p>`);
-  return out.join("");
-}
-function hudCard(v, ui = { tab: "changed", narr: false, unseen: 0, opened: new Set }) {
-  const n = v.now ?? {};
-  const place = n.place ?? [];
-  const clock = String(n.clock ?? "");
-  const cut = clock.lastIndexOf(", ");
-  const date = String(n.date ?? (n.time && cut > 0 ? clock.slice(0, cut) : ""));
-  const dayNo = n.day != null && !/\bday\b/i.test(date) ? `${date ? " · " : ""}Day ${n.day}` : "";
-  const size = ui.size ?? HUD_SIZE;
-  const night = NIGHT.test(n.band ?? "evening");
-  const tabs = HUD_TABS.filter((t) => t !== "unspoken" || hasThoughtsTab(v));
-  const tab = tabs.includes(ui.tab) ? ui.tab : "changed";
-  const rows = v.changes?.rows?.length ?? 0;
-  const due = (v.world?.cons ?? []).some((c) => c.status === "due") || (v.world?.deadlines ?? []).some((d) => !d.done && !d.passed && d.leftMin != null && d.leftMin < 180);
-  const badge = (t) => t === "changed" && ui.unseen ? `<sup>${ui.unseen > 9 ? "9+" : ui.unseen}</sup>` : t === "stakes" && due ? `<sup class="dot"></sup>` : t === "unspoken" && (v.thoughts?.list ?? []).length && v.thoughts.msg === v.changes?.msg ? `<sup class="dot soft"></sup>` : "";
-  const set = hm(n.sun?.set);
-  const rise = hm(n.sun?.rise);
-  let sunChip = "";
-  if (n.minute != null && set != null && rise != null) {
-    const toSet = set - n.minute;
-    const toRise = (rise - n.minute + 1440) % 1440;
-    sunChip = n.sun?.daylight ? toSet > 0 ? `☀ sets ${span(toSet)}` : "" : `☀ rises ${span(toRise)}`;
-  }
-  const fc = (n.forecastHours ?? []).filter((_, i) => i % 2 === 0).slice(0, 6);
-  const pane = tab === "stakes" ? paneStakes(v) : tab === "cast" ? paneCast(v, ui) : tab === "threads" ? paneThreads(v) : tab === "unspoken" ? paneUnspoken(v, ui) : tab === "backstage" ? paneBackstage(v) : paneChanged(v);
-  return `<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now" style="width:${size.w}px;height:${size.h}px">
-<header class="alm-hudc__sky${night ? " is-night" : ""}" style="background:${skyOf(v)}">
-  ${night ? `<span class="alm-hudc__stars"></span>` : ""}${skyArc(v)}${precip(v)}${HILLS}
-  <div class="alm-hudc__ttl"><b>${escapeHtml(n.time ?? "--:--")}</b><span title="${escapeHtml(date + dayNo)}">${escapeHtml(date)}${escapeHtml(dayNo)}</span>${n.title ? `<em title="${escapeHtml(n.title)}">${escapeHtml(n.title)}</em>` : ""}</div>
-  <div class="alm-hudc__astro">${sunChip ? `<span>${escapeHtml(sunChip)}</span>` : ""}${n.moon ? `<span title="${escapeHtml(n.moon.name)}">${escapeHtml(n.moon.glyph)}<i> ${escapeHtml(n.moon.name)}</i></span>` : ""}</div>
+</div>`;let d=[...s.genres??[]],c=(m)=>r.root.querySelector(`#${m}`),u=()=>{let m=c("szCalPreview");if(m)m.textContent=wa(c("szCalendar")?.value??"",c("szStart")?.value||c("szStart")?.placeholder||"",c("szClimate")?.value??"",c("szLatitude")?.value??"")};r.root.addEventListener("input",(m)=>{if(/^sz(Calendar|Start|Climate|Latitude)$/.test(m.target.id))u()}),r.root.addEventListener("change",(m)=>{if(m.target.id!=="szCalKind")return;let g=m.target.value,y=we.find((_)=>_.id===g),S=c("szCalendar");S.value=y?y.name:g==="original"?xa:"",c("szStart").placeholder=y?.start??(g==="original"?"Day 1 · 14 Harvest 312 AR · 18:40":wt),u()}),u(),r.root.addEventListener("click",(m)=>{let g=m.target,y=g.closest("[data-g]");if(y){let L=y.dataset.g,C=d.indexOf(L);if(C>=0)d.splice(C,1);else d.push(L);y.classList.toggle("on",d.includes(L));return}let S=g.closest("[data-t]");if(S){let L=S.dataset.t;if(l.has(L))l.delete(L);else l.add(L);S.classList.toggle("on",l.has(L));return}let _=(L)=>r.root.querySelector(`#${L}`)?.value?.trim()||void 0;if(g.id==="szSave")e.sendToBackend({type:"sessionZero",chatId:t,saveForCharacter:r.root.querySelector("#szSaveChar")?.checked,config:{genres:d,tone:_("szTone"),personaMode:_("szPersona"),romance:_("szRomance"),difficulty:_("szDifficulty"),nsfw:_("szNsfw"),theme:_("szTheme"),limits:_("szLimits"),climate:_("szClimate"),latitude:_("szLatitude"),calendar:_("szCalendar"),startPoint:_("szStart"),trackers:[...l]}}),r.dismiss();else if(g.id==="szSkip")e.sendToBackend({type:"config",chatId:t,patch:{sessionZeroDone:!0}}),r.dismiss()})}var H={w:360,h:540,minW:300,minH:380,maxW:720,maxH:960},ka=["changed","stakes","cast","threads","unspoken","backstage"],kt='<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>',$a={changed:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8 1.8.7-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/>',stakes:'<path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9"/>',cast:'<circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 20c.6-3.6 3-5.5 6-5.5s5.4 1.9 6 5.5M15 15c2.8-.3 5 1.2 5.6 4.5"/>',threads:'<path d="M4 7c4-4 7 4 11 0s5 2 5 2M4 13c4-4 7 4 11 0s5 2 5 2"/><circle cx="6" cy="19" r="1.5"/><path d="M7.5 19H20"/>',unspoken:'<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6.5L20.5 7"/><circle cx="12" cy="13.5" r="2.2" fill="currentColor"/>',backstage:'<path d="M4 5h16v10H4z"/><path d="M8 19h8M12 15v4"/><path d="M8 9h5M8 12h8"/>',book:'<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/>',eye:'<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/>'},vt={changed:"What changed",stakes:"Stakes",cast:"Who is here",threads:"Threads",unspoken:"Unspoken",backstage:"Backstage"},ze=(e,t=19)=>`<svg viewBox="0 0 24 24" width="${t}" height="${t}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${$a[e]}</svg>`,$t=/night|hours|pre-dawn|evening|dusk/,_t=(e)=>ae[e?.now?.band]??ae.evening,Ke=(e)=>(e.cast??[]).filter((t)=>(t.tier==="spot"||t.tier==="peri")&&!t.isUser&&!t.dead),ne=(e)=>{let t=/^(\d{1,2}):(\d{2})$/.exec(e??"");return t?+t[1]*60+ +t[2]:null},de=(e)=>e<60?`${e}m`:e<1440?`${Math.floor(e/60)}h${e%60?` ${e%60}m`:""}`:`${Math.floor(e/1440)}d ${Math.floor(e%1440/60)}h`;function _a(e){let t=e.mood?.v;if(typeof t!=="number")return e.mood?"var(--alm-accent-2)":"transparent";return t>0.2?"var(--alm-gold)":t<-0.2?"var(--alm-danger)":"var(--alm-accent-2)"}var St=(e,t=!1)=>`<span class="alm-om${t?" alm-om--big":""}" style="--c:${n(e.color)}" title="${n(e.name)}${e.mood?.name?` · ${n(e.mood.name)}`:""}">${n(q(e.name))}${e.mood?`<i class="alm-om__md${e.moodFresh?" is-fresh":""}" style="--m:${_a(e)}"></i>`:""}</span>`;function De(e,t,a,r=-5){if(e==null)return'<span class="alm-otrk is-empty"></span>';let s=(o)=>(o-r)/(5-r)*100,i=t!=null&&t!==e;return`<span class="alm-otrk" style="--c:${n(a)}">${r<0?'<i class="alm-otrk__mid"></i>':""}${i?`<i class="alm-otrk__trail" style="left:${s(Math.min(t,e))}%;width:${Math.abs(s(e)-s(t))}%"></i><i class="alm-otrk__ghost" style="left:${s(t)}%"></i>`:""}<i class="alm-otrk__knob${i?" is-moved":""}" style="left:${s(e)}%"></i></span>`}function Sa(e,t,a,r=52){let s=Math.max(1,Math.min(12,t)),i=Math.round(Math.max(0,Math.min(e,t))/Math.max(1,t)*s),o=(r-10)/2,l=r/2,d=2*Math.PI*o,c=d/s,u=Math.max(1,c-(s>8?2.5:4)),m=`<svg class="alm-oring" viewBox="0 0 ${r} ${r}" width="${r}" height="${r}" role="img" aria-label="${e} of ${t}">`;for(let g=0;g<s;g++)m+=`<circle cx="${l}" cy="${l}" r="${o}" fill="none" stroke="${g<i?a:"var(--alm-line)"}" stroke-width="6" stroke-dasharray="${u.toFixed(2)} ${(d-u).toFixed(2)}" stroke-dashoffset="${(-g*c).toFixed(2)}" transform="rotate(-90 ${l} ${l})"/>`;return`${m}<text x="50%" y="52%" text-anchor="middle" dominant-baseline="middle" fill="${a}">${e}/${t}</text></svg>`}var Ca=(e)=>/suspicio|alert|threat|heat|doom|danger|wrath|hunt|alarm|war|fear|dread|pursuit|exposure/i.test(e)?"var(--alm-danger)":/trust|favou?r|hope|progress|support|loyal|alliance|ready|repair|heal/i.test(e)?"var(--alm-good)":"var(--alm-accent-2)";function Ma(e){let t=[];for(let i of e.world?.deadlines??[]){if(i.done||i.passed||i.leftMin==null||i.leftMin>4320)continue;t.push({w:i.leftMin,t:`⏳ ${i.title} · ${de(i.leftMin)}`})}for(let i of e.world?.cons??[])if(i.status==="due")t.push({w:90,t:`⚖ ${i.whoName}${i.whomName?` → ${i.whomName}`:""} due`});let a=e.now??{},r=ne(a.sun?.set),s=ne(a.sun?.rise);if(a.minute!=null){let i=r!=null?r-a.minute:-1,o=s!=null?(s-a.minute+1440)%1440:-1;if(i>0&&i<=60)t.push({w:200+i,t:`☀ sets in ${i}m`});else if(o>0&&o<=60)t.push({w:200+o,t:`☀ rises in ${o}m`})}return t.sort((i,o)=>i.w-o.w).slice(0,3).map((i)=>i.t)}function ke(e,t,a){if(t||!e)return`<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" title="Open the Almanac"><span class="alm-hudw__dial" style="background:${ae.evening}"><b class="moon"></b></span><b class="alm-hudw__brand">ALMANAC</b><span class="alm-hudw__dim">${n(t??"connecting…")}</span></div>`;let r=e.now??{},s=r.place??[],i=Ke(e).slice(0,4),o=Ma(e),l=$t.test(r.band??"evening"),d=a?.unseen??0;return`<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" aria-expanded="false" title="Open the Now window">
+<span class="alm-hudw__dial" style="background:${_t(e)}"><b class="${l?"moon":"sun"}"></b></span><b class="alm-hudw__t">${n(r.time??"--:--")}</b>${r.weather?`<span class="alm-hudw__wx">${n(r.weather.glyph)}${r.weather.tempC!=null?` ${Math.round(r.weather.tempC)}°`:` ${n(r.weather.condition)}`}</span>`:""}${s.length?`<span class="alm-hudw__pl">${kt}${n(s[s.length-1])}</span>`:""}${i.length?`<span class="alm-hudw__who">${i.map((c)=>St(c)).join("")}</span>`:""}${o.length?`<span class="alm-hudw__chip"><span class="alm-hudw__rot" data-n="${o.length}">${o.map((c)=>`<span>${n(c)}</span>`).join("")}</span></span>`:""}${e.planError?'<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>':""}${d?`<span class="alm-hudw__badge" title="${d} change${d===1?"":"s"} since you last looked">${d>9?"9+":d}</span>`:""}</div>`}function La(e){let t=e.now??{},a=ne(t.sun?.rise)??360,r=ne(t.sun?.set)??1080,s=t.minute??720,i=360,o=150,l=270,d=132,c=78,u=86,m=(v)=>({x:270-78*Math.cos(Math.PI*v),y:132-86*Math.sin(Math.PI*v)}),g=r>a&&s>=a&&s<r,y=(a+1440-r)%1440||1,S=g?(s-a)/(r-a):(s-r+1440)%1440/y,_=m(Math.min(0.97,Math.max(0.03,S))),L=t.moon,C=typeof L?.illumination==="number"?L.illumination:0.5;return`<svg class="alm-hudc__arc" viewBox="0 0 360 150" preserveAspectRatio="xMaxYMax meet" aria-hidden="true"><path d="M192 132 A78 86 0 0 1 348 132" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2" stroke-dasharray="2 5"/>${g?`<circle cx="${_.x.toFixed(1)}" cy="${_.y.toFixed(1)}" r="26" fill="rgba(255,190,110,.22)"/><circle cx="${_.x.toFixed(1)}" cy="${_.y.toFixed(1)}" r="11" fill="#ffcf73"/>`:`<circle cx="${_.x.toFixed(1)}" cy="${_.y.toFixed(1)}" r="16" fill="rgba(244,236,214,.14)"/><circle cx="${_.x.toFixed(1)}" cy="${_.y.toFixed(1)}" r="9" fill="#f4ecd6"/><circle cx="${(_.x+3+(1-C)*6).toFixed(1)}" cy="${(_.y-1).toFixed(1)}" r="${(8*(1-C)+0.01).toFixed(1)}" fill="rgba(20,22,60,.8)"/>`}</svg>`}var ja='<svg class="alm-hudc__land" viewBox="0 0 360 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 40V26c30-8 60-12 96-6 20 3 30-6 44-6h6v-7h6v7h10v-4l7-5 7 5v8c26 2 52-10 86-8 34 2 60 8 98 2v24z"/><rect x="160" y="15" width="3" height="3" fill="#ffc86b"/><rect x="170" y="17" width="3" height="3" fill="#ffc86b"/></svg>';function Ea(e){let t=String(e.now?.weather?.condition??"").toLowerCase();if(/snow|sleet|blizzard|flurr/.test(t))return'<span class="alm-hudc__fx is-snow"></span>';if(/rain|drizzle|storm|shower|thunder|downpour/.test(t))return'<span class="alm-hudc__fx is-rain"></span>';if(/fog|mist|haze/.test(t))return'<span class="alm-hudc__fx is-fog"></span>';return""}var pe=(e)=>`<p class="alm-hudc__empty">${e}</p>`,F=(e,t="")=>`<h6><span>${e}</span>${t?`<span>${t}</span>`:""}</h6>`;function Aa(e){let t=e.changes?.rows??[],a=(e.checks?.issues??[]).filter((s)=>s.level==="warn"),r=a.length?F("The check found",`${a.length}`)+a.slice(0,4).map((s)=>`<div class="alm-hudc__row"><span class="alm-hudc__ic">⚠</span><div><span>${n(s.text)}</span>${s.quote&&!s.text.includes(s.quote)?`<small>«${n(s.quote.slice(0,90))}»</small>`:""}</div></div>`).join(""):"";if(!t.length)return r+F("Since the last reply")+pe("The last reply didn't change anything the Almanac tracks.");return r+F("Since the last reply",`${t.length} change${t.length===1?"":"s"}`)+t.map((s,i)=>{let o=s.bond?`<span class="alm-hudc__d ${s.bond.delta>0?"up":"dn"}">${s.bond.delta>0?"▲ +":"▼ "}${s.bond.delta}</span>`:s.tone==="due"?'<span class="alm-hudc__d due">due</span>':"",l=s.bond?`<b>${n(s.text)}</b>${De(s.bond.to,s.bond.from,s.bond.color,s.bond.lo)}${s.sub?`<small>${n(s.sub)}</small>`:""}`:`<span>${n(s.text)}</span>${s.sub?`<small>${n(s.sub)}</small>`:""}`;return`<div class="alm-hudc__row" style="--i:${i}"><span class="alm-hudc__ic">${n(s.icon)}</span><div>${l}</div>${o}</div>`}).join("")}function Ta(e){let t=e.world??{},a=[],r=(t.deadlines??[]).filter((c)=>!c.done&&!c.passed&&c.leftMin!=null).sort((c,u)=>c.leftMin-u.leftMin);if(r.length){let c=r[0];if(a.push(F("Nearest deadline"),`<div class="alm-hudc__count"><b>${n(de(c.leftMin))}</b><span>${n(c.title)}</span><small>${n(c.at)}</small><i style="--p:${Math.max(4,Math.min(100,100-c.leftMin/4320*100)).toFixed(0)}%"></i></div>`),r.length>1)a.push(r.slice(1,4).map((u)=>`<div class="alm-hudc__row"><span class="alm-hudc__ic">⏳</span><div><span>${n(u.title)}</span><small>${n(u.at)}</small></div><span class="alm-hudc__d">${n(de(u.leftMin))}</span></div>`).join(""))}let s=(t.factions??[]).flatMap((c)=>(c.clocks??[]).map((u)=>({...u,faction:c.name}))).slice(0,6);if(s.length)a.push(F("Clocks"),`<div class="alm-hudc__rings">${s.map((c)=>`<div>${Sa(c.cur,c.max,Ca(c.name))}<small>${n(c.faction)}<br>${n(c.name)}</small></div>`).join("")}</div>`);let i=t.gauges??[];if(i.length)a.push(F("Gauges"),i.slice(0,4).map((c)=>{let u=c.history?.length>1?c.history[c.history.length-2].v:null,m=u==null||u===c.cur?"":c.cur>u?'<span class="alm-hudc__d dn">▲</span>':'<span class="alm-hudc__d up">▼</span>',g=c.max<=12?`<span class="alm-hudc__segs">${Array.from({length:c.max},(y,S)=>`<i class="${S<c.cur?"on":""}"></i>`).join("")}</span>`:`<span class="alm-hudc__bar"><i style="width:${Math.round(c.cur/Math.max(1,c.max)*100)}%"></i></span>`;return`<div class="alm-hudc__gauge"><span title="${n(c.cause??"")}">${n(c.name)}</span>${g}<span class="alm-hudc__n">${c.cur}/${c.max}</span>${m}</div>`}).join(""));let o=(t.cons??[]).filter((c)=>c.status==="due"||c.status==="open").sort((c,u)=>(c.status==="due"?-1:0)-(u.status==="due"?-1:0)||u.msgIndex-c.msgIndex).slice(0,5);if(o.length)a.push(F("Owed and due"),o.map((c)=>`<div class="alm-hudc__row"><span class="alm-hudc__ic">${c.kind==="owe"?"⚖":"⛓"}</span><div><span><b>${n(c.whoName)}${c.whomName?` → ${n(c.whomName)}`:""}</b>: ${n(c.what??"")}</span>${c.dueText?`<small>due ${n(c.dueText)}</small>`:""}</div>${c.status==="due"?'<span class="alm-hudc__d due">due</span>':""}</div>`).join(""));let l=(t.clues??[]).slice(-5).reverse();if(l.length){let c=(u)=>!u?0:/solid|confirm|certain|strong|reliable|high/i.test(u)?3:/likely|probable|good|medium|fair/i.test(u)?2:1;a.push(F("Clue board"),l.map((u)=>`<div class="alm-hudc__clue"><span>\uD83D\uDCCC</span><div>${n(u.text)}${u.pointsTo?` <em>→ ${n(u.pointsTo)}</em>`:""}${u.reliability?`<span class="alm-hudc__rel" title="${n(u.reliability)}">${[1,2,3].map((m)=>`<i class="${m<=c(u.reliability)?"on":""}"></i>`).join("")}</span>`:""}</div></div>`).join(""))}let d=(t.rep??[]).filter((c)=>c.score).slice(0,4);if(d.length)a.push(F("Standing"),`<div class="alm-hudc__tags">${d.map((c)=>`<span class="alm-hudc__tag ${c.score>0?"up":"dn"}">${n(c.group)} ${c.score>0?"+":""}${c.score}</span>`).join("")}</div>`);return a.length?a.join(""):F("Stakes")+pe("No deadlines, clocks, gauges or debts yet.")}function Ia(e,t){let a=Ke(e),r=`<button class="alm-hudc__narr${t.narr?" is-on":""}" data-hud="narr" aria-pressed="${t.narr}" title="${t.narr?"Hide the narrator's secrets":"Show the narrator's secrets (spoilers)"}">${ze("eye",14)}${t.narr?"Narrator":"Player"}</button>`,s=`<h6><span>Present${(e.now?.place??[]).length?` · ${n(e.now.place[e.now.place.length-1])}`:""}</span>${r}</h6>`;if(!a.length)return s+pe("No one else is here.");let i=a.slice(0,8).map((c)=>{let u=[c.mood?`<span class="alm-hudc__tag" title="${n(c.mood.prev&&c.moodFresh?`${c.mood.prev} → `:"")}${n(c.mood.name)}">${c.mood.prev&&c.moodFresh?`<s>${n(c.mood.prev)}</s> → `:""}${n(c.mood.name)}</span>`:"",...(c.held??[]).slice(0,2).map((S)=>`<span class="alm-hudc__tag" title="${n(S)}">✋ ${n(S)}</span>`),...(c.injuries??[]).slice(0,2).map((S)=>`<span class="alm-hudc__tag dn" title="${n(S.where)}${S.note?`, ${n(S.note)}`:""}">\uD83E\uDE78 ${n(S.where)}${S.note?`, ${n(S.note)}`:""}</span>`)].join(""),m=c.toYou,g=m?`<div class="alm-hudc__bars">${m.trust!=null?`<span>trust</span>${De(m.trust,m.trustWas,c.color)}`:""}${m.affection!=null?`<span>affection</span>${De(m.affection,m.affectionWas,c.color)}`:""}</div>`:"",y=t.narr&&c.pressure?`<div class="alm-hudc__secret"><b>Hidden pressure</b>${n(c.name)} ${n(c.pressure)}</div>`:"";return`<div class="alm-hudc__per" style="--c:${n(c.color)}"><div class="alm-hudc__perh">${St(c,!0)}<div><b>${n(c.name)}</b>${c.activity?`<small>${n(c.activity)}</small>`:""}</div></div>${u?`<div class="alm-hudc__tags">${u}</div>`:""}${g}${y}</div>`}).join(""),o=e.irony??[],l=Ke(e).filter((c)=>c.pressure).length+o.length,d=t.narr?o.map((c)=>`<div class="alm-hudc__irony"><b>\uD83C\uDFAD Dramatic irony</b>${n(c.name)} is certain of something false: ${n(c.statement)}</div>`).join(""):l?`<p class="alm-hudc__locked">\uD83D\uDD12 ${l} secret${l===1?"":"s"} the narrator keeps. Narrator view shows ${l===1?"it":"them"}.</p>`:"";return s+`<div class="alm-hudc__who">${i}</div>`+d}function Ra(e){let t=e.world??{},a=[],r=(t.threads??[]).filter((l)=>l.status!=="resolved").sort((l,d)=>d.lastMsg-l.lastMsg).slice(0,6);if(r.length)a.push(F("Threads"),r.map((l)=>`<div class="alm-hudc__thr"><div><b>${n(l.title)}</b><span class="alm-hudc__st ${l.status==="stalled"?"stall":""}">${l.status==="stalled"?`stalled${l.stalls?` · ${l.stalls}`:""}`:"open"}</span></div>${l.latest?`<small>${n(l.latest)}</small>`:""}${l.blocker?`<small>Blocked: ${n(l.blocker)}</small>`:""}</div>`).join(""));let s=e.now?.scene??0,i=(t.plants??[]).filter((l)=>l.paidAt==null).slice(-3).reverse();if(i.length)a.push(F("Chekhov's shelf"),i.map((l)=>{let d=Math.max(0,s-(l.plantedScene??s));return`<div class="alm-hudc__chek"><span>\uD83D\uDD2B</span><div><b>${n(l.text)}</b><small>${d?`planted ${d} scene${d===1?"":"s"} ago`:"planted this scene"}${l.payoff?` · payoff: ${n(l.payoff)}`:""}</small></div></div>`}).join(""));let o=(t.rumors??[]).slice(-2).reverse();if(o.length)a.push(F("Word going round"),o.map((l)=>`<p class="alm-hudc__rumor">“${n(l.text)}”<small>${l.hops?`passed through ${l.hops} mouth${l.hops===1?"":"s"}`:"first-hand"}</small></p>`).join(""));return a.length?a.join(""):F("Threads")+pe("No open threads, plants or rumours yet.")}function Oa(e){let t=e?.thoughts?.innerVoice??"";if(t==="off")return!1;return!!t||(e?.thoughts?.list??[]).length>0}function Na(e,t){let a=e.thoughts??{list:[]},r=a.list??[],s=a.msg>=0&&a.msg===e.changes?.msg;if(!r.length)return F("Unspoken")+pe(a.innerVoice==="prose"?"No one thought aloud in the last reply.":"The last reply kept its thoughts to itself.");let i=r.map((o,l)=>{let d=`${a.msg}:${l}`,c=o.isUser?`${o.name} · you`:o.name;if(o.kind==="inline"||!o.cue)return`<div class="alm-hudc__bub" style="--c:${n(o.color)}"><b>${n(c)} thinks</b>${n(o.text)}</div>`;let u=t.opened.has(d);return`<button class="alm-hudc__env${u?" is-open":""}" style="--c:${n(o.color)}" data-hud="env" data-key="${n(d)}" aria-expanded="${u}">${u?`<span class="alm-hudc__note">${n(o.text)}<em>— ${n(o.name)}</em></span>`:`<span class="alm-hudc__front"><span class="alm-hudc__seal">${n(q(o.name))}</span><span class="alm-hudc__cue">“${n(o.cue)}”</span><span class="alm-hudc__envwho">${n(c)} · break the seal</span></span>`}</button>`}).join("");return F(s?"Unspoken · the last reply":"Unspoken · an earlier reply",`${r.length}`)+'<p class="alm-hudc__lockcap">\uD83D\uDD12 No one else in the story knows these.</p>'+i}function Pa(e){let t=(e.feed??[])[0],a=[],r=Math.round(String(e.note??"").length/4),s=e.chronicle?.tokens?(e.chronicle.tokens.chapter??0)+(e.chronicle.tokens.arc??0)+(e.chronicle.tokens.volume??0):0,o=[["Lore & recall",t?.tokens??0,"var(--alm-gold)"],["Chronicle",s,"var(--alm-accent-2)"],["Scene note",r,"var(--alm-accent)"]],l=o.reduce((g,y)=>g+y[1],0);if(l)a.push(F("Fed to the model",`~${l.toLocaleString()} tokens`),`<div class="alm-hudc__tok">${o.filter((g)=>g[1]).map((g)=>`<i style="flex:${g[1]};background:${g[2]}"></i>`).join("")}</div><div class="alm-hudc__legend">${o.filter((g)=>g[1]).map((g)=>`<span style="--c:${g[2]}">${g[0]} ${g[1].toLocaleString()}</span>`).join("")}</div>`);let d=(t?.items??[]).filter((g)=>g.injected).slice(0,8),c=(t?.chronicle??[]).slice(0,4);if(d.length||c.length)a.push(F("What went in this turn"),[...d.map((g)=>`<div class="alm-hudc__fed"><span class="alm-hudc__via">${n(g.via??"recall")}</span><span>${n(g.name)}</span></div>`),...c.map((g)=>`<div class="alm-hudc__fed"><span class="alm-hudc__via">chronicle</span><span>${n(g.name)}</span></div>`)].join(""));let u=e.clerk??{},m=u.running?"⏳ The knowledge clerk is reading replies…":u.unread?`${u.unread} repl${u.unread===1?"y":"ies"} the clerk hasn't read yet`:"✓ The clerk is idle; every reply read";return a.push(F("Health"),e.planError?`<p class="alm-hudc__ok is-warn">The last turn went out without the Almanac (${n(e.planError.where)}).</p>`:'<p class="alm-hudc__ok">✓ The last turn went out with the Almanac</p>',`<p class="alm-hudc__ok${u.unread?" is-warn":""}">${n(m)}</p>`),a.join("")}function Ct(e,t={tab:"changed",narr:!1,unseen:0,opened:new Set}){let a=e.now??{},r=a.place??[],s=String(a.clock??""),i=s.lastIndexOf(", "),o=String(a.date??(a.time&&i>0?s.slice(0,i):"")),l=a.day!=null&&!/\bday\b/i.test(o)?`${o?" · ":""}Day ${a.day}`:"",d=t.size??H,c=$t.test(a.band??"evening"),u=ka.filter((b)=>b!=="unspoken"||Oa(e)),m=u.includes(t.tab)?t.tab:"changed",g=e.changes?.rows?.length??0,y=(e.world?.cons??[]).some((b)=>b.status==="due")||(e.world?.deadlines??[]).some((b)=>!b.done&&!b.passed&&b.leftMin!=null&&b.leftMin<180),S=(b)=>b==="changed"&&t.unseen?`<sup>${t.unseen>9?"9+":t.unseen}</sup>`:b==="stakes"&&y?'<sup class="dot"></sup>':b==="unspoken"&&(e.thoughts?.list??[]).length&&e.thoughts.msg===e.changes?.msg?'<sup class="dot soft"></sup>':"",_=ne(a.sun?.set),L=ne(a.sun?.rise),C="";if(a.minute!=null&&_!=null&&L!=null){let b=_-a.minute,E=(L-a.minute+1440)%1440;C=a.sun?.daylight?b>0?`☀ sets ${de(b)}`:"":`☀ rises ${de(E)}`}let x=(a.forecastHours??[]).filter((b,E)=>E%2===0).slice(0,6),v=m==="stakes"?Ta(e):m==="cast"?Ia(e,t):m==="threads"?Ra(e):m==="unspoken"?Na(e,t):m==="backstage"?Pa(e):Aa(e);return`<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now" style="width:${d.w}px;height:${d.h}px">
+<header class="alm-hudc__sky${c?" is-night":""}" style="background:${_t(e)}">
+  ${c?'<span class="alm-hudc__stars"></span>':""}${La(e)}${Ea(e)}${ja}
+  <div class="alm-hudc__ttl"><b>${n(a.time??"--:--")}</b><span title="${n(o+l)}">${n(o)}${n(l)}</span>${a.title?`<em title="${n(a.title)}">${n(a.title)}</em>`:""}</div>
+  <div class="alm-hudc__astro">${C?`<span>${n(C)}</span>`:""}${a.moon?`<span title="${n(a.moon.name)}">${n(a.moon.glyph)}<i> ${n(a.moon.name)}</i></span>`:""}</div>
   <button class="alm-hudc__x" data-hud="toggle" aria-label="Close the Now window">✕</button>
-  <div class="alm-hudc__chips">${n.weather ? `<span>${escapeHtml(n.weather.glyph)} ${escapeHtml(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${escapeHtml(place.slice(-3).join(" › "))}</span>` : ""}</div>
+  <div class="alm-hudc__chips">${a.weather?`<span>${n(a.weather.glyph)} ${n(a.weather.text??a.weather.condition)}</span>`:""}${r.length?`<span>${kt} ${n(r.slice(-3).join(" › "))}</span>`:""}</div>
 </header>
-${fc.length ? `<div class="alm-hudc__fc">${fc.map((h, i) => `<div class="${i === 0 ? "now" : ""}"><span>${i === 0 ? "now" : escapeHtml(h.t)}</span><b>${escapeHtml(h.glyph)}</b><i>${escapeHtml(h.temp)}°</i></div>`).join("")}</div>` : ""}
-${v.planError ? `<p class="alm-hudc__err alm-hudc__err--top" data-hud="tab" data-tab="backstage"><b>The last turn went out without the Almanac.</b> ${escapeHtml(v.planError.message)}</p>` : ""}
+${x.length?`<div class="alm-hudc__fc">${x.map((b,E)=>`<div class="${E===0?"now":""}"><span>${E===0?"now":n(b.t)}</span><b>${n(b.glyph)}</b><i>${n(b.temp)}°</i></div>`).join("")}</div>`:""}
+${e.planError?`<p class="alm-hudc__err alm-hudc__err--top" data-hud="tab" data-tab="backstage"><b>The last turn went out without the Almanac.</b> ${n(e.planError.message)}</p>`:""}
 <div class="alm-hudc__body">
-  <nav class="alm-hudc__rail" role="tablist" aria-orientation="vertical">${tabs.map((t) => `<button role="tab" data-hud="tab" data-tab="${t}" aria-selected="${t === tab}" title="${TAB_LABEL[t]}" aria-label="${TAB_LABEL[t]}">${svg(t)}${badge(t)}</button>`).join("")}<button class="alm-hudc__open" data-hud="open" title="Open the Almanac" aria-label="Open the Almanac">${svg("book")}</button></nav>
-  <div class="alm-hudc__pane" role="tabpanel" data-tab="${tab}">${pane}</div>
-</div><span class="alm-hudc__grip" data-hud-grip data-spindle-float-resize-handle title="Drag to resize · double-click to reset" aria-hidden="true"></span></div>`;
-}
-function measure(html, width) {
-  try {
-    const probe = document.createElement("div");
-    probe.style.cssText = `position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none;${width ? `width:${width}px;` : "width:max-content;"}`;
-    probe.innerHTML = html;
-    document.body.appendChild(probe);
-    const el = probe.firstElementChild;
-    const r = el?.getBoundingClientRect();
-    probe.remove();
-    if (r && r.width > 0)
-      return { w: Math.ceil(r.width), h: Math.ceil(r.height) };
-  } catch {}
-  const text = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-  const avatars = (html.match(/class="alm-om/g) ?? []).length;
-  return width ? { w: width, h: 540 } : { w: Math.ceil(text.length * 7.4 + 56 + avatars * 18), h: 44 };
-}
+  <nav class="alm-hudc__rail" role="tablist" aria-orientation="vertical">${u.map((b)=>`<button role="tab" data-hud="tab" data-tab="${b}" aria-selected="${b===m}" title="${vt[b]}" aria-label="${vt[b]}">${ze(b)}${S(b)}</button>`).join("")}<button class="alm-hudc__open" data-hud="open" title="Open the Almanac" aria-label="Open the Almanac">${ze("book")}</button></nav>
+  <div class="alm-hudc__pane" role="tabpanel" data-tab="${m}">${v}</div>
+</div><span class="alm-hudc__grip" data-hud-grip data-spindle-float-resize-handle title="Drag to resize · double-click to reset" aria-hidden="true"></span></div>`}function Mt(e,t){try{let s=document.createElement("div");s.style.cssText=`position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none;${t?`width:${t}px;`:"width:max-content;"}`,s.innerHTML=e,document.body.appendChild(s);let o=s.firstElementChild?.getBoundingClientRect();if(s.remove(),o&&o.width>0)return{w:Math.ceil(o.width),h:Math.ceil(o.height)}}catch{}let a=e.replace(/<svg[\s\S]*?<\/svg>/g,"").replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim(),r=(e.match(/class="alm-om/g)??[]).length;return t?{w:t,h:540}:{w:Math.ceil(a.length*7.4+56+r*18),h:44}}var k=(e)=>`:root[data-alm-skin="${e}"]`;var Fa=`
+/* Almanac: the sun on the section heads */
+${k("almanac")} .alm-hudc h6>span:first-child::before{content:"☉ ";color:var(--alm-gold);letter-spacing:0}
 
-// src/frontend/hudstyles.ts
-var S2 = (id) => `:root[data-alm-skin="${id}"]`;
-var BASE = `
+/* Solar: square, ruled, highlighter yellow */
+${k("solar")} .alm-hudw,${k("solar")} .alm-hudc{--alm-hud-pill:0px;--alm-hud-r:0px}
+${k("solar")} .alm-hudw{border:2px solid var(--alm-rule);box-shadow:none}
+${k("solar")} .alm-hudc{box-shadow:0 0 0 2px var(--alm-rule)}
+${k("solar")} .alm-hudc h6{border-top:2px solid var(--alm-rule);padding-top:6px;color:var(--alm-ink);font-weight:700}
+${k("solar")} .alm-hudc__rail button{border-radius:0}
+${k("solar")} .alm-hudc__rail button[aria-selected="true"]{box-shadow:none;color:#111}
+${k("solar")} .alm-om,${k("solar")} .alm-hudw__dial{border-radius:0}
+${k("solar")} .alm-hudc__ttl b{font-weight:900}
+
+/* Nocturne: arched portraits, a filigree frame */
+${k("nocturne")} .alm-om{border-radius:50% 50% 3px 3px;font-style:italic}
+${k("nocturne")} .alm-hudc{box-shadow:0 30px 60px -24px rgba(0,0,0,.8),0 0 0 1px var(--alm-line),inset 0 0 0 4px var(--alm-panel)}
+${k("nocturne")} .alm-hudc__pane{box-shadow:inset 0 0 0 4px var(--alm-panel),inset 0 0 0 5px var(--alm-line)}
+${k("nocturne")} .alm-hudc h6{font-family:var(--alm-font-display);font-style:italic;text-transform:none;letter-spacing:.04em;font-size:13px}
+${k("nocturne")} .alm-hudc__ttl b{font-style:italic;font-weight:500}
+
+/* Botanical: specimen labels and tape */
+${k("botanical")} .alm-hudw,${k("botanical")} .alm-hudc{--alm-hud-pill:4px}
+${k("botanical")} .alm-hudw{border-color:var(--alm-ink)}
+${k("botanical")} .alm-om{border-radius:4px;background:var(--alm-panel);color:var(--c);box-shadow:0 0 0 1px var(--c);font-family:var(--alm-font-mono);font-weight:400}
+${k("botanical")} .alm-hudc{overflow:visible;border:1px solid var(--alm-ink)}
+${k("botanical")} .alm-hudc__sky{border-radius:calc(var(--alm-hud-r) + 5px) calc(var(--alm-hud-r) + 5px) 0 0}
+${k("botanical")} .alm-hudc::before{content:"";position:absolute;z-index:2;top:-8px;left:40%;width:70px;height:17px;background:color-mix(in oklab,var(--alm-gold) 40%,transparent);transform:rotate(-3deg);pointer-events:none}
+${k("botanical")} .alm-hudc__rail button{border-radius:3px}
+
+/* Prism: holographic foil */
+${k("prism")} .alm-hudw{border:1.5px solid transparent;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,var(--alm-holo) border-box}
+${k("prism")} .alm-hudc{box-shadow:0 30px 60px -24px rgba(0,0,0,.7);border:1.5px solid transparent;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,var(--alm-holo) border-box}
+${k("prism")} .alm-hudc__rail button[aria-selected="true"],${k("prism")} .alm-hudw__badge{background:var(--alm-holo);color:#15152c}
+${k("prism")} .alm-hudc__ttl b{font-weight:800}
+
+/* Candy: stickers with hard shadows */
+${k("candy")} .alm-hudw{border:2.5px solid var(--alm-pop);box-shadow:3px 3px 0 var(--alm-pop)}
+${k("candy")} .alm-hudc{border:2.5px solid var(--alm-pop);box-shadow:5px 5px 0 var(--alm-pop)}
+${k("candy")} .alm-om{box-shadow:0 0 0 2px var(--alm-pop);transform:rotate(-6deg)}
+${k("candy")} .alm-hudc__rail button[aria-selected="true"]{border:2px solid var(--alm-pop);box-shadow:2px 2px 0 var(--alm-pop)}
+${k("candy")} .alm-hudc__per,${k("candy")} .alm-hudc__count{box-shadow:inset 0 0 0 2px var(--alm-pop),3px 3px 0 var(--c,var(--alm-accent))}
+${k("candy")} .alm-hudw__badge{border:2px solid var(--alm-pop);box-shadow:2px 2px 0 var(--alm-pop)}
+
+/* Dossier: case file, a stamped count */
+${k("dossier")} .alm-hudw,${k("dossier")} .alm-hudc{--alm-hud-pill:3px}
+${k("dossier")} .alm-om{border-radius:3px}
+${k("dossier")} .alm-hudw__badge{border-radius:2px;background:none;color:var(--alm-accent);box-shadow:none;border:1.5px solid var(--alm-accent);transform:rotate(-8deg);font-family:var(--alm-font-mono)}
+${k("dossier")} .alm-hudc__row{border-bottom-style:solid}
+${k("dossier")} .alm-hudc__per{background:var(--alm-panel);border-left:3px solid var(--c);border-radius:2px}
+${k("dossier")} .alm-hudc__note{font-size:1.7em}
+
+/* Scriptorium: ribbons, a wax seal, blackletter */
+${k("scriptorium")} .alm-hudw,${k("scriptorium")} .alm-hudc{--alm-hud-pill:3px}
+${k("scriptorium")} .alm-hudw{outline:1px solid var(--alm-line);outline-offset:-4px}
+${k("scriptorium")} .alm-hudw__t{font:400 20px/1 "UnifrakturMaguntia",serif}
+${k("scriptorium")} .alm-hudc__ttl b{font:400 42px/1 "UnifrakturMaguntia",serif}
+${k("scriptorium")} .alm-hudw__badge{width:24px;height:24px;line-height:24px;background:radial-gradient(circle at 35% 30%,#d4475a,#8e1f2f 70%);box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 0 0 3px rgba(0,0,0,.18)}
+${k("scriptorium")} .alm-om{border-radius:50% 50% 6px 6px;box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 0 3px var(--alm-gold);font:400 13px/1 "UnifrakturMaguntia",serif}
+${k("scriptorium")} .alm-hudc h6{border-bottom:3px double var(--alm-line);padding-bottom:4px}
+${k("scriptorium")} .alm-hudc__pane{box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px var(--alm-line)}
+
+/* Arcana: gold frames, glowing voices */
+${k("arcana")} .alm-hudc{box-shadow:0 30px 60px -24px rgba(0,0,0,.8),0 0 0 1px color-mix(in oklab,var(--alm-gold) 45%,transparent),0 0 36px -16px var(--alm-gold)}
+${k("arcana")} .alm-hudw{border-color:color-mix(in oklab,var(--alm-gold) 50%,var(--alm-line))}
+${k("arcana")} .alm-om{box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 12px -1px var(--c)}
+${k("arcana")} .alm-hudc h6{font-family:var(--alm-font-display);letter-spacing:.2em;color:var(--alm-gold)}
+${k("arcana")} .alm-hudc__per{box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-gold) 30%,transparent),0 0 20px -12px var(--c)}
+
+/* Orbital: clipped corners, instrument readout */
+${k("orbital")} .alm-hudw,${k("orbital")} .alm-hudc{--alm-hud-pill:0px;--alm-hud-r:0px}
+${k("orbital")} .alm-hudw{border-top:2px solid var(--alm-accent);text-transform:uppercase}
+${k("orbital")} .alm-hudc{clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));border-top:3px solid var(--alm-accent)}
+${k("orbital")} .alm-om,${k("orbital")} .alm-hudw__dial,${k("orbital")} .alm-om__md{border-radius:0}
+${k("orbital")} .alm-hudc__rail button,${k("orbital")} .alm-hudc__tag,${k("orbital")} .alm-hudc__d,${k("orbital")} .alm-hudc__st{border-radius:0}
+${k("orbital")} .alm-hudw__badge{border-radius:0}
+${k("orbital")} .alm-hudc h6>span:first-child::before{content:"// ";color:var(--alm-accent)}
+
+/* Posy: round, with a sprig of roses */
+${k("posy")} .alm-om{box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 0 4px color-mix(in oklab,var(--c) 35%,transparent)}
+${k("posy")} .alm-hudc__pane{position:relative}
+${k("posy")} .alm-hudc__pane::after{content:"";position:sticky;display:block;float:right;bottom:-10px;margin:-40px -12px -16px 0;width:64px;height:64px;background:var(--alm-sprig) center/contain no-repeat;opacity:.55;pointer-events:none}
+${k("posy")} .alm-hudc h6>span:first-child::after{content:" ✿";color:var(--alm-accent)}
+`,Lt=`
 .alm-hudw,.alm-hudc{--alm-hud-r:var(--alm-radius,18px);--alm-hud-pill:999px;--alm-hud-ring:var(--alm-panel);--alm-hud-veil:linear-gradient(color-mix(in oklab,var(--alm-panel) 84%,transparent),color-mix(in oklab,var(--alm-panel) 84%,transparent));box-sizing:border-box;-webkit-font-smoothing:antialiased}
 .alm-hudw *,.alm-hudc *{box-sizing:border-box}
 .alm-hudc button,.alm-hudw button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit;min-width:0;min-height:0;box-shadow:none}
@@ -3878,590 +1105,4 @@ var BASE = `
 @keyframes alm-hud-snow{to{background-position:20px 160px,-20px 160px,10px 160px}}
 @keyframes alm-hud-twinkle{50%{opacity:.35}}
 @keyframes alm-hud-unfold{from{opacity:0;transform:rotateX(-60deg)}to{opacity:1;transform:none}}
-`;
-var SIGNATURES2 = `
-/* Almanac: the sun on the section heads */
-${S2("almanac")} .alm-hudc h6>span:first-child::before{content:"☉ ";color:var(--alm-gold);letter-spacing:0}
-
-/* Solar: square, ruled, highlighter yellow */
-${S2("solar")} .alm-hudw,${S2("solar")} .alm-hudc{--alm-hud-pill:0px;--alm-hud-r:0px}
-${S2("solar")} .alm-hudw{border:2px solid var(--alm-rule);box-shadow:none}
-${S2("solar")} .alm-hudc{box-shadow:0 0 0 2px var(--alm-rule)}
-${S2("solar")} .alm-hudc h6{border-top:2px solid var(--alm-rule);padding-top:6px;color:var(--alm-ink);font-weight:700}
-${S2("solar")} .alm-hudc__rail button{border-radius:0}
-${S2("solar")} .alm-hudc__rail button[aria-selected="true"]{box-shadow:none;color:#111}
-${S2("solar")} .alm-om,${S2("solar")} .alm-hudw__dial{border-radius:0}
-${S2("solar")} .alm-hudc__ttl b{font-weight:900}
-
-/* Nocturne: arched portraits, a filigree frame */
-${S2("nocturne")} .alm-om{border-radius:50% 50% 3px 3px;font-style:italic}
-${S2("nocturne")} .alm-hudc{box-shadow:0 30px 60px -24px rgba(0,0,0,.8),0 0 0 1px var(--alm-line),inset 0 0 0 4px var(--alm-panel)}
-${S2("nocturne")} .alm-hudc__pane{box-shadow:inset 0 0 0 4px var(--alm-panel),inset 0 0 0 5px var(--alm-line)}
-${S2("nocturne")} .alm-hudc h6{font-family:var(--alm-font-display);font-style:italic;text-transform:none;letter-spacing:.04em;font-size:13px}
-${S2("nocturne")} .alm-hudc__ttl b{font-style:italic;font-weight:500}
-
-/* Botanical: specimen labels and tape */
-${S2("botanical")} .alm-hudw,${S2("botanical")} .alm-hudc{--alm-hud-pill:4px}
-${S2("botanical")} .alm-hudw{border-color:var(--alm-ink)}
-${S2("botanical")} .alm-om{border-radius:4px;background:var(--alm-panel);color:var(--c);box-shadow:0 0 0 1px var(--c);font-family:var(--alm-font-mono);font-weight:400}
-${S2("botanical")} .alm-hudc{overflow:visible;border:1px solid var(--alm-ink)}
-${S2("botanical")} .alm-hudc__sky{border-radius:calc(var(--alm-hud-r) + 5px) calc(var(--alm-hud-r) + 5px) 0 0}
-${S2("botanical")} .alm-hudc::before{content:"";position:absolute;z-index:2;top:-8px;left:40%;width:70px;height:17px;background:color-mix(in oklab,var(--alm-gold) 40%,transparent);transform:rotate(-3deg);pointer-events:none}
-${S2("botanical")} .alm-hudc__rail button{border-radius:3px}
-
-/* Prism: holographic foil */
-${S2("prism")} .alm-hudw{border:1.5px solid transparent;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,var(--alm-holo) border-box}
-${S2("prism")} .alm-hudc{box-shadow:0 30px 60px -24px rgba(0,0,0,.7);border:1.5px solid transparent;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,var(--alm-holo) border-box}
-${S2("prism")} .alm-hudc__rail button[aria-selected="true"],${S2("prism")} .alm-hudw__badge{background:var(--alm-holo);color:#15152c}
-${S2("prism")} .alm-hudc__ttl b{font-weight:800}
-
-/* Candy: stickers with hard shadows */
-${S2("candy")} .alm-hudw{border:2.5px solid var(--alm-pop);box-shadow:3px 3px 0 var(--alm-pop)}
-${S2("candy")} .alm-hudc{border:2.5px solid var(--alm-pop);box-shadow:5px 5px 0 var(--alm-pop)}
-${S2("candy")} .alm-om{box-shadow:0 0 0 2px var(--alm-pop);transform:rotate(-6deg)}
-${S2("candy")} .alm-hudc__rail button[aria-selected="true"]{border:2px solid var(--alm-pop);box-shadow:2px 2px 0 var(--alm-pop)}
-${S2("candy")} .alm-hudc__per,${S2("candy")} .alm-hudc__count{box-shadow:inset 0 0 0 2px var(--alm-pop),3px 3px 0 var(--c,var(--alm-accent))}
-${S2("candy")} .alm-hudw__badge{border:2px solid var(--alm-pop);box-shadow:2px 2px 0 var(--alm-pop)}
-
-/* Dossier: case file, a stamped count */
-${S2("dossier")} .alm-hudw,${S2("dossier")} .alm-hudc{--alm-hud-pill:3px}
-${S2("dossier")} .alm-om{border-radius:3px}
-${S2("dossier")} .alm-hudw__badge{border-radius:2px;background:none;color:var(--alm-accent);box-shadow:none;border:1.5px solid var(--alm-accent);transform:rotate(-8deg);font-family:var(--alm-font-mono)}
-${S2("dossier")} .alm-hudc__row{border-bottom-style:solid}
-${S2("dossier")} .alm-hudc__per{background:var(--alm-panel);border-left:3px solid var(--c);border-radius:2px}
-${S2("dossier")} .alm-hudc__note{font-size:1.7em}
-
-/* Scriptorium: ribbons, a wax seal, blackletter */
-${S2("scriptorium")} .alm-hudw,${S2("scriptorium")} .alm-hudc{--alm-hud-pill:3px}
-${S2("scriptorium")} .alm-hudw{outline:1px solid var(--alm-line);outline-offset:-4px}
-${S2("scriptorium")} .alm-hudw__t{font:400 20px/1 "UnifrakturMaguntia",serif}
-${S2("scriptorium")} .alm-hudc__ttl b{font:400 42px/1 "UnifrakturMaguntia",serif}
-${S2("scriptorium")} .alm-hudw__badge{width:24px;height:24px;line-height:24px;background:radial-gradient(circle at 35% 30%,#d4475a,#8e1f2f 70%);box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 0 0 3px rgba(0,0,0,.18)}
-${S2("scriptorium")} .alm-om{border-radius:50% 50% 6px 6px;box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 0 3px var(--alm-gold);font:400 13px/1 "UnifrakturMaguntia",serif}
-${S2("scriptorium")} .alm-hudc h6{border-bottom:3px double var(--alm-line);padding-bottom:4px}
-${S2("scriptorium")} .alm-hudc__pane{box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px var(--alm-line)}
-
-/* Arcana: gold frames, glowing voices */
-${S2("arcana")} .alm-hudc{box-shadow:0 30px 60px -24px rgba(0,0,0,.8),0 0 0 1px color-mix(in oklab,var(--alm-gold) 45%,transparent),0 0 36px -16px var(--alm-gold)}
-${S2("arcana")} .alm-hudw{border-color:color-mix(in oklab,var(--alm-gold) 50%,var(--alm-line))}
-${S2("arcana")} .alm-om{box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 12px -1px var(--c)}
-${S2("arcana")} .alm-hudc h6{font-family:var(--alm-font-display);letter-spacing:.2em;color:var(--alm-gold)}
-${S2("arcana")} .alm-hudc__per{box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-gold) 30%,transparent),0 0 20px -12px var(--c)}
-
-/* Orbital: clipped corners, instrument readout */
-${S2("orbital")} .alm-hudw,${S2("orbital")} .alm-hudc{--alm-hud-pill:0px;--alm-hud-r:0px}
-${S2("orbital")} .alm-hudw{border-top:2px solid var(--alm-accent);text-transform:uppercase}
-${S2("orbital")} .alm-hudc{clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));border-top:3px solid var(--alm-accent)}
-${S2("orbital")} .alm-om,${S2("orbital")} .alm-hudw__dial,${S2("orbital")} .alm-om__md{border-radius:0}
-${S2("orbital")} .alm-hudc__rail button,${S2("orbital")} .alm-hudc__tag,${S2("orbital")} .alm-hudc__d,${S2("orbital")} .alm-hudc__st{border-radius:0}
-${S2("orbital")} .alm-hudw__badge{border-radius:0}
-${S2("orbital")} .alm-hudc h6>span:first-child::before{content:"// ";color:var(--alm-accent)}
-
-/* Posy: round, with a sprig of roses */
-${S2("posy")} .alm-om{box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 0 4px color-mix(in oklab,var(--c) 35%,transparent)}
-${S2("posy")} .alm-hudc__pane{position:relative}
-${S2("posy")} .alm-hudc__pane::after{content:"";position:sticky;display:block;float:right;bottom:-10px;margin:-40px -12px -16px 0;width:64px;height:64px;background:var(--alm-sprig) center/contain no-repeat;opacity:.55;pointer-events:none}
-${S2("posy")} .alm-hudc h6>span:first-child::after{content:" ✿";color:var(--alm-accent)}
-`;
-var HUD_CSS = BASE + SIGNATURES2;
-
-// src/frontend.ts
-var ICON2 = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><circle cx="12" cy="10" r="3.2"/><path d="M12 4.5v1.3M12 14.2v1.3M6.5 10h1.3M16.2 10h1.3"/></svg>`;
-var COMMANDS = [
-  ["/skip 15m", "⏩ Skip 15 minutes"],
-  ["/skip 1h", "⏩ Skip an hour"],
-  ["/skip until evening", "⏩ Skip until evening"],
-  ["/skip until morning", "⏩ Skip to next morning"],
-  ["/recap", "\uD83D\uDCDC Recap (Previously on…)"],
-  ["/report bonds", "\uD83D\uDD78 Report: bonds"],
-  ["/report threads", "\uD83E\uDDF5 Report: threads"],
-  ["/audit", "\uD83D\uDD0E Audit continuity"]
-];
-function setup(ctx) {
-  const removers = [];
-  let fontsOn = true;
-  let skin = "almanac";
-  let fontStyle = null;
-  let fontSkin = "";
-  const setFonts = (on) => {
-    if (fontStyle && (!on || fontSkin !== skin)) {
-      fontStyle();
-      fontStyle = null;
-    }
-    if (on && !fontStyle) {
-      fontStyle = ctx.dom.addStyle(fontsFor(skin));
-      fontSkin = skin;
-    }
-    fontsOn = on;
-  };
-  setFonts(true);
-  removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS + HUD_CSS));
-  let customStyle = null;
-  let lastCustom = "";
-  const applyCustom = (colors) => {
-    const css = customCss(colors);
-    if (css === lastCustom)
-      return;
-    customStyle?.();
-    customStyle = css ? ctx.dom.addStyle(css) : null;
-    lastCustom = css;
-  };
-  let modePref = "auto";
-  const systemDark = () => typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
-  const hostMode = () => {
-    if (typeof getComputedStyle !== "function")
-      return systemDark() ? "dark" : "light";
-    const probe = (el) => {
-      if (!el)
-        return null;
-      const m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/.exec(getComputedStyle(el).backgroundColor);
-      if (!m || m[4] != null && parseFloat(m[4]) < 0.5)
-        return null;
-      const [r, g, b] = [m[1], m[2], m[3]].map(Number);
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128 ? "dark" : "light";
-    };
-    const fromVar = getComputedStyle(document.documentElement).getPropertyValue("--lumiverse-bg").trim();
-    if (fromVar) {
-      const tmp = document.createElement("span");
-      tmp.style.cssText = `position:absolute;visibility:hidden;background:${fromVar}`;
-      document.body.append(tmp);
-      const m = probe(tmp);
-      tmp.remove();
-      if (m)
-        return m;
-    }
-    return probe(document.body) ?? probe(document.documentElement) ?? (systemDark() ? "dark" : "light");
-  };
-  const applyMode = () => {
-    let mode = modePref;
-    if (mode !== "light" && mode !== "dark") {
-      try {
-        mode = hostMode();
-      } catch {
-        mode = "light";
-      }
-    }
-    document.documentElement.setAttribute("data-alm-mode", mode);
-  };
-  applyMode();
-  if (typeof MutationObserver === "function") {
-    const modeWatch = new MutationObserver(() => {
-      if (modePref === "auto")
-        applyMode();
-    });
-    modeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme", "data-mode", "data-color-scheme"] });
-    if (document.body)
-      modeWatch.observe(document.body, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
-    removers.push(() => modeWatch.disconnect());
-  }
-  if (typeof matchMedia === "function") {
-    const schemeQuery = matchMedia("(prefers-color-scheme: dark)");
-    const onScheme = () => modePref === "auto" && applyMode();
-    schemeQuery.addEventListener?.("change", onScheme);
-    removers.push(() => schemeQuery.removeEventListener?.("change", onScheme));
-  }
-  let speakerStyle = null;
-  let lastSpeakerCss = "";
-  const tab = ctx.ui.registerDrawerTab({
-    id: "almanac",
-    title: "ALMANAC Ledger",
-    shortName: "Almanac",
-    description: "Story state, Codex, chapters, bonds, knowledge, lore bridge and lorebook creator",
-    keywords: ["almanac", "ledger", "codex", "tracker", "chronicle", "lorebook", "bonds", "weather"],
-    headerTitle: "Almanac",
-    iconSvg: ICON2
-  });
-  const app = new AlmanacApp(ctx, tab.root);
-  app.render();
-  const refreshDisplay = () => {
-    try {
-      ctx.display?.invalidate(["*"]);
-    } catch {}
-  };
-  let displaySig;
-  setTimeout(refreshDisplay, 0);
-  let gotStateFor;
-  let retry = null;
-  const requestState = (attempt = 0) => {
-    if (retry)
-      clearTimeout(retry);
-    retry = null;
-    const chatId = ctx.getActiveChat().chatId;
-    app.setStatus(chatId ? attempt >= 4 ? "stalled" : "waiting" : "nochat");
-    renderHud(app.view);
-    if (!chatId)
-      return;
-    ctx.sendToBackend({ type: attempt === 0 ? "hello" : "getState", chatId });
-    const delays = [900, 2000, 4000, 8000, 15000, 30000];
-    retry = setTimeout(() => {
-      if (gotStateFor !== ctx.getActiveChat().chatId)
-        requestState(attempt + 1);
-    }, delays[Math.min(attempt, delays.length - 1)]);
-  };
-  let hud = null;
-  let hudOn = true;
-  let hudOpen = false;
-  const hudUi = { tab: "changed", narr: false, unseen: 0, opened: new Set };
-  let seen = {};
-  let thoughtsMsg = -1;
-  const load = (k) => {
-    try {
-      return localStorage.getItem(k);
-    } catch {
-      return null;
-    }
-  };
-  const save = (k, val) => {
-    try {
-      localStorage.setItem(k, val);
-    } catch {}
-  };
-  hudOpen = load("alm-hud-open") === "1";
-  hudUi.tab = load("alm-hud-tab") || "changed";
-  try {
-    const sz = JSON.parse(load("alm-hud-size") || "null");
-    if (sz && Number.isFinite(sz.w) && Number.isFinite(sz.h))
-      hudUi.size = { w: sz.w, h: sz.h };
-  } catch {}
-  const fitSize = (w, h) => {
-    const vw = typeof innerWidth === "number" && innerWidth > 0 ? innerWidth - 16 : HUD_SIZE.maxW;
-    const vh = typeof innerHeight === "number" && innerHeight > 0 ? innerHeight - 16 : HUD_SIZE.maxH;
-    const clamp = (x, lo, hi) => Math.round(Math.max(lo, Math.min(hi, x)));
-    return { w: clamp(w, Math.min(HUD_SIZE.minW, vw), Math.min(HUD_SIZE.maxW, vw)), h: clamp(h, Math.min(HUD_SIZE.minH, vh), Math.min(HUD_SIZE.maxH, vh)) };
-  };
-  try {
-    seen = JSON.parse(load("alm-hud-seen") || "{}") ?? {};
-  } catch {
-    seen = {};
-  }
-  const markSeen = (v) => {
-    const msg = v?.changes?.msg ?? -1;
-    if (!v?.chatId || msg < 0 || seen[v.chatId] === msg)
-      return;
-    seen[v.chatId] = msg;
-    const keys = Object.keys(seen);
-    if (keys.length > 60)
-      for (const k of keys.slice(0, keys.length - 60))
-        delete seen[k];
-    save("alm-hud-seen", JSON.stringify(seen));
-  };
-  const setHudOpen = (open) => {
-    if (open && hudUi.unseen)
-      hudUi.tab = "changed";
-    hudOpen = open;
-    save("alm-hud-open", open ? "1" : "0");
-    renderHud(app.view);
-  };
-  const onHudAction = (target) => {
-    const el = target?.closest?.("[data-hud]");
-    if (!el)
-      return;
-    const v = app.view;
-    const live = v && v.chatId === ctx.getActiveChat().chatId && v.enabled;
-    const act = el.dataset.hud;
-    if (act === "open" || !live) {
-      tab.activate();
-      return;
-    }
-    if (act === "tab" && el.dataset.tab) {
-      hudUi.tab = el.dataset.tab;
-      save("alm-hud-tab", hudUi.tab);
-    } else if (act === "narr")
-      hudUi.narr = !hudUi.narr;
-    else if (act === "env" && el.dataset.key) {
-      if (hudUi.opened.has(el.dataset.key))
-        hudUi.opened.delete(el.dataset.key);
-      else
-        hudUi.opened.add(el.dataset.key);
-    } else if (act === "toggle")
-      return setHudOpen(!hudOpen);
-    renderHud(v);
-  };
-  const ensureHud = (on) => {
-    hudOn = on;
-    try {
-      if (on && !hud) {
-        hud = ctx.ui.createFloatWidget({ width: 260, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, chromeless: true });
-        hud.root.addEventListener("click", (ev) => onHudAction(ev.target));
-        hud.root.addEventListener("pointerdown", (ev) => {
-          const pe = ev;
-          const grip = pe.target?.closest?.("[data-hud-grip]");
-          const card = hud?.root.querySelector(".alm-hudc");
-          if (!grip || !card || pe.button !== 0)
-            return;
-          pe.preventDefault();
-          pe.stopPropagation();
-          const start = { x: pe.clientX, y: pe.clientY, ...fitSize(hudUi.size?.w ?? HUD_SIZE.w, hudUi.size?.h ?? HUD_SIZE.h) };
-          let next = { w: start.w, h: start.h };
-          let frame = 0;
-          const onMove = (e) => {
-            next = fitSize(start.w + e.clientX - start.x, start.h + e.clientY - start.y);
-            if (frame)
-              return;
-            frame = requestAnimationFrame(() => {
-              frame = 0;
-              card.style.width = `${next.w}px`;
-              card.style.height = `${next.h}px`;
-              hud?.setSize(next.w, next.h);
-            });
-          };
-          const onUp = () => {
-            removeEventListener("pointermove", onMove);
-            removeEventListener("pointerup", onUp);
-            removeEventListener("pointercancel", onUp);
-            if (frame)
-              cancelAnimationFrame(frame);
-            hudUi.size = next;
-            save("alm-hud-size", JSON.stringify(next));
-            renderHud(app.view);
-          };
-          addEventListener("pointermove", onMove);
-          addEventListener("pointerup", onUp);
-          addEventListener("pointercancel", onUp);
-        });
-        hud.root.addEventListener("dblclick", (ev) => {
-          if (!ev.target?.closest?.("[data-hud-grip]"))
-            return;
-          hudUi.size = undefined;
-          save("alm-hud-size", "null");
-          renderHud(app.view);
-        });
-        hud.root.addEventListener("keydown", (ev) => {
-          const k = ev.key;
-          if (k === "Escape" && hudOpen)
-            setHudOpen(false);
-          else if ((k === "Enter" || k === " ") && ev.target.matches?.('[role="button"]')) {
-            ev.preventDefault();
-            onHudAction(ev.target);
-          }
-        });
-        app.hudProblem = "";
-      } else if (!on && hud) {
-        hud.destroy();
-        hud = null;
-      }
-    } catch (err) {
-      hud = null;
-      app.hudProblem = /PERMISSION/i.test(String(err)) ? "permission" : String(err?.message ?? err);
-      app.render();
-    }
-    renderHud(app.view);
-  };
-  let lastHud = "";
-  const renderHud = (v) => {
-    if (!hud)
-      return;
-    const chatId = ctx.getActiveChat().chatId;
-    if (!chatId || !hudOn) {
-      hud.setVisible(false);
-      return;
-    }
-    hud.setVisible(true);
-    let html;
-    const live = v && v.chatId === chatId;
-    if (live) {
-      const msg = v.changes?.msg ?? -1;
-      hudUi.unseen = msg >= 0 && msg !== seen[chatId] ? v.changes?.rows?.length ?? 0 : 0;
-      if ((v.thoughts?.msg ?? -1) !== thoughtsMsg) {
-        thoughtsMsg = v.thoughts?.msg ?? -1;
-        hudUi.opened.clear();
-      }
-    }
-    if (!live)
-      html = hudPill(null, app.status === "stalled" ? "no answer yet" : "connecting…");
-    else if (!v.enabled)
-      html = hudPill(null, "off in this chat");
-    else if (hudOpen) {
-      const fit = fitSize(hudUi.size?.w ?? HUD_SIZE.w, hudUi.size?.h ?? HUD_SIZE.h);
-      html = hudCard(v, { ...hudUi, size: fit });
-      markSeen(v);
-      if (html === lastHud)
-        return;
-      lastHud = html;
-      hud.root.innerHTML = html;
-      hud.setSize(fit.w, fit.h);
-      return;
-    } else
-      html = hudPill(v, undefined, hudUi);
-    if (html === lastHud)
-      return;
-    lastHud = html;
-    hud.root.innerHTML = html;
-    const size = measure(html);
-    hud.setSize(Math.min(480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
-  };
-  let badgeSig = "";
-  const syncBadge = () => {
-    const v = app.view;
-    const seen = app.seenSet();
-    const count = v ? engineNew(v, seen) : 0;
-    const why = count ? attentionNote("engine", v, seen) : "";
-    if (`${count}|${why}` === badgeSig)
-      return;
-    badgeSig = `${count}|${why}`;
-    tab.setBadge(count ? String(count > 9 ? "9+" : count) : null);
-    tab.setTitle?.(why ? `ALMANAC Ledger · ${why}` : "ALMANAC Ledger");
-  };
-  app.onSeen = () => {
-    syncBadge();
-    app.render();
-  };
-  const applyView = (v) => {
-    gotStateFor = v ? v.chatId : null;
-    if (retry && v) {
-      clearTimeout(retry);
-      retry = null;
-    }
-    app.setStatus(v ? "ok" : ctx.getActiveChat().chatId ? "waiting" : "nochat");
-    app.versionWarning = v && v.version !== VERSION ? String(v.version ?? "an older version") : "";
-    app.setView(v);
-    if (v) {
-      const sig = JSON.stringify([v.chatId, v.version, v.enabled, v.theme, v.config?.colors, v.detected?.trackerView, v.detected?.trackers, v.detected?.nsfw]);
-      if (sig !== displaySig) {
-        if (displaySig !== undefined || v.version !== VERSION)
-          refreshDisplay();
-        displaySig = sig;
-      }
-      skin = v.theme || "almanac";
-      document.documentElement.setAttribute("data-alm-skin", skin);
-      if (fontsOn && fontSkin !== skin)
-        setFonts(true);
-      const pref = v.settings?.skinMode ?? "auto";
-      if (pref !== modePref) {
-        modePref = pref;
-        applyMode();
-      }
-      applyCustom(v.settings?.skinColors);
-      if (v.speakerCss !== lastSpeakerCss) {
-        speakerStyle?.();
-        speakerStyle = v.speakerCss ? ctx.dom.addStyle(v.speakerCss) : null;
-        lastSpeakerCss = v.speakerCss;
-      }
-      if (v.settings && v.settings.fonts !== fontsOn)
-        setFonts(!!v.settings.fonts);
-      if (v.settings && !!v.settings.hud !== hudOn)
-        ensureHud(!!v.settings.hud);
-    }
-    syncBadge();
-    renderHud(v);
-  };
-  ensureHud(true);
-  removers.push(ctx.onBackendMessage((raw) => {
-    const m = raw;
-    if (!m || typeof m.type !== "string")
-      return;
-    if (app.creator.handle(m))
-      return;
-    switch (m.type) {
-      case "state":
-        applyView(m.view);
-        break;
-      case "open":
-        tab.activate();
-        break;
-      case "sessionZero": {
-        const active = ctx.getActiveChat().chatId;
-        if (m.chatId && active && m.chatId !== active)
-          return;
-        const cfg = app.view?.chatId === m.chatId ? app.view?.config : null;
-        if (cfg?.sessionZeroDone && !m.force)
-          return;
-        openSessionZero(ctx, m.chatId, cfg);
-        break;
-      }
-      case "toast":
-        console.info(`[ALMANAC] ${m.text}`);
-        break;
-      case "clerkProgress":
-        if (app.view?.chatId !== m.chatId)
-          return;
-        app.clerkProgress = m.done >= m.total ? "" : `${m.done}/${m.total}`;
-        app.render();
-        break;
-    }
-  }));
-  removers.push(ctx.events.on("almanac:sessionZero", (p) => {
-    const chatId = p?.chatId ?? ctx.getActiveChat().chatId;
-    if (chatId)
-      openSessionZero(ctx, chatId, app.view?.chatId === chatId ? app.view?.config : null);
-  }));
-  removers.push(ctx.events.on("almanac:retryState", () => requestState()));
-  removers.push(ctx.events.on("almanac:grantPanels", async () => {
-    try {
-      await ctx.permissions.request(["ui_panels"], { reason: "Show the floating Now widget (time, weather, place and who is present)." });
-      ensureHud(true);
-    } catch {}
-  }));
-  removers.push(ctx.events.on("almanac:settings", (p) => {
-    setTimeout(refreshDisplay, 400);
-    if (p && "hud" in p)
-      ensureHud(!!p.hud);
-    if (p && "fonts" in p)
-      setFonts(!!p.fonts);
-    if (p && "skinMode" in p) {
-      modePref = p.skinMode || "auto";
-      applyMode();
-    }
-  }));
-  removers.push(ctx.events.on("almanac:skinColors", (p) => applyCustom(p)));
-  try {
-    const action = ctx.ui.registerInputBarAction({ id: "almanac-command", label: "Almanac command…", iconSvg: ICON2.replace(/20/g, "14") });
-    removers.push(action.onClick(async () => {
-      try {
-        const res = await ctx.ui.showContextMenu({ items: COMMANDS.map(([key, label]) => ({ key, label })), position: { x: Math.round(window.innerWidth / 2), y: window.innerHeight - 120 } });
-        const key = res?.selectedKey;
-        if (key)
-          insertIntoComposer(key);
-      } catch {
-        insertIntoComposer("/recap");
-      }
-    }));
-    removers.push(() => action.destroy());
-  } catch {}
-  tab.onActivate(() => requestState(gotStateFor === ctx.getActiveChat().chatId ? 1 : 0));
-  removers.push(ctx.events.on("CHAT_SWITCHED", () => setTimeout(() => {
-    gotStateFor = undefined;
-    requestState();
-  }, 150)));
-  let boots = 0;
-  const boot = () => {
-    if (ctx.getActiveChat().chatId || ++boots > 10)
-      requestState();
-    else
-      setTimeout(boot, 500);
-  };
-  boot();
-  return () => {
-    for (const r of removers) {
-      try {
-        r();
-      } catch {}
-    }
-    speakerStyle?.();
-    customStyle?.();
-    fontStyle?.();
-    if (retry)
-      clearTimeout(retry);
-    hud?.destroy();
-    tab.destroy();
-    document.documentElement.removeAttribute("data-alm-skin");
-    document.documentElement.removeAttribute("data-alm-mode");
-    ctx.dom.cleanup();
-  };
-}
-function insertIntoComposer(text) {
-  const ta = document.querySelector("textarea[data-chat-input], .chat-input textarea, form textarea, textarea");
-  if (!ta) {
-    navigator.clipboard?.writeText(text).catch(() => {
-      return;
-    });
-    return;
-  }
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  setter?.call(ta, text);
-  ta.dispatchEvent(new Event("input", { bubbles: true }));
-  ta.focus();
-}
-export {
-  setup
-};
+`+Fa;var jt='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><circle cx="12" cy="10" r="3.2"/><path d="M12 4.5v1.3M12 14.2v1.3M6.5 10h1.3M16.2 10h1.3"/></svg>',za=[["/skip 15m","⏩ Skip 15 minutes"],["/skip 1h","⏩ Skip an hour"],["/skip until evening","⏩ Skip until evening"],["/skip until morning","⏩ Skip to next morning"],["/recap","\uD83D\uDCDC Recap (Previously on…)"],["/report bonds","\uD83D\uDD78 Report: bonds"],["/report threads","\uD83E\uDDF5 Report: threads"],["/audit","\uD83D\uDD0E Audit continuity"]];function Pr(e){let t=[],a=!0,r="almanac",s=null,i="",o=(h)=>{if(s&&(!h||i!==r))s(),s=null;if(h&&!s)s=e.dom.addStyle(Je(r)),i=r;a=h};o(!0),t.push(e.dom.addStyle(ut+Xe+ht+ft+Lt));let l=null,d="",c=(h)=>{let w=et(h);if(w===d)return;l?.(),l=w?e.dom.addStyle(w):null,d=w},u="auto",m=()=>typeof matchMedia==="function"&&matchMedia("(prefers-color-scheme: dark)").matches,g=()=>{if(typeof getComputedStyle!=="function")return m()?"dark":"light";let h=(M)=>{if(!M)return null;let R=/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/.exec(getComputedStyle(M).backgroundColor);if(!R||R[4]!=null&&parseFloat(R[4])<0.5)return null;let[P,z,W]=[R[1],R[2],R[3]].map(Number);return 0.2126*P+0.7152*z+0.0722*W<128?"dark":"light"},w=getComputedStyle(document.documentElement).getPropertyValue("--lumiverse-bg").trim();if(w){let M=document.createElement("span");M.style.cssText=`position:absolute;visibility:hidden;background:${w}`,document.body.append(M);let R=h(M);if(M.remove(),R)return R}return h(document.body)??h(document.documentElement)??(m()?"dark":"light")},y=()=>{let h=u;if(h!=="light"&&h!=="dark")try{h=g()}catch{h="light"}document.documentElement.setAttribute("data-alm-mode",h)};if(y(),typeof MutationObserver==="function"){let h=new MutationObserver(()=>{if(u==="auto")y()});if(h.observe(document.documentElement,{attributes:!0,attributeFilter:["class","style","data-theme","data-mode","data-color-scheme"]}),document.body)h.observe(document.body,{attributes:!0,attributeFilter:["class","style","data-theme"]});t.push(()=>h.disconnect())}if(typeof matchMedia==="function"){let h=matchMedia("(prefers-color-scheme: dark)"),w=()=>u==="auto"&&y();h.addEventListener?.("change",w),t.push(()=>h.removeEventListener?.("change",w))}let S=null,_="",L=e.ui.registerDrawerTab({id:"almanac",title:"ALMANAC Ledger",shortName:"Almanac",description:"Story state, Codex, chapters, bonds, knowledge, lore bridge and lorebook creator",keywords:["almanac","ledger","codex","tracker","chronicle","lorebook","bonds","weather"],headerTitle:"Almanac",iconSvg:jt}),C=new Ie(e,L.root);C.render();let x=()=>{try{e.display?.invalidate(["*"])}catch{}},v;setTimeout(x,0);let b,E=null,T=(h=0)=>{if(E)clearTimeout(E);E=null;let w=e.getActiveChat().chatId;if(C.setStatus(w?h>=4?"stalled":"waiting":"nochat"),Y(C.view),!w)return;e.sendToBackend({type:h===0?"hello":"getState",chatId:w});let M=[900,2000,4000,8000,15000,30000];E=setTimeout(()=>{if(b!==e.getActiveChat().chatId)T(h+1)},M[Math.min(h,M.length-1)])},j=null,f=!0,A=!1,I={tab:"changed",narr:!1,unseen:0,opened:new Set},K={},N=-1,Q=(h)=>{try{return localStorage.getItem(h)}catch{return null}},Z=(h,w)=>{try{localStorage.setItem(h,w)}catch{}};A=Q("alm-hud-open")==="1",I.tab=Q("alm-hud-tab")||"changed";try{let h=JSON.parse(Q("alm-hud-size")||"null");if(h&&Number.isFinite(h.w)&&Number.isFinite(h.h))I.size={w:h.w,h:h.h}}catch{}let ee=(h,w)=>{let M=typeof innerWidth==="number"&&innerWidth>0?innerWidth-16:H.maxW,R=typeof innerHeight==="number"&&innerHeight>0?innerHeight-16:H.maxH,P=(z,W,V)=>Math.round(Math.max(W,Math.min(V,z)));return{w:P(h,Math.min(H.minW,M),Math.min(H.maxW,M)),h:P(w,Math.min(H.minH,R),Math.min(H.maxH,R))}};try{K=JSON.parse(Q("alm-hud-seen")||"{}")??{}}catch{K={}}let me=(h)=>{let w=h?.changes?.msg??-1;if(!h?.chatId||w<0||K[h.chatId]===w)return;K[h.chatId]=w;let M=Object.keys(K);if(M.length>60)for(let R of M.slice(0,M.length-60))delete K[R];Z("alm-hud-seen",JSON.stringify(K))},ue=(h)=>{if(h&&I.unseen)I.tab="changed";A=h,Z("alm-hud-open",h?"1":"0"),Y(C.view)},he=(h)=>{let w=h?.closest?.("[data-hud]");if(!w)return;let M=C.view,R=M&&M.chatId===e.getActiveChat().chatId&&M.enabled,P=w.dataset.hud;if(P==="open"||!R){L.activate();return}if(P==="tab"&&w.dataset.tab)I.tab=w.dataset.tab,Z("alm-hud-tab",I.tab);else if(P==="narr")I.narr=!I.narr;else if(P==="env"&&w.dataset.key)if(I.opened.has(w.dataset.key))I.opened.delete(w.dataset.key);else I.opened.add(w.dataset.key);else if(P==="toggle")return ue(!A);Y(M)},B=(h)=>{f=h;try{if(h&&!j)j=e.ui.createFloatWidget({width:260,height:40,initialPosition:{x:24,y:88},snapToEdge:!0,chromeless:!0}),j.root.addEventListener("click",(w)=>he(w.target)),j.root.addEventListener("pointerdown",(w)=>{let M=w,R=M.target?.closest?.("[data-hud-grip]"),P=j?.root.querySelector(".alm-hudc");if(!R||!P||M.button!==0)return;M.preventDefault(),M.stopPropagation();let z={x:M.clientX,y:M.clientY,...ee(I.size?.w??H.w,I.size?.h??H.h)},W={w:z.w,h:z.h},V=0,Ue=(Ge)=>{if(W=ee(z.w+Ge.clientX-z.x,z.h+Ge.clientY-z.y),V)return;V=requestAnimationFrame(()=>{V=0,P.style.width=`${W.w}px`,P.style.height=`${W.h}px`,j?.setSize(W.w,W.h)})},fe=()=>{if(removeEventListener("pointermove",Ue),removeEventListener("pointerup",fe),removeEventListener("pointercancel",fe),V)cancelAnimationFrame(V);I.size=W,Z("alm-hud-size",JSON.stringify(W)),Y(C.view)};addEventListener("pointermove",Ue),addEventListener("pointerup",fe),addEventListener("pointercancel",fe)}),j.root.addEventListener("dblclick",(w)=>{if(!w.target?.closest?.("[data-hud-grip]"))return;I.size=void 0,Z("alm-hud-size","null"),Y(C.view)}),j.root.addEventListener("keydown",(w)=>{let M=w.key;if(M==="Escape"&&A)ue(!1);else if((M==="Enter"||M===" ")&&w.target.matches?.('[role="button"]'))w.preventDefault(),he(w.target)}),C.hudProblem="";else if(!h&&j)j.destroy(),j=null}catch(w){j=null,C.hudProblem=/PERMISSION/i.test(String(w))?"permission":String(w?.message??w),C.render()}Y(C.view)},G="",Y=(h)=>{if(!j)return;let w=e.getActiveChat().chatId;if(!w||!f){j.setVisible(!1);return}j.setVisible(!0);let M,R=h&&h.chatId===w;if(R){let z=h.changes?.msg??-1;if(I.unseen=z>=0&&z!==K[w]?h.changes?.rows?.length??0:0,(h.thoughts?.msg??-1)!==N)N=h.thoughts?.msg??-1,I.opened.clear()}if(!R)M=ke(null,C.status==="stalled"?"no answer yet":"connecting…");else if(!h.enabled)M=ke(null,"off in this chat");else if(A){let z=ee(I.size?.w??H.w,I.size?.h??H.h);if(M=Ct(h,{...I,size:z}),me(h),M===G)return;G=M,j.root.innerHTML=M,j.setSize(z.w,z.h);return}else M=ke(h,void 0,I);if(M===G)return;G=M,j.root.innerHTML=M;let P=Mt(M);j.setSize(Math.min(480,Math.max(120,P.w||260)),Math.max(44,Math.min(640,P.h||44)))},He="",We=()=>{let h=C.view,w=C.seenSet(),M=h?Ae(h,w):0,R=M?Te("engine",h,w):"";if(`${M}|${R}`===He)return;He=`${M}|${R}`,L.setBadge(M?String(M>9?"9+":M):null),L.setTitle?.(R?`ALMANAC Ledger · ${R}`:"ALMANAC Ledger")};C.onSeen=()=>{We(),C.render()};let Et=(h)=>{if(b=h?h.chatId:null,E&&h)clearTimeout(E),E=null;if(C.setStatus(h?"ok":e.getActiveChat().chatId?"waiting":"nochat"),C.versionWarning=h&&h.version!==J?String(h.version??"an older version"):"",C.setView(h),h){let w=JSON.stringify([h.chatId,h.version,h.enabled,h.theme,h.config?.colors,h.detected?.trackerView,h.detected?.trackers,h.detected?.nsfw]);if(w!==v){if(v!==void 0||h.version!==J)x();v=w}if(r=h.theme||"almanac",document.documentElement.setAttribute("data-alm-skin",r),a&&i!==r)o(!0);let M=h.settings?.skinMode??"auto";if(M!==u)u=M,y();if(c(h.settings?.skinColors),h.speakerCss!==_)S?.(),S=h.speakerCss?e.dom.addStyle(h.speakerCss):null,_=h.speakerCss;if(h.settings&&h.settings.fonts!==a)o(!!h.settings.fonts);if(h.settings&&!!h.settings.hud!==f)B(!!h.settings.hud)}We(),Y(h)};B(!0),t.push(e.onBackendMessage((h)=>{let w=h;if(!w||typeof w.type!=="string")return;if(C.creator.handle(w))return;switch(w.type){case"state":Et(w.view);break;case"open":L.activate();break;case"sessionZero":{let M=e.getActiveChat().chatId;if(w.chatId&&M&&w.chatId!==M)return;let R=C.view?.chatId===w.chatId?C.view?.config:null;if(R?.sessionZeroDone&&!w.force)return;Fe(e,w.chatId,R);break}case"toast":console.info(`[ALMANAC] ${w.text}`),C.notice={tone:String(w.tone??"info"),text:String(w.text??""),at:Date.now()},C.render();break;case"clerkProgress":if(C.view?.chatId!==w.chatId)return;C.clerkProgress=w.done>=w.total?"":`${w.done}/${w.total}`,C.render();break}})),t.push(e.events.on("almanac:sessionZero",(h)=>{let w=h?.chatId??e.getActiveChat().chatId;if(w)Fe(e,w,C.view?.chatId===w?C.view?.config:null)})),t.push(e.events.on("almanac:retryState",()=>T())),t.push(e.events.on("almanac:grantPanels",async()=>{try{await e.permissions.request(["ui_panels"],{reason:"Show the floating Now widget (time, weather, place and who is present)."}),B(!0)}catch{}})),t.push(e.events.on("almanac:settings",(h)=>{if(setTimeout(x,400),h&&"hud"in h)B(!!h.hud);if(h&&"fonts"in h)o(!!h.fonts);if(h&&"skinMode"in h)u=h.skinMode||"auto",y()})),t.push(e.events.on("almanac:skinColors",(h)=>c(h)));try{let h=e.ui.registerInputBarAction({id:"almanac-command",label:"Almanac command…",iconSvg:jt.replace(/20/g,"14")});t.push(h.onClick(async()=>{try{let M=(await e.ui.showContextMenu({items:za.map(([R,P])=>({key:R,label:P})),position:{x:Math.round(window.innerWidth/2),y:window.innerHeight-120}}))?.selectedKey;if(M)Ka(M)}catch{}})),t.push(()=>h.destroy())}catch{}L.onActivate(()=>T(b===e.getActiveChat().chatId?1:0)),t.push(e.events.on("CHAT_SWITCHED",()=>setTimeout(()=>{b=void 0,T()},150)));let At=0,Be=()=>{if(e.getActiveChat().chatId||++At>10)T();else setTimeout(Be,500)};return Be(),()=>{for(let h of t)try{h()}catch{}if(S?.(),l?.(),s?.(),E)clearTimeout(E);j?.destroy(),L.destroy(),document.documentElement.removeAttribute("data-alm-skin"),document.documentElement.removeAttribute("data-alm-mode"),e.dom.cleanup()}}function Ka(e){let t=document.querySelector("textarea[data-chat-input], .chat-input textarea, [class*='chat-input'] textarea, [class*='composer'] textarea");if(!t){navigator.clipboard?.writeText(e).catch(()=>{return});return}Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value")?.set?.call(t,e),t.dispatchEvent(new Event("input",{bubbles:!0})),t.focus()}export{Pr as setup};

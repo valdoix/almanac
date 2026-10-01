@@ -3,6 +3,7 @@
 
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { escapeHtml as e } from "../core/util";
+import { ask } from "./confirm";
 
 type Step = "source" | "plan" | "entries" | "done";
 
@@ -100,7 +101,7 @@ ${this.activation ? `<ul class="alm-list">${this.activation.map((a) => `<li>${e(
 <h4>Save</h4><div class="row"><input type="text" id="almCrName" placeholder="New lorebook name" class="grow"><select id="almCrAttach"><option value="none">don't attach</option><option value="character">attach to character</option><option value="persona">attach to persona</option><option value="chat">attach to this chat</option><option value="global">attach globally</option></select></div>
 <label class="chk"><input type="checkbox" id="almCrBridge" checked> Read it into this chat's Codex now (Lore Bridge)</label>
 <div class="row"><button class="btn primary" data-cr-act="writeNew">Create lorebook</button>${this.bookId ? `<button class="btn" data-cr-act="writeMerge">Merge into the source book</button>` : ""}<button class="btn" data-cr-act="export">Download JSON</button><button class="btn" data-cr-act="restart">Start over</button></div>
-${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} created, ${this.written.updated} updated.</div>` : ""}`;
+${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} created, ${this.written.updated} updated${this.written.skipped ? `, ${this.written.skipped} kept as they were (same title)` : ""}.${this.written.personaKept ? ` Your persona keeps ${e(this.written.personaKept)}; the new book was not attached to it.` : ""}</div>` : ""}`;
     }
     return "";
   }
@@ -191,7 +192,13 @@ ${this.written ? `<div class="card flat">✓ Saved: ${this.written.created} crea
         const bridge = (root.querySelector("#almCrBridge") as HTMLInputElement)?.checked;
         run("Saving", async () => {
           const target = act === "writeMerge" ? { kind: "merge", bookId: this.bookId } : { kind: "new", name };
-          const r = await this.call({ type: "creator", action: "write", req: { entries: this.entries, target, attach, chatId: this.getView()?.chatId, bridge } });
+          const overwrite = act === "writeMerge"
+            ? await ask(this.ctx, { title: "Replace entries with the same title?", message: "Entries in the source book whose title matches a new entry will be overwritten, with no copy kept. Choose Keep to add only the new titles.", confirmLabel: "Replace them", cancelLabel: "Keep them", danger: true })
+            : false;
+          const replacePersonaBook = attach === "persona"
+            ? await ask(this.ctx, { title: "Replace your persona's lorebook?", message: "A persona holds one lorebook. If yours already has one, attaching this book takes its place. Choose Keep to leave the current one attached.", confirmLabel: "Replace it", cancelLabel: "Keep it", danger: true })
+            : false;
+          const r = await this.call({ type: "creator", action: "write", req: { entries: this.entries, target, attach, chatId: this.getView()?.chatId, bridge, overwrite, replacePersonaBook } });
           if (r.error) throw new Error(r.error);
           this.written = r.written;
           this.step = "done";

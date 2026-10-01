@@ -1,14 +1,14 @@
 // ALMANAC Ledger backend entry: register hooks, macros, tools, commands and
 // event listeners. Every feature degrades gracefully when a permission is denied.
 
-import { describe, has, host, log, rememberUser, setDebug, userFor, warn } from "./host";
+import { describe, flushPending, has, host, log, rememberUser, setDebug, userFor, warn } from "./host";
 import { registerContextHandler, registerPromptInterceptor, registerRenderProcessor, registerWorldInfoInterceptor, clearRenderCache } from "./hooks";
 import { registerMacros, pushMacros } from "./macros";
 import { registerTools } from "./tools";
 import { registerBridge, characterDefaults, applyChatConfig } from "./bridge";
-import { onFork, onMutation, onReply, rebuild, runChronicle } from "./ingest";
+import { onFork, onMutation, onReply, rebuild, runChronicle, syncHidden } from "./ingest";
 import { scanLore } from "./lorebridge";
-import { dropLedger, ledgerFor } from "./ledger";
+import { dropLedger, ledgerFor, ledgersWithCharacter } from "./ledger";
 import { forget, loadChat, loadSettings } from "./store";
 import { pushState } from "./view";
 import { isEnabled } from "./turn";
@@ -37,6 +37,8 @@ async function onSwitch(chatId: string | null, userId?: string) {
     const files = await loadChat(chatId, userId);
     const settings = await loadSettings(userId);
     setDebug(settings.debug); // boot can't read an operator install's settings: no user yet
+    // Hidden turns follow the chat's state: shown again if the chat, the Chronicle or hiding was switched off meanwhile.
+    if (files.chronicle.hidden.length || files.chronicle.units.length) syncHidden(chatId, userId).catch((err) => warn(`hidden turns: ${describe(err)}`));
     if (!files.meta.config.sessionZeroDone && !files.meta.config.genres.length) {
       const defaults = await characterDefaults(chatId, userId).catch(() => null);
       if (defaults) await applyChatConfig(chatId, { ...defaults, sessionZeroDone: true }, userId);
@@ -76,10 +78,15 @@ host.on("SWIPE_EDITED", (p, userId) => p?.chatId && onMutation(p.chatId, uid(p.c
 host.on("MESSAGE_EDITED", (p: any, userId) => p?.chatId && onMutation(p.chatId, uid(p.chatId, userId)));
 host.on("MESSAGE_DELETED", (p: any, userId) => p?.chatId && onMutation(p.chatId, uid(p.chatId, userId)));
 host.on("MESSAGE_SENT", (p: any, userId) => p?.chatId && rememberUser(p.chatId, userId));
-host.on("CHAT_FORKED", (p, userId) => {
-  if (p?.sourceChatId && p.forkedChatId) onFork(p.sourceChatId, p.forkedChatId, uid(p.sourceChatId, userId));
+host.on("CHAT_FORKED", (p: any, userId) => {
+  if (p?.sourceChatId && p.forkedChatId) onFork(p.sourceChatId, p.forkedChatId, uid(p.sourceChatId, userId), p.messageIdMap, typeof p.forkedAtMessageIndex === "number" ? p.forkedAtMessageIndex : undefined);
 });
-host.on("CHARACTER_EDITED", () => clearRenderCache());
+host.on("CHARACTER_EDITED", (p: any) => {
+  clearRenderCache();
+  // A card's looks and description feed fixed traits: read them again for chats showing it.
+  const id = p?.character?.id ?? p?.characterId ?? p?.id;
+  for (const L of id ? ledgersWithCharacter(String(id)) : []) L.loadNames().catch(() => undefined);
+});
 host.on("PERSONA_CHANGED", async (_p, userId) => {
   const active = await host.chats.getActive(userId).catch(() => null);
   if (active) {
@@ -102,11 +109,32 @@ function registerCommands() {
       { id: "rebuild", label: "ALMANAC: Rebuild from transcript", description: "Re-read every stored ledger and rebuild the story state", keywords: ["repair", "reset", "rebuild"], scope: "chat-idle" } as any,
       { id: "mirror", label: "ALMANAC: Sync mirror lorebook", description: "Project the Codex into this chat's managed lorebook", keywords: ["lorebook", "world book", "mirror"], scope: "chat-idle" } as any,
       { id: "lore", label: "ALMANAC: Re-read attached lorebooks", description: "Run the Lore Bridge over character, persona, chat and global books", keywords: ["lore", "world info"], scope: "chat-idle" } as any,
+      { id: "release", label: "ALMANAC: Release hidden turns", description: "Show every turn the Almanac hid under a summary (do this before uninstalling)", keywords: ["unhide", "hidden", "uninstall", "summaries"], scope: "chat-idle" } as any,
     ]);
     host.commands.onInvoked(async (id, ctx) => {
       const chatId = ctx.chatId;
       if (!chatId) return;
       const userId = userFor(chatId);
+      // The host doesn't catch a handler's rejected promise: every failure is caught and shown here.
+      try {
+        await runCommand(id, chatId, userId);
+      } catch (err) {
+        warn(`command ${id}: ${describe(err)}`);
+        try {
+          (host.toast as any).error(`ALMANAC: ${describe(err)}`, { title: "ALMANAC", userId });
+        } catch {
+          /* no toast on this host */
+        }
+      }
+    });
+  } catch (err) {
+    warn(`commands: ${describe(err)}`);
+  }
+}
+
+async function runCommand(id: string, chatId: string, userId: string | undefined) {
+  {
+    {
       switch (id) {
         case "open":
           host.sendToFrontend({ type: "open" }, userId);
@@ -127,14 +155,23 @@ function registerCommands() {
           await scanLore(chatId, userId, true);
           pushState(chatId, userId);
           break;
+        case "release": {
+          const r = await syncHidden(chatId, userId, { release: true });
+          host.sendToFrontend({ type: "toast", tone: "success", text: r.shown ? `${r.shown} hidden turns are visible again.` : "No turns were hidden by the Almanac." }, userId);
+          pushState(chatId, userId);
+          break;
+        }
       }
-    });
-  } catch (err) {
-    warn(`commands: ${describe(err)}`);
+    }
   }
 }
 
-host.on("SPINDLE_EXTENSION_UNLOADED", () => undefined);
+// Lumiverse stops the worker without a hook of its own (saves are kept short for that reason);
+// if it ever says this extension is unloading first, write what is waiting.
+host.on("SPINDLE_EXTENSION_UNLOADED", (p: any) => {
+  const who = p?.identifier ?? p?.extensionId ?? p?.id;
+  if (!who || who === "almanac_ledger") flushPending().catch(() => undefined);
+});
 
 if (!has("interceptor")) log("interceptor permission missing: notes and chapters will not be injected");
 boot().catch((err) => warn(`boot: ${describe(err)}`));

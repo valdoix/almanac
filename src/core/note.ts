@@ -261,7 +261,8 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
 
   lanes.arrived = `[ARRIVED] ${input.arrivals?.length ? input.arrivals.join(" · ") + " — render these arrivals and invent no others." : "(none from off-screen this turn)"}`;
 
-  const ladders = Object.values(state.ladders).filter((l) => present.some((c) => c.id === l.from || c.id === l.to) && l.tier > 0);
+  // A sealed persona's side of a ladder is the player's to show; the story can't move it, so it would only go stale here.
+  const ladders = Object.values(state.ladders).filter((l) => present.some((c) => c.id === l.from || c.id === l.to) && l.tier > 0 && !(input.sealed && l.from === "user"));
   if (ladders.length) {
     const nm = (id: string) => (id === "user" ? input.userName : state.chars[id]?.name ?? id);
     // The rung as a number too, so the next ladder line can name it; an old reason is left out, it would read as now.

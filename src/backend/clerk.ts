@@ -10,7 +10,7 @@ import { hash } from "../core/util";
 import { debug, describe, serial, warn, within } from "./host";
 import { ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
-import { loadChat, loadSettings, save, type ChatMeta } from "./store";
+import { loadChat, loadSettings, noteProblem, save, type ChatMeta } from "./store";
 
 const running = new Map<string, Promise<unknown>>();
 
@@ -63,7 +63,7 @@ export async function clerkOne(chatId: string, msgId: string, userId?: string, f
   const after = L.runtime.fold(L.path.slice(0, i + 1), fo, files.side).state;
   const prevReply = L.path.slice(0, i).map((m, j) => ({ m, j })).filter((x) => !x.m.isUser).at(-1)?.j ?? -1;
   const player = L.path.slice(prevReply + 1, i).filter((m) => m.isUser).map((m) => m.content).join("\n\n");
-  const p = clerkPrompt({ state: before, here: after, userName: L.names.user, sealed: fo.sealed, player, reply: msg.content, query: `${player} ${msg.content}`.slice(-3000) });
+  const p = clerkPrompt({ state: before, here: after, userName: L.names.user, sealed: fo.sealed, player, reply: msg.content, query: `${player} ${msg.content}`.slice(-3000), lang: files.meta.detected.lang });
   let text = "";
   try {
     text = await quiet([sys(p.system), usr(p.user)], {
@@ -95,7 +95,7 @@ export async function clerkOne(chatId: string, msgId: string, userId?: string, f
 
 /** After a reply: read it in the background (tracked, so the planner can wait for it). */
 export function scheduleClerk(chatId: string, msgId: string, userId: string | undefined, then: () => void): void {
-  track(chatId, clerkOne(chatId, msgId, userId).then((changed) => changed && then())).catch((err) => warn(`knowledge clerk: ${describe(err)}`));
+  track(chatId, clerkOne(chatId, msgId, userId).then((changed) => changed && then())).catch((err) => noteProblem(chatId, userId, "knowledge clerk", err));
 }
 
 /** Replies with a ledger the clerk hasn't read in their current text (or failed on). */

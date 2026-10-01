@@ -1,9 +1,10 @@
 // Hybrid storage (design 06): extension storage is the source of truth; a
 // per-chat world book "ALMANAC · <chat>" is a managed projection of the Codex
-// and Chronicle. The WI interceptor decides which mirror entries the host may
-// inject each turn (forced picks, everything else disabled), so there is no
-// double injection. Edits made to mirror entries in Lumiverse's world-book panel
-// flow back as locked user overlays.
+// and Chronicle. Its entries are stored disabled, and the WI interceptor enables
+// and forces the turn's picks, so there is no double injection, and the book is
+// inert whenever the Almanac isn't steering it (the chat switched off, the
+// extension disabled or uninstalled). Edits made to mirror entries in
+// Lumiverse's world-book panel flow back as locked user overlays.
 
 import type { WorldBookEntryDTO } from "lumiverse-spindle-types";
 import type { CodexRecord } from "../core/codex";
@@ -12,7 +13,7 @@ import { hash } from "../core/util";
 import { unitHeader } from "../core/chronicle";
 import { debug, describe, has, host, serial, warn } from "./host";
 import { ledgerFor } from "./ledger";
-import { loadChat, loadSettings, save } from "./store";
+import { loadChat, loadSettings, noteProblem, save } from "./store";
 import { isEnabled } from "./turn";
 
 const LABEL: Record<string, string> = {
@@ -109,6 +110,7 @@ async function doSync(chatId: string, userId?: string): Promise<void> {
       if (cid) byCodex.set(cid, e);
     }
     let ops = 0;
+    let failed = 0;
     const MAX_OPS = 60;
     // User edits flow back first
     for (const [cid, e] of byCodex) {
@@ -128,6 +130,8 @@ async function doSync(chatId: string, userId?: string): Promise<void> {
           ov.summary = e.content;
           ov.userKeys = e.key;
           ov.locked = true;
+          // In "full records" mode the entry is the whole rendered card: keep it verbatim, never render fields around it again.
+          if (settings.mirror === "full") ov.body = { ...(ov.body ?? {}), mirrorText: true };
           save(chatId, "codex", userId);
         }
         rec.hash = current;
@@ -136,16 +140,28 @@ async function doSync(chatId: string, userId?: string): Promise<void> {
     }
     const make = (d: { comment: string; content: string; key: string[] }, cid: string) => ({
       comment: d.comment, content: d.content, key: d.key, keysecondary: [], position: settings.recallPlacement === "depth4" ? 4 : 1, depth: 4,
-      order_value: 100, priority: 100, constant: false, disabled: false, selective: false, match_whole_words: true, use_probability: true, probability: 100,
+      order_value: 100, priority: 100, constant: false, disabled: true, selective: false, match_whole_words: true, use_probability: true, probability: 100,
       vectorized: settings.mirrorVectorize && !cid.startsWith("chron:"), extensions: { almanac: { codexId: cid, managed: true } },
     });
     for (const [cid, d] of desired) {
       if (ops >= MAX_OPS) break;
-      const want = hash(`${d.content}|${d.key.join(",")}|${d.comment}`);
+      // "v2": entries written before 1.13 were enabled; the marker rewrites each one once, disabled.
+      const want = hash(`v2|${d.content}|${d.key.join(",")}|${d.comment}`);
       const e = byCodex.get(cid);
       const rec = meta.mirror.entries[cid];
-      if (e && (rec?.wrote ?? rec?.hash) === want) continue;
-      if (e && rec && (rec.wrote ?? rec.hash) !== want && files.codex.overlays[cid]?.locked && !cid.startsWith("chron:")) continue; // user-owned
+      if (e && (rec?.wrote ?? rec?.hash) === want && e.disabled) continue;
+      if (e && rec && files.codex.overlays[cid]?.locked && !cid.startsWith("chron:")) {
+        // User-owned: keep their text, only make sure the host never injects it on its own.
+        if (!e.disabled) {
+          try {
+            await host.world_books.entries.update(e.id, { disabled: true } as any, userId);
+            ops++;
+          } catch (err) {
+            warn(`mirror disable ${cid}: ${describe(err)}`);
+          }
+        }
+        continue;
+      }
       try {
         const saved = e ? await host.world_books.entries.update(e.id, make(d, cid), userId) : await host.world_books.entries.create(bookId, make(d, cid), userId);
         // Hash what the host actually stored, so normalisation never looks like a user edit.
@@ -153,6 +169,7 @@ async function doSync(chatId: string, userId?: string): Promise<void> {
         ops++;
       } catch (err) {
         warn(`mirror write ${cid}: ${describe(err)}`);
+        failed++;
       }
     }
     // Records that no longer exist on this branch
@@ -169,8 +186,9 @@ async function doSync(chatId: string, userId?: string): Promise<void> {
       }
     }
     save(chatId, "meta", userId);
+    if (failed) await noteProblem(chatId, userId, "mirror lorebook", new Error(`${failed} entr${failed === 1 ? "y" : "ies"} could not be written`));
     debug(`mirror ${chatId}: ${ops} writes, ${desired.size} records`);
   } catch (err) {
-    warn(`mirror sync: ${describe(err)}`);
+    await noteProblem(chatId, userId, "mirror lorebook", err);
   }
 }

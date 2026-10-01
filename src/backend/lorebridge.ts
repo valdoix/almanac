@@ -7,7 +7,7 @@ import { classify, seedOverlays, weaverBook, weaverWorldCard, type Classified } 
 import { classifierPrompt, extractJson } from "../core/prompts";
 import { hash } from "../core/util";
 import { debug, describe, has, host, serial, warn } from "./host";
-import { chatPersonaId, ledgerFor } from "./ledger";
+import { chatCharacterIds, chatPersonaId, ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
 import { loadChat, loadSettings, save } from "./store";
 
@@ -28,10 +28,13 @@ export async function attachedBooks(chatId: string, userId?: string, cards?: { n
   try {
     const chat = has("chats") ? await host.chats.get(chatId, userId) : null;
     if (chat) {
-      if (has("characters") && chat.character_id) {
-        const ch = await host.characters.get(chat.character_id, userId).catch(() => null);
-        if (ch) cards?.push(ch);
-        for (const id of ch?.world_book_ids ?? []) out.push({ id, scope: "character" });
+      if (has("characters")) {
+        // A group chat carries every member's card and books, the focused card first.
+        for (const cid of chatCharacterIds(chat)) {
+          const ch = await host.characters.get(cid, userId).catch(() => null);
+          if (ch) cards?.push(ch);
+          for (const id of ch?.world_book_ids ?? []) out.push({ id, scope: "character" });
+        }
       }
       for (const id of ((chat.metadata as any)?.chat_world_book_ids ?? []) as string[]) out.push({ id, scope: "chat" });
     }
@@ -46,6 +49,12 @@ export async function attachedBooks(chatId: string, userId?: string, cards?: { n
   }
   const seen = new Set<string>();
   return out.filter((b) => b.id !== mirror && !seen.has(b.id) && seen.add(b.id));
+}
+
+/** A book the Ledger made as some chat's mirror (a fork inherits its source's). Never read as lore. */
+export function isMirrorBook(book: { metadata?: unknown } | null | undefined): boolean {
+  const md = (book?.metadata ?? {}) as Record<string, unknown>;
+  return typeof md.almanac_chat_id === "string";
 }
 
 export function scanLore(chatId: string, userId?: string, force = false): Promise<{ books: number; entries: number; review: number }> {
@@ -65,7 +74,7 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
     const liveBooks = new Set<string>();
     for (const b of books) {
       const book = await host.world_books.get(b.id, userId).catch(() => null);
-      if (!book) continue;
+      if (!book || isMirrorBook(book)) continue;
       liveBooks.add(b.id);
       const entries = await entriesOf(b.id, userId).catch(() => [] as WorldBookEntryDTO[]);
       const wv = weaverBook(book, entries);
@@ -73,7 +82,7 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
       if (wv?.role === "governance" && worldCard) wv.world = true;
       // A Weaver rules book is always-on by design: its keywords (none) and constants decide.
       const mode = wv?.role === "governance" ? "native" : settings.loreDefaultMode;
-      const state = (meta.lore.books[b.id] ??= { name: book.name, scope: b.scope, mode, permission: settings.lorePermission, entryHashes: {}, count: 0 });
+      const state = (meta.lore.books[b.id] ??= { name: book.name, scope: b.scope, mode, permission: "read", entryHashes: {}, count: 0 });
       state.name = book.name;
       state.scope = b.scope;
       if (wv?.role === "governance" && !state.weaver) state.mode = "native";

@@ -1,20 +1,21 @@
 {
   "name": "almanac-ledger",
-  "version": "1.12.4",
+  "version": "1.13.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build:backend": "bun build src/backend.ts --outfile dist/backend.js --target bun",
-    "build:frontend": "bun build src/frontend.ts --outfile dist/frontend.js --target browser",
+    "build:frontend": "bun build src/frontend.ts --outfile dist/frontend.js --target browser --minify",
     "build:preset": "bun run preset/build.ts",
     "build": "bun run build:backend && bun run build:frontend && bun run build:preset",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "preset:harness": "bun run preset/harness.ts",
-    "golden": "bun run preset/golden.ts"
+    "golden": "bun run preset/golden.ts",
+    "check:dist": "bun run scripts/check-dist.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "1.4.2",
     "lumiverse-spindle-types": "^0.6.36",
     "typescript": "^5.9.3"
   }

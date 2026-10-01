@@ -1,5 +1,5 @@
 {
-  "version": "1.12.4",
+  "version": "1.13.0",
   "name": "ALMANAC Ledger",
   "identifier": "almanac_ledger",
   "author": "valdoix",
@@ -21,5 +21,5 @@
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js",
   "interceptorTimeoutMs": 60000,
-  "minimum_lumiverse_version": "1.1.6"
+  "minimum_lumiverse_version": "1.2.4"
 }

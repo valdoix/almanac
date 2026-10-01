@@ -1,6 +1,6 @@
 # ALMANAC — Preset + Extension Design Set for Lumiverse
 
-**Status:** implemented. The preset is built from `preset/src/` into `preset/ALMANAC.json`; the extension lives in `src/` (bundled into `dist/`). See the [root README](../README.md) for install and development. These documents remain the design reference.
+**Status:** implemented; [05](05-extension-ledger.md) and [06](06-storage-decision.md) note the parts that weren't built. [08](08-release-audit.md) is the 1.13 release audit. The preset is built from `preset/src/` into `preset/ALMANAC.json`; the extension lives in `src/` (bundled into `dist/`). See the [root README](../README.md) for install and development. These documents remain the design reference.
 
 The set has two parts that work together:
 

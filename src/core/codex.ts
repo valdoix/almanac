@@ -298,7 +298,7 @@ function lasting(body: Record<string, any>): Record<string, any> {
   return out;
 }
 /** A routine is a schedule ("06:00–09:00 docks", "mornings at the market"), not one moment ("asleep in the guest room"). */
-export const isSchedule = (s: string) => /d{1,2}[:.]d{2}|(every|daily|each|mornings?|evenings?|nights?|weekdays?|weekends?|usually|always)/i.test(s);
+export const isSchedule = (s: string) => /\d{1,2}[:.]\d{2}|\b(every|daily|each|mornings?|evenings?|nights?|weekdays?|weekends?|usually|always)\b/i.test(s);
 const defined = (o: Record<string, any>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && !(Array.isArray(v) && !v.length)));
 
 const norm = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[’`]/g, "'").replace(/\s+/g, " ").trim();

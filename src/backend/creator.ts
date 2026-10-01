@@ -10,6 +10,7 @@ import { chatPersonaId, ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
 import { loadSettings } from "./store";
 import { scanLore } from "./lorebridge";
+import { weaverBook } from "../core/lore";
 
 export interface CreatorPlanItem {
   title: string;
@@ -124,11 +125,19 @@ export function creatorExport(entries: CreatorEntry[]) {
   return toSillyTavern(entries);
 }
 
-export async function creatorWrite(req: { entries: CreatorEntry[]; target: { kind: "new"; name: string } | { kind: "merge"; bookId: string }; attach?: "character" | "persona" | "chat" | "global" | "none"; chatId?: string; bridge?: boolean }, userId?: string): Promise<{ bookId: string; created: number; updated: number }> {
+export async function creatorWrite(req: { entries: CreatorEntry[]; target: { kind: "new"; name: string } | { kind: "merge"; bookId: string }; attach?: "character" | "persona" | "chat" | "global" | "none"; chatId?: string; bridge?: boolean; overwrite?: boolean; replacePersonaBook?: boolean }, userId?: string): Promise<{ bookId: string; created: number; updated: number; skipped: number; personaKept?: string }> {
   if (!has("world_books")) throw new Error("the world_books permission is not granted");
   let bookId: string;
   let created = 0;
   let updated = 0;
+  let skipped = 0;
+  if (req.target.kind === "merge") {
+    // Never into a book the Ledger or the Dream Weaver manages: the mirror is rewritten every sync, and a rules book is instructions.
+    const book = await host.world_books.get(req.target.bookId, userId).catch(() => null);
+    if (!book) throw new Error("that lorebook no longer exists");
+    if (typeof (book.metadata as any)?.almanac_chat_id === "string") throw new Error("that is a chat's mirror lorebook, which the Ledger rewrites on every sync; save as a new lorebook instead");
+    if (weaverBook(book, [])?.role === "governance") throw new Error("that is a Dream Weaver rules book; save as a new lorebook instead");
+  }
   if (req.target.kind === "new") {
     const book = await host.world_books.create({ name: req.target.name || "ALMANAC lorebook", description: "Made with the ALMANAC Lorebook Creator (VELLUM III conventions).", metadata: { almanac_creator: true } }, userId);
     bookId = book.id;
@@ -144,6 +153,11 @@ export async function creatorWrite(req: { entries: CreatorEntry[]; target: { kin
   for (const e of req.entries) {
     const payload = toLumiverse(e);
     const hit = existing.get(e.comment.toLowerCase());
+    // An entry with the same title is replaced only when the player said so.
+    if (hit && !req.overwrite) {
+      skipped++;
+      continue;
+    }
     try {
       if (hit) {
         await host.world_books.entries.update(hit, payload, userId);
@@ -156,12 +170,13 @@ export async function creatorWrite(req: { entries: CreatorEntry[]; target: { kin
       warn(`creator write ${e.comment}: ${describe(err)}`);
     }
   }
-  if (req.attach && req.attach !== "none") await attachBook(bookId, req.attach, req.chatId, userId);
+  const personaKept = req.attach && req.attach !== "none" ? await attachBook(bookId, req.attach, req.chatId, userId, !!req.replacePersonaBook) : undefined;
   if (req.bridge && req.chatId) await scanLore(req.chatId, userId, true);
-  return { bookId, created, updated };
+  return { bookId, created, updated, skipped, ...(personaKept ? { personaKept } : {}) };
 }
 
-async function attachBook(bookId: string, where: string, chatId?: string, userId?: string) {
+/** Attach the book. A persona holds one lorebook: an existing one is kept unless `replace`, and its name returned. */
+async function attachBook(bookId: string, where: string, chatId?: string, userId?: string, replace = false): Promise<string | undefined> {
   try {
     if (where === "global") await host.world_books.activateGlobal(bookId, userId);
     else if (where === "chat" && chatId) {
@@ -180,11 +195,19 @@ async function attachBook(bookId: string, where: string, chatId?: string, userId
       const chat = chatId && has("chats") ? await host.chats.get(chatId, userId).catch(() => null) : null;
       const pid = chatPersonaId(chat);
       const p = pid ? await host.personas.get(pid, userId) : await host.personas.getActive(userId);
-      if (p) await host.personas.update(p.id, { attached_world_book_id: bookId } as any, userId);
+      if (p) {
+        const cur = p.attached_world_book_id;
+        if (cur && cur !== bookId && !replace) {
+          const old = await host.world_books.get(cur, userId).catch(() => null);
+          return old?.name ?? "its current lorebook";
+        }
+        await host.personas.update(p.id, { attached_world_book_id: bookId } as any, userId);
+      }
     }
   } catch (err) {
     warn(`attach book: ${describe(err)}`);
   }
+  return undefined;
 }
 
 export async function bookHealth(bookId: string, userId?: string) {

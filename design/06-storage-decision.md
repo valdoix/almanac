@@ -1,5 +1,7 @@
 # 06 — Where should turns and Codex entries live: lorebooks or extension storage?
 
+> **Status (1.13):** the hybrid was built. Two details changed: mirror entries are stored switched off and enabled per turn by the WI interceptor (so the book is inert without the extension), and the per-book *overlay* and *write* permissions were not built (the Ledger only reads your lorebooks). The optional controller mentioned below doesn't exist.
+
 **The question:** should the Ledger store summarised turns and Codex entries as **lorebook (world-book) entries**, as LumiBooks does, or in the **extension's own storage**, as VELLUM does?
 
 **Priorities, as requested:** recall accuracy and continuity first.

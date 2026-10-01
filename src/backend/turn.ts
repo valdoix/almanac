@@ -8,10 +8,10 @@ import { buildLedgerNote } from "../core/note";
 import { chekhovNudges } from "../core/pressures";
 import { recall, tierGuess } from "../core/recall";
 import { genreNudge } from "../core/telemetry";
-import { absMinutes, fmtSpan, plainProse } from "../core/util";
+import { absMinutes, estTokens, fmtSpan, plainProse } from "../core/util";
 import { NOT_A_PERSON } from "../core/state";
 import { offPageFacts, redact } from "../core/offpage";
-import { chronicleBits } from "../core/chronicle";
+import { chronicleBits, unitHeader } from "../core/chronicle";
 import { seedTraitsFor } from "./traitseed";
 import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels, hasUnmarkedSpeech } from "../core/dsl";
 import { debug, describe, has, host, warn, within } from "./host";
@@ -47,14 +47,30 @@ export interface TurnPlan {
   playbookEntries: Set<string>;
   /** Off-page secrets' words and wording, for rewording summaries in the prompt. */
   offPage: ReturnType<typeof offPageFacts>;
+  /** Made for a preview (tokenize, prompt breakdown): never reused for a real generation. */
+  dryRun?: boolean;
+  /** A real prompt has used it; the next generation plans afresh. */
+  used?: boolean;
 }
 
 const plans = new Map<string, TurnPlan>();
 
+/** The latest plan, whatever it was made for (the drawer shows it). */
 export function lastPlan(chatId: string): TurnPlan | undefined {
+  return plans.get(chatId);
+}
+
+/**
+ * The plan made for the generation now being assembled: made moments ago by the context
+ * handler, not yet used by a prompt, and (for a real generation) not a preview's. A context
+ * handler that timed out leaves the previous turn's plan behind; that one must never go out.
+ */
+export function currentPlan(chatId: string, opts: { genType?: string; dryRun?: boolean } = {}): TurnPlan | undefined {
   const p = plans.get(chatId);
-  if (p && Date.now() - p.createdAt < 5 * 60_000) return p;
-  return undefined;
+  if (!p || p.used || Date.now() - p.createdAt > 90_000) return undefined;
+  if (opts.genType && p.genType !== opts.genType) return undefined;
+  if (p.dryRun && !opts.dryRun) return undefined;
+  return p;
 }
 
 export function isEnabled(meta: ChatMeta, settings: Settings): boolean {
@@ -81,6 +97,15 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   if (!isEnabled(meta, settings)) return null;
   // A knowledge clerk still reading the last reply: give it a moment, so the note is built from clean lines.
   if (!opts.dryRun && genType !== "impersonate") await waitForClerk(chatId, 8000);
+  // Semantic candidates from the vectorised mirror book (host vectors). Asked before the refresh:
+  // from the refresh to the finished plan nothing awaits, so another refresh can't swap the
+  // ledger's path or records halfway through (a swipe would see the reply it is replacing).
+  let semantic: { recordId: string; score: number }[] = [];
+  if (settings.mirror !== "off" && settings.mirrorVectorize && meta.mirror.bookId && has("world_books")) {
+    const act = await within(host.world_books.getActivated(chatId, userId), 1500, [], "getActivated");
+    const byEntry = new Map(Object.entries(meta.mirror.entries).map(([cid, v]) => [v.entryId, cid]));
+    semantic = act.filter((a) => a.source === "vector" && byEntry.has(a.id)).map((a) => ({ recordId: byEntry.get(a.id)!, score: a.score ?? 0.5 }));
+  }
   const exclude = genType === "regenerate" || genType === "swipe";
   await L.refresh({ excludeTrailingAssistant: exclude });
   const st = L.state;
@@ -92,14 +117,6 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   const recent = L.path.slice(-8, -1).map((m) => plainProse(m.content));
   const tier = tierGuess(player, st);
 
-  // Semantic candidates from the vectorised mirror book (host vectors).
-  let semantic: { recordId: string; score: number }[] = [];
-  if (settings.mirror !== "off" && settings.mirrorVectorize && meta.mirror.bookId && has("world_books")) {
-    const act = await within(host.world_books.getActivated(chatId, userId), 1500, [], "getActivated");
-    const byEntry = new Map(Object.entries(meta.mirror.entries).map(([cid, v]) => [v.entryId, cid]));
-    semantic = act.filter((a) => a.source === "vector" && byEntry.has(a.id)).map((a) => ({ recordId: byEntry.get(a.id)!, score: a.score ?? 0.5 }));
-  }
-
   // Chronicle: the summaries of the turns before the raw tail (see pickChronicle).
   const scene = [st.place.join(" › "), ...Object.values(st.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).map((c) => c.name), ...Object.values(st.threads).filter((t) => t.status !== "resolved").map((t) => t.title)].join(" · ");
   // Names to match: people, groups, objects, and places with a proper name (not "kitchen").
@@ -108,7 +125,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     .map((r) => [r.name, ...(r.aliases ?? [])]);
   const cq = { player, lastReply, scene, entities, background: L.path.map((m) => m.content) };
   const chronMode = settings.chronicleInject === "relevant" ? "relevant" : "all";
-  const chronicle = settings.chronicle ? pickChronicle(files.chronicle, chronMode, cq).map((u) => u.id) : [];
+  let chronicle = settings.chronicle ? pickChronicle(files.chronicle, chronMode, cq).map((u) => u.id) : [];
   const rc = recall({
     state: st, records: L.records, index: L.index, playerMsg: player, lastReply, recent, semantic,
     heat: settings.keyHeat ? meta.heat : undefined, injectedHistory: meta.injected, usedLastTurn: new Set(meta.lastInjected),
@@ -116,32 +133,6 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     offPage: offPageFacts(st, settings.secretsOffPage !== false),
   });
 
-  // Hybrid delivery: records that have a mirror entry are delivered by the host (forced + mutated);
-  // everything else rides the <recall> block.
-  const mirrorPicks: Record<string, string> = {};
-  const recallItems: string[] = [];
-  const mirrorActive = settings.mirror !== "off" && !!meta.mirror.bookId;
-  for (const it of rc.items) {
-    if (mirrorActive && meta.mirror.entries[it.record.id]) mirrorPicks[it.record.id] = it.text ?? it.record.summary;
-    else if (it.text) recallItems.push(it.text);
-  }
-  const recallText = recallItems.length ? `<recall>\n${recallItems.join("\n")}\n</recall>` : "";
-
-  // Lore bridge decisions. A story record that carries a lore baseline (Buffy, joined to her lore
-  // entry) goes out as one card: its mirror entry carries the lore text, and the lore entry stays out.
-  const lorePicks = new Set<string>();
-  const loreFold: Record<string, string> = {};
-  const loreManagedBooks = new Set<string>();
-  for (const [bookId, b] of Object.entries(meta.lore.books)) if (b.mode === "managed") loreManagedBooks.add(bookId);
-  for (const it of rc.items) {
-    const le = it.record.provenance?.loreEntryId;
-    const lb = it.record.provenance?.loreBookId;
-    if (!le || !lb || !meta.lore.books[lb] || meta.lore.books[lb].mode === "native" || meta.lore.books[lb].pinned?.includes(le)) continue;
-    // A playbook goes in the recall block, framed as not history; its own lorebook entry stays out.
-    if (it.record.kind === "playbook") continue;
-    if (mirrorPicks[it.record.id] && it.record.provenance.source !== "lore") loreFold[le] = it.record.id;
-    else lorePicks.add(le);
-  }
   const divergence: Record<string, string> = {};
   for (const d of detectDivergence(st, L.records)) {
     const r = L.records.find((x) => x.id === d.id);
@@ -154,7 +145,11 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   const now = st.time ? absMinutes(st.time) : null;
   const arrivals = meta.arrivals.filter((a) => !a.delivered && L.path.some((m) => m.id === a.msgId) && (a.atAbs == null || (now != null && a.atAbs <= now)) && (!a.place || st.place.some((p) => p.toLowerCase().includes(a.place!.toLowerCase()))));
   let returning: string | null = null;
-  const lastMsg = L.raw[L.raw.length - (exclude ? 2 : 1)] as any;
+  // Time away is measured from the last message before the player's new one(s): the message
+  // they just sent is seconds old, so measuring from it never finds an absence.
+  let at = L.raw.length - 1;
+  while (at >= 0 && isUserRaw(L.raw[at])) at--;
+  const lastMsg = L.raw[at] as any;
   const lastTs = Number(lastMsg?.send_date ?? lastMsg?.created_at ?? 0);
   const lastMs = lastTs > 1e12 ? lastTs : lastTs * 1000;
   const idle = lastMs ? Date.now() - lastMs : 0;
@@ -195,6 +190,77 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     speechFix = `Speech format: your last reply wrote its dialogue as bare quotes, so the page drew no voice cards. Wrap every spoken line again: [spk=${who}]"Words."[/spk] — each speaker with their own voice number.`;
   }
 
+  // The ceiling on what the Almanac adds to this prompt. Over it: the summaries narrow to the
+  // relevant ones, then the oldest of those go (never the latest chapter, which leads into the
+  // turns the model sees), then the lowest-ranked recall. The note itself always goes in.
+  const unitTokens = (ids: string[]) => ids.reduce((n, id) => {
+    const u = files.chronicle.units.find((x) => x.id === id);
+    return n + (u ? estTokens(`${unitHeader(u)}\n${u.text}`) : 0);
+  }, 0);
+  const itemTokens = (items: typeof rc.items) => items.reduce((n, it) => n + estTokens(it.text ?? it.record.summary ?? ""), 0);
+  const noteTokens = estTokens([noteRes.text, speechFix, formatExample].filter(Boolean).join("\n"));
+  const total = (ids: string[], items: typeof rc.items) => noteTokens + unitTokens(ids) + itemTokens(items);
+  let kept = rc.items;
+  const before = total(chronicle, kept);
+  const trimmed: string[] = [];
+  const limit = settings.injectCeiling > 0 ? settings.injectCeiling : 0;
+  if (limit && before > limit) {
+    const name = (id: string) => {
+      const u = files.chronicle.units.find((x) => x.id === id);
+      return u ? `${u.level[0].toUpperCase()}${u.level.slice(1)} ${u.no}` : id;
+    };
+    if (chronMode === "all" && settings.chronicle) {
+      const relevant = pickChronicle(files.chronicle, "relevant", cq).map((u) => u.id);
+      if (unitTokens(relevant) < unitTokens(chronicle)) {
+        trimmed.push(`summaries narrowed to the relevant ones (${chronicle.length} → ${relevant.length})`);
+        chronicle = relevant;
+      }
+    }
+    const latest = [...chronicle].sort((a, b) => (files.chronicle.units.find((u) => u.id === b)?.endIdx ?? 0) - (files.chronicle.units.find((u) => u.id === a)?.endIdx ?? 0))[0];
+    const oldestFirst = chronicle.filter((id) => id !== latest).sort((a, b) => (files.chronicle.units.find((u) => u.id === a)?.startIdx ?? 0) - (files.chronicle.units.find((u) => u.id === b)?.startIdx ?? 0));
+    for (const id of oldestFirst) {
+      if (total(chronicle, kept) <= limit) break;
+      chronicle = chronicle.filter((x) => x !== id);
+      trimmed.push(`${name(id)} left out`);
+    }
+    let cut = 0;
+    while (kept.length && total(chronicle, kept) > limit) {
+      kept = kept.slice(0, -1);
+      cut++;
+    }
+    if (cut) trimmed.push(`${cut} recall record${cut === 1 ? "" : "s"} left out`);
+    const after = total(chronicle, kept);
+    if (after > limit) trimmed.push(`still ${after - limit} tokens over: the note and the latest chapter always go in`);
+  }
+  const keptIds = new Set(kept.map((i) => i.record.id));
+
+  // Hybrid delivery: records that have a mirror entry are delivered by the host (forced + mutated);
+  // everything else rides the <recall> block.
+  const mirrorPicks: Record<string, string> = {};
+  const recallItems: string[] = [];
+  const mirrorActive = settings.mirror !== "off" && !!meta.mirror.bookId;
+  for (const it of kept) {
+    if (mirrorActive && meta.mirror.entries[it.record.id]) mirrorPicks[it.record.id] = it.text ?? it.record.summary;
+    else if (it.text) recallItems.push(it.text);
+  }
+  const recallText = recallItems.length ? `<recall>\n${recallItems.join("\n")}\n</recall>` : "";
+
+  // Lore bridge decisions. A story record that carries a lore baseline (Buffy, joined to her lore
+  // entry) goes out as one card: its mirror entry carries the lore text, and the lore entry stays out.
+  const lorePicks = new Set<string>();
+  const loreFold: Record<string, string> = {};
+  const loreManagedBooks = new Set<string>();
+  for (const [bookId, b] of Object.entries(meta.lore.books)) if (b.mode === "managed") loreManagedBooks.add(bookId);
+  for (const it of kept) {
+    const le = it.record.provenance?.loreEntryId;
+    const lb = it.record.provenance?.loreBookId;
+    if (!le || !lb || !meta.lore.books[lb] || meta.lore.books[lb].mode === "native" || meta.lore.books[lb].pinned?.includes(le)) continue;
+    // A playbook goes in the recall block, framed as not history; its own lorebook entry stays out.
+    if (it.record.kind === "playbook") continue;
+    if (mirrorPicks[it.record.id] && it.record.provenance.source !== "lore") loreFold[le] = it.record.id;
+    else lorePicks.add(le);
+  }
+
   // Nothing that names an off-page secret reaches the model: mirror cards are reworded like the recall block.
   const off = offPageFacts(st, settings.secretsOffPage !== false);
   if (off.length) for (const k of Object.keys(mirrorPicks)) mirrorPicks[k] = redact(mirrorPicks[k], off);
@@ -203,14 +269,16 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     mirrorChronicle: new Set(Object.entries(meta.mirror.entries).filter(([id]) => id.startsWith("chron:")).map(([, v]) => v.entryId)),
     lorePicks, loreFold, loreManagedBooks, divergence, tier,
     feed: {
-      at: Date.now(), tier, tokens: rc.tokens + noteRes.tokens,
+      at: Date.now(), tier, tokens: total(chronicle, kept),
       // Where each injected record went: the <recall> block, or a forced entry in the mirror lorebook.
-      items: rc.feed.map((f) => (f.injected ? { ...f, via: mirrorPicks[f.id] ? ("mirror" as const) : ("recall" as const) } : f)),
+      items: rc.feed.map((f) => (!f.injected ? f : !keptIds.has(f.id) ? { ...f, injected: false, reasons: [...f.reasons, "left out to stay under the ceiling"] } : { ...f, via: mirrorPicks[f.id] ? ("mirror" as const) : ("recall" as const) })),
+      ...(limit ? { ceiling: { limit, before, after: total(chronicle, kept), trimmed } } : {}),
       chronicle: chronicle.map((id) => files.chronicle.units.find((u) => u.id === id)).filter((u) => !!u).map((u) => ({ id: u.id, name: `${u.level[0].toUpperCase()}${u.level.slice(1)} ${u.no}: ${u.title}` })),
     },
-    firedKeys: rc.firedKeys, injectedIds: rc.items.map((i) => i.record.id), returning: !!returning, formatExample, speechFix,
+    firedKeys: rc.firedKeys, injectedIds: kept.map((i) => i.record.id), returning: !!returning, formatExample, speechFix,
     playbookEntries: new Set(Object.values(meta.lore.books).filter((b) => b.mode !== "native").flatMap((b) => b.playbooks ?? [])),
     offPage: off,
+    dryRun: !!opts.dryRun,
   };
   if (!opts.dryRun) {
     // Feedback bookkeeping for the next turn.
@@ -218,13 +286,17 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     for (const k of Object.keys(meta.injected)) meta.injected[k] = meta.injected[k].slice(-6);
     meta.lastInjected = plan.injectedIds;
     meta.chronicleShown = chronicle;
-    if (plan.feed) meta.feed = [plan.feed, ...meta.feed].slice(0, 12);
+    if (plan.feed) meta.feed = [plan.feed, ...meta.feed].slice(0, 4);
     if (returning) meta.greetedReturn = L.path.length;
     for (const a of arrivals) a.delivered = true;
   }
   plans.set(chatId, plan);
   debug(`plan ${chatId}: note ${noteRes.tokens}t, recall ${rc.tokens}t, chronicle ${chronicle.length} (${chronMode}), mirror ${Object.keys(mirrorPicks).length}, lore ${lorePicks.size}`);
   return plan;
+}
+
+function isUserRaw(m: { is_user?: boolean; role?: string } | undefined): boolean {
+  return !!m && (m.is_user ?? m.role === "user");
 }
 
 function scaleBudgets(total: number, tier: string) {

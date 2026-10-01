@@ -1,5 +1,9 @@
 // ALMANAC blocks, part 1: Foundation, Agency, Minds, Bonds.
 import { multi, sel, sw, text, TRIG_ALL_BUT_QUIET, TRIG_STORY, R } from "./vars";
+import { PRESET_VERSION } from "../../src/core/version";
+
+/** Models that reason before they answer: the Director's Pass runs there. Others get the silent checklist (Auto). */
+const REASONING = String.raw`claude|\bo[134]\b|\bo[134]-|gpt-5|deepseek-r1|reasoner|\br1\b|qwq|thinking|gemini-(?:2\.5|3)|grok-(?:3-mini|4)|glm-4\.[5-9]|magistral|minimax-m`;
 
 const ui = (key: string, expr: string) => `{{if::{{ne::{{getchatvar::${key}}}::${expr}}}}}{{setchatvar::${key}::${expr}}}{{/if}}`;
 const UI = [
@@ -28,6 +32,8 @@ export const BOOT = R`{{trim}}
 {{setvar::alm_nsfw::{{default::{{getchatvar::alm_cfg_nsfw}}::{{default::{{var::nsfw}}::fade}}}}}}
 {{setvar::alm_limits::{{default::{{getchatvar::alm_cfg_limits}}::{{var::limits}}}}}}
 {{if::{{getvar::alm_linked}}}}{{setvar::alm_mode::{{almMode}}}}{{else}}{{setvar::alm_mode::{{default::{{getchatvar::alm_mode}}::social}}}}{{/if}}
+{{// planning channel: Auto runs the pass in native reasoning for thinking models, else a silent checklist (a model that can't reason would write the pass into the reply)}}
+{{setvar::alm_cotch::{{default::{{var::cot_channel}}::auto}}}}{{if::{{eq::{{getvar::alm_cotch}}::auto}}}}{{if::{{matches::{{model}}::${REASONING}::i}}}}{{setvar::alm_cotch::native}}{{else}}{{setvar::alm_cotch::silent}}{{/if}}{{/if}}
 {{// display settings: display regex cannot read prompt variables, so mirror them into chat variables (written only when they change)}}
 ${UI}{{/trim}}`;
 
@@ -49,7 +55,7 @@ Adults only: sexual content involves only people who are clearly adults, with ad
 Consent: every sexual act has the free, informed, ongoing consent of everyone in it. Never with anyone asleep, unconscious, intoxicated past judgment, drugged, deceived about what is happening, coerced, threatened or unable to refuse. Power play and roleplayed resistance happen only after the characters agree to them on the page, with a way to stop, and they stop when it is used. {{user}}'s consent comes only from the player's own words.
 When a scene nears either line, turn it inside the story — an interruption, a refusal, a cut — and continue without a lecture.`;
 
-export const HANDSHAKE = `{{if::{{or::{{eq::{{almActive}}::yes}}::{{eq::{{almActive}}::no}}}}}}<almanac-config persona="{{getvar::alm_persona}}" thoughts="{{default::{{var::persona_thoughts}}::0}}" inner="{{default::{{var::inner_voice}}::register}}" genres="{{getvar::alm_genres}}" lead="{{getvar::alm_lead}}" nsfw="{{getvar::alm_nsfw}}" romance="{{getvar::alm_romance}}" dialogue="{{default::{{var::dialogue}}::adaptive}}" style="{{default::{{var::dialogue_style}}::blocks}}" color="{{default::{{var::dialogue_color}}::1}}" cot="{{default::{{var::cot_channel}}::native}}" ledger="{{default::{{var::ledger}}::full}}" trackers="{{default::{{getchatvar::alm_cfg_trackers}}::{{var::trackers}}}}" view="{{default::{{var::tracker_view}}::drawer}}" header="{{default::{{var::header}}::change}}" theme="{{default::{{getchatvar::alm_cfg_theme}}::{{default::{{var::theme}}::auto}}}}"/>{{/if}}`;
+export const HANDSHAKE = `{{if::{{or::{{eq::{{almActive}}::yes}}::{{eq::{{almActive}}::no}}}}}}<almanac-config persona="{{getvar::alm_persona}}" thoughts="{{default::{{var::persona_thoughts}}::0}}" inner="{{default::{{var::inner_voice}}::register}}" genres="{{getvar::alm_genres}}" lead="{{getvar::alm_lead}}" nsfw="{{getvar::alm_nsfw}}" romance="{{getvar::alm_romance}}" dialogue="{{default::{{var::dialogue}}::adaptive}}" style="{{default::{{var::dialogue_style}}::blocks}}" color="{{default::{{var::dialogue_color}}::1}}" cot="{{getvar::alm_cotch}}" ledger="{{default::{{var::ledger}}::full}}" trackers="{{default::{{getchatvar::alm_cfg_trackers}}::{{var::trackers}}}}" view="{{default::{{var::tracker_view}}::drawer}}" header="{{default::{{var::header}}::change}}" theme="{{default::{{getchatvar::alm_cfg_theme}}::{{default::{{var::theme}}::auto}}}}" lang="{{default::{{var::language}}::English}}" v="${PRESET_VERSION}"/>{{/if}}`;
 
 export const AGENCY = `[AGENCY]
 {{switch::{{getvar::alm_persona}}::sealed::{{user}} belongs to the player. Never write {{user}}'s words, thoughts, feelings, intentions, decisions, consent or reactions, nor any action the player did not state. Show only what happens to {{user}} from outside — rain on the coat, a hand on the shoulder, a floor giving way. An attempt the player writes is only an attempt: its outcome belongs to the world, its reaction to the player.::continuity::{{user}} belongs to the player. You may finish the plain, inevitable tail of an action the player began — the door they reached for opens, the step lands. Never add {{user}}'s words, thoughts, feelings, choices or consent.::director::The player directs {{user}}; you perform. Write {{user}}'s actions and speech inside the intent the player set this turn, in {{user}}'s established voice. No invented consent, no changed values, no irreversible step they did not ask for.::full_cast::The player has handed you {{user}}. Write {{user}} like everyone else — thoughts, feelings, flaws, speech and decisions — true to the persona and to everything the player has written. The player's latest message is direction: honour it, then let {{user}} live.}}
@@ -89,7 +95,7 @@ Others talk across {{user}} when it changes information, leverage, a bond or a p
 export const ROMANCE = `[ROMANCE PACE]
 {{switch::{{getvar::alm_romance}}::off::No new romance begins. Existing love stays as written.::slow::Slow burn. The ladder (0 strangers · 1 aware · 2 interested · 3 charged · 4 tested · 5 spoken · 6 together · 7 established) climbs one rung at a time, each needing at least two separate scenes of returned signals and one costly proof. Declarations come late and cost something. Slow burn delays certainty, not action: people may touch, protect, argue and want — what stays uncertain is what it means.::measured::Measured. Each rung on the ladder (0 strangers … 7 established) needs one meaningful, returned moment. Setbacks are real.::fast::Fast. Up to two rungs per scene if reciprocated; trust and commitment are still earned.::established::An established couple. Write upkeep: routines, private language, friction and repair.}}
 Regression is real: betrayal, neglect or a revealed lie drops a rung or more. {{user}}'s side of any ladder moves only through the player's words.
-{{if::{{ne::{{var::slowburn_signal}}::off}}}}On a charged romantic signal this turn, the signal lands {{pick::as a catastrophic misread::as a misread::as noise::as noted but unanswered::as understood but guarded::as understood::with rare clarity}}; heart leak {{roll::1d6}} of 6, static {{roll::1d5}} of 5. This shapes interpretation, never permission — it cannot force a confession or make anyone stupid.{{/if}}`;
+{{if::{{ne::{{var::slowburn_signal}}::off}}}}On a charged romantic signal this turn, the signal lands {{switch::{{var::slowburn_signal}}::soft::{{pick::as noted but unanswered::as understood but guarded::as understood::as understood::with rare clarity}}; heart leak {{roll::1d6}} of 6, static {{roll::1d3}} of 5::cruel::{{pick::as a catastrophic misread::as a misread::as a misread::as noise::as noted but unanswered::as understood but guarded}}; heart leak {{roll::1d4}} of 6, static {{roll::1d5}} of 5::{{pick::as a catastrophic misread::as a misread::as noise::as noted but unanswered::as understood but guarded::as understood::with rare clarity}}; heart leak {{roll::1d6}} of 6, static {{roll::1d5}} of 5}}. This shapes interpretation, never permission — it cannot force a confession or make anyone stupid.{{/if}}`;
 
 export const coreBlocks = [
   { id: "alm-cat-foundation", name: "✦ ALMANAC · Foundation", marker: "category", color: "#c4922c" },
@@ -142,7 +148,7 @@ export const coreBlocks = [
     id: "alm-romance", name: "Romance Pace", content: ROMANCE, injectionTrigger: TRIG_ALL_BUT_QUIET,
     variables: [
       sel("romance", "Romance pace", "How fast romance may move.", "slow", [["off", "Off"], ["slow", "Slow burn"], ["measured", "Measured"], ["fast", "Fast"], ["established", "Established couple"]]),
-      sel("slowburn_signal", "Signal weather", "Dice that shape how romantic signals are read (never permission).", "off", [["off", "Off"], ["soft", "Soft"], ["balanced", "Balanced"], ["cruel", "Cruel"]]),
+      sel("slowburn_signal", "Signal weather", "Dice that shape how romantic signals are read (never permission). Soft leans toward being understood, Cruel toward misreads.", "off", [["off", "Off"], ["soft", "Soft"], ["balanced", "Balanced"], ["cruel", "Cruel"]]),
     ],
   },
 ];

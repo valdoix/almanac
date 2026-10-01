@@ -3,7 +3,7 @@
 // off-screen simulator in the background, then refresh mirror, macros, chat
 // variables and the UI.
 
-import { sideKey, toPath } from "../core/branch";
+import { anchorKey, sideKey, toPath } from "../core/branch";
 import { coverageGaps, makeUnit, planChronicle, spanSignature, transcriptFor, validateUnits } from "../core/chronicle";
 import { extractLedgerBlock, parseLine } from "../core/dsl";
 import { extractOps } from "../core/extractor";
@@ -20,7 +20,7 @@ import { ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
 import { mirrorChatVars, pushMacros } from "./macros";
 import { syncMirror } from "./mirror";
-import { appendEvents, copyChat, loadChat, loadSettings, save } from "./store";
+import { appendEvents, copyChat, loadChat, loadSettings, noteProblem, save } from "./store";
 import { isEnabled } from "./turn";
 import { pushState } from "./view";
 import { clearRenderCache } from "./hooks";
@@ -80,15 +80,13 @@ export function onMutation(chatId: string, userId?: string) {
     if (!isEnabled(files.meta, settings)) return;
     const L = ledgerFor(chatId, userId);
     await serial(`chat:${chatId}`, () => L.refresh());
-    // Chronicle units whose turns changed: unhide and drop (they will be re-summarised).
+    // Chronicle units whose turns changed are dropped (they will be re-summarised), and their turns come back.
     const stale = validateUnits(files.chronicle, toPath(L.raw));
     if (stale.length) {
-      const ids = stale.filter((u) => !u.locked).flatMap((u) => u.msgIds).filter((id) => L.raw.some((m) => m.id === id));
       files.chronicle.units = files.chronicle.units.filter((u) => !u.stale || u.locked);
-      files.chronicle.hidden = files.chronicle.hidden.filter((id) => !ids.includes(id));
-      if (ids.length && has("chat_mutation")) await host.chat.setMessagesHidden(chatId, ids.slice(0, 500), false).catch(() => undefined);
       save(chatId, "chronicle", userId);
     }
+    await syncHidden(chatId, userId);
     afterChange(chatId, userId, { background: false });
   });
 }
@@ -101,11 +99,68 @@ function afterChange(chatId: string, userId: string | undefined, opts: { backgro
   debounce(`mirror:${chatId}`, 2000, () => syncMirror(chatId, userId));
   if (opts.background) {
     debounce(`bg:${chatId}`, 800, async () => {
-      await runChronicle(chatId, userId).catch((err) => warn(`chronicle: ${describe(err)}`));
-      await runSimulator(chatId, userId).catch((err) => warn(`simulator: ${describe(err)}`));
+      await runChronicle(chatId, userId).catch((err) => noteProblem(chatId, userId, "chapter summary", err));
+      await runSimulator(chatId, userId).catch((err) => noteProblem(chatId, userId, "off-screen simulator", err));
       pushState(chatId, userId);
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Hidden turns
+// ---------------------------------------------------------------------------
+
+/**
+ * Make the turns the Almanac hid match what it covers and sends. Turns are hidden only while
+ * the chat is on, the Chronicle is on and "Hide covered turns" is on, and only under a live
+ * chapter the prompt carries. Anything else it hid comes back: otherwise switching the chat or
+ * the Chronicle off would leave those turns out of the prompt with no summary in their place.
+ * Only turns the Almanac hid are ever shown again.
+ */
+export async function syncHidden(chatId: string, userId?: string, opts: { release?: boolean } = {}): Promise<{ hidden: number; shown: number }> {
+  if (!has("chat_mutation")) return { hidden: 0, shown: 0 };
+  return serial(`hide:${chatId}`, async () => {
+    const files = await loadChat(chatId, userId);
+    const settings = await loadSettings(userId);
+    const keep = !opts.release && isEnabled(files.meta, settings) && settings.chronicle && settings.hideCovered;
+    const L = ledgerFor(chatId, userId);
+    const exists = new Set(L.raw.map((m) => m.id));
+    const want = new Set<string>();
+    if (keep) for (const u of files.chronicle.units) if (u.level === "chapter" && !u.stale && !u.ghost) for (const id of u.msgIds) if (!exists.size || exists.has(id)) want.add(id);
+    const had = new Set(files.chronicle.hidden);
+    const show = [...had].filter((id) => !want.has(id));
+    const hide = [...want].filter((id) => !had.has(id));
+    let shown = 0;
+    let hidden = 0;
+    for (let i = 0; i < show.length; i += 500) {
+      const batch = show.slice(i, i + 500);
+      try {
+        await host.chat.setMessagesHidden(chatId, batch, false);
+        for (const id of batch) had.delete(id);
+        shown += batch.length;
+      } catch (err) {
+        // Turns that are gone can't be shown; anything else stays listed so the next pass retries.
+        if (exists.size && batch.every((id) => !exists.has(id))) for (const id of batch) had.delete(id);
+        else await noteProblem(chatId, userId, "showing summarised turns again", err);
+      }
+    }
+    for (let i = 0; i < hide.length; i += 500) {
+      const batch = hide.slice(i, i + 500);
+      try {
+        await host.chat.setMessagesHidden(chatId, batch, true);
+        for (const id of batch) had.add(id);
+        hidden += batch.length;
+      } catch (err) {
+        await noteProblem(chatId, userId, "hiding summarised turns", err);
+      }
+    }
+    if (shown || hidden || had.size !== files.chronicle.hidden.length) {
+      files.chronicle.hidden = [...had];
+      save(chatId, "chronicle", userId);
+    }
+    if (shown || hidden) debug(`hidden turns ${chatId}: +${hidden} −${shown}`);
+    return { hidden, shown };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +179,7 @@ export async function repair(chatId: string, msgId: string, swipe: number, conte
   let ops: ParsedOp[] = [];
   let source: "repair" | "extractor" = "repair";
   try {
-    const p = repairPrompt({ prose: plainProse(content), verified, userName: L.names.user, sealed: L.foldOptions(files.meta, settings).sealed });
+    const p = repairPrompt({ prose: plainProse(content), verified, userName: L.names.user, sealed: L.foldOptions(files.meta, settings).sealed, lang: files.meta.detected.lang });
     let text = await quiet([sys(p.system), usr(p.user)], { userId, reasoningOff: true, timeoutMs: 60_000, connectionId: settings.summarizerConnection || undefined, label: "ledger repair" });
     if (!/<ledger/i.test(text)) text = await quiet([sys(p.system), usr(p.user)], { userId, timeoutMs: 90_000, connectionId: settings.summarizerConnection || undefined, label: "ledger repair (thinking)" });
     const block = extractLedgerBlock(text);
@@ -136,7 +191,7 @@ export async function repair(chatId: string, msgId: string, swipe: number, conte
     source = "extractor";
     ops = extractOps(content, Object.values(prevState.chars).map((c) => c.name), L.names.user);
   }
-  files.side[key] = [...(files.side[key] ?? []).filter((s) => !s.replaces), { source, ops, replaces: true }];
+  files.side[key] = [...(files.side[key] ?? []).filter((s) => !s.replaces), { source, ops, replaces: true, hash: hash(content) }];
   files.meta.repaired[key] = ops.length ? source : "failed";
   save(chatId, "side", userId);
   save(chatId, "meta", userId);
@@ -168,16 +223,17 @@ export async function runChronicle(chatId: string, userId?: string, force = fals
         const detail = settings.summaryDetail;
         const focus = settings.summaryFocus;
         const offPage = offPageFacts(L.state, settings.secretsOffPage !== false);
-        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, prior: prev ? `${prev.title}: ${prev.text.slice(0, summaryPriorChars(detail))}` : undefined });
+        const lang = files.meta.detected.lang;
+        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, lang, prior: prev ? `${prev.title}: ${prev.text.slice(0, summaryPriorChars(detail))}` : undefined });
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary" });
         const gaps = coverageGaps(text, L.events, L.state, job.startIdx, job.endIdx);
         if (gaps.length) {
           const [lo, hi] = summaryWords("chapter", detail);
-          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, words: [lo, hi + 30 + gaps.length * 15], mustInclude: gaps });
+          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, lang, words: [lo, hi + 30 + gaps.length * 15], mustInclude: gaps });
           text = await quiet([sys(p2.system), usr(p2.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary (coverage)" }).catch(() => text);
         }
       } else {
-        const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}\n${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus, offPageFacts(L.state, settings.secretsOffPage !== false));
+        const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}\n${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus, offPageFacts(L.state, settings.secretsOffPage !== false), files.meta.detected.lang);
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: `${job.level} summary` });
       }
       if (!text || text.length < 40) break;
@@ -187,12 +243,8 @@ export async function runChronicle(chatId: string, userId?: string, force = fals
       unit.detail = settings.summaryDetail;
       files.chronicle.units.push(unit);
       made++;
-      if (job.level === "chapter" && settings.hideCovered && has("chat_mutation")) {
-        const ids = job.msgIds.filter((id) => !files.chronicle.hidden.includes(id));
-        for (let i = 0; i < ids.length; i += 500) await host.chat.setMessagesHidden(chatId, ids.slice(i, i + 500), true).catch(() => undefined);
-        files.chronicle.hidden.push(...ids);
-      }
       save(chatId, "chronicle", userId);
+      if (job.level === "chapter") await syncHidden(chatId, userId);
       if (job.level === "chapter") {
         // A scripted scene the story has now played is retired: it would read as still to come.
         let retired = 0;
@@ -202,7 +254,7 @@ export async function runChronicle(chatId: string, userId?: string, force = fals
           retired++;
         }
         if (retired) save(chatId, "codex", userId);
-        await runArchivist(chatId, unit.text, job.startIdx, job.endIdx, userId).catch((err) => warn(`archivist: ${describe(err)}`));
+        await runArchivist(chatId, unit.text, job.startIdx, job.endIdx, userId).catch((err) => noteProblem(chatId, userId, "archivist", err));
       }
       host.rpcPool?.sync?.("chapter_created", { chatId, level: unit.level, title: unit.title, text: unit.text, startIdx: unit.startIdx, endIdx: unit.endIdx });
     }
@@ -231,7 +283,7 @@ async function runArchivist(chatId: string, chapterText: string, startIdx: numbe
     .slice(0, 24);
   if (!touched.length) return;
   const locked = touched.filter((r) => r.locked).map((r) => r.id);
-  const p = archivistPrompt({ chapter: chapterText, records: touched.map((r) => `${r.id} | ${r.kind} | ${r.name} | ${r.summary} | keys: ${r.keys.join(", ")}${r.body.archivist ? ` | notes: ${r.body.archivist}` : ""}`).join("\n"), locked });
+  const p = archivistPrompt({ chapter: chapterText, records: touched.map((r) => `${r.id} | ${r.kind} | ${r.name} | ${r.summary} | keys: ${r.keys.join(", ")}${r.body.archivist ? ` | notes: ${r.body.archivist}` : ""}`).join("\n"), locked, lang: files.meta.detected.lang });
   const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, reasoningOff: true, timeoutMs: 120_000, label: "archivist" });
   const res = extractJson<{ set?: { id: string; summary?: string; keys?: string[]; body?: Record<string, unknown> }[]; drop?: string[] }>(text);
   if (!res) return;
@@ -266,6 +318,12 @@ export async function runSimulator(chatId: string, userId?: string, force = fals
   const st = L.state;
   if (!st?.time) return;
   const now = absMinutes(st.time);
+  // The clock moved back (the player said "it's day 12"): count again from here.
+  if (files.meta.lastSimAbs != null && now < files.meta.lastSimAbs) {
+    files.meta.lastSimAbs = now;
+    save(chatId, "meta", userId);
+    if (!force) return;
+  }
   const last = files.meta.lastSimAbs ?? now;
   if (files.meta.lastSimAbs == null) {
     files.meta.lastSimAbs = now;
@@ -294,15 +352,16 @@ export async function runSimulator(chatId: string, userId?: string, force = fals
       ...factions.map((f) => `FACTION ${f.name}: ${Object.values(f.clocks).map((c) => `${c.name} ${c.cur}/${c.max}`).join("; ")}`),
       `PLAYER is at ${st.place.join(" › ")}.`,
     ].join("\n");
-    const p = simulatorPrompt({ slice, from: fmtTime(fromAbs(last)), to: fmtTime(st.time), userName: L.names.user, world: !!agency });
+    const p = simulatorPrompt({ slice, from: fmtTime(fromAbs(last)), to: fmtTime(st.time), userName: L.names.user, world: !!agency, lang: files.meta.detected.lang });
     const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 120_000, label: "simulator" });
     const res = extractJson<{ ops?: string[]; arrivals?: { text: string; route?: string; at?: string; place?: string }[] }>(text);
     const target = L.lastAssistant();
     if (res && target) {
       const ops = (res.ops ?? []).map((l) => parseLine(String(l))).filter((o): o is ParsedOp => !!o && ["bond", "know", "item", "thread", "clockf", "rumor", "owe", "cons", "journal"].includes(o.op));
       if (ops.length) {
-        const key = sideKey(target.id, target.swipe);
-        files.side[key] = [...(files.side[key] ?? []).filter((s) => s.source !== "sim"), { source: "sim", ops }];
+        // Anchored to the position, not the swipe: what happened off-screen still happened if the reply is swiped.
+        const key = anchorKey(target.index);
+        files.side[key] = [...(files.side[key] ?? []).filter((s) => s.source !== "sim"), { source: "sim", ops, at: Date.now() }];
         save(chatId, "side", userId);
       }
       for (const a of res.arrivals ?? []) {
@@ -322,26 +381,44 @@ export async function runSimulator(chatId: string, userId?: string, force = fals
 // Forks and rebuilds
 // ---------------------------------------------------------------------------
 
-export async function onFork(sourceChatId: string, forkedChatId: string, userId?: string) {
+export async function onFork(sourceChatId: string, forkedChatId: string, userId?: string, idMap?: Record<string, string>, atIndex?: number) {
   try {
     await copyChat(sourceChatId, forkedChatId, userId);
-    const [src, dst] = await Promise.all([host.chat.getMessages(sourceChatId), host.chat.getMessages(forkedChatId)]);
-    // Map source message ids → forked ids by index + content signature (like LumiBooks' fork.ts).
-    const sig = (m: any) => `${m.index_in_chat}:${hash(String(m.content ?? ""))}`;
-    const dstBySig = new Map(dst.map((m: any) => [sig(m), m.id]));
-    const map = new Map<string, string>();
-    for (const m of src as any[]) {
-      const d = dstBySig.get(sig(m));
-      if (d) map.set(m.id, d);
+    // The fork inherits the source chat's lorebooks, the source's mirror among them: take it off,
+    // or the fork would read the source's live (and diverging) story. The fork gets its own mirror.
+    await detachForeignMirrors(forkedChatId, userId);
+    const map = new Map<string, string>(Object.entries(idMap ?? {}));
+    const dst = await host.chat.getMessages(forkedChatId);
+    if (!map.size) {
+      // Older hosts don't send the id map: match by position and text.
+      const src = await host.chat.getMessages(sourceChatId);
+      const sig = (m: any) => `${m.index_in_chat}:${hash(String(m.content ?? ""))}`;
+      const dstBySig = new Map(dst.map((m: any) => [sig(m), m.id]));
+      for (const m of src as any[]) {
+        const d = dstBySig.get(sig(m));
+        if (d) map.set(m.id, d);
+      }
     }
+    const last = atIndex ?? Math.max(-1, ...dst.map((m: any) => Number(m.index_in_chat ?? -1)));
     const files = await loadChat(forkedChatId, userId);
-    const side: typeof files.side = {};
-    for (const [k, v] of Object.entries(files.side)) {
-      const [mid, sw] = k.split(":");
-      const nid = map.get(mid);
-      if (nid) side[`${nid}:${sw}`] = v;
-    }
-    files.side = side;
+    const remap = <T>(rec: Record<string, T> | undefined): Record<string, T> => {
+      const out: Record<string, T> = {};
+      for (const [k, v] of Object.entries(rec ?? {})) {
+        if (k.startsWith("@")) {
+          if (Number(k.slice(1)) <= last) out[k] = v; // anchored events: positions carry over up to the branch point
+          continue;
+        }
+        const cut = k.lastIndexOf(":");
+        const nid = map.get(k.slice(0, cut));
+        if (nid) out[`${nid}${k.slice(cut)}`] = v;
+      }
+      return out;
+    };
+    files.side = remap(files.side);
+    files.meta.clerked = remap(files.meta.clerked);
+    files.meta.checks = remap(files.meta.checks);
+    files.meta.repaired = remap(files.meta.repaired);
+    files.meta.playerRead = remap(files.meta.playerRead);
     for (const u of files.chronicle.units) u.msgIds = u.msgIds.map((id) => map.get(id)).filter(Boolean) as string[];
     files.chronicle.hidden = files.chronicle.hidden.map((id) => map.get(id)).filter(Boolean) as string[];
     files.meta.arrivals = files.meta.arrivals.filter((a) => map.has(a.msgId)).map((a) => ({ ...a, msgId: map.get(a.msgId)! }));
@@ -364,26 +441,54 @@ export async function onFork(sourceChatId: string, forkedChatId: string, userId?
   }
 }
 
-/** Rebuild from transcript: every stored reply still carries its ledger. */
+/**
+ * Rebuild from transcript: re-read every message and refold from scratch. What the Almanac
+ * wrote alongside the chat (repairs, knowledge-clerk lines, player facts, corrections, the
+ * simulator) is kept: it is keyed to its message, swipe and text, so it is branch-safe, and
+ * nothing would redo it for older replies. Only entries for messages that no longer exist go.
+ */
 export async function rebuild(chatId: string, userId?: string) {
   const files = await loadChat(chatId, userId);
-  // Keep user/archivist overlays and chronicle; drop repair/extractor/sim side events so they rerun.
-  const side: typeof files.side = {};
-  for (const [k, v] of Object.entries(files.side)) {
-    const keep = v.filter((s) => s.source === "user");
-    if (keep.length) side[k] = keep;
-  }
-  files.side = side;
-  files.meta.repaired = {};
-  save(chatId, "side", userId);
-  save(chatId, "meta", userId);
   const L = ledgerFor(chatId, userId);
   L.runtime.invalidate();
   await L.refresh({ reloadNames: true });
+  const ids = new Set(L.raw.map((m) => m.id));
+  if (ids.size) {
+    const live = (k: string) => k.startsWith("@") || ids.has(k.slice(0, k.lastIndexOf(":")));
+    for (const k of Object.keys(files.side)) if (!live(k)) delete files.side[k];
+    for (const rec of [files.meta.repaired, files.meta.clerked, files.meta.checks, files.meta.playerRead]) {
+      if (rec) for (const k of Object.keys(rec)) if (!live(k)) delete (rec as Record<string, unknown>)[k];
+    }
+    save(chatId, "side", userId);
+    save(chatId, "meta", userId);
+    await L.refresh();
+  }
+  await syncHidden(chatId, userId);
   afterChange(chatId, userId, { background: false });
 }
 
-/** A user-authored correction (from the drawer/Codex UI) as a locked event. */
+/** Take any other chat's mirror book off this chat (a fork inherits its source's). */
+async function detachForeignMirrors(chatId: string, userId?: string) {
+  if (!has("chats") || !has("world_books")) return;
+  const chat = await host.chats.get(chatId, userId).catch(() => null);
+  if (!chat) return;
+  const md = (chat.metadata ?? {}) as Record<string, unknown>;
+  const ids = Array.isArray(md.chat_world_book_ids) ? (md.chat_world_book_ids as string[]) : [];
+  const keep: string[] = [];
+  for (const id of ids) {
+    const book = await host.world_books.get(id, userId).catch(() => null);
+    const owner = (book?.metadata as Record<string, unknown> | undefined)?.almanac_chat_id;
+    if (typeof owner === "string" && owner !== chatId) continue;
+    keep.push(id);
+  }
+  if (keep.length !== ids.length) await host.chats.update(chatId, { metadata: { ...md, chat_world_book_ids: keep } }, userId);
+}
+
+/**
+ * A player's correction (the drawer's "Record correction"), as the player's word. It is anchored
+ * to the position of the latest reply, not to its swipe, so regenerating or swiping that reply
+ * keeps it: players correct state exactly when a reply got it wrong, and that is when they swipe.
+ */
 export async function addUserOps(chatId: string, lines: string[], userId?: string) {
   const L = ledgerFor(chatId, userId);
   await L.refresh();
@@ -392,11 +497,35 @@ export async function addUserOps(chatId: string, lines: string[], userId?: strin
   const ops = lines.map((l) => parseLine(l)).filter(Boolean) as ParsedOp[];
   if (!ops.length) return 0;
   const files = await loadChat(chatId, userId);
-  const key = sideKey(target.id, target.swipe);
-  files.side[key] = [...(files.side[key] ?? []), { source: "user", ops }];
-  save(chatId, "side", userId);
+  const key = anchorKey(target.index);
+  files.side[key] = [...(files.side[key] ?? []), { source: "user", ops, id: uid("fix"), at: Date.now() }];
+  save(chatId, "side", userId, 0);
   onMutation(chatId, userId);
   return ops.length;
+}
+
+/** Remove one recorded correction. */
+export async function removeUserOps(chatId: string, key: string, id: string, userId?: string) {
+  const files = await loadChat(chatId, userId);
+  const list = files.side[key];
+  if (!list) return false;
+  const next = list.filter((s) => s.id !== id);
+  if (next.length === list.length) return false;
+  if (next.length) files.side[key] = next;
+  else delete files.side[key];
+  save(chatId, "side", userId, 0);
+  onMutation(chatId, userId);
+  return true;
+}
+
+/** The player's recorded corrections, newest first (for the drawer). */
+export function corrections(side: Record<string, { source: string; ops: ParsedOp[]; id?: string; at?: number }[]>): { key: string; id: string; at: number; index: number; lines: string[] }[] {
+  const out: { key: string; id: string; at: number; index: number; lines: string[] }[] = [];
+  for (const [key, list] of Object.entries(side)) {
+    if (!key.startsWith("@")) continue;
+    for (const s of list) if (s.source === "user" && s.id) out.push({ key, id: s.id, at: s.at ?? 0, index: Number(key.slice(1)), lines: s.ops.map((o) => o.raw) });
+  }
+  return out.sort((a, b) => b.at - a.at);
 }
 
 /** Schedule weather ("a storm on Day 5 evening") as a forecast record the engine honours. */

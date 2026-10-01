@@ -5,7 +5,7 @@
     "": {
       "name": "almanac-ledger",
       "devDependencies": {
-        "@types/bun": "latest",
+        "@types/bun": "1.4.2",
         "lumiverse-spindle-types": "^0.6.36",
         "typescript": "^5.9.3",
       },

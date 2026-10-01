@@ -816,7 +816,10 @@ export class Folder {
         const to = this.charId(op.object!, mi)!;
         if (from === "user" && this.opts.sealed && src !== "user") return reject("the player's side of a ladder moves only by the player's words");
         const key = `${from}>${to}`;
-        const cur = st.ladders[key]?.tier ?? (this.opts.romance === "established" ? 7 : 0);
+        // A direction the story hasn't tracked yet starts where the other direction stands, not at
+        // Strangers: "Gabriel→Buffy: 7" after Buffy→Gabriel reached 7 is where things are, not a skip.
+        const reverse = st.ladders[`${to}>${from}`]?.tier;
+        const cur = st.ladders[key]?.tier ?? (this.opts.romance === "established" ? 7 : reverse ?? 0);
         if (a.unknown) return reject(`no rung called "${a.unknown}"; the rungs are ${LADDER_NAMES.map((n, i) => `${i} ${n}`).join(" · ")} (now ${LADDER_NAMES[cur]})`);
         if (a.hold) {
           if (st.ladders[key] && op.cause) st.ladders[key].evidence = op.cause;
@@ -825,9 +828,11 @@ export class Folder {
         let tier = clamp(a.rel ? cur + a.tier : a.tier, 0, 7);
         const maxStep = this.opts.romance === "fast" ? 2 : 1;
         let warned: string | undefined;
+        // The first line of a new direction may sit below the other one: asymmetry is no fall.
+        const freshBelow = !st.ladders[key] && reverse != null && tier <= cur;
         // A fall needs a reason. Models often write "tier 1" after a warm beat meaning
         // "up one"; that is read as a step up, and a fall with no hurt in its cause is held.
-        if (tier < cur && src !== "user") {
+        if (tier < cur && src !== "user" && !freshBelow) {
           const why = op.cause ?? "";
           if (!LADDER_FALL.test(why)) {
             if (!a.rel && !a.named && a.tier > 0 && LADDER_WARM.test(why)) {

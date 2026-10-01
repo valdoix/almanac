@@ -541,23 +541,22 @@ export interface Settings {
   summaryFocus: string;
   recallBudget: number;
   recallPlacement: "before_history" | "depth4";
-  controller: "off" | "collapsed";
-  controllerConnection: string;
-  semanticSource: "mirror" | "none";
+  /**
+   * Ceiling on everything the Almanac adds to one prompt (note, recall, mirror cards, chapter
+   * summaries), in tokens. Over it, the summaries narrow to the relevant ones, then the
+   * lowest-ranked recall goes. 0: no ceiling.
+   */
+  injectCeiling: number;
   keyHeat: boolean;
   maxKeys: number;
   stopList: string[];
   loreDefaultMode: "native" | "assisted" | "managed";
-  lorePermission: "read" | "overlay" | "write";
   climate: string;
   latitude: string;
   calendar: string;
   simStep: number; // minutes
   simulator: boolean;
   simConnection: string;
-  socialTicks: boolean;
-  rumors: boolean;
-  sidecar: boolean;
   sidecarConnection: string;
   sidecarTimeout: number;
   /** The knowledge clerk: a quiet pass that rewrites a reply's knowledge lines cleanly. */
@@ -606,23 +605,17 @@ export const DEFAULT_SETTINGS: Settings = {
   summaryFocus: "",
   recallBudget: 2400,
   recallPlacement: "before_history",
-  controller: "off",
-  controllerConnection: "",
-  semanticSource: "mirror",
+  injectCeiling: 24000,
   keyHeat: true,
   maxKeys: 12,
   stopList: [],
   loreDefaultMode: "assisted",
-  lorePermission: "read",
   climate: "",
   latitude: "temperate",
   calendar: "",
   simStep: 120,
   simulator: false,
   simConnection: "",
-  socialTicks: true,
-  rumors: true,
-  sidecar: false,
   sidecarConnection: "",
   sidecarTimeout: 20,
   knowledgeClerk: "auto",
@@ -633,7 +626,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "preset",
   skinMode: "auto",
   skinColors: {},
-  fonts: true,
+  fonts: false,
   narratorOnlyToTools: false,
   telemetry: true,
   replyCheck: "rules",

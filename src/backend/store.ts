@@ -16,7 +16,7 @@ import type { WeaverRole, WeaverWorld } from "../core/lore";
 import type { CraftReport } from "../core/telemetry";
 import type { ChatConfig, Settings } from "../core/types";
 import { DEFAULT_CHAT_CONFIG, DEFAULT_SETTINGS } from "../core/types";
-import { debounce, describe, host, warn } from "./host";
+import { debounce, describe, host, pending, serial, warn } from "./host";
 
 export interface Detected {
   sealed?: boolean;
@@ -38,7 +38,18 @@ export interface Detected {
   dialogueStyle?: string;
   /** The preset's Dialogue blocks switch: false when speech is written without [spk] marks. */
   dialogueMarks?: boolean;
+  /** The story's language (the preset's Language setting). */
+  lang?: string;
+  /** The preset version that sent the handshake. */
+  presetVersion?: string;
   at?: number;
+}
+
+/** Something that went wrong in the background (a summary, a mirror write, hiding turns). */
+export interface Problem {
+  at: number;
+  where: string;
+  message: string;
 }
 
 export interface PlanError {
@@ -99,6 +110,8 @@ export interface ChatMeta {
     tokens: number;
     /** Chronicle summaries the prompt carried. */
     chronicle?: { id: string; name: string }[];
+    /** The injection ceiling, what the turn would have cost without it, and what was cut to fit. */
+    ceiling?: { limit: number; before: number; after: number; trimmed: string[] };
   }[];
   mirror: { bookId?: string; entries: Record<string, { entryId: string; hash: string; wrote?: string }> };
   lore: { books: Record<string, LoreBookState>; review: { entryId: string; bookId: string; title: string; kind: string; confidence: number }[]; lastScan?: number; world?: WeaverWorld };
@@ -117,6 +130,10 @@ export interface ChatMeta {
   playerRead?: Record<string, string>;
   telemetry?: CraftReport | null;
   greetedReturn?: number;
+  /** Prompts in a row without the ALMANAC charter or handshake (auto mode disarms after a few). */
+  charterMiss?: number;
+  /** Recent background failures, newest first (shown in the drawer). */
+  problems?: Problem[];
 }
 
 export function emptyMeta(): ChatMeta {
@@ -147,6 +164,19 @@ interface ChatFiles {
 
 const cache = new Map<string, ChatFiles>();
 const loading = new Map<string, Promise<ChatFiles>>();
+/** Chats kept in memory; older ones are dropped once their writes are out. */
+const CACHE_MAX = 32;
+
+function touch(chatId: string, files: ChatFiles) {
+  cache.delete(chatId);
+  cache.set(chatId, files);
+  if (cache.size <= CACHE_MAX) return;
+  for (const id of cache.keys()) {
+    if (cache.size <= CACHE_MAX) break;
+    if (id === chatId || pending(`save:${id}:`)) continue;
+    cache.delete(id);
+  }
+}
 
 function path(chatId: string, kind: FileKind | "events") {
   const safe = chatId.replace(/[^\w-]/g, "_");
@@ -176,9 +206,12 @@ async function readJson<T>(p: string, fallback: T, userId?: string): Promise<T> 
 
 export async function loadChat(chatId: string, userId?: string): Promise<ChatFiles> {
   const hit = cache.get(chatId);
-  if (hit) return hit;
-  const pending = loading.get(chatId);
-  if (pending) return pending;
+  if (hit) {
+    touch(chatId, hit);
+    return hit;
+  }
+  const inFlight = loading.get(chatId);
+  if (inFlight) return inFlight;
   const p = (async () => {
     try {
       const [meta, side, codex, chronicle] = await Promise.all([
@@ -188,7 +221,7 @@ export async function loadChat(chatId: string, userId?: string): Promise<ChatFil
         readJson<ChronicleStore>(path(chatId, "chronicle"), emptyChronicle(), userId),
       ]);
       const files: ChatFiles = { meta: { ...emptyMeta(), ...meta, config: { ...DEFAULT_CHAT_CONFIG, ...(meta.config ?? {}), colors: { ...(meta.config?.colors ?? {}) } } }, side, codex, chronicle };
-      cache.set(chatId, files);
+      touch(chatId, files);
       return files;
     } finally {
       // A failed read caches nothing, so the next call (with a user) reads the real files.
@@ -199,7 +232,11 @@ export async function loadChat(chatId: string, userId?: string): Promise<ChatFil
   return p;
 }
 
-export function save(chatId: string, kind: FileKind, userId?: string, delay = 400) {
+/**
+ * Write a chat file soon. The delay is short on purpose: Lumiverse stops the worker without
+ * warning on an update or restart, so anything still waiting is lost.
+ */
+export function save(chatId: string, kind: FileKind, userId?: string, delay = 150) {
   debounce(`save:${chatId}:${kind}`, delay, async () => {
     const files = cache.get(chatId);
     if (!files) return;
@@ -233,7 +270,7 @@ export async function copyChat(fromChat: string, toChat: string, userId?: string
   const src = await loadChat(fromChat, userId);
   const clone = JSON.parse(JSON.stringify(src)) as ChatFiles;
   clone.meta.mirror = { entries: {} }; // the fork gets its own mirror book
-  cache.set(toChat, clone);
+  touch(toChat, clone);
   for (const k of ["meta", "side", "codex", "chronicle"] as FileKind[]) save(toChat, k, userId, 0);
 }
 
@@ -265,10 +302,46 @@ export async function loadSettings(userId?: string): Promise<Settings> {
 }
 
 /** Merge a change into the settings file as it is on disk, never into defaults read in its place. */
-export async function saveSettings(patch: Partial<Settings>, userId?: string): Promise<Settings> {
-  const onDisk = await readJson<Partial<Settings>>("settings.json", {}, userId); // throws rather than guess
-  const next = { ...DEFAULT_SETTINGS, ...onDisk, ...patch };
-  await host.userStorage.setJson("settings.json", next, { indent: 2, userId });
-  settingsCache.set(userId ?? "", next);
-  return next;
+export function saveSettings(patch: Partial<Settings>, userId?: string): Promise<Settings> {
+  // One at a time per user: two quick changes would otherwise read the same file and the second write lose the first.
+  return serial(`settings:${userId ?? ""}`, async () => {
+    const onDisk = await readJson<Partial<Settings>>("settings.json", {}, userId); // throws rather than guess
+    const next = { ...DEFAULT_SETTINGS, ...onDisk, ...cleanSettings(patch) };
+    await host.userStorage.setJson("settings.json", next, { indent: 2, userId });
+    settingsCache.set(userId ?? "", next);
+    return next;
+  });
+}
+
+/** Keep only known settings whose value has the default's type (a frontend bug can't store junk). */
+export function cleanSettings(patch: Record<string, unknown>): Partial<Settings> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch ?? {})) {
+    const def = (DEFAULT_SETTINGS as unknown as Record<string, unknown>)[k];
+    if (def === undefined) continue;
+    if (Array.isArray(def) ? Array.isArray(v) : typeof v === typeof def) out[k] = typeof v === "number" && !Number.isFinite(v) ? def : v;
+  }
+  return out as Partial<Settings>;
+}
+
+// ---------------------------------------------------------------------------
+// Background problems
+// ---------------------------------------------------------------------------
+
+let problemListener: ((chatId: string, userId?: string) => void) | undefined;
+export function onProblem(fn: (chatId: string, userId?: string) => void) {
+  problemListener = fn;
+}
+
+/** Record a background failure for the drawer to show (and the server log). */
+export async function noteProblem(chatId: string, userId: string | undefined, where: string, err: unknown) {
+  warn(`${where}: ${describe(err)}`);
+  try {
+    const files = await loadChat(chatId, userId);
+    files.meta.problems = [{ at: Date.now(), where, message: describe(err).slice(0, 400) }, ...(files.meta.problems ?? [])].slice(0, 8);
+    save(chatId, "meta", userId);
+    problemListener?.(chatId, userId);
+  } catch {
+    /* storage itself is down: the log line above is all we can do */
+  }
 }

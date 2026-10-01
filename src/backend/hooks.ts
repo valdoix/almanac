@@ -12,10 +12,11 @@ import { redact } from "../core/offpage";
 import { debug, describe, has, host, rememberUser, userFor, warn, within } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings, save, type Detected } from "./store";
-import { isEnabled, lastPlan, notePlanError, safePlan } from "./turn";
+import { currentPlan, isEnabled, notePlanError, safePlan } from "./turn";
 import { pushMacros } from "./macros";
 import { quiet, sys } from "./llm";
 import { checksFor } from "./check";
+import { syncHidden } from "./ingest";
 
 // ---------------------------------------------------------------------------
 // Context handler: refresh + plan before assembly
@@ -52,7 +53,8 @@ export function registerWorldInfoInterceptor() {
       const files = await loadChat(ctx.chatId, ctx.userId);
       const settings = await loadSettings(ctx.userId);
       if (!isEnabled(files.meta, settings)) return;
-      let plan = lastPlan(ctx.chatId);
+      // The plan the context handler just made for this assembly (a preview's counts too: the WI step can't tell).
+      let plan = currentPlan(ctx.chatId, { dryRun: true });
       if (!plan) plan = (await within(safePlan(ctx.chatId, "normal", ctx.userId, { dryRun: true }), 7000, null, "wi plan")) ?? undefined;
       const mirrorBook = files.meta.mirror.bookId;
       const disabled: string[] = [];
@@ -140,6 +142,8 @@ function parseConfig(attrs: string): Detected {
     trackerView: get("view"),
     header: get("header")?.toLowerCase() || undefined,
     theme: get("theme"),
+    lang: get("lang") || undefined,
+    presetVersion: get("v") || undefined,
     at: Date.now(),
   };
 }
@@ -192,7 +196,32 @@ export function registerPromptInterceptor() {
         meta.enabled = true;
         save(chatId, "meta", userId);
       }
-      if (!isEnabled(meta, settings)) return msgs;
+      // Arming follows the preset: a chat that switched away from ALMANAC disarms after two story
+      // turns without its charter or handshake (only plain turns count: a continue or an
+      // impersonation can legitimately go without the handshake).
+      if (settings.enabled === "auto" && meta.config.enabledOverride == null && !context.isDryRun) {
+        if (almanacPrompt) {
+          if (meta.charterMiss) {
+            meta.charterMiss = 0;
+            save(chatId, "meta", userId);
+          }
+        } else if (meta.enabled && genType === "normal") {
+          meta.charterMiss = (meta.charterMiss ?? 0) + 1;
+          if (meta.charterMiss >= 2) {
+            meta.enabled = false;
+            meta.charterMiss = 0;
+            debug(`chat ${chatId} disarmed: the ALMANAC preset is no longer in use`);
+            syncHidden(chatId, userId).catch((err) => warn(`release hidden turns: ${describe(err)}`));
+            pushMacros(chatId, userId);
+          }
+          save(chatId, "meta", userId);
+        }
+      }
+      if (!isEnabled(meta, settings)) {
+        // Off in this chat: turns the Almanac hid come back, or they would reach the model with no summary.
+        if (files.chronicle.hidden.length) syncHidden(chatId, userId).catch((err) => warn(`release hidden turns: ${describe(err)}`));
+        return msgs;
+      }
       // Speech labelled `Name#N|tone:` in earlier replies teaches the model the
       // wrong shape (and outlives the [spk] marks thinned from older turns). A planning block
       // another system left in a reply (<weaver_deliberation>) is dropped: the model would copy it.
@@ -204,9 +233,10 @@ export function registerPromptInterceptor() {
       }
       if (genType === "impersonate") return msgs;
 
-      let plan = lastPlan(chatId);
-      if (!plan || plan.genType !== genType) plan = (await safePlan(chatId, genType, userId, { dryRun: context.isDryRun })) ?? undefined;
+      let plan = currentPlan(chatId, { genType, dryRun: context.isDryRun });
+      if (!plan) plan = (await safePlan(chatId, genType, userId, { dryRun: context.isDryRun })) ?? undefined;
       if (!plan) return msgs;
+      if (!context.isDryRun) plan.used = true;
       const L = ledgerFor(chatId, userId);
 
       // Knowledge lines in earlier replies, as the Almanac filed them (one fact a line, #keys, no diary):

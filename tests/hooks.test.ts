@@ -7,6 +7,9 @@ import { OPENING, SAMPLE_REPLY, SAMPLE_USER } from "../preset/fixtures";
 
 const files = new Map<string, string>();
 const macros = new Map<string, string>();
+const macroHandlers = new Map<string, (ctx: any) => unknown>();
+/** What the host would get for a macro while assembling a prompt for this chat. */
+const macro = (name: string, chatId = CHAT) => String(macroHandlers.get(name)?.({ chatId }) ?? "");
 const chatVars = new Map<string, string>();
 const hooks: Record<string, any> = {};
 const sent: any[] = [];
@@ -45,7 +48,7 @@ const spindle: any = new Proxy({
   characters: { get: async () => ({ id: "char-1", name: "Mara", description: "A dockside fence with a temper." }), update: async () => {} },
   personas: { getActive: async () => ({ id: "p1", name: "Wren" }), get: async () => ({ id: "p1", name: "Wren" }) },
   variables: { chat: { set: async (_c: string, k: string, v: string) => void chatVars.set(k, v), delete: async (_c: string, k: string) => void chatVars.delete(k) } },
-  registerMacro: () => {},
+  registerMacro: (def: any) => void (typeof def.handler === "function" && macroHandlers.set(def.name, def.handler)),
   updateMacroValue: (n: string, v: string) => void macros.set(n, v),
   registerInterceptor: (fn: any) => void (hooks.prompt = fn),
   registerContextHandler: (fn: any) => void (hooks.context = fn),
@@ -106,12 +109,16 @@ describe("extension hooks with the preset", () => {
 
   test("macros report the linked state the preset branches on", async () => {
     await hooks.context({ chatId: CHAT, userId: USER, generationType: "normal" });
-    expect(macros.get("almActive")).toBe("yes");
-    expect(macros.get("almMode")).toBe("conflict");
-    expect(macros.get("almVoices")).toContain("Mara#");
-    expect(macros.get("almClock")).toContain("21:40");
+    expect(macro("almActive")).toBe("yes");
+    expect(macro("almMode")).toBe("conflict");
+    expect(macro("almVoices")).toContain("Mara#");
+    expect(macro("almClock")).toContain("21:40");
     // The header said "Day 3 · Tuesday, 14 October 1923": the almanac agrees on Day 3.
-    expect(macros.get("almClock")).toContain("Tuesday 14 October 1923");
+    expect(macro("almClock")).toContain("Tuesday 14 October 1923");
+    // Per chat: another chat (or another user's) never reads this one's values, and nothing goes in the host's global cache.
+    expect(macro("almActive", "some-other-chat")).toBe("no");
+    expect(macro("almPlace", "some-other-chat")).toBe("");
+    expect(macros.size).toBe(0);
   });
 
   test("render processor swaps the ledger for a drawer as of that message, with the desk on the latest", async () => {
@@ -294,6 +301,146 @@ describe("a Dream Weaver world card", () => {
       expect(f.meta.lore.books.lore).toMatchObject({ weaver: "lore", kinds: { group: 1 } });
       expect(f.codex.overlays["loc:saltmere"]).toMatchObject({ kind: "place", summary: "Saltmere is a fishing town that pays a yearly tithe to something under the bay.", body: { tension: "The count came back short." } });
       expect(f.codex.overlays["fac:the_harbour_guild"]?.kind).toBe("group");
+    } finally {
+      Object.assign(spindle, saved);
+    }
+  });
+});
+
+describe("release fixes against the host (1.13)", () => {
+  const hiddenCalls: { ids: string[]; hidden: boolean }[] = [];
+  const meta = (enabled: boolean) => JSON.stringify({ version: 1, enabled, config: { genres: [], sessionZeroDone: true, colors: {} }, detected: {}, pressures: {}, heat: {}, injected: {}, lastInjected: [], feed: [], mirror: { entries: {} }, lore: { books: {}, review: [] }, arrivals: [], repaired: {} });
+
+  test("hidden turns follow the chat: hidden under a chapter while on, back as soon as it's switched off", async () => {
+    const HC = "hide-chat";
+    files.set(`chats/${HC}/meta.json`, meta(true));
+    files.set(`chats/${HC}/chronicle.json`, JSON.stringify({ version: 1, units: [{ id: "c1", level: "chapter", no: 1, title: "The Dock", startIdx: 0, endIdx: 1, msgIds: ["m0", "m1"], text: "x".repeat(80), signature: "", children: [] }], hidden: [] }));
+    const saved = spindle.chat;
+    spindle.chat = { ...saved, setMessagesHidden: async (_c: string, ids: string[], hidden: boolean) => void hiddenCalls.push({ ids, hidden }) };
+    try {
+      const { syncHidden } = await import("../src/backend/ingest");
+      const { loadChat } = await import("../src/backend/store");
+      await syncHidden(HC, USER);
+      expect(hiddenCalls.at(-1)).toEqual({ ids: ["m0", "m1"], hidden: true });
+      expect((await loadChat(HC, USER)).chronicle.hidden.sort()).toEqual(["m0", "m1"]);
+      // Off for this chat: the turns come back (the model would otherwise get neither them nor the chapter).
+      await hooks.frontend({ type: "enable", chatId: HC, value: false }, USER);
+      expect(hiddenCalls.at(-1)).toEqual({ ids: ["m0", "m1"], hidden: false });
+      expect((await loadChat(HC, USER)).chronicle.hidden).toEqual([]);
+      // "Release hidden turns" with the chat on shows them too, and nothing the Almanac didn't hide.
+      await hooks.frontend({ type: "enable", chatId: HC, value: true }, USER);
+      expect(hiddenCalls.at(-1)).toEqual({ ids: ["m0", "m1"], hidden: true });
+      await hooks.frontend({ type: "releaseHidden", chatId: HC }, USER);
+      expect(hiddenCalls.at(-1)).toEqual({ ids: ["m0", "m1"], hidden: false });
+    } finally {
+      spindle.chat = saved;
+    }
+  });
+
+  test("a chat that leaves the ALMANAC preset disarms after two plain turns without its charter", async () => {
+    const AC = "arm-chat";
+    files.set(`chats/${AC}/meta.json`, meta(false));
+    const turn = (system: string) => hooks.prompt([{ role: "system", content: system }, { role: "user", content: "Hello." }], { chatId: AC, userId: USER, generationType: "normal" });
+    const { loadChat } = await import("../src/backend/store");
+    await turn(`${CHARTER}\n${HANDSHAKE}`);
+    expect((await loadChat(AC, USER)).meta.enabled).toBe(true);
+    await turn("You are a helpful narrator.");
+    expect((await loadChat(AC, USER)).meta.enabled).toBe(true); // one turn isn't enough
+    await turn("You are a helpful narrator.");
+    expect((await loadChat(AC, USER)).meta.enabled).toBe(false);
+    await turn(`${CHARTER}\n${HANDSHAKE}`);
+    expect((await loadChat(AC, USER)).meta.enabled).toBe(true); // and arms again when the preset returns
+  });
+
+  test("the handshake's language and preset version are read", async () => {
+    const { loadChat } = await import("../src/backend/store");
+    await hooks.prompt([{ role: "system", content: `${CHARTER}\n${HANDSHAKE.replace("/>", ' lang="Español" v="1.0.11"/>')}` }, { role: "user", content: "Hola." }], { chatId: CHAT, userId: USER, generationType: "normal" });
+    expect((await loadChat(CHAT, USER)).meta.detected).toMatchObject({ lang: "Español", presetVersion: "1.0.11" });
+  });
+
+  test("a plan goes out once: the next prompt never reuses it", async () => {
+    const { lastPlan, currentPlan } = await import("../src/backend/turn");
+    await hooks.context({ chatId: CHAT, userId: USER, generationType: "normal" });
+    const made = lastPlan(CHAT)!;
+    expect(currentPlan(CHAT, { genType: "normal" })).toBe(made);
+    await hooks.prompt([{ role: "system", content: CHARTER }, { role: "user", content: "Go on." }], { chatId: CHAT, userId: USER, generationType: "normal" });
+    expect(made.used).toBe(true);
+    expect(currentPlan(CHAT, { genType: "normal" })).toBeUndefined();
+    // A preview's plan is never used by a real generation.
+    await hooks.context({ chatId: CHAT, userId: USER, generationType: "normal", dryRun: true });
+    expect(currentPlan(CHAT, { genType: "normal" })).toBeUndefined();
+    expect(currentPlan(CHAT, { genType: "normal", dryRun: true })?.dryRun).toBe(true);
+  });
+
+  test("the injection ceiling is the player's: what was cut is reported, the note always goes in", async () => {
+    const { saveSettings } = await import("../src/backend/store");
+    const { planTurn } = await import("../src/backend/turn");
+    try {
+      await saveSettings({ injectCeiling: 40 }, USER);
+      const plan = (await planTurn(CHAT, "normal", USER, { dryRun: true }))!;
+      expect(plan.note).toContain("<ledger-note>");
+      expect(plan.feed!.ceiling).toMatchObject({ limit: 40 });
+      expect(plan.feed!.ceiling!.trimmed.join(" ")).toContain("over");
+      await saveSettings({ injectCeiling: 0 }, USER);
+      expect((await planTurn(CHAT, "normal", USER, { dryRun: true }))!.feed!.ceiling).toBeUndefined();
+    } finally {
+      await saveSettings({ injectCeiling: 24000 }, USER);
+    }
+  });
+
+  test("the drawer acts only on the user's own chats, and settings keep their types", async () => {
+    const saved = spindle.chats;
+    const before = sent.length;
+    spindle.chats = { ...saved, get: async () => null };
+    try {
+      await hooks.frontend({ type: "getState", chatId: "someone-elses-chat" }, "user-2");
+      expect(sent.length).toBe(before);
+    } finally {
+      spindle.chats = saved;
+    }
+    const { cleanSettings } = await import("../src/backend/store");
+    expect(cleanSettings({ injectCeiling: 9000, fanIn: "6", bogus: 1, stopList: ["a"], chronicle: false } as any)).toEqual({ injectCeiling: 9000, stopList: ["a"], chronicle: false });
+  });
+
+  test("a fork drops the source's mirror and carries the Almanac's entries over by the host's id map", async () => {
+    const saved = { chats: spindle.chats, world_books: spindle.world_books, chat: spindle.chat };
+    const updates: any[] = [];
+    try {
+      files.set("chats/src-chat/meta.json", JSON.stringify({ ...JSON.parse(meta(true)), clerked: { "m2:0": { hash: "h", result: "ok" } }, mirror: { bookId: "srcmirror", entries: {} } }));
+      files.set("chats/src-chat/side.json", JSON.stringify({ "m2:0": [{ source: "clerk", ops: [] }], "@2": [{ source: "user", ops: [], id: "fix" }], "@9": [{ source: "sim", ops: [] }] }));
+      spindle.chats = { ...saved.chats, get: async () => ({ id: "fork-2", character_id: "", metadata: { chat_world_book_ids: ["srcmirror", "lore"] } }), update: async (_id: string, patch: any) => void updates.push(patch) };
+      spindle.world_books = { get: async (id: string) => (id === "srcmirror" ? { id, metadata: { almanac_chat_id: "src-chat" } } : { id, metadata: {} }) };
+      spindle.chat = { ...saved.chat, getMessages: async () => messages.map((m) => ({ ...m, id: `f${m.index_in_chat}` })) };
+      const { onFork } = await import("../src/backend/ingest");
+      const { loadChat } = await import("../src/backend/store");
+      await onFork("src-chat", "fork-2", USER, { m0: "f0", m1: "f1", m2: "f2" }, 2);
+      expect(updates.at(-1).metadata.chat_world_book_ids).toEqual(["lore"]);
+      const f = await loadChat("fork-2", USER);
+      expect(Object.keys(f.side).sort()).toEqual(["@2", "f2:0"]); // @9 is past the branch point
+      expect(Object.keys(f.meta.clerked ?? {})).toEqual(["f2:0"]);
+      expect(f.meta.mirror.bookId).toBeUndefined();
+    } finally {
+      Object.assign(spindle, saved);
+    }
+  });
+
+  test("another chat's mirror book is never read as lore (a fork inherits its source's)", async () => {
+    const FC = "fork-chat";
+    const saved = { chats: spindle.chats, world_books: spindle.world_books };
+    const books: Record<string, any> = {
+      theirs: { id: "theirs", name: "ALMANAC · Source chat", metadata: { almanac_chat_id: "source-chat" } },
+      lore: { id: "lore", name: "Harbour lore", metadata: {} },
+    };
+    try {
+      spindle.chats = { ...saved.chats, get: async () => ({ id: FC, character_id: "", metadata: { chat_world_book_ids: ["theirs", "lore"] } }) };
+      spindle.world_books = { get: async (id: string) => books[id], getGlobal: async () => [], entries: { list: async () => ({ data: [{ id: `${Math.random()}`, comment: "The Harbour Guild", key: ["guild"], content: "Nobody crosses them." }] }) } };
+      files.set(`chats/${FC}/meta.json`, meta(true));
+      const { scanLore, isMirrorBook } = await import("../src/backend/lorebridge");
+      const { loadChat } = await import("../src/backend/store");
+      await scanLore(FC, USER, true);
+      expect(Object.keys((await loadChat(FC, USER)).meta.lore.books)).toEqual(["lore"]);
+      expect(isMirrorBook(books.theirs)).toBe(true);
+      expect(isMirrorBook(books.lore)).toBe(false);
     } finally {
       Object.assign(spindle, saved);
     }

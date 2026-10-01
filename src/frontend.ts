@@ -411,7 +411,10 @@ export function setup(ctx: SpindleFrontendContext) {
           break;
         }
         case "toast":
+          // The host's toast wasn't available: show it at the top of the drawer instead of only in the console.
           console.info(`[ALMANAC] ${m.text}`);
+          app.notice = { tone: String(m.tone ?? "info"), text: String(m.text ?? ""), at: Date.now() };
+          app.render();
           break;
         case "clerkProgress":
           if (app.view?.chatId !== m.chatId) return;
@@ -457,7 +460,7 @@ export function setup(ctx: SpindleFrontendContext) {
         const key = res?.selectedKey;
         if (key) insertIntoComposer(key);
       } catch {
-        insertIntoComposer("/recap");
+        /* no menu on this host: nothing is inserted */
       }
     }));
     removers.push(() => action.destroy());
@@ -498,9 +501,9 @@ export function setup(ctx: SpindleFrontendContext) {
   };
 }
 
-/** Best effort: put a command in the chat composer (there is no official composer API). */
+/** Best effort: put a command in the chat composer (there is no official composer API). Never another text box. */
 function insertIntoComposer(text: string) {
-  const ta = document.querySelector<HTMLTextAreaElement>("textarea[data-chat-input], .chat-input textarea, form textarea, textarea");
+  const ta = document.querySelector<HTMLTextAreaElement>("textarea[data-chat-input], .chat-input textarea, [class*='chat-input'] textarea, [class*='composer'] textarea");
   if (!ta) {
     navigator.clipboard?.writeText(text).catch(() => undefined);
     return;

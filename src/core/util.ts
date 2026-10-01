@@ -70,6 +70,17 @@ export function hash(s: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
+const nativeHash: ((s: string) => number | bigint) | undefined = (globalThis as any).Bun?.hash;
+
+/**
+ * A fast 64-bit hash for in-memory keys (the fold's chain, the parse cache). Native wyhash
+ * under Bun, FNV-1a plus the length elsewhere. Never persist it: the value differs between runtimes.
+ */
+export function fastHash(s: string): string {
+  if (nativeHash) return nativeHash(s).toString(16);
+  return `${hash(s)}${s.length.toString(16)}`;
+}
+
 /** Deterministic PRNG (mulberry32) seeded from a string. */
 export function rng(seed: string): () => number {
   let a = parseInt(hash(seed), 16) || 1;
@@ -153,10 +164,10 @@ export function titleCase(s: string): string {
 /** Strip display marks ([spk=…], [thk=…], [txt], vtk wrappers, html) to get plain prose. */
 export function plainProse(text: string): string {
   return text
-    .replace(/<ledger>[\s\S]*?(<\/ledger>|$)/gi, "")
-    .replace(/<unspoken>[\s\S]*?(<\/unspoken>|$)/gi, "")
-    .replace(/<plan>[\s\S]*?(<\/plan>|$)/gi, "")
-    .replace(/<think(ing)?>[\s\S]*?<\/think(ing)?>/gi, "")
+    .replace(/<ledger\b[^>]*>[\s\S]*?(<\/ledger>|$)/gi, "")
+    .replace(/<unspoken\b[^>]*>[\s\S]*?(<\/unspoken>|$)/gi, "")
+    .replace(/<plan\b[^>]*>[\s\S]*?(<\/plan>|$)/gi, "")
+    .replace(/<(think|thinking)\b[^>]*>[\s\S]*?(<\/\1>|$)/gi, "")
     .replace(/\[(?:spk|thk|txt)(?:=[^\]]*)?\]|\[\/(?:spk|thk|txt)\]/g, "")
     .replace(/\[vtk=[^\]]*\]|\[\/vtk\]/g, "")
     .replace(/^[ \t]*(?:🗓️?|📍)[^\n]*$/gmu, "")

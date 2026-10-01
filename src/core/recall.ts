@@ -241,6 +241,8 @@ function nameOf(state: WorldState, id: string, userName: string): string {
 /** Knowledge-perspective rendering: the same record reads differently depending on who is in the room. */
 export function renderRecord(r: CodexRecord, state: WorldState, present: string[], full: boolean, userName: string): string {
   const tag = r.scope.narratorOnly ? "[narrator-only] " : "";
+  // A full card the player rewrote in the mirror lorebook stands as they wrote it.
+  if (r.body.mirrorText && r.locked) return `${tag}${r.summary}`;
   const diverged = r.body.divergedNote ? ` [History — ${r.body.divergedNote}]` : "";
   switch (r.kind) {
     case "fact": {

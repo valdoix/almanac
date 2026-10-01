@@ -4,6 +4,7 @@
 
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { escapeHtml as e, initials, kpNote } from "../core/util";
+import { PRESET_VERSION, olderThan } from "../core/version";
 import { renderGraph, type GEdge, type GNode } from "./graph";
 import { CreatorUI } from "./creator-ui";
 import { VERSION } from "../core/version";
@@ -86,6 +87,8 @@ export class AlmanacApp {
   status: "nochat" | "waiting" | "stalled" | "ok" = "nochat";
   hudProblem = "";
   versionWarning = "";
+  /** A message from the background process (shown at the top until dismissed). */
+  notice: { tone: string; text: string; at: number } | null = null;
   /** Per chat, the Engine findings the player has already looked at (kept in this browser). */
   engineSeen: Record<string, string[]> = {};
   /** Called when the Engine's unseen count may have changed (the drawer tab's badge follows it). */
@@ -180,10 +183,21 @@ export class AlmanacApp {
       ? `<div class="card flat alm-warnbox"><b>The last ${pe.genType === "normal" ? "turn" : e(pe.genType)} went to the model without the Almanac.</b><p class="muted">At ${e(new Date(pe.at).toLocaleString())}, ${e(pe.where)} failed, so the reply was written without the ledger note, recall or mirror entries. This clears itself on the next turn that works. If it keeps coming back, update the extension, and report the error below if an update doesn't fix it.</p><p><code>${e(pe.message)}</code></p>${pe.stack ? `<details><summary class="muted">Details for a bug report</summary><pre>ALMANAC Ledger ${e(v.version)}\n${e(pe.stack)}</pre></details>` : ""}</div>`
       : "";
     const banner = !v.enabled
-      ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block). You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button></div>`
+      ? `<div class="card flat"><b>The Ledger is not active in this chat.</b><p class="muted">It switches on by itself when the ALMANAC preset is in use (or a reply contains a &lt;ledger&gt; block), and off again when the chat moves to another preset. You can also turn it on here.</p><button class="btn primary" data-act="enable">Turn on for this chat</button>${v.hiddenTurns ? `<p class="muted">${v.hiddenTurns} turn${v.hiddenTurns === 1 ? " is" : "s are"} still hidden under summaries. <button class="btn" data-act="releaseHidden">Show them again</button></p>` : ""}</div>`
+      : "";
+    const pv = v.detected?.presetVersion;
+    const presetOld = v.enabled && pv && olderThan(String(pv), PRESET_VERSION)
+      ? `<div class="card flat alm-warnbox"><b>This chat uses ALMANAC preset ${e(pv)}; the extension expects ${PRESET_VERSION} or newer.</b><p class="muted">Import <code>preset/ALMANAC.json</code> from the repository again (Presets → Import) so both halves speak the same version.</p></div>`
+      : "";
+    const probs = v.enabled ? (v.problems ?? []).slice(0, 3) : [];
+    const problems = probs.length
+      ? `<div class="card flat alm-warnbox"><div class="row"><b class="grow">Something in the background didn't work</b><button class="btn" data-act="clearProblems">Clear</button></div><ul class="alm-list">${probs.map((p: any) => `<li><b>${e(p.where)}</b> <small class="muted">${e(new Date(p.at).toLocaleString())}</small><br><small>${e(p.message)}</small></li>`).join("")}</ul><p class="muted"><small>The story still goes on; this is what didn't happen. If it repeats, check the connection set for that job in Settings.</small></p></div>`
+      : "";
+    const note = this.notice && Date.now() - this.notice.at < 60_000
+      ? `<div class="card flat${this.notice.tone === "error" || this.notice.tone === "warning" ? " alm-warnbox" : ""}"><div class="row"><span class="grow">${e(this.notice.text)}</span><button class="btn" data-act="dismissNotice">OK</button></div></div>`
       : "";
     const scroll = this.root.scrollTop;
-    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${stale}${planErr}${banner}${body}</main>${dock(v, this.tab, this.orbit, this.seenSet())}</div>`;
+    this.root.innerHTML = `<div class="almo${this.orbit ? " orbiting" : ""}">${skyHeader(v, this.tab)}<main class="almo-body">${pageTitle(v, this.tab)}${note}${stale}${presetOld}${planErr}${problems}${banner}${body}</main>${dock(v, this.tab, this.orbit, this.seenSet())}</div>`;
     this.root.scrollTop = scroll;
   }
 
@@ -404,7 +418,8 @@ ${others.length ? `<label class="f">Same fact as…<select id="almFactInto"><opt
 <p class="muted">${recs.length} of ${v.codex.length} records. Edits lock a record so the archivist never overwrites it. Keys are real retrieval keys.</p>
 <div class="list">${recs.slice(0, 200).map((r: any) => this.editing === r.id ? this.codexEditor(r) : `<div class="rec"><div class="hd"><span class="kind">${e(r.kind)}</span><b class="grow">${e(r.name)}</b>${r.locked ? `<span class="pill">🔒 locked</span>` : ""}${r.narratorOnly ? `<span class="pill">narrator-only</span>` : ""}<span class="pill">${e(r.source)}</span><button class="btn" data-act="edit" data-id="${e(r.id)}">edit</button></div><div>${e(r.summary)}</div>${r.keys.length ? `<div>${r.keys.map((k: string) => `<span class="pill">${e(k)}</span>`).join("")}</div>` : ""}${r.body?.divergedNote ? `<div class="alm-tag warn">moved past: ${e(r.body.divergedNote)}</div>` : ""}</div>`).join("")}</div>
 <details><summary class="muted">Add a record or a correction</summary><div class="card flat"><label class="f">New record name<input type="text" id="almNewName"></label><label class="f">Kind<select id="almNewKind">${["person", "place", "object", "group", "law", "texture", "history", "situation"].map((k) => `<option>${k}</option>`).join("")}</select></label><label class="f">Summary<textarea id="almNewSummary"></textarea></label><button class="btn primary" data-act="newRecord">Add record</button>
-<h4>Correct the state with ledger lines</h4><textarea id="almOps" placeholder="bond Mara>Kael: trust -1 — she caught him lying&#10;item Locket: Mara → Kael — stolen back"></textarea><button class="btn" data-act="userOps">Record correction</button></div></details>`;
+<h4>Correct the state with ledger lines</h4><textarea id="almOps" placeholder="bond Mara>Kael: trust -1 — she caught him lying&#10;item Locket: Mara → Kael — stolen back"></textarea><button class="btn" data-act="userOps">Record correction</button><p class="muted"><small>A correction applies from the latest reply on, and holds if you regenerate or swipe it.</small></p>
+${v.corrections?.length ? `<h4>Your corrections</h4><div class="list">${v.corrections.slice(0, 40).map((c: any) => `<div class="rec"><div class="hd"><small class="muted grow">from message ${c.index + 1}${c.at ? ` · ${e(new Date(c.at).toLocaleString())}` : ""}</small><button class="btn" data-act="userOpsRemove" data-key="${e(c.key)}" data-id="${e(c.id)}">remove</button></div>${c.lines.map((l: string) => `<code>${e(l)}</code>`).join("<br>")}</div>`).join("")}</div>` : ""}</div></details>`;
   }
 
   codexEditor(r: any): string {
@@ -496,8 +511,8 @@ ${worldPanel(v.lore.world, !!v.settings?.simulator)}
 <div class="row"><button class="btn primary" data-act="loreScan">Re-read lorebooks</button>${v.lore.review?.length ? `<button class="btn" data-act="loreClassify">Classify ${v.lore.review.length} unclear entries with the model</button>` : ""}<button class="btn" data-act="mirrorSync">Sync mirror book</button></div>
 <div class="list" style="margin-top:10px">${books.map(([id, b]: any) => `<div class="rec"><div class="hd"><b class="grow">${e(b.name)}</b>${b.weaver ? `<span class="pill" title="${e(WEAVER_BOOK[b.weaver]?.[1] ?? "")}">Dream Weaver · ${e(WEAVER_BOOK[b.weaver]?.[0] ?? b.weaver)}</span>` : ""}<span class="pill">${e(b.scope)}</span><span class="pill">${b.count} entries</span></div>
 ${loreKinds(b.kinds)}
-<div class="row"><label class="f grow">Activation<select data-lore-mode="${e(id)}">${["native", "assisted", "managed"].map((m) => `<option value="${m}"${m === b.mode ? " selected" : ""}>${m}</option>`).join("")}</select></label><label class="f grow">Permission<select data-lore-perm="${e(id)}">${["read", "overlay", "write"].map((m) => `<option value="${m}"${m === b.permission ? " selected" : ""}>${m === "read" ? "read-only" : m}</option>`).join("")}</select></label></div></div>`).join("") || `<div class="empty">No lorebooks are attached to this chat.</div>`}</div>
-<p class="muted"><b>Native</b>: your keywords decide; the Ledger only annotates lore the story has moved past. <b>Assisted</b>: plus the entries Recall picks. <b>Managed</b>: the Ledger is the only retrieval owner for that book.</p>
+<div class="row"><label class="f grow">Activation<select data-lore-mode="${e(id)}">${["native", "assisted", "managed"].map((m) => `<option value="${m}"${m === b.mode ? " selected" : ""}>${m}</option>`).join("")}</select></label></div></div>`).join("") || `<div class="empty">No lorebooks are attached to this chat.</div>`}</div>
+<p class="muted"><b>Native</b>: your keywords decide; the Ledger only annotates lore the story has moved past. <b>Assisted</b>: plus the entries Recall picks. <b>Managed</b>: the Ledger is the only retrieval owner for that book. The Ledger reads these books and never writes to them.</p>
 ${(v.playbooks ?? []).length ? `<h4>Playbooks</h4><p class="muted">Scripted scenes from depth books: how someone would act if the story reaches a moment. They are never sent as lore, because the model took them for things that had happened. When a turn comes close to one, it goes in once, marked "not history". Mark one played once the story has had that scene.</p><div class="list">${v.playbooks.map((p: any) => `<div class="rec"><div class="hd"><b class="grow">${e(p.name)}</b>${p.subject ? `<span class="pill">${e(p.subject)}</span>` : ""}<button class="btn" data-act="playbookPlayed" data-id="${e(p.id)}" data-played="${p.played ? "1" : ""}">${p.played ? "✓ played · undo" : "mark played"}</button></div><details><summary class="muted">The scene</summary><div class="muted">${e(p.summary)}</div></details></div>`).join("")}</div>` : ""}
 ${v.lore.review?.length ? `<h4>Review queue</h4><ul class="alm-list">${v.lore.review.slice(0, 40).map((r: any) => `<li>${e(r.title)} — read as <b>${e(r.kind)}</b> (${Math.round(r.confidence * 100)}%)</li>`).join("")}</ul>` : ""}`;
   }
@@ -514,6 +529,7 @@ ${v.lore.review?.length ? `<h4>Review queue</h4><ul class="alm-list">${v.lore.re
     return `${checkCard}<p class="muted">What Recall considered for the latest generation, with scores and reasons. Green = injected. Records the chat's mirror lorebook holds go in as its entries (the Prompt Breakdown shows them under World Info); the rest go in the ALMANAC · Recall block.</p>
 ${f ? `<div class="card flat"><div class="row"><span class="pill">tier: ${e(f.tier)}</span><span class="pill">≈ ${f.tokens} tokens injected</span><span class="pill">${new Date(f.at).toLocaleTimeString()}</span></div>
 ${f.chronicle?.length ? `<p class="muted"><small>Story so far in this prompt: ${f.chronicle.map((c: any) => e(c.name)).join(" · ")}</small></p>` : ""}
+${f.ceiling ? `<p class="muted"><small>Ceiling ${f.ceiling.limit} tokens: this turn ≈${f.ceiling.after}${f.ceiling.trimmed?.length ? ` (≈${f.ceiling.before} before trimming; ${f.ceiling.trimmed.map((t: string) => e(t)).join("; ")})` : ""}.</small></p>` : ""}
 <div class="feed">${f.items.map((i: any) => `<div class="it${i.injected ? " in" : ""}"><span class="sc">${i.score}</span><div><b>${e(i.name)}</b>${via(i)} <small class="muted">${e(i.id)}</small><br><small class="muted">${e(i.reasons.join(" · "))}</small></div></div>`).join("")}</div></div>` : `<div class="empty">No retrieval yet.</div>`}
 ${v.rejected.length ? `<h4>Rejected or corrected ledger lines</h4><div class="list">${v.rejected.slice().reverse().map((r: any) => `<div class="rec"><code>${e(r.raw)}</code><div class="muted"><small>message ${r.msgIndex + 1} · ${e(r.verdict)} — ${e(r.reason ?? "")}</small></div></div>`).join("")}</div>` : ""}`;
   }
@@ -533,7 +549,7 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
     const num = (k: string, min = 0, max = 99999) => `<input type="number" data-setting="${k}" value="${s[k]}" min="${min}" max="${max}">`;
     const chk = (k: string, lab: string) => `<label class="chk"><input type="checkbox" data-setting="${k}"${s[k] ? " checked" : ""}> ${lab}</label>`;
     const txt = (k: string, ph = "") => `<input type="text" data-setting="${k}" value="${e(s[k] ?? "")}" placeholder="${e(ph)}">`;
-    return `<h3>This chat</h3><div class="card flat"><div class="row"><span class="grow">Ledger in this chat: <b>${v.enabled ? "on" : "off"}</b>${v.config.enabledOverride == null ? " (automatic)" : ""}</span><button class="btn" data-act="enable">On</button><button class="btn" data-act="disable">Off</button><button class="btn" data-act="auto">Automatic</button></div>
+    return `<h3>This chat</h3><div class="card flat"><div class="row"><span class="grow">Ledger in this chat: <b>${v.enabled ? "on" : "off"}</b>${v.config.enabledOverride == null ? " (automatic)" : ""}</span><button class="btn" data-act="enable">On</button><button class="btn" data-act="disable">Off</button><button class="btn" data-act="auto">Automatic</button></div>${v.hiddenTurns ? `<div class="row"><span class="grow muted"><small>${v.hiddenTurns} turn${v.hiddenTurns === 1 ? " is" : "s are"} hidden under summaries. Switching the chat off shows them again; so does this button (do it before uninstalling).</small></span><button class="btn" data-act="releaseHidden">Show hidden turns</button></div>` : ""}
 <label class="f">Story truths <small class="muted">— one a line; sent every turn and held over the source material and older chat</small><textarea id="almTruths" rows="3" placeholder="Jaime and Cersei are strictly family.&#10;Rhaegar is bald and wears a wig.">${e((v.config.truths ?? []).join("\n"))}</textarea></label><div class="row"><span class="grow muted"><small>You can also pin one from a message: <code>((truth: …))</code>.</small></span><button class="btn" data-act="saveTruths">Save truths</button></div></div>
 <h3>Core</h3><div class="card flat"><label class="f">Enable<select data-setting="enabled"><option value="auto"${s.enabled === "auto" ? " selected" : ""}>automatic (ALMANAC chats)</option><option value="on"${s.enabled === "on" ? " selected" : ""}>every chat</option><option value="off"${s.enabled === "off" ? " selected" : ""}>off</option></select></label>
 <label class="f">Validation${sel("strictness", [["strict", "strict — reject impossible changes"], ["lenient", "lenient — warn only"]])}</label>${chk("autoRepair", "Repair missing ledgers automatically")}${chk("formatAid", "Show the model last turn's ledger as a format example")}${chk("debug", "Debug logging")}</div>
@@ -542,12 +558,13 @@ ${t.repeated.length ? `<div class="card flat"><h4>Repeated phrases</h4>${t.repea
 ${chk("secretsOffPage", "Keep secrets off the page when the model names words to avoid (<code>secret … | never say: …</code>)")}<p class="muted">A secret you mark on the Knowledge page is always kept off the page until it comes out.</p>
 <label class="f">Check each reply${sel("replyCheck", [["rules", "rules: secrets named, leaks, the dead or absent speaking, looks contradicted"], ["model", "rules, plus a quiet model read for past events the record doesn't hold"], ["off", "off"]])}</label><label class="f">Check connection id (empty = the summariser's)${txt("replyCheckConnection")}</label>
 <label class="f">Facts in your own messages${sel("playerFacts", [["rules", "rules: dates (\"it's day 12\"), looks (\"X has violet eyes\"), ((truth: …))"], ["model", "rules, plus a quiet model read of what you state"], ["off", "off"]])}</label><p class="muted">What you state is your word: the story can't overwrite a look you set, and a date you give moves the clock, even backwards.</p></div>
-<h3>Recall</h3><div class="card flat"><label class="f">Injection budget (tokens)${num("recallBudget", 400, 20000)}</label><label class="f">Recall placement${sel("recallPlacement", [["before_history", "before chat history"], ["depth4", "4 messages from the end"]])}</label>${chk("keyHeat", "Demote keys that fire without being used")}<label class="f">Max keys per record${num("maxKeys", 4, 24)}</label></div>
+<h3>Prompt size</h3><div class="card flat"><label class="f">Ceiling for everything the Almanac adds to a prompt (tokens; 0 = no ceiling)${num("injectCeiling", 0, 1000000)}</label><div class="row">${[["8000", "8K"], ["16000", "16K"], ["24000", "24K"], ["48000", "48K"], ["0", "none"]].map(([n, lab]) => `<button class="btn${String(s.injectCeiling) === n ? " primary" : ""}" data-act="ceiling" data-id="${n}">${lab}</button>`).join("")}</div><p class="muted">The note, recall, the mirror lorebook's cards and the chapter summaries together. Over the ceiling, the summaries narrow to the ones this turn touches, then the oldest of those are left out, then the lowest-ranked recall records. The note and the latest chapter always go in. Lumiverse fits the rest of the prompt to your model's context before the Almanac adds its part, so leave room: with a 32K model, try 8K. The Recall page shows what the last turn cost and what was cut.${v.feed?.[0]?.ceiling ? ` Last turn: ≈${v.feed[0].ceiling.after} tokens${v.feed[0].ceiling.before > v.feed[0].ceiling.after ? ` (≈${v.feed[0].ceiling.before} before trimming)` : ""}.` : v.feed?.[0] ? ` Last turn: ≈${v.feed[0].tokens} tokens.` : ""}</p></div>
+<h3>Recall</h3><div class="card flat"><label class="f">Note and recall budget (tokens)${num("recallBudget", 400, 20000)}</label><label class="f">Recall placement${sel("recallPlacement", [["before_history", "before chat history"], ["depth4", "4 messages from the end"]])}</label>${chk("keyHeat", "Demote keys that fire without being used")}<label class="f">Max keys per record${num("maxKeys", 4, 24)}</label><label class="f">Words never used as keys <small class="muted">— comma-separated</small><input type="text" data-list-setting="stopList" value="${e((s.stopList ?? []).join(", "))}" placeholder="house, door, tea"></label></div>
 <h3>Storage (hybrid)</h3><div class="card flat"><p class="muted">The extension's storage is the source of truth (branch-safe, rebuildable). The mirror lorebook is a readable, editable projection attached to this chat only.</p><label class="f">Mirror lorebook${sel("mirror", [["off", "off"], ["summaries", "summaries"], ["full", "full records"]])}</label>${chk("mirrorVectorize", "Vectorise mirror entries (semantic recall; needs an embedding provider)")}</div>
-<h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><label class="f">Default permission${sel("lorePermission", [["read", "read-only"], ["overlay", "overlay"], ["write", "read + write"]])}</label></div>
+<h3>Lore bridge</h3><div class="card flat"><label class="f">Default activation for new books${sel("loreDefaultMode", [["native", "native"], ["assisted", "assisted"], ["managed", "managed"]])}</label><p class="muted">Your lorebooks are only read, never written to.</p></div>
 <h3>World engines</h3><div class="card flat"><label class="f">Climate (default for new chats)${txt("climate", "temperate maritime")}</label><label class="f">Latitude${txt("latitude", "temperate / 51 N / southern subpolar")}</label><label class="f">Calendar${txt("calendar", "Westeros · Roshar · Harptos · Shire Reckoning · or months: Name (30), …; weekdays: …")}</label>${chk("simulator", "Off-screen simulator (one model call when story time advances)")}<label class="f">Simulator step (minutes of story time)${num("simStep", 30, 10000)}</label><label class="f">Simulator connection id${txt("simConnection")}</label>${chk("pressures", "Hidden pressures for new characters")}${chk("chekhov", "Chekhov nudges for unused plants")}${chk("telemetry", "Craft telemetry")}</div>
 <h3>Director</h3><div class="card flat"><p class="muted">Used when the preset's Director's Pass channel is set to Sidecar.</p><label class="f">Planner connection id${txt("sidecarConnection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label></div>
-<p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${e(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ...SKIN_LIST])}</label><label class="f">Light or dark${sel("skinMode", [["auto", "Auto (follow Lumiverse)"], ["light", "Light"], ["dark", "Dark"]])}</label>${this.skinColors(v)}${chk("fonts", "Load the ALMANAC web fonts (Google Fonts)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${e(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
+<p class="muted" style="margin:14px 0 0">ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${e(v.version)}` : ""}</p><h3>Look</h3><div class="card flat"><label class="f">Skin${sel("theme", [["preset", "follow the preset (Auto by genre)"], ...SKIN_LIST])}</label><label class="f">Light or dark${sel("skinMode", [["auto", "Auto (follow Lumiverse)"], ["light", "Light"], ["dark", "Dark"]])}</label>${this.skinColors(v)}${chk("fonts", "Load the skins' web fonts from Google Fonts (your browser contacts Google)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${e(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>`;
   }
 
   /** The skin and palette on screen: the ones the colour pickers change. */
@@ -626,6 +643,17 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
     switch (act.act) {
       case "enable": this.send({ type: "enable", value: true }); break;
       case "disable": this.send({ type: "enable", value: false }); break;
+      case "releaseHidden": this.send({ type: "releaseHidden" }); break;
+      case "clearProblems": this.send({ type: "clearProblems" }); if (this.view) this.view.problems = []; this.render(); break;
+      case "dismissNotice": this.notice = null; this.render(); break;
+      case "userOpsRemove": this.send({ type: "userOpsRemove", key: (t.closest("[data-key]") as HTMLElement | null)?.dataset.key, id }); break;
+      case "ceiling": {
+        const n = Number(id ?? 0);
+        this.send({ type: "settings", patch: { injectCeiling: n } });
+        if (this.view) this.view.settings.injectCeiling = n;
+        this.render();
+        break;
+      }
       case "auto": this.send({ type: "enable", value: null }); break;
       case "sessionZero": this.ctx.events.emit("almanac:sessionZero", { chatId: this.view?.chatId }); break;
       case "repairLast": this.send({ type: "repairLast" }); break;
@@ -839,6 +867,12 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
       this.ctx.events.emit("almanac:settings", { [d.setting]: value });
       return;
     }
+    if (d.listSetting) {
+      const list = t.value.split(",").map((x) => x.trim()).filter(Boolean);
+      this.send({ type: "settings", patch: { [d.listSetting]: list } });
+      if (this.view) this.view.settings[d.listSetting] = list;
+      return;
+    }
     if (d.skinColor) {
       this.saveSkinColors(this.withSkinColor(d.skinColor, t.value));
       return;
@@ -865,7 +899,6 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
       return;
     }
     if (d.loreMode) this.send({ type: "lore", action: "mode", bookId: d.loreMode, value: t.value });
-    if (d.lorePerm) this.send({ type: "lore", action: "permission", bookId: d.lorePerm, value: t.value });
   }
 }
 

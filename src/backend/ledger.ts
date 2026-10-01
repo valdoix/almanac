@@ -24,6 +24,28 @@ export interface Names {
   charText?: string;
   personaText?: string;
   chatName?: string;
+  /** Every card in the chat (one, or a group's members), the focused one first. */
+  cards?: { id: string; name: string; text: string }[];
+}
+
+/** One consistent view of a refresh: planning reads this, never the ledger's fields after an await. */
+export interface LedgerSnapshot {
+  raw: RawChatMessage[];
+  path: PathMessage[];
+  state: WorldState;
+  events: LedgerEvent[];
+  records: CodexRecord[];
+  index: KeyIndex;
+  names: Names;
+  stamp: string;
+}
+
+/** The cards in a chat: a group's members (`metadata.character_ids`), else its one character. */
+export function chatCharacterIds(chat: { character_id?: string | null; metadata?: unknown } | null | undefined): string[] {
+  const md = (chat?.metadata ?? {}) as Record<string, unknown>;
+  const group = md.group === true && Array.isArray(md.character_ids) ? (md.character_ids as unknown[]).filter((x): x is string => typeof x === "string" && !!x) : [];
+  const ids = [...(chat?.character_id ? [chat.character_id] : []), ...group];
+  return [...new Set(ids)];
 }
 
 /** The persona bound to a chat. Lumiverse keeps it as `active_persona_id` in the chat's metadata. */
@@ -46,6 +68,7 @@ export class ChatLedger {
   index!: KeyIndex;
   stamp = "";
   loadedAt = 0;
+  namesLoaded = false;
 
   constructor(chatId: string, userId?: string) {
     this.chatId = chatId;
@@ -69,12 +92,18 @@ export class ChatLedger {
       const chat = has("chats") ? await host.chats.get(this.chatId, this.userId) : null;
       if (chat) {
         this.names.chatName = chat.name;
-        this.names.characterId = chat.character_id;
-        if (has("characters") && chat.character_id) {
-          const ch = await host.characters.get(chat.character_id, this.userId).catch(() => null);
-          if (ch) {
-            this.names.char = ch.name;
-            this.names.charText = [ch.description, (ch as any).personality].filter(Boolean).join("\n").slice(0, 8000);
+        const ids = chatCharacterIds(chat);
+        this.names.characterId = ids[0];
+        if (has("characters") && ids.length) {
+          const cards: { id: string; name: string; text: string }[] = [];
+          for (const id of ids.slice(0, 12)) {
+            const ch = await host.characters.get(id, this.userId).catch(() => null);
+            if (ch) cards.push({ id: ch.id, name: ch.name, text: [ch.description, (ch as any).personality].filter(Boolean).join("\n").slice(0, 8000) });
+          }
+          this.names.cards = cards;
+          if (cards[0]) {
+            this.names.char = cards[0].name;
+            this.names.charText = cards[0].text;
           }
         }
         const pid = chatPersonaId(chat);
@@ -89,6 +118,7 @@ export class ChatLedger {
           }
         }
       }
+      this.namesLoaded = true;
     } catch (err) {
       warn(`names for ${this.chatId}: ${describe(err)}`);
     }
@@ -123,15 +153,19 @@ export class ChatLedger {
   }
 
   /** Reload messages and refold. `excludeTrailingAssistant` for regenerate/swipe prompts. */
-  async refresh(opts: { excludeTrailingAssistant?: boolean; reloadNames?: boolean } = {}): Promise<void> {
+  async refresh(opts: { excludeTrailingAssistant?: boolean; reloadNames?: boolean } = {}): Promise<LedgerSnapshot> {
     const [files, settings] = await Promise.all([this.files(), this.settings()]);
-    if (opts.reloadNames || !this.names.char) await this.loadNames();
+    if (opts.reloadNames || !this.namesLoaded) await this.loadNames();
+    let raw: RawChatMessage[];
     try {
-      this.raw = (await host.chat.getMessages(this.chatId)) as unknown as RawChatMessage[];
+      raw = (await host.chat.getMessages(this.chatId)) as unknown as RawChatMessage[];
     } catch (err) {
+      // Keep the last good state: an empty fold would wipe the story for this turn (and the mirror after it).
       warn(`getMessages ${this.chatId}: ${describe(err)}`);
-      this.raw = [];
+      if (this.state) return this.snapshot();
+      throw err;
     }
+    this.raw = raw;
     let path = toPath(this.raw);
     // With no persona bound to the chat, the global active one may belong to another
     // chat; the name on the player's own messages is the better witness.
@@ -159,6 +193,11 @@ export class ChatLedger {
     this.index = new KeyIndex(this.records);
     this.stamp = res.chain[res.chain.length - 1] ?? hash(this.chatId);
     this.loadedAt = Date.now();
+    return this.snapshot();
+  }
+
+  snapshot(): LedgerSnapshot {
+    return { raw: this.raw, path: this.path, state: this.state, events: this.events, records: this.records, index: this.index, names: { ...this.names }, stamp: this.stamp };
   }
 
   stateAt(msgId: string, meta: ChatMeta, settings: Settings, side?: import("../core/branch").SideEventStore): WorldState | null {
@@ -225,14 +264,10 @@ const ledgers = new Map<string, ChatLedger>();
 
 export function ledgerFor(chatId: string, userId?: string): ChatLedger {
   let l = ledgers.get(chatId);
-  if (!l) {
-    l = new ChatLedger(chatId, userId);
-    ledgers.set(chatId, l);
-    if (ledgers.size > 24) {
-      const first = ledgers.keys().next().value!;
-      if (first !== chatId) ledgers.delete(first);
-    }
-  }
+  if (l) ledgers.delete(chatId); // most recently used goes last
+  else l = new ChatLedger(chatId, userId);
+  ledgers.set(chatId, l);
+  while (ledgers.size > 16) ledgers.delete(ledgers.keys().next().value!);
   if (userId) {
     l.userId = userId;
     rememberUser(chatId, userId);
@@ -242,4 +277,9 @@ export function ledgerFor(chatId: string, userId?: string): ChatLedger {
 
 export function dropLedger(chatId: string) {
   ledgers.delete(chatId);
+}
+
+/** Ledgers whose chat shows this character (to reload names after the card is edited). */
+export function ledgersWithCharacter(characterId: string): ChatLedger[] {
+  return [...ledgers.values()].filter((l) => l.names.cards?.some((c) => c.id === characterId) || l.names.characterId === characterId);
 }

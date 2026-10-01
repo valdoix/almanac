@@ -1,11 +1,14 @@
-// Push-model macros (zero latency during assembly) + a few pull macros with
-// arguments, and chat-variable mirrors so the preset's standalone mode can take
-// over seamlessly if the extension is disabled mid-chat.
+// The macros the preset reads, and chat-variable mirrors so the preset's standalone mode can
+// take over seamlessly if the extension is disabled mid-chat.
+//
+// Values are kept per chat and served by a handler that reads the host-given chat id. The host's
+// push cache (updateMacroValue) holds one value per extension, so two chats, or two users of an
+// operator-scoped install, would read each other's place, cast and voices.
 
 import { absMinutes, fmtSpan, hhmm, partyName } from "../core/util";
 import { LADDER_NAMES, normFact, overlap } from "../core/state";
 import { factKind, lackOf, stanceVerb } from "../core/facts";
-import { describe, host, warn } from "./host";
+import { describe, has, host, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings } from "./store";
 import { isEnabled, lastPlan } from "./turn";
@@ -29,14 +32,26 @@ const PUSH: { name: string; description: string }[] = [
   { name: "almReturning", description: "yes if the player returns after a long absence" },
 ];
 
+/** chat id → macro name → value, filled by pushMacros before each assembly. */
+const values = new Map<string, Record<string, string>>();
+
+/** What a chat's macro reads. `almActive` is "off" when the prompt interceptor isn't granted, so the preset sends no handshake nobody would strip. */
+export function macroValue(chatId: string | undefined, name: string): string {
+  if (name === "almActive" && !has("interceptor")) return "off";
+  const v = chatId ? values.get(chatId)?.[name] : undefined;
+  return v ?? (name === "almActive" ? "no" : "");
+}
+
 let registered = false;
 export function registerMacros() {
   if (registered) return;
   registered = true;
   for (const m of PUSH) {
     try {
-      host.registerMacro({ name: m.name, category: "extension:almanac_ledger", description: m.description, returnType: "string", handler: "" });
-      host.updateMacroValue(m.name, m.name === "almActive" ? "no" : "");
+      host.registerMacro({
+        name: m.name, category: "extension:almanac_ledger", description: m.description, returnType: "string",
+        handler: ((ctx: any) => macroValue(ctx?.chatId ?? ctx?.env?.chat?.id, m.name)) as unknown as string,
+      });
     } catch (err) {
       warn(`macro ${m.name}: ${describe(err)}`);
     }
@@ -86,23 +101,14 @@ export function registerMacros() {
   });
 }
 
-const lastPushed = new Map<string, string>();
-function push(name: string, value: string) {
-  if (lastPushed.get(name) === value) return;
-  lastPushed.set(name, value);
-  try {
-    host.updateMacroValue(name, value);
-  } catch {
-    /* host gone */
-  }
-}
-
 export async function pushMacros(chatId: string, userId?: string) {
+  const cur: Record<string, string> = {};
+  const push = (name: string, value: string) => void (cur[name] = value);
   try {
     const files = await loadChat(chatId, userId);
     const settings = await loadSettings(userId);
     if (!isEnabled(files.meta, settings)) {
-      push("almActive", "no");
+      values.set(chatId, { almActive: "no" });
       return;
     }
     const L = ledgerFor(chatId, userId);
@@ -132,6 +138,8 @@ export async function pushMacros(chatId: string, userId?: string) {
     ];
     push("almDue", due.join("; "));
     push("almReturning", lastPlan(chatId)?.returning ? "yes" : "no");
+    values.set(chatId, cur);
+    if (values.size > 64) values.delete(values.keys().next().value!);
   } catch (err) {
     warn(`push macros: ${describe(err)}`);
   }

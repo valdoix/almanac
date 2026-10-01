@@ -1,0 +1,23 @@
+name: CI
+
+# Lumiverse installs and updates the extension straight from a branch, with the
+# bundles committed in dist/. This checks that every push typechecks, passes the
+# tests, and that dist/ and preset/ALMANAC.json match their sources.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - name: dist/ and the preset are built from this commit
+        run: bun run check:dist

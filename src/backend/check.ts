@@ -11,7 +11,7 @@ import { hash, plainProse } from "../core/util";
 import { debug, describe, serial, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
-import { loadChat, loadSettings, save } from "./store";
+import { loadChat, loadSettings, noteProblem, save } from "./store";
 import { seedTraitsFor } from "./traitseed";
 
 const running = new Set<string>();
@@ -94,7 +94,7 @@ export async function runCheck(chatId: string, msgId: string, userId?: string): 
         }
         model = true;
       } catch (err) {
-        warn(`reply check (model): ${describe(err)}`);
+        await noteProblem(chatId, userId, "reply check (model read)", err);
       }
     }
     const fresh = await loadChat(chatId, userId);

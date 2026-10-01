@@ -15,9 +15,13 @@ export function seedTraitsFor(L: ChatLedger, _meta: ChatMeta): Record<string, Tr
     const cur = (out[id] ??= []);
     for (const t of list) if (!cur.some((x) => x.kind === t.kind)) cur.push({ ...t, by, msgIndex: 0 });
   };
-  // The card's character and the player's persona.
-  const cardId = L.names.char ? Object.values(st.chars).find((c) => !c.isUser && (c.name === L.names.char || c.aliases.includes(L.names.char) || L.names.char.split(/\s+/)[0] === c.name.split(/\s+/)[0]))?.id : undefined;
-  if (cardId && L.names.charText) add(cardId, traitsFromText(L.names.charText, [L.names.char, L.names.char.split(/\s+/)[0]]), "card");
+  // The chat's cards (one, or every member of a group) and the player's persona.
+  const cards = L.names.cards?.length ? L.names.cards : L.names.char ? [{ id: "", name: L.names.char, text: L.names.charText ?? "" }] : [];
+  for (const card of cards) {
+    const first = card.name.split(/\s+/)[0];
+    const cardId = Object.values(st.chars).find((c) => !c.isUser && (c.name === card.name || c.aliases.includes(card.name) || first === c.name.split(/\s+/)[0]))?.id;
+    if (cardId && card.text) add(cardId, traitsFromText(card.text, [card.name, first]), "card");
+  }
   if (st.chars.user && L.names.personaText) add("user", traitsFromText(L.names.personaText, [L.names.user, L.names.user.split(/\s+/)[0]]), "card");
   // Lorebook people joined to the story's (their looks were read from the whole entry at scan time).
   for (const r of L.records) {

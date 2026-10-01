@@ -8,8 +8,9 @@ import { worldBlocks } from "./src/blocks-world";
 import { craftBlocks } from "./src/blocks-craft";
 import { sourceBlocks, turnBlocks } from "./src/blocks-turn";
 import { REGEX, toScript } from "./src/regex";
+import { PRESET_VERSION } from "../src/core/version";
 
-export const VERSION = "1.0.10";
+export const VERSION = PRESET_VERSION;
 
 const DEFAULTS = {
   role: "system", enabled: true, position: "pre_history", depth: 0, marker: null, isLocked: false, color: null,
@@ -34,7 +35,9 @@ export function buildPreset() {
     coverUrl: null,
     presetVersion: VERSION,
     schemaVersion: 2,
-    samplerOverrides: { enabled: true, maxTokens: null, contextSize: null, temperature: 1, topP: 0.95, minP: null, topK: null, frequencyPenalty: null, presencePenalty: null, repetitionPenalty: null, streaming: true },
+    // Off: newer models reject temperature and top_p sent together (and reasoning models reject
+    // temperature); the connection's own sampling applies.
+    samplerOverrides: { enabled: false, maxTokens: null, contextSize: null, temperature: null, topP: null, minP: null, topK: null, frequencyPenalty: null, presencePenalty: null, repetitionPenalty: null, streaming: true },
     customBody: { enabled: false, rawJson: "{}" },
     promptBehavior: {
       continueNudge: "[Continue from the exact last word. No header, no recap, no restart, no second ledger.]",

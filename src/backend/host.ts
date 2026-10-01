@@ -78,17 +78,31 @@ export function userFor(chatId: string): string | undefined {
 }
 
 /** Debounce by key. */
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const timers = new Map<string, { t: ReturnType<typeof setTimeout>; fn: () => void | Promise<void> }>();
 export function debounce(key: string, ms: number, fn: () => void | Promise<void>) {
-  const t = timers.get(key);
-  if (t) clearTimeout(t);
-  timers.set(
-    key,
-    setTimeout(() => {
-      timers.delete(key);
-      Promise.resolve(fn()).catch((err) => warn(`debounced ${key}: ${describe(err)}`));
-    }, ms),
-  );
+  const prev = timers.get(key);
+  if (prev) clearTimeout(prev.t);
+  const run = () => {
+    timers.delete(key);
+    return Promise.resolve(fn()).catch((err) => warn(`debounced ${key}: ${describe(err)}`));
+  };
+  timers.set(key, { t: setTimeout(run, ms), fn });
+}
+
+/** Whether work is waiting under a key prefix (a save not yet written). */
+export function pending(prefix: string): boolean {
+  for (const k of timers.keys()) if (k.startsWith(prefix)) return true;
+  return false;
+}
+
+/** Run every waiting debounce now (under a key prefix, or all), and wait for them. */
+export async function flushPending(prefix = ""): Promise<void> {
+  const due = [...timers.entries()].filter(([k]) => k.startsWith(prefix));
+  for (const [k, { t }] of due) {
+    clearTimeout(t);
+    timers.delete(k);
+  }
+  await Promise.all(due.map(([k, { fn }]) => Promise.resolve(fn()).catch((err) => warn(`flush ${k}: ${describe(err)}`))));
 }
 
 /** Serialise async work per key (no two refreshes of one chat at once). */

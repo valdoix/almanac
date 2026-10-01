@@ -9,7 +9,7 @@ import { parseLine, parseMessage } from "./dsl";
 import { playerOps } from "./player";
 import { Folder, type FoldOptions } from "./state";
 import type { EventSource, LedgerEvent, OpName, ParsedLedger, ParsedOp, WorldState } from "./types";
-import { deepClone, hash } from "./util";
+import { deepClone, fastHash, hash } from "./util";
 
 export interface PathMessage {
   id: string;
@@ -33,12 +33,25 @@ export interface SideEvents {
   hash?: string;
   /** Facts read from the player's own message (the player-facts reader). */
   player?: boolean;
+  /** Identifies one entry, so the player can remove a correction. */
+  id?: string;
+  /** When it was recorded (ms). */
+  at?: number;
 }
 
 export type SideEventStore = Record<string, SideEvents[]>; // key: `${msgId}:${swipe}`
 
 export function sideKey(msgId: string, swipe: number): string {
   return `${msgId}:${swipe}`;
+}
+
+/**
+ * Events anchored to a message position rather than a message and swipe: they apply after
+ * whatever reply stands at that index, so a swipe or regenerate keeps them (player
+ * corrections, the off-screen simulator).
+ */
+export function anchorKey(index: number): string {
+  return `@${index}`;
 }
 
 export interface RawChatMessage {
@@ -89,7 +102,7 @@ export class LedgerRuntime {
   static SNAP_EVERY = 25;
 
   parse(content: string): ParsedLedger {
-    const k = hash(content) + ":" + content.length;
+    const k = fastHash(content) + ":" + content.length;
     let p = this.parseCache.get(k);
     if (!p) {
       p = parseMessage(content);
@@ -108,13 +121,14 @@ export class LedgerRuntime {
    * render the state *as of* an older message.
    */
   fold(path: PathMessage[], opts: FoldOptions, side: SideEventStore = {}, upTo = path.length): FoldResult {
-    const optsKey = hash(JSON.stringify(opts));
+    const optsKey = fastHash(JSON.stringify(opts));
     const chain: string[] = [];
     let acc = optsKey;
     for (let i = 0; i < upTo; i++) {
       const m = path[i];
       const sk = sideKey(m.id, m.swipe);
-      acc = hash(`${acc}|${m.id}:${m.swipe}:${hash(m.content)}:${side[sk] ? hash(JSON.stringify(side[sk])) : ""}`);
+      const ak = anchorKey(m.index);
+      acc = fastHash(`${acc}|${m.id}:${m.swipe}:${fastHash(m.content)}:${side[sk] ? fastHash(JSON.stringify(side[sk])) : ""}:${side[ak] ? fastHash(JSON.stringify(side[ak])) : ""}`);
       chain.push(acc);
     }
     // Find the deepest valid snapshot.
@@ -132,7 +146,10 @@ export class LedgerRuntime {
     const events: LedgerEvent[] = [];
     for (let i = start; i < upTo; i++) {
       const m = path[i];
-      const sides = side[sideKey(m.id, m.swipe)] ?? [];
+      const own = side[sideKey(m.id, m.swipe)] ?? [];
+      const anchored = side[anchorKey(m.index)] ?? [];
+      // A repair written for an older text of this reply no longer stands in for its ledger.
+      const sides = [...own.filter((s) => !(s.replaces && s.hash && s.hash !== hash(m.content))), ...anchored];
       if (!m.isUser) {
         const replacing = sides.find((s) => s.replaces);
         const parsed = this.parse(m.content);
@@ -172,7 +189,8 @@ export class LedgerRuntime {
         this.snapshots = this.snapshots.filter((s) => s.pos !== pos);
         this.snapshots.push({ chain: chain[i], pos, state: deepClone(folder.state) });
         this.snapshots.sort((a, b) => a.pos - b.pos);
-        if (this.snapshots.length > 80) this.snapshots.shift();
+        // About a thousand messages of tail; a render that far back folds from the oldest kept one.
+        if (this.snapshots.length > 40) this.snapshots.shift();
       }
     }
     return { state: folder.state, events, chain };

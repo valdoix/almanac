@@ -9,7 +9,8 @@ import type { WorldState } from "../core/types";
 import { replyChanges, type ChangeRow } from "../core/changes";
 import { debounce, describe, host, warn } from "./host";
 import { ledgerFor } from "./ledger";
-import { loadChat, loadSettings } from "./store";
+import { loadChat, loadSettings, onProblem } from "./store";
+import { corrections } from "./ingest";
 import { isEnabled, lastPlan, onPlanErrorChange } from "./turn";
 import { clerkRunning, unreadReplies } from "./clerk";
 import { checksFor } from "./check";
@@ -63,6 +64,12 @@ export interface UIView {
   playbooks: { id: string; name: string; subject: string; played: boolean; summary: string }[];
   /** Running bits: the ledger's own and the chronicle's. */
   bits: { text: string; who?: string; uses: number; by: string }[];
+  /** Recent background failures (summaries, the mirror, hiding turns), newest first. */
+  problems: { at: number; where: string; message: string }[];
+  /** The player's recorded corrections, newest first. */
+  corrections: { key: string; id: string; at: number; index: number; lines: string[] }[];
+  /** Turns the Almanac has hidden under summaries. */
+  hiddenTurns: number;
 }
 
 const AUTO_THEME: Record<string, string> = {
@@ -198,8 +205,9 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       climate: L.almanacConfig(meta, settings).climate || "temperate maritime (default)",
       items: Object.values(st.items).map((i) => ({ name: i.name, holder: i.holder ? nm(i.holder) : "", where: i.where, gone: !!i.gone, condition: i.condition, custody: i.custody.slice(-4).map((c) => ({ from: c.from ? nm(c.from) : "", to: c.to ? nm(c.to) : "", how: c.how })) })),
     },
-    lore: meta.lore,
-    feed: meta.feed,
+    // Per-entry hashes are bookkeeping for the scan; the page needs only counts and modes.
+    lore: { ...meta.lore, books: Object.fromEntries(Object.entries(meta.lore.books).map(([id, b]) => [id, { ...b, entryHashes: {} }])) },
+    feed: meta.feed.slice(0, 3),
     rejected: L.events.filter((e) => e.verdict !== "accepted").slice(-20).map((e) => ({ msgIndex: e.msgIndex, raw: e.op.raw, verdict: e.verdict, reason: e.reason })),
     telemetry: meta.telemetry ?? null,
     note: plan?.note ?? "",
@@ -217,6 +225,9 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       ...(st.motifs ?? []).map((m) => ({ text: m.text, who: m.who, uses: m.uses, by: m.by })),
       ...chronicleBits(files.chronicle).map((t) => ({ text: t, uses: 0, by: "chronicle" })),
     ].slice(0, 30),
+    problems: (meta.problems ?? []).filter((p) => Date.now() - p.at < 3 * 86_400_000),
+    corrections: corrections(files.side),
+    hiddenTurns: files.chronicle.hidden.length,
   };
 }
 
@@ -268,3 +279,4 @@ export function loreAge(records: { kind: string; name: string; aliases: string[]
 }
 
 onPlanErrorChange(pushState);
+onProblem(pushState);

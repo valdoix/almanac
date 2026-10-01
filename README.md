@@ -12,7 +12,7 @@ The full design is in [`design/`](design/README.md).
 ## Install
 
 ### The extension
-In Lumiverse, open **Extensions → Install from GitHub** and paste this repository's URL (`https://github.com/valdoix/almanac`). The manifest is `spindle.json` at the repository root, and the built bundles are committed in `dist/`, so no build step is needed. Grant the permissions it asks for:
+In Lumiverse (1.2.4 or newer), open **Extensions → Install from GitHub** and paste this repository's URL (`https://github.com/valdoix/almanac`). The manifest is `spindle.json` at the repository root, and the built bundles are committed in `dist/`, so no build step is needed. Grant the permissions it asks for:
 
 | Permission | Used for |
 |---|---|
@@ -24,12 +24,16 @@ In Lumiverse, open **Extensions → Install from GitHub** and paste this reposit
 | tools | Optional recall tools the model can call |
 | ui_panels | The floating "Now" widget |
 
-To update later, use **Update** on the extension in the Extensions panel. It pulls the latest commit of the branch you installed from, so if you installed from a different branch, switch to it there first. The version in the Extensions panel (from `spindle.json`) tells you which release you're running.
+To update later, use **Update** on the extension in the Extensions panel. It pulls the latest commit of the branch you installed from, so if you installed from a different branch, switch to it there first. The version in the Extensions panel (from `spindle.json`) tells you which release you're running. Releases are listed in [CHANGELOG.md](CHANGELOG.md).
+
+After updating the extension, import the preset again when the changelog says the preset changed too. The drawer warns when the chat's preset is older than the extension expects.
 
 ### The preset
 **Presets → Import** and choose `preset/ALMANAC.json`. It brings its own regex scripts (they are bound to the preset, so they switch on and off with it). Open the preset's **variables** panel to set persona mode, genres, intimacy, planning depth and the rest; each setting lives on the block that uses it.
 
-The two find each other on their own: with the extension installed, the preset sends a hidden handshake that the extension removes before the model sees it, and the extension arms itself for any chat that uses the ALMANAC charter.
+The two find each other on their own: with the extension installed, the preset sends a hidden handshake that the extension removes before the model sees it, and the extension arms itself for any chat that uses the ALMANAC charter. It disarms again after two turns without it, so a chat moved to another preset goes back to normal (turns it hid come back, and its mirror lorebook goes quiet). **Settings › This chat** can pin it on or off instead.
+
+The preset leaves sampling (temperature, top P) to your connection: newer models reject some combinations. Its **Planning channel** defaults to *Auto*: the Director's Pass runs in native reasoning for models that think before answering, and becomes a silent checklist for models that don't (they would otherwise write the plan into the reply).
 
 ---
 
@@ -74,6 +78,20 @@ The two find each other on their own: with the extension installed, the preset s
 - **What the model writes, read as meant.** `hunger 4→2 (fed; real food)` sets hunger to 2. `fatigue 4+` is 4. `concussion + scalp laceration` is two injuries, not two flags. Bond axes are whole words ("self-resentment" is not resentment of the other person). Ladder rungs can be given by number or name ("tier 2 → tier 3", "Charged → Tested"), and the note shows them as `Charged (3/7)`. A line the Almanac can't read ("ladder A>B: Name Said Bare") is reported with the right shape instead of being dropped. A body line with new states replaces the passing ones (lasting conditions stay), and a new scene clears poses. Parts of a room ("fridge") aren't items, and an item someone is now wearing comes to them.
 - **No stale cards.** The archivist records only what lasts about someone (role, traits, wants, fears, voice, looks), and it revisits everyone a chapter names, not only people first seen in it. What it wrote about where someone is or what they were doing is left out of the prompt after 60 messages, and it never overrides the live state.
 
+### Prompt size and cost
+
+- **Ceiling** (Settings › Prompt size): everything the Almanac adds to one prompt (the ledger note, recall, the mirror lorebook's cards and the chapter summaries) stays under this many tokens. The default is 24,000; 0 means no ceiling. Over it, the summaries narrow to the ones the turn touches, then the oldest of those are left out, then the lowest-ranked recall. The note and the latest chapter always go in. Lumiverse fits the rest of the prompt to your model's context *before* the Almanac adds its part, so leave room: with a 32K model, try 8,000. The Recall page shows what the last turn cost and what was cut. On a 250-message chat with *exhaustive* summaries, the whole story runs to about 21,500 tokens; the preset itself is about 6,500.
+- **Background calls.** These are quiet model calls on your summariser connection (or the one set for each job): chapter, arc and volume summaries and the archivist (now and then), ledger repair (only when a reply has no ledger), the knowledge clerk (*auto*: only when a reply's lines need it), the reply check's model read, the player-facts read and the off-screen simulator (each only when switched to it). With everything on, expect three to five extra calls per reply. Point them at a cheaper connection in Settings to save cost.
+
+### Privacy
+
+- Everything the extension stores is in Lumiverse's own extension storage for your user (`data/users/<id>/extensions/almanac_ledger/`). Nothing is sent anywhere except to the model connections you configured.
+- The skins' web fonts load from Google Fonts only when you switch them on (Settings › Look). Off by default since 1.13; the skins fall back to your system fonts.
+
+### Language
+
+The preset writes the story in its **Language** setting, and the extension's summaries, Codex cards and knowledge lines follow it. Its own readers (the ledger parser, injuries, dates you state, speech detection) are tuned for English; dialogue in « », „ “, 「」 and British single quotes is recognised.
+
 ## Skins
 
 Eleven skins, each with a light and a dark palette: **Almanac** (field almanac), **Solar Editorial** (magazine), **Nocturne** (gothic romance), **Botanical** (herbarium), **Prism** (holographic), **Candy** (sticker pop), **Dossier** (case file), **Scriptorium** (illuminated manuscript), **Arcana** (spellbook), **Orbital** (station interface) and **Posy** (florals in pink and green). **Follow Lumiverse** takes its colours from your Lumiverse theme instead.
@@ -109,7 +127,22 @@ The calendar setting (Session Zero, Settings › World engines, or the preset's 
 
 ## Storage (hybrid)
 
-The extension's own storage is the source of truth: an event log keyed to message and swipe, so any branch can be rebuilt from the transcript. A **mirror lorebook** named "ALMANAC · ‹chat›" is attached to the chat as a readable, editable projection (summaries or full records, your choice). Edits you make in the mirror are imported back as locked corrections, and the extension never writes to your other lorebooks unless you give a book write permission in the Lore tab. See [design/06](design/06-storage-decision.md).
+The extension's own storage is the source of truth: an event log keyed to message and swipe, so any branch can be rebuilt from the transcript. A **mirror lorebook** named "ALMANAC · ‹chat›" is attached to the chat as a readable, editable projection (summaries or full records, your choice). Edits you make in the mirror are imported back as locked corrections. The mirror's entries are stored switched off, and the extension switches on the ones each turn needs, so the book stays quiet whenever the Almanac isn't running the chat. It never writes to your other lorebooks; only the Lorebook Creator writes, to a book you choose, and it asks before replacing entries or your persona's lorebook. See [design/06](design/06-storage-decision.md).
+
+## Uninstalling or switching off
+
+1. In each chat that used the Almanac, run **ALMANAC: Release hidden turns** from the command palette (or **Settings › This chat › Show hidden turns**). With *Hide covered turns* on, summarised turns are hidden from the prompt; without the extension nothing would put their summaries back. Switching a chat off does this for you.
+2. Optionally delete the chat's mirror lorebook ("ALMANAC · ‹chat›"). It is inert without the extension, so leaving it does no harm.
+3. Remove the extension in Extensions, and switch the chat to another preset.
+
+## Troubleshooting
+
+- **A warning says the last turn went out without the Almanac.** Planning failed; the error is in the warning. It clears on the next turn that works.
+- **"Something in the background didn't work."** A summary, the knowledge clerk, the reply check, the simulator, the mirror lorebook or hiding turns failed. The story carries on. Check the connection set for that job in Settings.
+- **The drawer says the background process runs another version.** Turn the extension off and on (or press Update) and reload the page.
+- **The chat forgot older story after switching something off.** Run **ALMANAC: Release hidden turns**.
+- **Nothing happens in a chat.** Settings › This chat shows whether the Ledger is on there and why. It arms itself only with the ALMANAC preset; press **On** to pin it.
+- **Long chats.** The first turn after a restart re-reads the whole chat (about 3 seconds for 2,500 messages). After that, a turn costs a few tens of milliseconds.
 
 ---
 
@@ -120,10 +153,13 @@ bun install
 bun run build        # dist/backend.js, dist/frontend.js and preset/ALMANAC.json
 bun run typecheck
 bun test             # parser, state engine, engines, recall, chronicle, golden checkers, hooks against a fake host
+bun run check:dist   # the committed dist/ and preset match this commit (CI runs it on every push)
 ```
 
+Lumiverse installs from a branch head, so every push to the branch users install from is a release. Work on another branch and merge to the install branch when `bun run build`, `bun test` and `bun run check:dist` pass; add a CHANGELOG entry and bump `src/core/version.ts` (`VERSION`, and `PRESET_VERSION` when the preset changed), `spindle.json` and `package.json` together.
+
 - `preset/src/` holds the preset source (blocks, variables, regex suite, scene plate); `bun run build:preset` regenerates `preset/ALMANAC.json` and validates ids, placement bindings, router targets, every regex, and macro balance.
-- `LUMIVERSE_SRC=/path/to/Lumiverse bun run preset:harness -- --html preview.html` renders every block through Lumiverse's real macro engine in twelve scenarios (standalone, linked, swipe, continue, OOC, commands, full cast, Session Zero overrides, impersonation) and runs the display regex over a sample reply, including one rendered by the extension. Add `--ext` to include the extension stylesheet in the preview.
+- `LUMIVERSE_SRC=/path/to/Lumiverse bun run preset:harness -- --html preview.html` renders every block through Lumiverse's real macro engine in thirteen scenarios (standalone, linked, swipe, continue, OOC, commands, full cast, Session Zero overrides, impersonation, Auto planning on a non-reasoning model; Windows paths work too) and runs the display regex over a sample reply, including one rendered by the extension. Add `--ext` to include the extension stylesheet in the preview.
 - `bun run golden` lists the golden scenarios (agency, knowledge leak, clock, weather, NPC↔NPC, convergence, safety floor, ledger). Play each in Lumiverse, save the replies as `{ "agency": "…", … }`, and grade them with `bun run golden replies.json`.
 
 ### Notes

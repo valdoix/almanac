@@ -7,6 +7,8 @@
 // Fails (exit 1) if any rendered block leaves macro syntax behind or a display
 // regex throws. Token counts are rough (chars / 4).
 import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { buildPreset } from "./build";
 import { OPENING, SAMPLE_REPLY, SAMPLE_USER } from "./fixtures";
 import { LedgerRuntime, toPath } from "../src/core/branch";
@@ -18,9 +20,12 @@ if (!SRC) {
   console.error("Set LUMIVERSE_SRC to a Lumiverse checkout (the macro engine lives in src/macros).");
   process.exit(2);
 }
-const { evaluate } = await import(`${SRC}/src/macros/MacroEvaluator`);
-const { registry } = await import(`${SRC}/src/macros/MacroRegistry`);
-const { initMacros } = await import(`${SRC}/src/macros/index`);
+// One module URL per file: on Windows a forward-slash path and the engine's own relative imports
+// load two copies of a module, so macros would register into a registry `evaluate` never reads.
+const engine = (file: string) => import(pathToFileURL(join(SRC, "src", "macros", file)).href);
+const { evaluate } = await engine("MacroEvaluator.ts");
+const { registry } = await engine("MacroRegistry.ts");
+const { initMacros } = await engine("index.ts");
 initMacros();
 
 const preset = buildPreset();
@@ -29,7 +34,7 @@ const preset = buildPreset();
 const LINKED: Record<string, string> = {
   almActive: "yes", almDay: "3", almClock: "21:40", almTime: "Day 3 · 21:40", almWeather: "🌧️ rain, moderate · 9°C · wind SW", almForecast: "rain easing to drizzle by 01:00; clearing before dawn",
   almSun: "rise 07:12 · set 17:41", almMoon: "🌖 waning gibbous", almSeason: "late autumn", almPlace: "Lowmarket › The Rusty Flagon › back room", almVoices: "Mara#2 · Kael#5 · Joss#3 · Wren#0",
-  almCast: "Mara (spot), Kael (peri)", almMode: "conflict", almDue: "Mara owes Wren a favour", almReturning: "no",
+  almCast: "Mara (spot), Kael (peri)", almMode: "conflict", almDue: "Mara owes Wren a favour", almReturning: "no", almCalendar: "",
 };
 function setLinked(on: boolean) {
   for (const [name, value] of Object.entries(LINKED)) {
@@ -76,6 +81,7 @@ const SCENARIOS: Scenario[] = [
   { name: "full cast · explicit · visible · deep", gen: "normal", model: "deepseek-r1", vars: { persona_mode: "full_cast", nsfw: "explicit", cot_channel: "visible", cot: "deep", outcomes: "fair_roll", inner_voice: "register", persona_thoughts: "1", ledger: "snapshot" } },
   { name: "session-zero overrides", gen: "normal", chatVars: { alm_cfg_genres: "horror, mystery", alm_cfg_persona: "director", alm_cfg_nsfw: "off", alm_cfg_romance: "off", alm_cfg_limits: "gore > 3", alm_mode: "investigation" } },
   { name: "impersonate", gen: "impersonate" },
+  { name: "auto planning · non-reasoning model", gen: "normal", model: "mistral-large-latest" },
 ];
 
 const LEFTOVER = /\{\{[^}]*\}\}|\{\{|\}\}/;

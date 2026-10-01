@@ -4,6 +4,7 @@
 // know / reveal / secret / unaware lines for that message and swipe.
 
 import type { ParsedOp, WorldState } from "./types";
+import { langRule } from "./prompts";
 import { KNOW_OPS } from "./types";
 import { parseLine, parseThoughts } from "./dsl";
 import { factKind, factsInPlay, isKnower, peopleHere, stanceVerb, lackOf, lackText } from "./facts";
@@ -25,7 +26,13 @@ export function clerkWanted(mode: string, st: WorldState, msgIndex: number, cont
   return !hasLines && parseThoughts(content).length > 0;
 }
 
-export function clerkPrompt(opts: {
+/** The clerk's prompt, with facts written in the story's language when it isn't English. */
+export function clerkPrompt(opts: Parameters<typeof clerkPromptBase>[0] & { lang?: string }): { system: string; user: string } {
+  const p = clerkPromptBase(opts);
+  return { ...p, system: p.system + langRule(opts.lang, "the line shapes, #keys and stance words (knows, believes, suspects, doubts, wrong, true, false)") };
+}
+
+function clerkPromptBase(opts: {
   /** The story before the reply: its facts and keys. */
   state: WorldState;
   /** The story after it, for who is present (defaults to `state`). */

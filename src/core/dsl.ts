@@ -310,9 +310,10 @@ const PARSERS: Record<OpName, LineParser> = {
       const v = /V\s*([+-]?\d)/i.exec(vad);
       const a = /A\s*([+-]?\d)/i.exec(vad);
       const d = /D\s*([+-]?\d)/i.exec(vad);
-      if (v) p.args.v = parseInt(v[1], 10);
-      if (a) p.args.a = parseInt(a[1], 10);
-      if (d) p.args.d = parseInt(d[1], 10);
+      // The documented ranges: valence and dominance −3..3, arousal 0..5.
+      if (v) p.args.v = Math.max(-3, Math.min(3, parseInt(v[1], 10)));
+      if (a) p.args.a = Math.max(0, Math.min(5, parseInt(a[1], 10)));
+      if (d) p.args.d = Math.max(-3, Math.min(3, parseInt(d[1], 10)));
     }
     if (!p.args.name) return null;
     return p;
@@ -362,7 +363,8 @@ const PARSERS: Record<OpName, LineParser> = {
           // "concussion + scalp laceration", "self-stitched wound closed": injuries written as words.
           const hurt = injuriesIn(ff);
           if (hurt.length) injuries.push(...hurt);
-          else flags.push(ff.replace(/^\+/, "").toLowerCase());
+          // "malnourished (unchanged)" restates "malnourished": one flag, not two.
+          else flags.push(ff.replace(/^\+/, "").replace(/\s*\((?:unchanged|no change|still|same|as before|ongoing|continues?)\)\s*$/i, "").toLowerCase());
         }
       }
     }
@@ -466,7 +468,7 @@ const PARSERS: Record<OpName, LineParser> = {
   },
   item(p, s, rest) {
     if (!s) return null;
-    const q = /\s*[x×]\s*(\d+)\s*$/.exec(s);
+    const q = /\s*\(?\s*[x×]\s*(\d+)\s*\)?\s*$/.exec(s);
     p.subject = q ? s.slice(0, q.index).trim() : s;
     const { main, cause } = splitCause(rest);
     p.cause = cause;
@@ -487,20 +489,14 @@ const PARSERS: Record<OpName, LineParser> = {
     if (!s) return null;
     p.subject = s;
     const { main, cause } = splitCause(rest);
-    const m = /^(new|open|advance[sd]?|complicate[sd]?|bridge[sd]?|resolve[sd]?|close[sd]?|stall(?:ed|s)?)\s*(?:\((.*)\))?\s*(.*)$/i.exec(main);
+    const m = /^(new|open(?:s|ed)?|advanc(?:e|es|ed)|complicat(?:e|es|ed)|bridg(?:e|es|ed)|resolv(?:e|es|ed)|clos(?:e|es|ed)|stall(?:s|ed)?)\b\s*(?:\((.*)\))?\s*(.*)$/i.exec(main);
     if (!m) {
       p.args = { op: "advance", detail: main || cause };
       p.cause = cause ?? main;
       return p;
     }
-    let op = m[1].toLowerCase().replace(/(ed|s|d)$/, "");
-    if (op === "open") op = "new";
-    if (op === "close") op = "resolve";
-    if (op === "advanc") op = "advance";
-    if (op === "complicat") op = "complicate";
-    if (op === "resolv") op = "resolve";
-    if (op === "stal") op = "stall";
-    if (!["new", "advance", "complicate", "bridge", "resolve", "stall"].includes(op)) op = "advance";
+    const VERB: [RegExp, string][] = [[/^(new|open)/, "new"], [/^advanc/, "advance"], [/^complicat/, "complicate"], [/^bridg/, "bridge"], [/^(resolv|clos)/, "resolve"], [/^stall/, "stall"]];
+    const op = VERB.find(([re]) => re.test(m[1].toLowerCase()))?.[1] ?? "advance";
     p.args = { op, blocker: m[2]?.trim(), detail: (m[3] || cause || "").trim() || undefined };
     p.cause = cause ?? (m[3]?.trim() || undefined);
     return p;
@@ -950,13 +946,18 @@ export function parseSpeech(text: string): SpokenLine[] {
     if (words) out.push({ who: who.trim(), text: words, ...(tone && QUIET_TONE.test(tone) ? { quiet: true } : {}) });
     return " ";
   });
-  const re = /["“]([^"“”\n]{1,600})["”]/g;
+  // Double quotes, guillemets, German and CJK quotes; single quotes (British style) only when
+  // the text has no double-quoted speech, and only where a quote can't be an apostrophe.
+  const DOUBLE = /["“„]([^"“”„\n]{1,600})["”“]|«\s*([^«»\n]{1,600}?)\s*»|»\s*([^«»\n]{1,600}?)\s*«|「([^「」\n]{1,600})」|『([^『』\n]{1,600})』/g;
+  const SINGLE = /(?<![\p{L}\p{N}])['‘](?=\S)([^'‘’\n]{1,600}?[^\s'‘’])['’](?![\p{L}\p{N}])/gu;
+  const re = DOUBLE.test(t) ? DOUBLE : SINGLE;
+  re.lastIndex = 0;
   let m: RegExpExecArray | null;
   let last = 0;
   while ((m = re.exec(t))) {
     const lead = t.slice(Math.max(last, m.index - 160), m.index);
     const tail = t.slice(m.index + m[0].length, m.index + m[0].length + 60);
-    const words = m[1].replace(/[*_]/g, "").trim();
+    const words = (m.slice(1).find((g) => g != null) ?? "").replace(/[*_]/g, "").trim();
     last = m.index + m[0].length;
     if (!words) continue;
     const quiet = QUIET_TONE.test(`${lead.slice(-40)} ${tail.slice(0, 40)}`);

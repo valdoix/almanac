@@ -1,5 +1,7 @@
 # 05 — ALMANAC Ledger: Extension Design
 
+> **Status (1.13):** this is the design as first written. Built as described: branch-safe folding, the chronicle, the Codex, recall's candidate stages (keys, graph links from the cast and place, debts and routines due, mirror vectors, chronicle zoom-in, lore), the note, the mirror and lore bridge, the knowledge clerk, the reply check, the simulator and the sidecar. **Not built:** the LLM *controller* (Recall stage 3), *predictive prefetch*, the per-book *overlay* and *read + write* permissions (the Ledger only reads your lorebooks), and the Memory Cortex signal. Where this document and the [root README](../README.md) disagree, the README describes the shipped behaviour.
+
 > **ALMANAC Ledger** (`almanac_ledger`): a Lumiverse Spindle extension that combines **LumiBooks**' tiered summarise-and-hide memory and Codex, **Lore Recall**'s reasoning-driven retrieval, and **VELLUM**'s event-sourced state. It adds tracker-driven retrieval keys, a Lore Bridge that seeds from attached lorebooks, a built-in Lorebook Creator, and computed world engines.
 
 ---
