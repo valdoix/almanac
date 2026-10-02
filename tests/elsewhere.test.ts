@@ -325,6 +325,24 @@ describe("crossings", () => {
     const l = elsewhereLane({ state: st, arrivals: [carrier], roster: r2, now: 3 * DAY + 700, at: 12, tier: "routine", mode: "living", onPath: () => true, seen: {} });
     expect(l.text).toContain("May come up, if it fits: Willow knows: Giles is coming");
   });
+  test("an insistent or world-led story lets news into a charged scene, with one more a scene; never an intimate or pivotal one", () => {
+    const { st, records } = world();
+    st.chars.willow.tier = "peri";
+    const r = buildRoster({ state: st, records, userName: "Gabriel" });
+    const lane = (tier: "charged" | "pivotal", press: { texture?: string; initiative?: string }) => {
+      const carrier = base({ id: "k", kind: "carrier", carrier: "Willow", text: "Willow knows: Giles is coming" });
+      const news = base({ id: "n", kind: "ambient", place: [], text: "Sirens two streets over" });
+      const third = base({ id: "t", kind: "ambient", place: [], text: "The power flickers across the block" });
+      return elsewhereLane({ state: st, arrivals: [carrier, news, third], roster: r, now: 3 * DAY + 700, at: 12, tier, mode: "living", onPath: () => true, seen: {}, ...press }).offered;
+    };
+    expect(lane("charged", {})).toEqual([]);
+    expect(lane("charged", { texture: "living", initiative: "player_led" })).toEqual([]);
+    expect(lane("charged", { texture: "insistent" })).toEqual(["k", "n"]);
+    expect(lane("charged", { initiative: "world_led" })).toEqual(["k", "n"]);
+    expect(lane("pivotal", { texture: "insistent" })).toEqual([]);
+    st.mode = "intimacy";
+    expect(lane("charged", { texture: "insistent" })).toEqual([]);
+  });
   test("an arrival counts as delivered only when the reply takes it up", () => {
     const { st, records } = world();
     const r = buildRoster({ state: st, records, userName: "Gabriel" });

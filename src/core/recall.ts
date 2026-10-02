@@ -65,7 +65,9 @@ export function tierGuess(playerMsg: string, state: WorldState): "routine" | "ch
   const t = playerMsg.toLowerCase();
   if (/\b(kill|attack|stab|shoot|kiss|confess|reveal|betray|die|run away|escape|fight|draw (my|a) (sword|gun|knife)|propose)\b/.test(t)) return "pivotal";
   const present = Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).length;
-  if (present >= 3 || /\b(lie|threat|negotiat|bargain|argue|accuse|touch|seduce|interrogat|demand)\b/.test(t) || state.mode === "conflict" || state.mode === "intimacy" || state.mode === "crisis") return "charged";
+  // A crowd charges a scene, but not a family breakfast: three or more at ease (downtime, social, travel) stay routine.
+  const crowd = present >= 3 && !(state.mode === "downtime" || state.mode === "social" || state.mode === "travel");
+  if (crowd || /\b(lie|threat|negotiat|bargain|argue|accuse|touch|seduce|interrogat|demand)\b/.test(t) || state.mode === "conflict" || state.mode === "intimacy" || state.mode === "crisis") return "charged";
   return "routine";
 }
 

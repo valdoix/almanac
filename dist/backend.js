@@ -7818,7 +7818,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.21.3";
+var VERSION = "1.21.4";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -14588,7 +14588,8 @@ function tierGuess(playerMsg, state) {
   if (/\b(kill|attack|stab|shoot|kiss|confess|reveal|betray|die|run away|escape|fight|draw (my|a) (sword|gun|knife)|propose)\b/.test(t))
     return "pivotal";
   const present = Object.values(state.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser).length;
-  if (present >= 3 || /\b(lie|threat|negotiat|bargain|argue|accuse|touch|seduce|interrogat|demand)\b/.test(t) || state.mode === "conflict" || state.mode === "intimacy" || state.mode === "crisis")
+  const crowd = present >= 3 && !(state.mode === "downtime" || state.mode === "social" || state.mode === "travel");
+  if (crowd || /\b(lie|threat|negotiat|bargain|argue|accuse|touch|seduce|interrogat|demand)\b/.test(t) || state.mode === "conflict" || state.mode === "intimacy" || state.mode === "crisis")
     return "charged";
   return "routine";
 }
@@ -16448,7 +16449,9 @@ function elsewhereLane(inp) {
   };
   const sceneStart = st.sceneStartMsg ?? 0;
   const thisScene = inp.arrivals.filter((a) => (a.offered ?? []).some((i) => i >= sceneStart)).length;
-  const cap = SCENE_CAP[inp.mode] ?? 1;
+  const pressing = inp.texture === "insistent" || inp.initiative === "world_led";
+  const tier = pressing && inp.tier === "charged" && st.mode !== "intimacy" ? "routine" : inp.tier;
+  const cap = (SCENE_CAP[inp.mode] ?? 1) + (pressing && inp.mode !== "off" ? 1 : 0);
   const firstTurn = inp.at - sceneStart <= 2;
   const room = inp.mode === "quiet" ? firstTurn ? cap - thisScene : 0 : cap - thisScene;
   const ready = inp.arrivals.filter((a) => {
@@ -16460,9 +16463,9 @@ function elsewhereLane(inp) {
       return false;
     if (a.atAbs != null && inp.now != null && a.atAbs > inp.now)
       return false;
-    if (inp.tier === "pivotal" && !a.urgent)
+    if (tier === "pivotal" && !a.urgent)
       return false;
-    if (inp.tier === "charged" && !a.urgent && !isMessage(a))
+    if (tier === "charged" && !a.urgent && !isMessage(a))
       return false;
     switch (a.kind) {
       case "carrier":
@@ -16513,7 +16516,7 @@ function elsewhereLane(inp) {
     seen[a.key] = inp.at;
   }
   const likely = [];
-  if (place && place !== inp.lastPlace && inp.tier === "routine") {
+  if (place && place !== inp.lastPlace && tier === "routine") {
     for (const a of r.actors) {
       if (a.ring === "onstage" || !canAct(a) || !a.where || likely.length >= 2)
         continue;
@@ -20605,7 +20608,7 @@ async function runElsewhere(chatId, userId, opts = {}) {
         return null;
       const E = elsewhereOf(meta);
       const now = absMinutes(st.time);
-      const step = Math.max(10, settings.simStep);
+      const step = Math.max(10, meta.detected?.initiative === "world_led" ? Math.round(settings.simStep / 2) : settings.simStep);
       let last = E.lastTickAbs ?? meta.lastSimAbs;
       if (last == null) {
         E.lastTickAbs = meta.lastSimAbs = now;
@@ -20955,7 +20958,9 @@ function elsewhereNote(o) {
     onPath: o.onPath,
     seen: E.seen,
     lastPlace: E.lastPlace,
-    userName: o.userName
+    userName: o.userName,
+    texture: o.meta.detected?.texture,
+    initiative: o.meta.detected?.initiative
   });
   if (!o.dryRun) {
     E.seen = lane.seen;
@@ -21694,6 +21699,8 @@ function parseConfig(attrs) {
     trackerView: get("view"),
     header: get("header")?.toLowerCase() || undefined,
     theme: get("theme"),
+    texture: get("world")?.toLowerCase() || undefined,
+    initiative: get("initiative")?.toLowerCase() || undefined,
     presetVersion: get("v") || undefined,
     at: Date.now()
   };

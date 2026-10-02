@@ -98,6 +98,8 @@ const SCENARIOS: Scenario[] = [
   { name: "session-zero overrides", gen: "normal", chatVars: { alm_cfg_genres: "horror, mystery", alm_cfg_persona: "director", alm_cfg_nsfw: "off", alm_cfg_romance: "off", alm_cfg_limits: "gore > 3" }, ext: { ...LINKED, almMode: "investigation" } },
   { name: "unknown setting values fall back", gen: "normal", chatVars: { alm_cfg_persona: "full cast", alm_cfg_nsfw: "none", alm_cfg_romance: "slow burn" } },
   { name: "lite ledger · header every reply", gen: "normal", vars: { ledger: "lite", header: "every" } },
+  { name: "insistent world · world-led", gen: "normal", vars: { world_layer: "insistent", initiative: "world_led" } },
+  { name: "backdrop world · player-led", gen: "normal", vars: { world_layer: "backdrop", initiative: "player_led" } },
   { name: "impersonate", gen: "impersonate" },
   { name: "auto planning · non-reasoning model", gen: "normal", model: "mistral-large-latest" },
   { name: "gate · Ledger not installed", gen: "normal", ext: null },
@@ -169,6 +171,9 @@ for (const sc of SCENARIOS) {
   if (sc.name === "empty send after a command") expect(get("alm_route") === "scene", "an empty send doesn't re-run the last /command");
   if (sc.name === "swipe of a command reply") expect(get("alm_route") === "command", "a new take on a command reply is the command again");
   if (sc.name === "unknown setting values fall back") expect(get("alm_persona") === "sealed" && get("alm_nsfw") === "fade" && get("alm_romance") === "slow" && /\[AGENCY\]\nWren belongs to the player/.test(all), "unknown setting values fall back to the defaults");
+  if (sc.name === "scene") expect(/Texture: living/.test(all) && /At most one unprompted environmental act/.test(all) && /Initiative: shared/.test(all) && /world="living" initiative="collaborative"/.test(all), "default: a living world, shared initiative, both in the handshake");
+  if (sc.name === "insistent world · world-led") expect(/Texture: insistent/.test(all) && /Up to two unprompted environmental acts/.test(all) && !/At most one unprompted environmental act/.test(all) && /Initiative: the world leads\. Don't wait/.test(all) && /world="insistent" initiative="world_led"/.test(all), "insistent and world-led change the budgets and reach the Ledger");
+  if (sc.name === "backdrop world · player-led") expect(/Texture: backdrop/.test(all) && /Initiative: the player leads/.test(all) && /world="backdrop" initiative="player_led"/.test(all), "backdrop and player-led render");
   if (sc.name === "intimacy · fade") expect(!/Baseline vocabulary/.test(all), "fade sends no explicit vocabulary");
   if (sc.name === "impersonate") expect(!ids.includes("alm-agency") && !ids.includes("alm-prose") && /This one message, you write Wren's next line/.test(all), "impersonation drops the agency and POV rules");
   if (sc.name === "native · deepseek (reasoning prefill)") expect(/^Director's Pass — ROUTE, ANCHOR, SEAL, MINDS, MOVE, VOICE, LEDGER\./.test(prefill), "native planning on DeepSeek gets a lean prefill");

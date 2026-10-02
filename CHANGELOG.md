@@ -4,6 +4,15 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.21.4 (2026-10-03) · preset 1.1.4
+
+**World texture and Initiative now change the story.** Before, each setting only swapped one sentence, and fixed rules elsewhere in the preset ("at most one unprompted environmental act", "invent no off-screen news") overrode it. World-led even read weaker than Collaborative.
+- **Insistent:** every reply, the place makes at least one demand that someone present has to answer, such as weather, a crowd, a closing time, a bill, a knock or something boiling over. Up to two unprompted environmental acts per reply. **Living** keeps one per reply. **Backdrop** stays quiet unless the scene can't go on without the world.
+- **World-led:** when your message brings no new pressure, someone present or the place itself brings one, drawn from established people, threads, debts and clocks. It also allows one more unprompted initiative per reply than Autonomy does.
+- "Invent no off-screen news" now says it's about news from elsewhere. What the place does and what the people in it start belong to the scene.
+- The preset tells the Ledger both settings. With Insistent or World-led, news, traces and people from Elsewhere can reach a charged scene (not a pivotal or intimate one), with one more item per scene. Under World-led, Elsewhere steps twice as often in story time.
+- Three or more people at ease (downtime, social, travel) no longer make a scene charged, so a family breakfast lets the world in under every setting.
+
 ## 1.21.3 (2026-10-03) · preset 1.1.3
 
 **Your character speaks only in Director and Full cast.** With Persona set to Sealed or Continuity, the story no longer gives your character lines of dialogue. That includes repeating your own line back to you.

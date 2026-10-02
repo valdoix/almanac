@@ -183,6 +183,15 @@ describe("recall and note", () => {
     expect(note.text).toContain("[ELSEWHERE] (nothing from off the page");
     expect(tierGuess("I draw my sword", state)).toBe("pivotal");
   });
+  test("three at ease stay routine; three in a tense scene are charged", () => {
+    const chars: any = { user: { id: "user", name: "Wren", isUser: true, tier: "spot" } };
+    for (const n of ["a", "b", "c"]) chars[n] = { id: n, name: n, tier: "spot" };
+    const st = (mode: string) => ({ chars, mode }) as any;
+    expect(tierGuess("I pour the coffee.", st("downtime"))).toBe("routine");
+    expect(tierGuess("I pour the coffee.", st("social"))).toBe("routine");
+    expect(tierGuess("I pour the coffee.", st("investigation"))).toBe("charged");
+    expect(tierGuess("I pour the coffee.", st("conflict"))).toBe("charged");
+  });
 });
 
 describe("telemetry and pressures", () => {

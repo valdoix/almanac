@@ -141,7 +141,8 @@ export async function runElsewhere(chatId: string, userId?: string, opts: { forc
       if (!st?.time || !target) return null;
       const E = elsewhereOf(meta);
       const now = absMinutes(st.time);
-      const step = Math.max(10, settings.simStep);
+      // A world-led story steps twice as often: its subplots move within a long scene, not only across hours.
+      const step = Math.max(10, meta.detected?.initiative === "world_led" ? Math.round(settings.simStep / 2) : settings.simStep);
       let last = E.lastTickAbs ?? meta.lastSimAbs;
       if (last == null) {
         E.lastTickAbs = meta.lastSimAbs = now;
@@ -445,6 +446,7 @@ export function elsewhereNote(o: { state: WorldState; records: ReturnType<typeof
   const lane = elsewhereLane({
     state: o.state, arrivals: working, roster, now: o.state.time ? absMinutes(o.state.time) : null, at: o.state.msgCount, tier: o.tier,
     mode: mode === "off" ? (list.some((a) => a.status === "pending" || a.status === "offered") ? "quiet" : "off") : mode, onPath: o.onPath, seen: E.seen, lastPlace: E.lastPlace, userName: o.userName,
+    texture: o.meta.detected?.texture, initiative: o.meta.detected?.initiative,
   });
   if (!o.dryRun) {
     E.seen = lane.seen;

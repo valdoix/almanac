@@ -38,6 +38,9 @@ export interface Detected {
   dialogueStyle?: string;
   /** The preset's Dialogue blocks switch: false when speech is written without [spk] marks. */
   dialogueMarks?: boolean;
+  /** World texture (backdrop · living · insistent) and initiative (player_led · collaborative · world_led). */
+  texture?: string;
+  initiative?: string;
   /** The preset version that sent the handshake. */
   presetVersion?: string;
   at?: number;

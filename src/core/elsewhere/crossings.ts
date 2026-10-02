@@ -198,6 +198,9 @@ export interface LaneInput {
   /** The player's character, for why a call was dropped. */
   userName?: string;
   budget?: number;
+  /** The preset's World texture and Initiative: insistent or world-led lets the world press into charged scenes. */
+  texture?: string;
+  initiative?: string;
 }
 
 export interface LaneResult {
@@ -310,7 +313,11 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
   };
   const sceneStart = st.sceneStartMsg ?? 0;
   const thisScene = inp.arrivals.filter((a) => (a.offered ?? []).some((i) => i >= sceneStart)).length;
-  const cap = SCENE_CAP[inp.mode] ?? 1;
+  // An insistent or world-led story lets news, traces and people in while the scene is charged (never
+  // pivotal, never intimate), with one more item a scene; a backdrop world or a player-led story keeps the default.
+  const pressing = inp.texture === "insistent" || inp.initiative === "world_led";
+  const tier = pressing && inp.tier === "charged" && st.mode !== "intimacy" ? "routine" : inp.tier;
+  const cap = (SCENE_CAP[inp.mode] ?? 1) + (pressing && inp.mode !== "off" ? 1 : 0);
   const firstTurn = inp.at - sceneStart <= 2;
   const room = inp.mode === "quiet" ? (firstTurn ? cap - thisScene : 0) : cap - thisScene;
   const ready = inp.arrivals.filter((a) => {
@@ -319,8 +326,8 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
     if (!forHere(a)) return false;
     if (a.atAbs != null && inp.now != null && a.atAbs > inp.now) return false;
     // A call or a message is quiet enough for a charged scene (a buzz, a glance at the screen); news isn't.
-    if (inp.tier === "pivotal" && !a.urgent) return false;
-    if (inp.tier === "charged" && !a.urgent && !isMessage(a)) return false;
+    if (tier === "pivotal" && !a.urgent) return false;
+    if (tier === "charged" && !a.urgent && !isMessage(a)) return false;
     switch (a.kind) {
       case "carrier": return present(a.carrier);
       case "entrance": return !present(a.lead);
@@ -369,7 +376,7 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
 
   // Encounters: who is likely here when the scene moves somewhere new.
   const likely: string[] = [];
-  if (place && place !== inp.lastPlace && inp.tier === "routine") {
+  if (place && place !== inp.lastPlace && tier === "routine") {
     for (const a of r.actors) {
       if (a.ring === "onstage" || !canAct(a) || !a.where || likely.length >= 2) continue;
       if (segs(a.where).at(-1) !== scene[0] && placeMatch(segs(a.where), scene.slice(1))) likely.push(`${a.name}${a.routine ? ` (${a.routine.slice(0, 40)})` : ""}`);

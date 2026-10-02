@@ -77,7 +77,7 @@ beforeAll(async () => {
 });
 
 const CHARTER = "<almanac>\nYou are ALMANAC: narrator, director, and every living person in this story except Wren.\n</almanac>";
-const HANDSHAKE = `<almanac-config persona="sealed" thoughts="0" inner="register" genres="mystery, romance" lead="mystery" nsfw="fade" romance="slow" dialogue="adaptive" style="blocks" cot="native" ledger="full" trackers="scene, cast, bonds, thoughts, inventory, threads, knowledge" view="drawer" theme="auto"/>`;
+const HANDSHAKE = `<almanac-config persona="sealed" thoughts="0" inner="register" genres="mystery, romance" lead="mystery" nsfw="fade" romance="slow" dialogue="adaptive" style="blocks" cot="native" ledger="full" trackers="scene, cast, bonds, thoughts, inventory, threads, knowledge" view="drawer" theme="auto" world="insistent" initiative="world_led"/>`;
 
 describe("extension hooks with the preset", () => {
   test("interceptor arms the chat, strips the handshake and injects the ledger note", async () => {
@@ -106,6 +106,7 @@ describe("extension hooks with the preset", () => {
     expect(meta.enabled).toBe(true);
     expect(meta.detected.lead).toBe("mystery");
     expect(meta.detected.innerVoice).toBe("register");
+    expect([meta.detected.texture, meta.detected.initiative]).toEqual(["insistent", "world_led"]);
   });
 
   test("a Sealed persona's lines in earlier replies stay out of the prompt", async () => {

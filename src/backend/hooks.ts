@@ -146,6 +146,8 @@ function parseConfig(attrs: string): Detected {
     trackerView: get("view"),
     header: get("header")?.toLowerCase() || undefined,
     theme: get("theme"),
+    texture: get("world")?.toLowerCase() || undefined,
+    initiative: get("initiative")?.toLowerCase() || undefined,
     presetVersion: get("v") || undefined,
     at: Date.now(),
   };
