@@ -88,6 +88,9 @@ export const DRAWER_CSS = `
 .almo .almx-stk.voice{background:var(--c);color:var(--alm-on-voice)}
 .almo .almx-stk.ghost{background:transparent;border:1.5px dashed color-mix(in oklab,var(--alm-muted) 70%,transparent);color:var(--alm-muted);padding:4px 7px}
 .almo .almx-stk.flat{transform:none}
+.almo .card,.almo .almx-row>.grow,.almo .almx-inset{min-width:0;overflow-wrap:anywhere}
+.almo .row>.almx-stk,.almo .almx-row>.almx-stk{max-width:100%;white-space:normal;line-height:1.2;text-align:center}
+.almo .almx-bond__nm{display:block;font:700 15.5px/1.25 var(--almo-font)}
 
 /* Pills, buttons, fields */
 .almo .pill{padding:5px 11px;font:600 12.5px/1.2 var(--alm-font-body);color:var(--alm-ink);margin:0}

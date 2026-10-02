@@ -4,6 +4,10 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.19.1 (2026-10-02)
+
+**Bonds: cards fit the drawer.** A long label ("possessive attachment") wraps under the names instead of pushing the card wider than the drawer, which had hidden the right half of every bar and the numbers. Changes of 0 are no longer listed as a bond's last changes. Long stickers wrap everywhere in the drawer.
+
 ## 1.19.0 (2026-10-02)
 
 **The drawer, redesigned ("Night Almanac").** Every page of the Almanac drawer has a new look that is easier to read at a glance:
