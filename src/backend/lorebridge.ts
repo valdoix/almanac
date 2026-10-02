@@ -1,6 +1,6 @@
 // Lore Bridge service: gather the books Lumiverse activates for the chat
-// (character, persona, chat, global), classify each entry with VELLUM III rules,
-// and seed Codex baselines. Books are read-only unless the user allows more.
+// (character, persona, chat, global), classify each entry by the Almanac lorebook
+// format (core/loreformat.ts), and seed Codex baselines. Books are read-only unless the user allows more.
 
 import type { WorldBookEntryDTO } from "lumiverse-spindle-types";
 import { classify, seedOverlays, weaverBook, weaverWorldCard, type Classified } from "../core/lore";
@@ -95,7 +95,7 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
         if (e.disabled) continue;
         entryCount++;
         const h = hash(`${e.comment}|${e.content}|${e.key.join(",")}|${JSON.stringify(e.extensions ?? {})}`);
-        const c = classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, extensions: e.extensions as any }, wv);
+        const c = classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, position: e.position, extensions: e.extensions as any }, wv);
         classified.push(c);
         state.entryHashes[e.id] = h;
         state.kinds[c.kind] = (state.kinds[c.kind] ?? 0) + 1;
@@ -174,7 +174,7 @@ export async function classifyReview(chatId: string, userId?: string): Promise<n
     const q = queue.find((x) => x.entryId === r.id);
     if (!q || !r.kind) continue;
     const e = entries.find((x) => x.id === r.id)!;
-    const c = classify({ id: e.id, world_book_id: q.bookId, comment: e.title, content: e.content, key: [], extensions: { vellum3: { kind: r.kind === "forecast" ? "situation" : r.kind, tense: r.kind === "forecast" ? "future" : r.tense, participants: r.participants, members: r.members, place: r.place, visibility: r.visibility } } });
+    const c = classify({ id: e.id, world_book_id: q.bookId, comment: e.title, content: e.content, key: [], extensions: { almanac: { lore: { kind: r.kind === "forecast" ? "situation" : r.kind, tense: r.kind === "forecast" ? "future" : r.tense, participants: r.participants, members: r.members, place: r.place, visibility: r.visibility } } } });
     if (r.name) c.name = r.name;
     Object.assign(files.codex.overlays, seedOverlays([c]));
     files.meta.lore.review = files.meta.lore.review.filter((x) => x.entryId !== r.id);

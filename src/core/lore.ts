@@ -1,12 +1,14 @@
 // Lore Bridge: read attached lorebooks (character, persona, chat, global) into
-// Codex baselines using VELLUM III reading conventions — exact metadata first,
-// then the title label, then first-sentence rules. Low-confidence entries go to
-// a review queue (and can be sent to the LLM classifier).
+// Codex baselines by the Almanac lorebook format (loreformat.ts): exact metadata
+// first, then the title label, then content tags, title shapes and first-sentence
+// rules. Low-confidence entries go to a review queue (and can be sent to the LLM
+// classifier).
 
 import type { CodexKind, CodexOverlay } from "./codex";
 import { slug } from "./util";
 import { traitsFromText } from "./traits";
 import type { TraitKind } from "./types";
+import { BARE_DESCRIPTOR, category, categoryOfLabel, contentTag, DATED, HONORIFIC, isRank as isRankWord, labelNames, pairNames, readLoreMeta, VOICE_DESCRIPTOR, type LoreCategory } from "./loreformat";
 
 export interface LoreEntry {
   id: string;
@@ -16,6 +18,8 @@ export interface LoreEntry {
   key: string[];
   disabled?: boolean;
   constant?: boolean;
+  /** Lumiverse's insertion position: free-form books put people at 1 (after the character card). */
+  position?: number;
   extensions?: Record<string, any>;
 }
 
@@ -27,7 +31,10 @@ export interface Classified {
   name: string;
   aliases: string[];
   confidence: number;
-  via: "metadata" | "title" | "sentence" | "guess" | "weaver";
+  /** How it was read: metadata, a title label, a content tag ("RULE:"), the title's shape, the first sentence, a weaker hint, or a guess. */
+  via: "metadata" | "title" | "tag" | "shape" | "sentence" | "hint" | "guess" | "weaver";
+  /** The format category (loreformat.ts) when one was read: several share a kind (voice, secret and customs are texture). */
+  category?: string;
   role?: string;
   parent?: string;
   hours?: string;
@@ -197,29 +204,24 @@ function classifyWeaverEntry(e: LoreEntry, part: WeaverPart, book: WeaverBook | 
   };
 }
 
-const LABELS: [RegExp, CodexKind, Classified["tense"]][] = [
-  [/^(current|now|ongoing|active|right now)$/i, "situation", "now"],
-  [/^(timeline boundary|era|canon point|story start)$/i, "boundary", "timeless"],
-  [/^(faction|group|gang|order|clan|coven|guild|cult|society|house|company|crew|family)$/i, "group", "timeless"],
-  [/^(location|place|city|town|village|building|district|region|realm|kingdom|country|planet|room|area|landmark)$/i, "place", "timeless"],
-  [/^(character|npc|person)$/i, "person", "timeless"],
-  [/^(item|object|artifact|artefact|weapon|relic|equipment)$/i, "object", "timeless"],
-  [/^(rule|law|magic|magic system|how .* works|mechanic|physics)$/i, "law", "timeless"],
-  [/^(history|past|backstory|previously|origins?)$/i, "history", "past"],
-  [/^(upcoming|prophecy|planned|scheduled|future)$/i, "forecast", "future"],
-  [/^(customs|culture|traditions|atmosphere|slang|language)$/i, "texture", "timeless"],
-  [/^(ooc|instructions|author's note|format|style)$/i, "meta", "timeless"],
-];
+// Title words for unlabelled entries, first match wins. The strong nouns (a guild, a sword, a
+// tavern) decide before a story's past tense does; the weak ones (a festival, a curse, "history")
+// only after. Weaver lore books read them all at once, as before.
+const GROUP_HINT = /\b(?:guild|order|council|clan|famil(?:y|ies)|house of|crew|church|cult|company|companies|holdings|corporation|firm|watch|brotherhood|sisterhood|society|faction|court|union|gang|coven|syndicate|circle|knight|kingsguard|minion|network|loyalist|program|programme|agency|initiative|unit|army|legion|band|tribe|dynasty|cabal|league|alliance|senate|parliament|household|retinue|staff)(?:e?s)?\b/i;
+const OBJECT_HINT = /\b(?:ledger|book|tome|handbook|scroll|key|sword|blade|dagger|axe|hammer|bow|wand|stake|ring|amulet|gem|orb|sphere|urn|chalice|grail|map|relic|artifact|artefact|crown|mask|lantern|bell|idol|stone|coin|chip|katra|device|potion|vial|crystal|locket|necklace|talisman|totem|egg)(?:e?s)?\b/i;
+const PLACE_HINT = /\b(?:harbou?r|bay|port|dock|pier|market|street|road|drive|square|quarter|district|ward|tavern|inn|pub|bar|club|nightclub|hall|temple|shrine|chapel|sept|godswood|keep|holdfast|castle|tower|manor|mansion|house|residence|home|apartment|flat|crypt|grave|tomb|office|library|school|academy|university|college|campus|forest|wood|marsh|river|lake|sea|coast|shore|island|mountain|valley|cave|mine|ruin|gate|wall|bridge|lighthouse|cemetery|graveyard|farm|mill|shop|store|warehouse|station|village|town|city|palace|prison|asylum|hospital|chamber|yard|ground|dragonpit|facility|base|lab|laboratory|bunker|garden|park|church|cathedral|abbey|monastery|estate|villa|cottage|cabin|hotel|motel|restaurant|diner|caf[eé]|passage|tunnel|sewer|kingdom|princedom|duchy|province|territor(?:y|ies)|land)(?:e?s)?\b/i;
+const HISTORY_HINT = /\b(history|founding|founded|origins?|the fall of|war of|years? ago|age of|legend of|in the old days|before the)\b/i;
+const LAW_HINT = /\b(rules?|laws?|magic|how .+ works|the price|cost of|curse|pact|oath|bargain|covenant|forbidden|taboo|doctrine|physiology|weakness(?:es)?|powers?)\b/i;
+const TEXTURE_HINT = /\b(customs?|traditions?|festival|rites?|rituals?|ceremon(?:y|ies)|holiday|feast|superstitions?|etiquette|slang|dialect|cuisine|dress|fashion|night|day|season|precedence|politics|market)\b/i;
 
-// Title words for untagged Weaver lore entries, first match wins ("The Harbour Guild" is a group,
-// "Harbour Festival" a custom, "Rules of the Harbour" a rule, before any of them is a place).
+// Weaver lore books: as before, every hint in one ordered list.
 const LORE_TITLE_HINTS: [RegExp, CodexKind, Classified["tense"]][] = [
-  [/\b(history|founding|founded|origins?|the fall of|war of|years? ago|age of|legend of|in the old days|before the)\b/i, "history", "past"],
-  [/\b(guild|order|council|clan|famil(?:y|ies)|house of|crew|church|cult|company|watch|brotherhood|sisterhood|society|faction|court|union|gang|coven|syndicate|circle)\b/i, "group", "timeless"],
-  [/\b(rules?|laws?|magic|how .+ works|the price|cost of|curse|pact|oath|bargain|covenant|forbidden|taboo)\b/i, "law", "timeless"],
-  [/\b(customs?|traditions?|festival|rites?|rituals?|ceremon(?:y|ies)|holiday|feast|superstitions?|etiquette|slang|dialect|cuisine|dress|fashion|night|day|season)\b/i, "texture", "timeless"],
-  [/\b(ledger|book|key|sword|ring|amulet|map|relic|artifact|artefact|crown|blade|mask|lantern|bell|idol|stone|coin)\b/i, "object", "timeless"],
-  [/\b(harbou?r|bay|port|docks?|pier|market|street|road|square|quarter|district|ward|tavern|inn|pub|bar|hall|temple|shrine|chapel|keep|castle|tower|manor|house|office|library|school|academy|forest|woods|marsh|river|lake|sea|coast|shore|island|mountain|valley|cave|mine|ruins?|gate|walls?|bridge|lighthouse|cemetery|graveyard|farm|mill|shop|store|warehouse|station|village|town|city|palace|prison|asylum|hospital)\b/i, "place", "timeless"],
+  [HISTORY_HINT, "history", "past"],
+  [GROUP_HINT, "group", "timeless"],
+  [LAW_HINT, "law", "timeless"],
+  [TEXTURE_HINT, "texture", "timeless"],
+  [OBJECT_HINT, "object", "timeless"],
+  [PLACE_HINT, "place", "timeless"],
 ];
 
 const BELIEF = /\b(believes?|thinks?|assumes?|unaware|doesn'?t know|don'?t know|suspects?|convinced)\b/i;
@@ -228,57 +230,150 @@ const PUBLIC = /\b(raid|fire|attack|riot|festival|in the streets|sirens|crowds|t
 const SECRET = /\b(secret|hidden|concealed|unknown to most|no one knows)\b/i;
 const SIGN = /[^.]*\b(sign|smell|scent|cold spot|mark|draft|draught|sound|stain|notice)\b[^.]*\./i;
 
-export function splitTitle(comment: string): { label?: string; name: string } {
-  const c = (comment ?? "").trim();
-  const m = /^(.{1,40}?)\s*(?:\s-\s|\s–\s|:\s|\s\|\s)\s*(.+)$/.exec(c);
-  if (m && m[1].split(/\s+/).length <= 4) return { label: m[1].trim(), name: m[2].replace(/\s*\([^)]*\)\s*/g, " ").trim().split(/\s+/).slice(0, 5).join(" ") };
-  return { name: c };
+// What an event is called ("The Wildfire Nameday", "Aelor & Cersei Betrothal", "Departure for Harrenhal").
+const EVENT_NOUN = /\b(betrothal|wedding|marriage|death|murder|assassination|birth|coronation|battle|war|siege|attack|raid|fall|return|departure|arrival|visit|feast|nameday|birthday|grant|dismissal|ascension|resurrection|trial|duel|kiss|first kiss|campaign|rebellion|uprising|massacre|sacrifice|exile|escape|capture|founding|burning|sack|treaty|council of|tourney|tournament|funeral|execution|abdication|succession crisis)\b/i;
+// A title that tells something happening ("Faith Kills Allan Finch", "Dawn Is Created from the Key").
+const TITLE_VERB = /\b(?:is|are|was|were)\s+[a-z]+(?:ed|en)\b|\b(?:dies|die|kills|kill|loses|lose|leaves|leave|arrives|arrive|returns|return|captures|capture|drains|retaliates|performs|begins|begin|comes|prepares|flees|flee|opens|meets|marries|betrays|discovers|learns|saves|joins|becomes|escapes|attacks|takes|falls|rises|wins|finds|defeats|reveals|confesses|breaks|burns|claws|awakens|wakes|summons|seals)\b/i;
+const PRESENT = /\b(is|are|has|have|lies|stands|sits|remains|serves|rules|runs|holds|keeps|carries|lives|works|owns|leads|guards|knows|wants|loves|hates|fears)\b/i;
+const PAST = /\b(was|were|had|did|became|began|came|went|took|gave|made|found|left|fled|fell|broke|lost|won|led|grew|ran|saw|told|foretold|knew|met|threw|wrote|sent|brought|built|held|kept|stood|swore|bore|cut|struck|slew|rode|flew|chose|forgot|hid|sought|thought|fought|caught|taught|bought|spent)\b/i;
+const STOP_END = /\s+(?:the|a|an|of|and|or|to|in|on|at|for|with|from|by|&)$/i;
+
+/** Cut a name to `n` words without leaving it on "the", "of", "and". */
+function cutName(s: string, n: number): string {
+  let out = s.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, n).join(" ");
+  while (STOP_END.test(out)) out = out.replace(STOP_END, "");
+  return out;
 }
 
+export interface TitleParts {
+  /** The category a known label names ("Character", "CURRENT", "AU Canon"). */
+  label?: string;
+  cat?: LoreCategory;
+  /** What the entry is about: the part after a known label, or before a descriptor. */
+  name: string;
+  /** "Buffy Summers - The Slayer": the part after the name, when the left side isn't a label. */
+  descriptor?: string;
+  /** The left part as written, when the title has a separator. */
+  left?: string;
+}
+
+/**
+ * A title read as "Label: Name" (a known label), or "Name - Descriptor" (anything else before the
+ * separator: a person, a place, a date). Only known labels count as labels, so "Buffy Summers -
+ * The Slayer" is about Buffy Summers, not about "The Slayer".
+ */
+export function splitTitle(comment: string): TitleParts {
+  const c = (comment ?? "").trim();
+  const m = /^(.{1,60}?)\s*(?:\s-\s|\s–\s|\s—\s|:\s|\s\|\s)\s*(.+)$/.exec(c);
+  if (!m) return { name: cutName(c, 10) };
+  const left = m[1].trim();
+  const right = m[2].trim();
+  const cat = left.split(/\s+/).length <= 4 ? categoryOfLabel(left) : undefined;
+  if (cat) return { label: left, cat, name: labelNames(left) ? cutName(`${left}: ${right}`, 12) : cutName(right, 10), left };
+  return { name: cutName(left, 10), descriptor: right, left };
+}
+
+/** The first sentence, not cut at "Mr." or "St." or an initial. */
 function firstSentence(s: string): string {
   const t = s.replace(/\{\{[^}]+\}\}/g, "X").trim();
-  const m = /^[\s\S]*?[.!?](\s|$)/.exec(t);
-  return (m ? m[0] : t).trim();
+  const re = /[.!?](?=\s|$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t))) {
+    const before = t.slice(Math.max(0, m.index - 6), m.index + 1);
+    if (m[0] === "." && /(?:^|[\s(])(?:Mr|Mrs|Ms|Dr|St|Jr|Sr|Sgt|Lt|Col|Gen|Prof|vs|etc|e\.g|i\.e|[A-Z])\.$/.test(before)) continue;
+    return t.slice(0, m.index + 1).trim();
+  }
+  return t;
+}
+
+/** The first sentence with a leading time or circumstance clause taken off ("In 1997, …", "After …, …"). */
+function mainClause(fs: string): string {
+  return fs.replace(/^(?:(?:in|on|at|by|after|before|during|while|when|once|as|following|believing|having|since|until|from)\b[^,]{0,90},\s*)/i, "");
+}
+
+function isPast(fs: string): boolean {
+  const m = mainClause(fs);
+  const pres = PRESENT.exec(m)?.index ?? Infinity;
+  const pastIrr = PAST.exec(m)?.index ?? Infinity;
+  // A regular past after the subject ("The Initiative captured Spike", "Five months passed"), not an
+  // adjective after an article ("the abandoned mansion").
+  let pastEd = Infinity;
+  const words = [...m.matchAll(/\S+/g)];
+  for (let i = 1; i < words.length; i++) {
+    // Not after an article, and not after a comma ("Exceptionalism, accepted by the Faith" is a participle).
+    if (/^\p{Ll}+ed[,;:]?$/u.test(words[i][0]) && !/^(?:a|an|the|very|most|more|less|so|too|and|or|its|their|his|her)$/i.test(words[i - 1][0]) && !/[,;:—–]$/.test(words[i - 1][0])) {
+      pastEd = words[i].index!;
+      break;
+    }
+  }
+  // A present verb right after the subject ("Harrenhal broods over …", "King's Landing sprawls …").
+  const s3 = /^(?:[A-Z][\p{L}'’.-]*\s+){1,3}(\p{Ll}+[^s\s]s)\s+(?:over|around|near|on|in|at|across|along|above|below|beneath|through|between|among|the|a|an|its|his|her|their|to|from|with|by|as|into)\b/u.exec(m);
+  const pres3 = s3 && !/(?:ss|us|is)$/.test(s3[1]) ? s3.index + s3[0].length - s3[1].length : Infinity;
+  return Math.min(pastIrr, pastEd) < Math.min(pres, pres3);
+}
+
+// A first sentence that names what something is: "X is a/an/the ROLE", "X is Sunnydale's ROLE",
+// "X, called Glory, was an exiled hell-goddess".
+const NAME = String.raw`(?:[A-Z][\p{L}'’.-]+|the)(?:\s+(?:[A-Z][\p{L}'’.-]+|of|the|de|du|van|von|al|ibn))*`;
+const IS_ROLE = new RegExp(String.raw`^(${NAME})(?:,\s+[^,]{1,80},)?\s+(?:is|was)\s+(?:(?:a|an|the|one of the)\s+|(?:[A-Z][\p{L}'’.-]+(?:\s+[A-Z][\p{L}'’.-]+){0,3})['’]s?\s+)([^,.;]+)`, "u");
+
+/** What the role names, by its head noun: "an ancient vampire and leader of the Order" is a vampire. */
+// Nouns that name a person even after a place or group word ("a senior Watchers Council authority").
+const PERSON_NOUN = /^(?:authority|leader|member|head|chief|officer|agent|man|woman|girl|boy|child|figure|director|founder|heir|ruler|lord|lady|servant|guard|soldier|knight|priest|priestess|witch|wizard|mage|sorcerer|sorceress|vampire|demon|god|goddess|slayer|watcher|hunter|student|teacher|professor|doctor|friend|ally|enemy|rival|lover|wife|husband|son|daughter|mother|father|sister|brother|twin|cousin|uncle|aunt|prince|princess|king|queen|official|clerk|scholar|merchant|captain|commander|advisor|adviser|maester|steward|castellan|smith|cook|maid|nanny|nurse|physician|healer|engineer|historian|financier|jurist|poet|musician|singer|dancer|actor|artist|writer|thief|assassin|spy|mercenary|warrior|rider|dragon|creature|beast|cat|dog|wolf|horse|robot|android|construct|ghost|spirit|entity|being)s?$/i;
+
+function roleKind(role: string): CodexKind {
+  const head = role.split(/\s+(?:and|or|who|which|that|whose|whom|of|in|on|at|from|for|with|to|by|built|made|created|used|known|called|named|beneath|under|near)\b|[,;:(]/)[0];
+  if (PERSON_NOUN.test(head.trim().split(/\s+/).pop() ?? "")) return "person";
+  if (/\b(town|city|village|tavern|inn|club|nightclub|house|home|residence|mansion|apartment|crypt|grave|shop|store|forest|street|district|castle|keep|fortress|temple|library|school|university|college|campus|bar|pub|hospital|cemetery|island|kingdom|realm|region|country|land|valley|mountain|river|lake|chamber|hall|tower|yard|facility|base|complex|laboratory|lab|church|palace|prison|estate|venue|restaurant|cafe|café|market|port|harbou?r|ruins?)\b/i.test(head)) return "place";
+  if (/\b(sword|blade|ring|amulet|book|volume|tome|handbook|locket|key|device|gun|staff|wand|stake|orb|sphere|urn|vessel|gem|hammer|chip|weapon|artifact|artefact|relic|object|potion|scroll|map|crown|mask)\b/i.test(head)) return "object";
+  if (/\b(gangs?|orders?|guilds?|clans?|cults?|compan(?:y|ies)|groups?|factions?|societ(?:y|ies)|organi[sz]ations?|programs?|programmes?|agenc(?:y|ies)|councils?|arm(?:y|ies)|units?|networks?|houses?|dynast(?:y|ies)|famil(?:y|ies)|bands?|tribes?|alliances?|leagues?|corporations?|firms?|lineages?|bloodlines?|brotherhoods?|sisterhoods?|syndicates?|covens?)\b/i.test(head)) return "group";
+  if (/\b(rule|law|spell|curse|ritual|process|system|doctrine|custom|tradition)\b/i.test(head)) return "law";
+  return "person";
+}
+
+/** Names in a phrase ("Laenor and Laena" → [Laenor, Laena]); "the Realm" is nobody's. */
+function namesIn(s: string): string[] {
+  return s.split(/\s*(?:,|\band\b|&)\s*/).map((x) => x.trim()).filter((x) => /^[A-Z]/.test(x) && !/^(?:The|A|An)\b/.test(x));
 }
 
 export function classify(e: LoreEntry, book: WeaverBook | null = null): Classified {
   const part = weaverEntry(e);
   if (part) return classifyWeaverEntry(e, part, book);
-  const meta = e.extensions?.vellum3 ?? e.extensions?.almanac?.vellum3 ?? null;
-  const { label, name: titleName } = splitTitle(e.comment);
-  const fs = firstSentence(e.content ?? "");
+  const meta = readLoreMeta(e.extensions);
+  const t = splitTitle(e.comment);
+  const titleName = t.name;
+  const content = e.content ?? "";
+  const fs = firstSentence(content);
   const aliases = (e.key ?? []).filter((k) => /^[A-Z]/.test(k) && k.split(/\s+/).length <= 3 && k !== titleName);
   const base: Classified = {
     entryId: e.id, bookId: e.world_book_id, kind: "texture", tense: "timeless", name: titleName || fs.slice(0, 40),
     aliases, confidence: 0.3, via: "guess", summary: fs,
   };
+  const as = (cat: LoreCategory | undefined, via: Classified["via"], confidence: number, extra: Partial<Classified> = {}) => {
+    if (!cat) return;
+    Object.assign(base, { kind: cat.kind, tense: cat.tense, category: cat.id, via, confidence, ...extra });
+  };
 
-  if (meta && typeof meta.kind === "string") {
+  if (meta) {
+    const cat = category(meta.category);
     const kind = (meta.kind === "situation" && meta.tense === "future" ? "forecast" : meta.kind) as CodexKind;
     Object.assign(base, {
-      kind, tense: meta.tense ?? "timeless", confidence: 1, via: "metadata",
+      kind, tense: meta.tense ?? cat?.tense ?? "timeless", confidence: 1, via: "metadata", category: cat?.id,
       participants: meta.participants, place: meta.place, visibility: meta.visibility, expected: meta.expected, members: meta.members,
+      ...(meta.holder ? { holder: meta.holder } : {}),
+      ...(meta.parent ? { parent: meta.parent } : {}),
+      ...(meta.subject ? { subject: meta.subject } : {}),
+      ...(typeof meta.name === "string" && meta.name.trim() ? { name: meta.name.trim() } : {}),
     });
-  } else if (label) {
-    for (const [re, kind, tense] of LABELS) {
-      if (re.test(label)) {
-        base.kind = kind;
-        base.tense = tense;
-        base.confidence = 0.85;
-        base.via = "title";
-        break;
-      }
-    }
+  } else if (t.cat) {
+    as(t.cat, "title", 0.85);
   }
-  if (base.via === "guess") {
-    // Unlabelled: "X is a/an/the role …"
+  if (base.via === "guess" && !book) readUnlabelled(e, t, fs, base, as);
+  if (base.via === "guess" && book) {
+    // A Weaver book's unlabelled entry: only a plain "X is a/an/the role …" is read here; the book's
+    // role decides the rest (an NPC book's people, a depth book's scenes).
     const m = /^([A-Z][\p{L}'’.-]+(?:\s+[A-Z][\p{L}'’.-]+){0,3})\s+(?:is|was)\s+(?:a|an|the)\s+([^,.;]+)/u.exec(fs);
-    if (m) {
-      base.name = m[1];
-      base.via = "sentence";
-      base.confidence = 0.55;
-      base.kind = /\b(town|city|village|tavern|inn|club|house|shop|forest|street|district|castle|temple|library|school|bar|nightclub)\b/i.test(m[2]) ? "place" : /\b(sword|ring|amulet|book|blade|locket|key|device|gun|staff)\b/i.test(m[2]) ? "object" : /\b(gang|order|guild|clan|cult|company|group|faction|society)\b/i.test(m[2]) ? "group" : "person";
-    }
+    if (m) Object.assign(base, { name: m[1], via: "sentence", confidence: 0.55, kind: roleKind(m[2]) });
   }
   if (book) {
     base.weaver = { role: book.role };
@@ -286,9 +381,9 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
     if (book.role === "npc" && unlabelled) {
       // NPC book: the Weaver titles each entry with the person's name.
       Object.assign(base, { kind: "person", tense: "timeless", name: titleName || base.name, confidence: 0.9, via: "weaver" });
-    } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess" && isScene(e.comment || titleName, e.content ?? "", book.role)) {
+    } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess" && isScene(e.comment || titleName, content, book.role)) {
       // A scripted scene ("When Buffy learns…", "It happens in the kitchen…"): a playbook, not something that happened.
-      Object.assign(base, { kind: "playbook", tense: "future", subject: book.subject, confidence: 0.8, via: "weaver", name: (e.comment ?? titleName).trim(), aliases: [], keys: e.key ?? [], summary: clip((e.content ?? "").replace(/\s+/g, " ").trim(), 700) });
+      Object.assign(base, { kind: "playbook", tense: "future", subject: book.subject, confidence: 0.8, via: "weaver", name: (e.comment ?? titleName).trim(), aliases: [], keys: e.key ?? [], summary: clip(content.replace(/\s+/g, " ").trim(), 700) });
     } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess") {
       // Depth book: more about the card's character, or the persona's (history, bonds, secrets, daily texture).
       const past = /\b(history|past|childhood|upbringing|backstory|origins?|before|years ago|used to)\b/i.test(`${titleName} ${(e.key ?? []).join(" ")}`);
@@ -300,22 +395,28 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
       // Anything else goes to the review queue for the model classifier.
     }
   }
-  if (base.kind === "situation" && BELIEF.test(`${titleName} ${fs}`)) base.kind = "belief";
+  if (base.kind === "situation" && BELIEF.test(`${titleName} ${fs}`)) {
+    base.kind = "belief";
+    base.category = "belief";
+  }
 
-  const content = e.content ?? "";
   switch (base.kind) {
     case "person": {
-      const r = /\b(?:is|was)\s+(?:a|an|the)\s+(.+?)(?=\s+(?:who|that|in|of|with)\b|[,.;]|$)/i.exec(fs);
+      const r = /\b(?:is|was)\s+(?:(?:a|an|the)\s+|(?:[A-Z][\p{L}'’.-]+(?:\s+[A-Z][\p{L}'’.-]+){0,3})['’]s?\s+)(.+?)(?=\s+(?:who|that|in|of|with)\b|[,.;]|$)/iu.exec(fs);
       if (r) base.role = r[1].trim();
+      else if (t.descriptor && !base.role && personDescriptor(t.descriptor)) base.role = t.descriptor;
       // Eyes, hair and age the entry states for this person (not for someone it mentions).
       const looks = traitsFromText(content, [base.name, base.name.split(/\s+/)[0], ...base.aliases]);
       if (looks.length) base.looks = looks;
-      if (/\b(died|is dead|was killed|passed away)\b/i.test(fs)) base.dead = true;
+      if (/\b(died|is dead|was killed|passed away)\b/i.test(fs) || /^deceased\b/i.test(t.descriptor ?? "")) base.dead = true;
       break;
     }
     case "place": {
       const p = /\b(?:in|inside|within|part of|located in|beneath)\s+((?:the\s+)?[A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+){0,3})/u.exec(content);
-      if (p) base.parent = p[1].replace(/^the\s+/i, "");
+      if (base.parent) {
+        /* metadata named it */
+      } else if (p) base.parent = p[1].replace(/^the\s+/i, "");
+      else if (t.descriptor && t.left && base.name !== t.left && !categoryOfLabel(t.left)) base.parent = t.left;
       const h = /\bopen\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:to|–|-|until)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i.exec(content);
       if (h) base.hours = h[1];
       const routes = [...content.matchAll(/((?:\w+|\d+)\s+(?:minutes?|hours?)['’]?\s+(?:walk|ride|drive|sail)\s+from\s+(?:the\s+)?[A-Z][\p{L}'’ -]+)/gu)].map((x) => x[1].trim());
@@ -325,8 +426,13 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
       break;
     }
     case "object": {
-      const h = /\b(?:carried|held|owned|kept|worn|wielded)\s+by\s+([A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+)?)/u.exec(fs) || /\b([A-Z][\p{L}'’-]+)(?:'s|’s)\b/u.exec(fs);
-      if (h) base.holder = h[1];
+      // "Faith's Draconian Katra": the title names whose it is.
+      const owns = /^([A-Z][\p{L}'’.-]+(?:\s+[A-Z][\p{L}'’.-]+)?)['’]s\s/u.exec(e.comment ?? "")?.[1];
+      if (!base.holder && owns && base.via !== "metadata") base.holder = owns;
+      if (!base.holder) {
+        const h = /\b(?:carried|held|owned|kept|worn|wielded)\s+by\s+([A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+)?)/u.exec(fs) || /\b([A-Z][\p{L}'’-]+)(?:'s|’s)\b/u.exec(fs);
+        if (h) base.holder = h[1];
+      }
       break;
     }
     case "group": {
@@ -336,12 +442,22 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
       }
       break;
     }
+    case "bond": {
+      if (!base.participants?.length) base.participants = pairNames(base.name) ?? namesIn(base.name).slice(0, 2);
+      break;
+    }
+    case "playbook": {
+      // A "Scene:" entry from any book: how someone acts if the story gets there. Recalled by its own words.
+      const who = base.subject ?? base.participants?.[0] ?? namesIn(titleName.replace(/^(?:when|if|once|after|the first time|the moment)\s+/i, "").split(/\s+/).slice(0, 2).join(" "))[0];
+      Object.assign(base, { subject: who, aliases: [], keys: e.key ?? [], name: base.via === "metadata" ? base.name : titleName, summary: clip(content.replace(/\s+/g, " ").trim(), 700) });
+      break;
+    }
     case "situation":
     case "forecast":
     case "belief": {
       if (!base.participants) {
-        const before = /^(.+?)\s+(?:is|are|was|were|flee|fleeing|plan|plans|believe|believes|think|thinks|attack|attacks|search|searches|will)\b/i.exec(titleName)?.[1];
-        if (before) base.participants = before.split(/\s*(?:,|\band\b|&)\s*/).map((s) => s.trim()).filter((s) => /^[A-Z]/.test(s));
+        const before = /^(.+?)\s+(?:is|are|was|were|flee|fleeing|plan|plans|believe|believes|think|thinks|attack|attacks|search|searches|will|do not know|does not know|don't know|doesn't know)\b/i.exec(titleName)?.[1];
+        if (before) base.participants = namesIn(before);
       }
       if (!base.visibility) base.visibility = PUBLIC.test(`${titleName} ${content}`) ? "public" : "private";
       if (!base.expected) base.expected = [...content.matchAll(/[^.]*\b(will|is about to|is going to|plans to|are about to|are going to)\b[^.]*\./gi)].map((x) => x[0].trim()).slice(0, 3);
@@ -349,7 +465,11 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
       break;
     }
     case "texture": {
-      if (SECRET.test(content)) {
+      if (base.category === "voice") {
+        // How someone talks: it goes on their card as their voice.
+        base.subject ??= base.participants?.[0] ?? base.name;
+        base.voice = clip(content.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim(), 240);
+      } else if (base.category === "secret" || SECRET.test(content)) {
         const sign = SIGN.exec(content.replace(firstSentence(content), ""))?.[0]?.trim();
         base.secret = { fact: firstSentence(content), sign };
       }
@@ -358,6 +478,150 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
   }
   if (!base.name) base.name = e.id;
   return base;
+}
+
+/** A descriptor that reads as a role ("The Slayer", "Castellan"), not a trait or a status ("Age Eight", "Deceased"). */
+function personDescriptor(d: string): boolean {
+  if (BARE_DESCRIPTOR.test(d) || VOICE_DESCRIPTOR.test(d)) return false;
+  if (/^(?:age|aged|deceased|dead|status|appearance|personality|backstory|history|past|secrets?|years?|fire|immunity|conflict)\b/i.test(d)) return false;
+  return /^(?:the\s+)?[A-Z][\p{L}'’-]*(?:\s+(?:of|the|and|&|[A-Z][\p{L}'’-]*)){0,5}$/u.test(d);
+}
+
+/**
+ * An entry with no metadata and no known label, read from what free-form books do: a tag the
+ * content opens with, the title's shape (a pair of names, a voice, "What X Knows", a date, a rank),
+ * the first sentence, then weaker hints. Each sets a category only when it is fairly sure.
+ */
+function readUnlabelled(e: LoreEntry, t: TitleParts, fs: string, base: Classified, as: (cat: LoreCategory | undefined, via: Classified["via"], confidence: number, extra?: Partial<Classified>) => void) {
+  const title = (e.comment ?? "").trim();
+  const left = t.left ?? title;
+  const d = t.descriptor;
+  const bare = d && BARE_DESCRIPTOR.test(d);
+  const content = e.content ?? "";
+  const pos1 = (e as any).position === 1;
+  // Non-person names keep their descriptor, so "Harrenhal - The Five Towers" is no second "Harrenhal".
+  const thingName = d && !bare ? cutName(`${left}: ${d}`, 12) : t.name;
+
+  // 1. A tag the content opens with ("RULE:", "MYTHOLOGY:", "STORY ARC:", "AI DIRECTIVE:").
+  const tag = contentTag(content);
+  if (tag) {
+    as(tag, "tag", 0.8, { name: tag.kind === "person" ? t.name : thingName });
+    return;
+  }
+  // 2. A dated title: "109 AC - Daemon Begins …" is an event; "The Wildfire Nameday - 5 Third Moon 281 AC" too.
+  if (d && DATED.test(left)) {
+    as(category("history"), "shape", 0.7, { name: cutName(d, 12) });
+    return;
+  }
+  if (d && DATED.test(d) && (EVENT_NOUN.test(left) || TITLE_VERB.test(left))) {
+    as(category("history"), "shape", 0.7, { name: t.name });
+    return;
+  }
+  // 3. Who knows what: "What Rhaenyra Does Not Know", "What the Realm Believes".
+  const knows = /^what\s+(.+?)\s+(knows?|believes?|thinks?|suspects?|does(?:n['’]t| not) know|do(?:n['’]t| not) know|remembers?)$/i.exec(title);
+  if (knows) {
+    const who = namesIn(knows[1]);
+    as(category("belief"), "shape", 0.7, { name: title, participants: who.length ? who : undefined, ...(/\b(realm|town|city|court|public|everyone|people|world)\b/i.test(knows[1]) ? { visibility: "public" } : {}) });
+    return;
+  }
+  // 4. Two people: "Buffy & Spike - Truce", "Viserys and Rhaegel" (on its own, kept with the characters).
+  // Not two places or groups ("Red Keep & Court"), not an event ("Kendra Dies & Acathla Opens").
+  const pair = pairNames(left);
+  const thingWord = (s: string) => [GROUP_HINT, PLACE_HINT, OBJECT_HINT].some((re) => re.test(s.split(/\s+/).pop() ?? ""));
+  if (pair && (d || pos1) && !EVENT_NOUN.test(left) && !TITLE_VERB.test(left) && !thingWord(pair[0]) && !thingWord(pair[1])) {
+    as(category("relationship"), "shape", 0.75, { name: `${pair[0]} & ${pair[1]}`, participants: pair });
+    return;
+  }
+  // 5. How someone talks: "Rhaenyra - Speech and Manner".
+  if (d && VOICE_DESCRIPTOR.test(d)) {
+    as(category("voice"), "shape", 0.8, { name: t.name, participants: [t.name] });
+    return;
+  }
+  // 6. Events: a title that tells something happening ("Faith Kills Allan Finch").
+  if (!pos1 && TITLE_VERB.test(title) && !IS_ROLE.test(fs)) {
+    as(category("history"), "shape", 0.6, { name: t.name === left && d ? thingName : t.name });
+    return;
+  }
+  // 7. A group by its form: "House Velaryon", "Order of Dagon", "Knights of Byzantium".
+  if (/^(?:House|Clan|Order|Knights|Brotherhood|Sisterhood|Church|Cult|Company|Band|Guild)\s+(?:of\s+(?:the\s+)?)?\p{Lu}/u.test(left)) {
+    as(category("faction"), "shape", 0.7, { name: thingName });
+    return;
+  }
+  // 8. A person by rank ("Ser Criston Cole", "Princess Elia Martell"), unless the first sentence says it's a thing.
+  const role = IS_ROLE.exec(fs);
+  const roleK = role ? roleKind(role[2]) : null;
+  if (HONORIFIC.test(left) && !/['’]s\s/.test(left) && !EVENT_NOUN.test(left) && (!roleK || roleK === "person")) {
+    const plain = left.replace(/^(?:grand\s+)?\S+\.?\s+(?=\p{Lu})/iu, "");
+    as(category("character"), "shape", 0.75, { name: plain.split(/\s+/).length >= 2 ? plain : left, aliases: [...new Set([...base.aliases, left])].filter((a) => a !== plain) });
+    return;
+  }
+  // 9. A name whose content opens with that person (their name, maybe after a rank, then a verb or an
+  // aside: "Daniel 'Oz' Osbourne is …", "Lord Lyonel Strong, Hand of the King …", "Elia Martell — Twenty-two"),
+  // not with something of theirs ("Rhaenyra's anger …").
+  const c0 = content.trimStart().replace(/^(?:grand\s+)?(\p{L}+)\.?\s+(?=\p{Lu})/iu, (m, w) => (isRankWord(w) ? "" : m));
+  const nameLed = (n: string) => {
+    const words = n.split(/\s+/);
+    if (words.length < 2 || !c0.startsWith(words[0]) || /^\S+['’]s\b/.test(c0)) return false;
+    if (c0.startsWith(n) && /^(?:[\s,]+(?:\p{Ll}|\()|\s*[—–:-]\s)/u.test(c0.slice(n.length))) return true;
+    return /^[^.!?]{0,40}?\s(?:is|was|has|had|serves|served|rules|ruled|remains|grew|became|endured)\b|^[^,.!?]{2,40},/.test(c0);
+  };
+  const named = /^\p{Lu}[\p{L}'’.-]+(?:\s+\p{Lu}[\p{L}'’.-]+){1,3}$/u.test(left) && !/^The\s/.test(left);
+  const hinted = thingWord(left);
+  // A descriptor that names a role ("Hand of the King", "Captain of the Household Guard", "Dragon of Prince Rhaegel").
+  const roleDescriptor = d && !bare && [d.replace(/^the\s+/i, "").split(/\s+/)[0], d.split(/\s+/).pop() ?? ""].some((w) => PERSON_NOUN.test(w.replace(/['’]s$/, "")) || /^(?:hand|master|mistress|keeper|warden|lord|lady)$/i.test(w));
+  if ((d ? !bare : named) && /^\p{Lu}/u.test(left) && (pos1 || !hinted) && (!roleK || roleK === "person") && (nameLed(left) || (role && role[1] === left) || (d && roleDescriptor && !hinted))) {
+    as(category("character"), "shape", 0.7, { name: left });
+    return;
+  }
+  // 10. The first sentence: "X is a/an/the …", "X is Sunnydale's …", "X, called Glory, was an …".
+  // A title that names a thing ("Order of Taraka") outranks a first sentence read as a person.
+  const titleHint = ([[GROUP_HINT, "group"], [OBJECT_HINT, "object"], [PLACE_HINT, "place"]] as [RegExp, CodexKind][]).find(([re]) => re.test(left))?.[1];
+  if (role && !/^the$/i.test(role[1])) {
+    const subject = d && role[1].endsWith(left) ? left : role[1];
+    const kind = roleK === "person" && titleHint ? titleHint : roleK!;
+    const cat = kind === "person" ? category("character") : kind === "place" ? category("location") : kind === "object" ? category("item") : kind === "group" ? category("faction") : category("rule");
+    // A person is named for themselves; a place or thing keeps the title's own words.
+    as(cat, "sentence", 0.6, { name: kind === "person" ? subject : t.name || subject });
+    return;
+  }
+  // An aside that says what it is: "Harrenhal broods over the Gods Eye, the largest castle in …".
+  const aside = content.trimStart().startsWith(left) ? /^[^,.;]{0,90},\s+(?:the|a|an)\s+([^,.;]+)/.exec(fs)?.[1] : undefined;
+  const asideK = aside ? roleKind(aside) : null;
+  if (asideK && asideK !== "person") {
+    const cat = asideK === "place" ? category("location") : asideK === "object" ? category("item") : asideK === "group" ? category("faction") : category("rule");
+    as(cat, "sentence", 0.55, { name: t.name });
+    return;
+  }
+  // 11. Strong nouns in the title: a guild, a sword, a tavern.
+  const strong: [RegExp, string][] = [[GROUP_HINT, "faction"], [OBJECT_HINT, "item"], [PLACE_HINT, "location"]];
+  // The head noun (the title's last word) decides first: "Spike's Initiative Chip" is a chip.
+  const lastWord = (left.split(/\s+/).pop() ?? "").replace(/['’]s$/, "");
+  const hit = strong.find(([re]) => re.test(lastWord)) ?? strong.find(([re]) => re.test(left) || (d ? re.test(d) && !bare : false));
+  if (hit) {
+    as(category(hit[1]), "hint", 0.55, { name: thingName });
+    return;
+  }
+  // 12. A past-tense entry is history ("Five months passed after Buffy's sacrifice").
+  if (!pos1 && isPast(fs)) {
+    as(category("history"), "hint", 0.55, { name: thingName });
+    return;
+  }
+  // 13. Weaker words: rules, customs, history; then an event's name ("Buffy's Second Death").
+  const weak: [RegExp, string][] = [[HISTORY_HINT, "history"], [LAW_HINT, "rule"], [TEXTURE_HINT, "customs"]];
+  const w = weak.find(([re]) => re.test(title));
+  if (w) {
+    as(category(w[1]), "hint", 0.5, { name: thingName });
+    return;
+  }
+  if (!pos1 && EVENT_NOUN.test(left)) {
+    as(category("history"), "hint", 0.5, { name: thingName });
+    return;
+  }
+  // 14. "Rhaenyra's Denial", "Daemon's Whisper Campaign": more about that person (not "King's Landing").
+  const owner = /^([A-Z][\p{L}'’.-]+(?:\s+[A-Z][\p{L}'’.-]+){0,2})['’]s\s+\S/u.exec(left)?.[1] ?? (d && /^[A-Z][\p{L}'’.-]+$/u.test(left) ? left : undefined);
+  if (owner && !isRankWord(owner)) {
+    Object.assign(base, { subject: owner, name: thingName, confidence: 0.5, via: "hint" as const, category: "customs" });
+  }
 }
 
 // How a scripted scene opens: a trigger ("When…", "If…", "The first time…", "It happens…").
@@ -396,7 +660,7 @@ export function playbookPlayed(pb: { name: string; keys: string[] }, chapter: st
 }
 
 const KIND_PREFIX: Partial<Record<CodexKind, string>> = {
-  person: "char:", place: "loc:", object: "item:", group: "fac:", thread: "thread:", playbook: "play:",
+  person: "char:", place: "loc:", object: "item:", group: "fac:", thread: "thread:", playbook: "play:", bond: "bond:",
 };
 
 /** Turn classified lore into Codex overlays (baseline records, "true as the story begins"). */
@@ -419,6 +683,16 @@ export function seedOverlays(items: Classified[], opts: { userName?: string } = 
       return a.kind === "person" && ct[0] === at[0] && ct.every((w) => at.includes(w));
     });
     if (t) anchorInto.set(a, t);
+  }
+  // A voice entry ("Rhaenyra - Speech and Manner") is that person's voice, on their own card, when
+  // a book has them (by name, alias, or first name: "Rhaenyra" for "Rhaenyra Targaryen").
+  for (const v of items) {
+    if (v.category !== "voice" || !v.voice || !v.subject) continue;
+    const sn = low(v.subject);
+    const t = items.find((c) => c.kind === "person" && c !== v && ([c.name, ...c.aliases].some((n) => low(n) === sn) || low(c.name).split(/\s+/)[0] === sn.split(/\s+/)[0]));
+    if (!t) continue;
+    if (!t.voice) t.voice = v.voice;
+    anchorInto.set(v, t);
   }
   items = items.filter((c) => !anchorInto.has(c));
   const anchorsOf = (c: Classified) => [...anchorInto].filter(([, t]) => t === c).map(([a]) => a);

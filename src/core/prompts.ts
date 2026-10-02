@@ -123,7 +123,7 @@ ${opts.userName} belongs to the player: plan the world's response, never ${opts.
 export function classifierPrompt(entries: { id: string; title: string; content: string }[]): { system: string; user: string } {
   return {
     system: `You classify lorebook entries for a story engine. ${SAFETY_DATA}
-For each entry return {"id","kind","tense","name","participants"?,"members"?,"place"?,"holder"?,"visibility"?}. kind ∈ situation, belief, person, group, place, law, history, object, texture, boundary, meta, forecast. tense ∈ now, past, future, timeless. Future events are "forecast". JSON array only.`,
+For each entry return {"id","kind","tense","name","participants"?,"members"?,"place"?,"holder"?,"visibility"?}. kind ∈ situation, belief, person, bond, group, place, law, history, object, texture, boundary, meta, forecast. tense ∈ now, past, future, timeless. Future events are "forecast"; what lies between two people is "bond" (participants: both names); instructions to the model are "meta". JSON array only.`,
     user: `<source>\n${entries.map((e) => `[${e.id}] ${e.title}\n${e.content.slice(0, 600)}`).join("\n\n")}\n</source>`,
   };
 }

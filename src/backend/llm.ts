@@ -45,3 +45,6 @@ export function sys(content: string): LlmMessageDTO {
 export function usr(content: string): LlmMessageDTO {
   return { role: "user", content };
 }
+export function asst(content: string): LlmMessageDTO {
+  return { role: "assistant", content };
+}

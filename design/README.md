@@ -5,7 +5,7 @@
 The set has two parts that work together:
 
 - **ALMANAC** (preset): a living-world roleplay preset. Deep character states, autonomous NPCs and NPC↔NPC relationships, world simulation, a knowledge firewall, genre contracts, a step-by-step Director's Pass that works with or without provider reasoning, five-layer anti-slop, player agency, an adults-only NSFW enhancer, and a full visual system (dialogue blocks, weather-reactive scene plates, VTKs, trackers).
-- **ALMANAC Ledger** (extension): event-sourced story memory. It combines LumiBooks-style summarise-and-hide chapters and Codex with Lore Recall-style reasoning retrieval. Tracker keys become real retrieval keys. It seeds from attached lorebooks, includes a built-in VELLUM III-compatible lorebook creator, and computes weather, calendar and astronomy.
+- **ALMANAC Ledger** (extension): event-sourced story memory. It combines LumiBooks-style summarise-and-hide chapters and Codex with Lore Recall-style reasoning retrieval. Tracker keys become real retrieval keys. It seeds from attached lorebooks, includes a lorebook creator you talk a book through with, and computes weather, calendar and astronomy.
 
 ```
             ┌──────────── ALMANAC preset ────────────┐        ┌──────────── ALMANAC Ledger ────────────┐
@@ -32,6 +32,7 @@ The set has two parts that work together:
 | 07 | [Knowledge](07-knowledge.md) | Who has what information and how it reached them: facts, witnesses, secrets, gaps, the knowledge clerk, and what the model is told |
 | 08 | [Release audit](08-release-audit.md) | The 1.12.4 audit: findings by severity, and what 1.13.0 fixed |
 | 09 | [Elsewhere](09-elsewhere.md) | The world off the page (built in 1.14): the whole cast as a roster, subplot arcs, a seeded storyteller with dice, an MKAMT gate, news that travels person to person, one validated telling call, and the routes by which it reaches the scene. Replaces the off-screen simulator |
+| 10 | [Lorebook format and Creator](10-lorebook-format.md) | ALMANAC's own lorebook format (16 categories, metadata, tiers), read from an analysis of the players' books; the reader for free-form books; the Creator as a conversation (ask, propose, revise, write, save) |
 | — | [Visual mockup](mockups/almanac-visuals.html) | Static HTML with a skin switcher (6 themes) and light/dark toggle: animated scene plates for five genres, voice cards and ten tones, sealed-envelope thoughts, call-sheet Director's notes, trading-card trackers, HUD strip, VTKs, relationship graph. Open it in a browser |
 
 ---
@@ -91,4 +92,4 @@ The set has two parts that work together:
 - [`AMousePad/LumiBooks`](https://github.com/AMousePad/LumiBooks): chapter/arc/volume coverage and splice injection, Codex schema and archivist prompts.
 - [`archkr/Lumiverse-LoreRecall`](https://github.com/archkr/Lumiverse-LoreRecall): tree retrieval, controller modes, scoring and feedback.
 - [`valdoix/vellum-engine`](https://github.com/valdoix/vellum-engine): VELLUM II event-log engine, model errata, colored-dialogue CSS-injection plan (`testing` branch).
-- `lorebook_creator_prompt_vellum3.md` (uploaded): VELLUM III reading conventions, templates, QA checklist.
+- An uploaded lorebook-creator prompt (reading conventions, templates, QA checklist), superseded by [10](10-lorebook-format.md).

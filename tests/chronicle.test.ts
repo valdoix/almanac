@@ -145,11 +145,12 @@ describe("creator", () => {
   test("validator auto-fixes and re-asks", () => {
     const e = normalizeEntry({ comment: "Character: Mara Voss - Smuggler", content: "{{char}} knows her.", key: ["Mara", "sword"], priority: 10, order: 99, selective: true, vectorized: true }, 0);
     const v = validateEntry(e);
-    expect(v.entry.priority).toBe(100);
-    expect(v.entry.order).toBe(100);
+    // Priority 10 (Lumiverse's import default) takes the category's tier.
+    expect(v.entry.priority).toBe(200);
+    expect(v.entry.order).toBe(200);
     expect(v.entry.selective).toBe(false);
-    expect(v.entry.vectorized).toBe(false);
-    expect(v.entry.extensions.vellum3).toMatchObject({ kind: "person", tense: "timeless" });
+    expect(v.entry.extensions.almanac.lore).toMatchObject({ category: "character", kind: "person", tense: "timeless" });
+    expect(v.entry.extensions.vellum3).toBeUndefined();
     expect(v.reask.join(" | ")).toMatch(/second separator/);
     expect(v.reask.join(" | ")).toMatch(/\{\{char\}\}/);
     expect(v.reask.join(" | ")).toMatch(/generic keywords: sword/);

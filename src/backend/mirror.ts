@@ -19,7 +19,7 @@ import { isEnabled } from "./turn";
 const LABEL: Record<string, string> = {
   person: "Character", place: "Location", object: "Item", group: "Faction", thread: "CURRENT", document: "Document",
   consequence: "CURRENT", fact: "Belief", texture: "Customs", clue: "Clue", forecast: "Upcoming", law: "Rule", history: "History",
-  situation: "CURRENT", boundary: "Timeline Boundary", belief: "Belief",
+  situation: "CURRENT", boundary: "Timeline Boundary", belief: "Belief", bond: "Relationship", playbook: "Scene",
 };
 
 function titleFor(r: CodexRecord): string {

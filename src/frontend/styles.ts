@@ -519,4 +519,77 @@ export const PANEL_CSS = `
 .almo-dial.spin::after{animation:almo-orbit 3s linear infinite}
 @keyframes almo-orbit{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.almo-moonb,.almo-dial.spin::after{animation:none}.almo.orbiting .almo-body,.almo.orbiting .almo-sky{transition:none}}
+/* Library › Creator: a conversation */
+.almp .almcr-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.almp .almcr-head>.grow{flex:1 1 16em;min-width:0}
+.almp .almcr .row .grow,.almp .almcr-hist .row .grow{flex:1 1 auto;min-width:0}
+.almp .almcr-head b{font:600 15px/1.2 var(--alm-font-display)}
+.almp .almcr-model{display:flex;gap:6px;align-items:center;font:500 11px/1 var(--alm-font-mono);color:var(--alm-muted)}
+.almp .almcr-model select{width:auto;max-width:220px}
+.almp .almcr-hist{display:grid;gap:6px;max-height:240px;overflow:auto}
+.almp .almcr-hist .btn.grow{justify-content:flex-start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.almp .almcr{display:flex;flex-direction:column;gap:8px}
+.almp .almcr-log{display:flex;flex-direction:column;gap:10px;max-height:min(64vh,720px);min-height:220px;overflow:auto;padding:4px 2px 8px;overscroll-behavior:contain;scrollbar-color:var(--alm-line) transparent;scrollbar-width:thin}
+.almp .almcr-msg{display:flex;flex-direction:column;max-width:100%}
+.almp .almcr-msg.user{align-items:flex-end}
+.almp .almcr-who{font:600 10px/1 var(--alm-font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--alm-accent);margin:0 0 4px 2px}
+.almp .almcr-bubble{min-width:0;max-width:100%;overflow-wrap:anywhere;padding:10px 12px;border-radius:14px;background:var(--alm-panel);border:1px solid var(--alm-line);font-size:13.5px;line-height:1.5}
+.almp .almcr-bubble p{margin:0 0 6px}.almp .almcr-bubble p:last-child{margin-bottom:0}
+.almp .almcr-msg.user .almcr-bubble{max-width:85%;background:color-mix(in oklab,var(--alm-accent) 14%,var(--alm-panel));border-color:color-mix(in oklab,var(--alm-accent) 35%,var(--alm-line));border-bottom-right-radius:4px}
+.almp .almcr-msg.almanac .almcr-bubble{border-top-left-radius:4px}
+.almp .almcr-msg.error .almcr-bubble{border-color:color-mix(in oklab,var(--alm-danger) 45%,var(--alm-line));background:color-mix(in oklab,var(--alm-danger) 7%,var(--alm-panel))}
+.almp .almcr-dots{display:inline-flex;gap:3px;vertical-align:middle;margin-right:4px}
+.almp .almcr-dots i{width:5px;height:5px;border-radius:50%;background:var(--alm-accent);animation:almcr-blink 1.2s infinite both}
+.almp .almcr-dots i:nth-child(2){animation-delay:.2s}.almp .almcr-dots i:nth-child(3){animation-delay:.4s}
+@keyframes almcr-blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.almp .almcr-opts{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.almp .almcr-opts .pill{cursor:pointer;color:var(--alm-ink)}
+.almp .almcr-opts .pill:hover{border-color:var(--alm-accent)}
+.almp .almcr-tasks{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px;margin-top:10px}
+.almp .almcr-task,.almp .almcr-book{all:unset;cursor:pointer;display:grid;gap:3px;padding:9px 11px;border-radius:10px;background:var(--alm-panel-2);border:1px solid var(--alm-line);font-size:13px}
+.almp .almcr-task b{font:600 13px/1.25 var(--alm-font-display)}
+.almp .almcr-task small{color:var(--alm-muted);font-size:11.5px;line-height:1.35}
+.almp .almcr-task:hover,.almp .almcr-book:hover,.almp .almcr-task:focus-visible,.almp .almcr-book:focus-visible{border-color:var(--alm-accent)}
+.almp .almcr-books{display:grid;gap:6px;margin-top:10px}
+.almp .almcr-booklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:5px;max-height:260px;overflow:auto;margin-top:4px}
+.almp .almcr-book{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.almp .almcr-plan,.almp .almcr-draft,.almp .almcr-report{margin-top:10px;padding:10px;border-radius:12px;background:var(--alm-panel-2);border:1px solid var(--alm-line);display:grid;gap:8px}
+.almp .almcr-planhead{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.almp .almcr-planhead b{font:600 14px/1.2 var(--alm-font-display)}
+.almp .almcr-planopts,.almp .almcr-filter{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.almp .almcr-filter .pill{cursor:pointer}
+.almp .almcr-items{display:grid;gap:5px}
+.almp .almcr-item{padding:7px 8px;border-radius:9px;background:var(--alm-panel);border:1px solid var(--alm-line);display:grid;gap:3px;min-width:0}
+.almp .almcr-item .row{flex-wrap:nowrap}
+.almp .almcr-item .row select{width:auto;flex:none;max-width:150px;padding:4px 6px;font-size:12.5px}
+.almp .almcr-item .row input[type=text]{min-width:0;padding:5px 8px;font-size:13px}
+.almp .almcr-item .row .btn{flex:none;padding:4px 8px}
+.almp .almcr-item .pill.op{flex:none;min-width:58px;justify-content:center}
+.almp .almcr-item.op-create .pill.op{color:var(--alm-good);border-color:color-mix(in oklab,var(--alm-good) 40%,var(--alm-line))}
+.almp .almcr-item.op-retire .pill.op{color:var(--alm-danger)}
+.almp .almcr-item.op-keep{opacity:.72}
+.almp .almcr-item.fresh{border-color:var(--alm-accent);box-shadow:inset 3px 0 0 var(--alm-accent)}
+.almp .almcr-item.dropped{opacity:.6}
+.almp .almcr-item .pill.warn,.almp .almcr-entry .pill.warn{color:var(--alm-warn);border-color:color-mix(in oklab,var(--alm-warn) 45%,var(--alm-line))}
+.almp .almcr-about{color:var(--alm-ink);opacity:.86}
+.almp .almcr-planbtns{position:sticky;bottom:0;padding-top:6px;background:linear-gradient(transparent,var(--alm-panel-2) 30%)}
+.almp .almcr-old{margin-top:6px}
+.almp .almcr-entries{display:grid;gap:5px}
+.almp .almcr-entry{padding:7px 9px;border-radius:9px;background:var(--alm-panel);border:1px solid var(--alm-line)}
+.almp .almcr-entry summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.almp .almcr-entry summary b{flex:1 1 14em;min-width:0;overflow-wrap:anywhere}
+.almp .almcr-entry.flagged{border-color:color-mix(in oklab,var(--alm-warn) 45%,var(--alm-line))}
+.almp .almcr-entry.retired summary b{text-decoration:line-through;opacity:.7}
+.almp .almcr-entry textarea{min-height:110px;margin:6px 0}
+.almp .almcr-save{border-top:1px dashed var(--alm-line);padding-top:6px;display:grid;gap:6px}
+.almp .almcr-save h4{margin:4px 0}
+.almp .almcr-save select{width:auto}
+.almp .almcr-compose{display:grid;gap:6px;padding:8px;border-radius:14px;background:var(--alm-panel);border:1px solid var(--alm-line);box-shadow:var(--alm-lift)}
+.almp .almcr-compose textarea{min-height:58px;max-height:30vh}
+.almp .almcr-sources{display:flex;flex-wrap:wrap;gap:4px}
+.almp .almcr-sources .pill{max-width:100%}
+.almp .almcr-x{all:unset;cursor:pointer;margin-left:4px;color:var(--alm-muted)}
+.almp .almcr-x:hover{color:var(--alm-danger)}
+@media (max-width:560px){.almp .almcr-item .row{flex-wrap:wrap}.almp .almcr-item .row select{max-width:none}.almp .almcr-msg.user .almcr-bubble{max-width:100%}}
+@media (prefers-reduced-motion:reduce){.almp .almcr-dots i{animation:none;opacity:.7}}
 `;

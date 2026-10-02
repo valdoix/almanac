@@ -4,6 +4,23 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.17.0 (2026-10-02)
+
+**The Lorebook Creator is a conversation.** Library › Creator is now a chat with the model. The Almanac asks what you'd like to make (a new lorebook, an update to one you have, an existing book made Almanac-compatible, this story saved as a lorebook, or a check of how a book reads), proposes a plan, revises it with you until you accept, then writes the entries and saves them where you say.
+- **The plan** lists every entry it would create, rewrite, convert or switch off, with its category and final title. Change titles and categories on it, remove items, or ask in words ("add the Trio", "keep my titles", "fewer places"). Each revision is a new version, with what changed highlighted and what was removed listed.
+- **Sources:** paste notes or lore (long text is kept as a source), or add the chat's character card and your persona.
+- **Writing** checks every entry against the format and sends back once what the model must fix. Review shows tokens, recursion links and an activation check; any entry can be edited, rewritten with a note, or removed. Accepting a changed plan again rewrites only what changed.
+- **Saving:** into the book or as a new one (a converted or updated copy carries the rest of the book). Updates keep each entry's own settings, retired entries are switched off rather than deleted, only fields that changed are sent, and the page asks before writing into a book you already have.
+- **Its own connection:** a selector on the page (and Settings › Lore bridge); empty uses the summariser's.
+- Conversations are kept in your extension storage (the last twelve) and survive reloads; a failed model call shows in the conversation with **Try again**.
+
+**Making a book Almanac-compatible** reads every entry and shows what each becomes before anything changes: a category label in its title (or your own title, kept), metadata naming exactly what it is, and a real tier for entries at priority 10, Lumiverse's import default (the book's own `order` is used when it holds a tier). Contents stay as they are, except an *Upcoming* entry told as fact, whose first sentence is rewritten. Every converted entry reads back exactly as before, so chats that use the book keep their Codex records (checked on four real books, 426 entries).
+
+**The Almanac lorebook format** ([design/10](design/10-lorebook-format.md)) replaces the conventions the Creator and the Lore Bridge used to follow, which came from a project ALMANAC isn't part of. Sixteen categories, each with a label, tier, position and opening: the old ones, plus **Relationship** (a Codex bond linked to both people), **Voice** (joins the person's card as their voice), **Belief**, **Secret** (kept off the page) and **Scene** (a playbook from any book: kept from keyword activation, sent as "not history" only when a turn comes close). Metadata is `extensions.almanac.lore`; metadata other tools wrote is still read, and never removed.
+
+**Free-form lorebooks are read properly.** Analysed on the twelve books in the user's Lumiverse, the reader guessed at 475 of 624 free-form entries; now 10. It reads content tags (`RULE:`, `MYTHOLOGY:`, `STORY ARC:`, `THEME:`, `AI DIRECTIVE:`, `CUTOFF EVENT:`), `Name - Role` (Buffy Summers was read as a custom called "The Slayer"), ranks (`Ser Criston Cole`, `Princess Elia Martell`), `A & B - …` relationships, `Name - Speech and Manner`, `What X Knows`, dated titles (`109 AC - …`, `… - 5 Third Moon 281 AC`), titles that tell an event (`Faith Kills Allan Finch`), `House X` and `Order of X`, possessives (`Spike's Crypt`, `Olaf's Hammer`), and first sentences by their head noun ("a senior Watchers Council *authority*" is a person). Only known labels are labels; "Mr." no longer ends a first sentence.
+- **The check of a book** now reports how the Almanac reads it (exactly, by shape, or unsure) besides what Lumiverse will do with it, including entries left at priority 10.
+
 ## 1.16.4 (2026-10-02)
 
 **Edit a character's aliases and "always" line.** The Cast editor has **Also called** (aliases, separated by `;`; one you take away stays away) and **Always** (the whole line sent every turn; empty it to go back to what the card, lore and story say).

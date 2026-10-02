@@ -62,7 +62,7 @@ How the totals are computed (rows 1–5 ×3, rows 6–12 ×1):
 | `<ledger>` deltas | The stored message text **and** `events.jsonl` | — | — |
 | State projections | Computed from `events.jsonl`, snapshots every 25 messages | Chat variables (`alm_*`) for the standalone fallback | — |
 | Chapters, arcs, volumes | `chronicle.json` (text, span, story time, coverage, signatures) | Mirror entries titled `History: Chapter 7 — …` | — |
-| Codex records | `codex.json` | Mirror entries (VELLUM III title + first sentence + body; keys; `extensions.almanac.codexId`) | — |
+| Codex records | `codex.json` | Mirror entries (format title + first sentence + body; keys; `extensions.almanac.codexId`) | — |
 | Key index | `keys.json` (compiled per chat) | The mirror entry's `key` field | — |
 | Settings | `userStorage` (global + per chat) | Preset Profile for per-chat variables | — |
 
@@ -87,7 +87,7 @@ Summarised turns are **hidden** (`setMessagesHidden`, which removes them from em
 
 ## 4. When a lorebook-first workflow is still right
 
-- **Sharing a world** with other players or cards: use **Codex → Lorebook export** (VELLUM III-compatible) at a milestone. The exported book is a clean, portable artifact.
+- **Sharing a world** with other players or cards: use **Codex → Lorebook export** (the Creator's *Save this story as a lorebook*, in the Almanac lorebook format) at a milestone. The exported book is a clean, portable artifact.
 - **Authoring a setting before play:** use the **Lorebook Creator**. The Lore Bridge then seeds the Codex from it.
 - **Community lore you don't want touched:** attach it read-only; the Ledger reads it and never writes to it.
 

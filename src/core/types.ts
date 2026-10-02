@@ -547,6 +547,8 @@ export interface Settings {
   /** Which summaries go in the prompt: the whole story every turn, or only the ones this turn touches. */
   chronicleInject: "all" | "relevant";
   summarizerConnection: string;
+  /** The Lorebook Creator's conversation and writing ("" = the summariser's connection). */
+  creatorConnection: string;
   /** How much the chronicle keeps: brief, standard, detailed or exhaustive. */
   summaryDetail: "brief" | "standard" | "detailed" | "exhaustive";
   /** Free text the summariser always keeps ("outfits", "Buffy's lies"). */
@@ -626,6 +628,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chronicle: true,
   chronicleInject: "all",
   summarizerConnection: "",
+  creatorConnection: "",
   summaryDetail: "detailed",
   summaryFocus: "",
   recallBudget: 2400,

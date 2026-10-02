@@ -42,6 +42,7 @@ const spindle: any = new Proxy({
     setJson: async (p: string, v: unknown, o: any) => (op(o?.userId), void files.set(p, JSON.stringify(v))),
     read: async (p: string, u?: string) => (op(u), files.get(p) ?? ""),
     write: async (p: string, t: string, u?: string) => (op(u), void files.set(p, t)),
+    delete: async (p: string, u?: string) => (op(u), void files.delete(p)),
   },
   chat: { getMessages: async () => messages, setMessagesHidden: async () => {} },
   chats: { get: async () => ({ id: CHAT, character_id: "char-1", metadata: {} }), getActive: async () => ({ id: CHAT }), update: async () => {} },
@@ -578,5 +579,260 @@ describe("Elsewhere against the host (1.14)", () => {
     expect(st2.arcs![beat!.arc].beats.find((b) => b.tick === beat!.tick && b.atAbs === beat!.atAbs)).toMatchObject({ told: "model", text: again });
     // Nothing else in the chat moved: one beat for that step, still.
     expect(st2.arcs![beat!.arc].beats.filter((b) => b.tick === beat!.tick && b.atAbs === beat!.atAbs).length).toBe(1);
+  });
+});
+
+describe("the Lorebook Creator, a conversation (1.17)", () => {
+  /** A world-book host: books and entries in memory, every update recorded. */
+  function fakeBooks(seed: Record<string, { name: string; metadata?: any; entries: any[] }> = {}) {
+    const books: Record<string, any> = {};
+    const entries: Record<string, any[]> = {};
+    const updates: { id: string; patch: any }[] = [];
+    let n = 0;
+    for (const [id, b] of Object.entries(seed)) {
+      books[id] = { id, name: b.name, metadata: b.metadata ?? {} };
+      entries[id] = b.entries.map((e) => ({ keysecondary: [], position: 0, depth: 4, disabled: false, constant: false, selective: false, match_whole_words: null, extensions: {}, world_book_id: id, ...e }));
+    }
+    const api = {
+      list: async () => ({ data: Object.values(books), total: Object.keys(books).length }),
+      get: async (id: string) => books[id] ?? null,
+      create: async (input: any) => {
+        const id = `book${++n}`;
+        books[id] = { id, ...input };
+        entries[id] = [];
+        return books[id];
+      },
+      getGlobal: async () => [],
+      activateGlobal: async () => {},
+      entries: {
+        list: async (id: string) => ({ data: entries[id] ?? [], total: (entries[id] ?? []).length }),
+        get: async (eid: string) => Object.values(entries).flat().find((e) => e.id === eid) ?? null,
+        create: async (bookId: string, input: any) => {
+          const e = { id: `new${++n}`, world_book_id: bookId, ...input };
+          entries[bookId].push(e);
+          return e;
+        },
+        update: async (eid: string, patch: any) => {
+          updates.push({ id: eid, patch });
+          const e = Object.values(entries).flat().find((x) => x.id === eid);
+          Object.assign(e, patch);
+          return e;
+        },
+      },
+    };
+    return { api, books, entries, updates };
+  }
+
+  async function talk(action: string, req: Record<string, unknown> = {}) {
+    const before = sent.length;
+    await hooks.frontend({ type: "creator", action, req, rid: 77, chatId: CHAT }, USER);
+    const out = sent.slice(before);
+    return { reply: out.filter((m) => m?.type === "creator" && m.rid === 77).pop(), session: out.filter((m) => m?.type === "creatorSession").pop()?.session };
+  }
+
+  test("a new book: the Almanac asks, proposes, revises, writes on acceptance and saves", async () => {
+    const saved = { world_books: spindle.world_books, generate: spindle.generate };
+    const wb = fakeBooks();
+    const replies = [
+      JSON.stringify({ say: "Here's a first plan for Sunnydale at the start of season six.", options: ["Add the Trio"], proposal: { bookName: "Sunnydale 2001", summary: "The canon point, Buffy, a hangout.", items: [
+        { category: "boundary", title: "Beginning of Season Six", about: "Buffy has just clawed out of her grave", constant: true },
+        { category: "character", title: "Buffy Summers", about: "the Slayer, resurrected, in shock" },
+        { category: "location", title: "The Bronze", about: "the club" },
+      ] } }),
+      `Sure. {"say":"Dropped the Bronze and added Spike.","revise":{"drop":["p3"],"add":[{"category":"character","title":"Spike","about":"chipped vampire who kept watch over Dawn"}]}}`,
+      JSON.stringify({ entries: [
+        { comment: "Timeline Boundary - Beginning of Season Six", content: "The story begins in Sunnydale in October 2001, the night Buffy claws out of her grave after 147 days dead.", key: ["Season Six", "resurrection"], constant: true, priority: 300, position: 4, depth: 4, extensions: { almanac: { lore: { category: "boundary", kind: "boundary", tense: "timeless" } } } },
+        { comment: "Character: Buffy Summers", content: "Buffy Summers is the Slayer, twenty, just pulled back from the dead. Hazel-green eyes, blonde hair.", key: ["Buffy", "Slayer", "night"], priority: 250, position: 1 },
+        { comment: "Character: Spike", content: "Spike is a chipped vampire who has kept watch over Dawn since Buffy died.", key: ["Spike", "William the Bloody"], priority: 200, position: 1 },
+      ] }),
+      JSON.stringify({ entries: [{ comment: "Character: Buffy Summers", content: "Buffy Summers is the Slayer, twenty, just pulled back from the dead. Hazel-green eyes, blonde hair.", key: ["Buffy", "Slayer", "Buffy Anne Summers"] }] }),
+    ];
+    const prompts: any[] = [];
+    spindle.world_books = wb.api;
+    spindle.generate = { quiet: async (req: any) => (prompts.push(req.messages), { content: replies.shift() ?? "" }) };
+    try {
+      let r = await talk("new");
+      expect(r.reply.session.messages[0]).toMatchObject({ role: "almanac", card: "tasks" });
+      r = await talk("task", { task: "new" });
+      expect(r.session.messages.at(-1).options).toContain("Use this chat's character card");
+      expect(prompts.length).toBe(0); // choosing a task asks no model
+
+      r = await talk("send", { text: "Sunnydale at the very start of season six, Buffy just resurrected." });
+      const sys0 = prompts[0][0].content as string;
+      expect(sys0).toContain("TASK: Create a new lorebook");
+      expect(sys0).not.toMatch(/vellum/i);
+      expect(prompts[0].at(-1).content).toMatch(/JSON object only/);
+      expect(r.session.proposal).toMatchObject({ version: 1, bookName: "Sunnydale 2001", target: "new" });
+      expect(r.session.proposal.items.map((i: any) => i.title)).toEqual(["Timeline Boundary - Beginning of Season Six", "Character: Buffy Summers", "Location: The Bronze"]);
+      expect(r.session.messages.at(-1)).toMatchObject({ card: "proposal", version: 1, options: ["Add the Trio"] });
+
+      r = await talk("send", { text: "Drop the Bronze and add Spike." });
+      // The model sees the plan it's revising.
+      expect(prompts[1][0].content).toContain("p3 create location: Location: The Bronze");
+      expect(r.session.proposal.version).toBe(2);
+      expect(r.session.proposal.items.map((i: any) => [i.id, i.title])).toEqual([["p1", "Timeline Boundary - Beginning of Season Six"], ["p2", "Character: Buffy Summers"], ["p4", "Character: Spike"]]);
+
+      r = await talk("accept");
+      expect(r.session.phase).toBe("review");
+      const d = r.session.draft;
+      expect(d.entries.map((e: any) => e.comment)).toEqual(["Timeline Boundary - Beginning of Season Six", "Character: Buffy Summers", "Character: Spike"]);
+      // "night" was a generic key: the model was asked once more, and fixed it.
+      expect(prompts[3][1].content).toMatch(/generic keywords: night/);
+      expect(Object.keys(d.issues)).toEqual([]);
+      expect(d.entries[2].extensions.almanac.lore).toMatchObject({ category: "character", kind: "person" });
+      expect(r.session.messages.at(-1)).toMatchObject({ card: "result" });
+
+      r = await talk("save", { save: { target: "new", name: "Sunnydale 2001", attach: "none", bridge: false } });
+      expect(r.session.phase).toBe("saved");
+      const [book] = Object.values(wb.books);
+      expect(book).toMatchObject({ name: "Sunnydale 2001", metadata: { almanac_creator: "2.0.0" } });
+      expect(wb.entries[book.id].map((e) => [e.comment, e.priority, e.order_value])).toEqual([["Timeline Boundary - Beginning of Season Six", 300, 300], ["Character: Buffy Summers", 250, 250], ["Character: Spike", 200, 200]]);
+      // The conversation is kept in the player's storage.
+      expect(JSON.parse(files.get("creator/index.json")!).list[0]).toMatchObject({ id: r.session.id, title: "Sunnydale 2001" });
+      expect(JSON.parse(files.get(`creator/${r.session.id}.json`)!).phase).toBe("saved");
+    } finally {
+      Object.assign(spindle, saved);
+    }
+  });
+
+  test("an existing book made Almanac-compatible: read, adjusted in words, written in place with only what changed", async () => {
+    const saved = { world_books: spindle.world_books, generate: spindle.generate };
+    const wb = fakeBooks({
+      btvs: { name: "BTVS", entries: [
+        { id: "b1", comment: "Buffy Summers - The Slayer", content: "Buffy Summers is Sunnydale's Slayer: witty and stubborn.", key: ["Buffy"], priority: 10, order_value: 250, position: 1 },
+        { id: "b2", comment: "Buffy & Spike - Truce", content: "Buffy and Spike began as enemies and became reluctant allies.", key: ["Spike"], priority: 10, order_value: 230, position: 1 },
+        { id: "b3", comment: "Upcoming: The Trio Strikes", content: "The Trio robs the bank.", key: ["Trio"], priority: 10, order_value: 120 },
+        { id: "b4", comment: "Location: The Bronze", content: "The Bronze is a nightclub in Sunnydale.", key: ["Bronze"], priority: 110, order_value: 110, extensions: { almanac: { lore: { category: "location", kind: "place", tense: "timeless" } } } },
+      ] },
+    });
+    const replies = [
+      JSON.stringify({ say: "Done: your titles stay; only metadata and tiers change.", revise: { options: { titles: "keep" } } }),
+      JSON.stringify({ entries: [{ comment: "Upcoming: The Trio Strikes", content: "The Trio will rob the bank." }] }),
+    ];
+    const prompts: any[] = [];
+    spindle.world_books = wb.api;
+    spindle.generate = { quiet: async (req: any) => (prompts.push(req.messages), { content: replies.shift() ?? "" }) };
+    try {
+      await talk("new");
+      let r = await talk("task", { task: "convert" });
+      expect(r.session.messages.at(-1).card).toBe("books");
+      r = await talk("book", { bookId: "btvs" });
+      const p = r.session.proposal;
+      expect(p).toMatchObject({ task: "convert", target: "same", version: 1 });
+      expect(p.items.map((i: any) => [i.op, i.category, i.title])).toEqual([
+        ["convert", "character", "Character: Buffy Summers (The Slayer)"],
+        ["convert", "relationship", "Relationship: Buffy & Spike (Truce)"],
+        ["convert", "upcoming", "Upcoming: The Trio Strikes"],
+        ["keep", "location", "Location: The Bronze"],
+      ]);
+      expect(r.session.messages.at(-1).text).toMatch(/I read all 4 entries of BTVS/);
+      expect(prompts.length).toBe(0); // every reading was clear: no model call
+
+      r = await talk("send", { text: "Keep my titles, add metadata only" });
+      expect(r.session.proposal).toMatchObject({ version: 2, options: { titles: "keep", tiers: true } });
+
+      r = await talk("accept");
+      expect(r.session.draft.entries.map((e: any) => e.comment)).toEqual(["Buffy Summers - The Slayer", "Buffy & Spike - Truce", "Upcoming: The Trio Strikes"]);
+      expect(prompts[1][1].content).toMatch(/Rewrite ONLY the first sentence/);
+
+      r = await talk("save", { save: { target: "same", attach: "none", bridge: false } });
+      expect(r.session.saved).toMatchObject({ updated: 3, created: 0, bookId: "btvs" });
+      const patch = (id: string) => wb.updates.find((u) => u.id === id)!.patch;
+      // Only what changed: no title (kept), no fields Lumiverse left at their defaults.
+      expect(Object.keys(patch("b1")).sort()).toEqual(["extensions", "priority"]);
+      expect(patch("b1").priority).toBe(250);
+      expect(patch("b2").extensions.almanac.lore).toMatchObject({ category: "relationship", participants: ["Buffy", "Spike"] });
+      expect(patch("b3")).toMatchObject({ content: "The Trio will rob the bank.", priority: 120 });
+      expect(wb.updates.some((u) => u.id === "b4")).toBe(false);
+    } finally {
+      Object.assign(spindle, saved);
+    }
+  });
+
+  test("a model that fails is reported in the conversation, and Try again runs the same turn", async () => {
+    const saved = { world_books: spindle.world_books, generate: spindle.generate };
+    let calls = 0;
+    spindle.world_books = fakeBooks().api;
+    spindle.generate = {
+      quiet: async () => {
+        if (++calls === 1) throw new Error("connection refused");
+        return { content: `{"say":"Back. What should the book cover?"}` };
+      },
+    };
+    try {
+      await talk("new");
+      let r = await talk("send", { text: "I want a lorebook for my Harrenhal story." });
+      expect(r.session.messages.at(-1)).toMatchObject({ card: "error", options: ["Try again"] });
+      expect(r.session.messages.at(-1).text).toMatch(/connection refused/);
+      const users = r.session.messages.filter((m: any) => m.role === "user").length;
+      r = await talk("send", { text: "Try again" });
+      expect(r.session.messages.at(-1)).toMatchObject({ role: "almanac", text: "Back. What should the book cover?" });
+      expect(r.session.messages.filter((m: any) => m.role === "user").length).toBe(users);
+      expect(r.session.busy).toBeUndefined();
+    } finally {
+      Object.assign(spindle, saved);
+    }
+  });
+});
+
+describe("the Lorebook Creator updates a book (1.17)", () => {
+  test("rewrites keep the book's own fields, retired entries are switched off, new ones are added", async () => {
+    const saved = { world_books: spindle.world_books, generate: spindle.generate };
+    const entries: any[] = [
+      { id: "h1", world_book_id: "hb", comment: "Character: Ysilla Grell", content: "Ysilla Grell is the chief steward of Harrenhal.", key: ["Ysilla"], keysecondary: [], priority: 200, order_value: 200, position: 1, depth: 4, constant: false, selective: false, disabled: false, match_whole_words: null, probability: 100, extensions: { almanac: { lore: { category: "character", kind: "person", tense: "timeless" } } } },
+      { id: "h2", world_book_id: "hb", comment: "Location: The Kitchens", content: "The kitchens of Harrenhal are domed and enormous.", key: ["kitchens"], keysecondary: [], priority: 110, order_value: 110, position: 0, depth: 4, constant: false, selective: false, disabled: false, extensions: {} },
+    ];
+    const updates: any[] = [];
+    const created: any[] = [];
+    spindle.world_books = {
+      list: async () => ({ data: [{ id: "hb", name: "Harrenhal", metadata: {} }], total: 1 }),
+      get: async (id: string) => (id === "hb" ? { id: "hb", name: "Harrenhal", metadata: {} } : null),
+      entries: {
+        list: async () => ({ data: entries, total: entries.length }),
+        update: async (id: string, patch: any) => (updates.push({ id, patch }), { ...entries.find((e) => e.id === id), ...patch }),
+        create: async (_b: string, input: any) => (created.push(input), { id: "x", ...input }),
+      },
+    };
+    const replies = [
+      JSON.stringify({ say: "Three changes.", proposal: { bookName: "Harrenhal", items: [
+        { op: "update", entry: "e1", category: "character", title: "Character: Ysilla Grell", about: "she now knows Aelor is fireproof" },
+        { op: "retire", entry: "e2", title: "Location: The Kitchens", about: "folded into Goodwife Mara" },
+        { op: "create", category: "character", title: "Goodwife Mara", about: "mistress of the kitchens" },
+      ] } }),
+      JSON.stringify({ entries: [
+        { comment: "Character: Ysilla Grell", content: "Ysilla Grell is the chief steward of Harrenhal, and since the feast she knows the prince does not burn.", key: ["Ysilla", "steward"] },
+        { comment: "Character: Goodwife Mara", content: "Goodwife Mara is the mistress of Harrenhal's kitchens, which she rules like a keep.", key: ["Mara", "kitchens"] },
+      ] }),
+    ];
+    const prompts: any[] = [];
+    spindle.generate = { quiet: async (req: any) => (prompts.push(req.messages), { content: replies.shift() ?? "" }) };
+    try {
+      const talk = async (action: string, req: Record<string, unknown> = {}) => {
+        const before = sent.length;
+        await hooks.frontend({ type: "creator", action, req, rid: 78, chatId: CHAT }, USER);
+        return sent.slice(before).filter((m) => m?.type === "creatorSession").pop()?.session;
+      };
+      await talk("new");
+      await talk("task", { task: "update" });
+      let s = await talk("book", { bookId: "hb" });
+      expect(s.messages.at(-1).text).toMatch(/Harrenhal has 2 entries\. What should change\?/);
+      s = await talk("send", { text: "Ysilla knows about the fire now; fold the kitchens into a Goodwife Mara entry." });
+      // The model sees the book by e-numbers.
+      expect(prompts[0][0].content).toMatch(/e1 \| character \| Character: Ysilla Grell/);
+      expect(s.proposal.items.map((i: any) => [i.op, i.entryId ?? null])).toEqual([["update", "h1"], ["retire", "h2"], ["create", null]]);
+      s = await talk("accept");
+      // The rewrite was asked with the entry as it is now.
+      expect(prompts[1][1].content).toMatch(/Entries to rewrite[\s\S]*Ysilla Grell is the chief steward of Harrenhal\./);
+      expect(s.draft.entries.map((e: any) => [e.op, e.comment])).toEqual([["update", "Character: Ysilla Grell"], ["retire", "Location: The Kitchens"], ["create", "Character: Goodwife Mara"]]);
+      s = await talk("save", { save: { target: "same", attach: "none", bridge: false } });
+      expect(s.saved).toMatchObject({ updated: 1, retired: 1, created: 1 });
+      const u1 = updates.find((u) => u.id === "h1")!.patch;
+      // Only the text changed: the entry's own priority, position and match setting stay.
+      expect(Object.keys(u1).sort()).toEqual(["content", "extensions", "key"]);
+      expect(updates.find((u) => u.id === "h2")!.patch).toEqual({ disabled: true });
+      expect(created[0]).toMatchObject({ comment: "Character: Goodwife Mara", priority: 200, position: 1 });
+    } finally {
+      Object.assign(spindle, saved);
+    }
   });
 });

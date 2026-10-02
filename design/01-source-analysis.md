@@ -10,7 +10,7 @@ Every claim below comes from reading the files (preset JSON, regex scripts, exte
 | # | Preset | Format | Size | Blocks / prompts | Regex |
 |---|---|---|---|---|---|
 | 1 | CHRONICON v1.9.0 — Archive Pass | Lumiverse v2 | 446 KB | 63 blocks, 11 variable groups | 31 |
-| 2 | Tessera 1.0.0 (VELLUM III's official preset) | Lumiverse v2 | 162 KB | 42 blocks | 29 |
+| 2 | Tessera 1.0.0 | Lumiverse v2 | 162 KB | 42 blocks | 29 |
 | 3 | VELLUM II — Engine 2.3.2 | Lumiverse v2 | 221 KB | 69 blocks | 23 |
 | 4 | VELLUM II — ARGENT LOOM 1.5.1 | Lumiverse v2 | 214 KB | 52 blocks | 20 |
 | 5 | ≽^•⩊•^≼ KittyLotus 3.6.6 | Lumiverse export | 1.26 MB | 127 blocks, 17 variable groups | 75 |
@@ -47,7 +47,7 @@ Every claim below comes from reading the files (preset JSON, regex scripts, exte
 **ALMANAC keeps:** single ownership of each fact, typed operations, atomic swipe semantics, presence tiers, agendas, routes, STALL discipline, campaign tools, multi-world themes.
 **ALMANAC changes:** the model emits *deltas only* and the extension compiles state. Colour is resolved per speaker. The safety floor is actually locked. Genre gets contracts. Planning is hidden.
 
-### 1.2 Tessera (VELLUM III companion) — the most modern design
+### 1.2 Tessera — the most modern design
 
 **What it does well**
 - **A boot block that writes nothing.** It sets `tx_route` from `{{lastGenerationType}}`, detects OOC with `{{matches}}` on `{{lastUserMessage}}`, and detects the engine with `{{vellumActive}}`. Every later block branches on the route.
@@ -205,24 +205,26 @@ Two platform facts that shape the design:
 
 ---
 
-## 5. VELLUM III lorebook creator prompt (your uploaded file)
+## 5. A lorebook-creator prompt (an uploaded file)
+
+> Historical. ALMANAC is not associated with the project this prompt came from; since 1.17 the Creator and the Lore Bridge follow ALMANAC's own lorebook format ([10](10-lorebook-format.md)).
 
 **What it defines**
 - **Two modes:** Quick (JSON only) and Guided (Analysis → Generation → Optimization, with checkpoints). An **entry generator** offers Option A (suggest a list from a premise), Option B (parse raw lore) or Option C (examples for a category).
-- **VELLUM III reading conventions.** A lorebook is read as *"the world as the story begins"*:
+- **Its reading conventions.** A lorebook is read as *"the world as the story begins"*:
   - Title labels decide the kind: `Character:`, `Location:`, `Faction:`, `Item:`, `Rule:`, `History:`, `Customs:`, `CURRENT -`, `Upcoming:` / `Prophecy:`, `Timeline Boundary -`, `OOC:`.
   - The first sentence follows a fixed formula ("X is a/an role in Parent").
   - Hours, routes and climate are parsed from plain phrasing.
   - Participants are the names before the verb in a CURRENT title. Mistaken beliefs are flagged with "unbeknownst".
   - Anything future is written in the future tense and becomes a forecast, never a fact.
   - Secrets carry a noticeable sign.
-- **`extensions.vellum3` metadata:** `kind`, `tense`, `participants`, `place`, `visibility`, `expected`, `members`.
+- **A metadata block** on each entry: `kind`, `tense`, `participants`, `place`, `visibility`, `expected`, `members`.
 - **Lumiverse compatibility table:** `selectiveLogic` codes 0 = AND, 1 = NOT, 2 = OR, 3 = NOT ALL. `priority` is budget survival and `order` is sequence, so set them equal. A missing priority imports as 10.
 - **14 templates**, a priority tier ladder (300 → 80), a position selection matrix, sticky and cooldown guidance, recursion linking strategies, a keyword matrix, the bracketed data format `[ key(value); ]`, and a full **QA checklist**.
 
 **Why it matters for ALMANAC:** it is a *typed grammar for lore*. The Ledger extension uses the same grammar in both directions:
 - **Import:** read attached lorebooks into typed Codex records (a person, a place, a current situation, a forecast, a belief), so the Codex never starts from zero.
-- **Export:** its Lorebook Creator writes VELLUM III-compatible entries, adding `extensions.almanac` metadata alongside `extensions.vellum3`.
+- **Export:** the Lorebook Creator writes entries in ALMANAC's own lorebook format, with `extensions.almanac.lore` metadata ([10](10-lorebook-format.md)).
 
 ---
 
@@ -251,5 +253,5 @@ Two platform facts that shape the design:
 | Consequences | Tessera difficulty; CHRONICON failure shape | Consequences forgotten after a scene | Consequence ledger with due-dates and healing clocks, surfaced by Recall (02 §16) |
 | Summarise + hide + Codex | LumiBooks | Snapshot-only codex; keyword retrieval | Event-sourced Codex with history; scene-boundary chapters; splice-in-place (05 §5–6) |
 | Retrieval | Lore Recall | Static lore only | Hybrid recall over story memory plus lore, knowledge-aware (05 §8) |
-| Lorebook creator | VELLUM III prompt | A prompt, not a tool | Built-in wizard with validator, linker and writer (05 §10) |
-| Seed from attached books | VELLUM III reading | — | Lore Bridge using the same grammar (05 §9) |
+| Lorebook creator | An uploaded creator prompt | A prompt, not a tool | A conversation with the model that plans, revises, writes, validates, links and saves (10) |
+| Seed from attached books | — | — | Lore Bridge reading the Almanac lorebook format and free-form books (05 §9, 10) |

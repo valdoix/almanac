@@ -16,7 +16,9 @@ export type CodexKind =
   | "directive"
   // A scripted scene that hasn't happened ("When Buffy learns…", "It happens in the kitchen…"): how
   // someone would act if the story gets there. Never history; sent only when the story is close.
-  | "playbook";
+  | "playbook"
+  // What lies between two people, from a lorebook ("Buffy & Spike - Truce"); linked to both.
+  | "bond";
 
 export interface CodexRecord {
   id: string;

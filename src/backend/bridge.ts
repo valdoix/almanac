@@ -9,7 +9,7 @@ import { addUserOps, onMutation, rebuild, removeUserOps, repair, runChronicle, s
 import { elsewhereAction, retellBeat, runElsewhere, tickSummary } from "./elsewhere";
 import { classifyReview, scanLore } from "./lorebridge";
 import { syncMirror } from "./mirror";
-import { bookHealth, creatorExport, creatorGenerate, creatorPlan, creatorReport, creatorSimulate, creatorWrite, listBooks } from "./creator";
+import { bookHealth, creatorAction, listBooks } from "./creator";
 import { pushMacros } from "./macros";
 import type { ChatConfig } from "../core/types";
 import { clearRenderCache } from "./hooks";
@@ -389,22 +389,12 @@ export function registerBridge() {
           reply(userId, { type: "bookHealth", result: await bookHealth(m.bookId, userId), rid: m.rid });
           return;
         case "creator": {
+          // The Lorebook Creator's conversation: every step is pushed as the whole session; the
+          // reply (by rid) carries what the page asked for right away (a list, a simulation, an export).
           const rid = m.rid;
           try {
-            const src = m.req?.source?.chatId ?? m.req?.chatId;
-            if (src != null && !(await ownsChat(src, userId))) throw new Error("that chat isn't yours");
-            if (m.action === "plan") reply(userId, { type: "creator", rid, plan: await creatorPlan(m.req, userId) });
-            else if (m.action === "generate") {
-              const res = await creatorGenerate(m.req, userId, (done, total) => reply(userId, { type: "creatorProgress", rid, done, total }));
-              reply(userId, { type: "creator", rid, ...res, report: creatorReport(res.entries) });
-            } else if (m.action === "report") reply(userId, { type: "creator", rid, report: creatorReport(m.entries) });
-            else if (m.action === "simulate") reply(userId, { type: "creator", rid, activation: creatorSimulate(m.entries, m.scene ?? "") });
-            else if (m.action === "export") reply(userId, { type: "creator", rid, json: creatorExport(m.entries) });
-            else if (m.action === "write") {
-              const r = await creatorWrite(m.req, userId);
-              reply(userId, { type: "creator", rid, written: r });
-              toast(userId, "success", `Lorebook saved: ${r.created} created, ${r.updated} updated.`);
-            }
+            const res = await creatorAction({ ...(m.req ?? {}), action: String(m.action ?? ""), chatId: m.chatId ?? undefined }, userId);
+            reply(userId, { type: "creator", rid, ...res });
           } catch (err) {
             reply(userId, { type: "creator", rid, error: describe(err) });
           }

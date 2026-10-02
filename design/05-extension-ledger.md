@@ -17,7 +17,7 @@
 | 5 | **Keys** | Turn tracker `keys` (and names/aliases) into a live retrieval index |
 | 6 | **Recall** | Hybrid, knowledge-aware retrieval into a budgeted prompt layout |
 | 7 | **Lore Bridge** | Read attached lorebooks (character / persona / chat / global) into the Codex; take over or assist their activation |
-| 8 | **Lorebook Creator** | The VELLUM III creator as a wizard with a validator, linker and writer |
+| 8 | **Lorebook Creator** | A conversation with the model: it proposes a plan, revises it with the player, then writes, validates, links and saves the book ([10](10-lorebook-format.md)) |
 | 9 | **Almanac Engines** | Calendar, astronomy, weather; off-screen simulator; rumour propagation |
 | 10 | **Craft Telemetry** | Repetition and slop metrics, genre-delivery tracking, agency-violation flags |
 | 11 | **Render** | Speaker/theme stylesheet; per-message tracker snapshots; plate enrichment |
@@ -197,7 +197,7 @@ interface CodexRecord {
                          // thread:lost_locket · doc:letter_harbourmaster · cons:c12 · fact:f31 · custom:flagon
   kind: 'person' | 'place' | 'object' | 'group' | 'law' | 'history' | 'situation' | 'belief'
       | 'texture' | 'boundary' | 'meta' | 'thread' | 'document' | 'forecast' | 'consequence';
-  tense: 'now' | 'past' | 'future' | 'timeless';     // VELLUM III compatible
+  tense: 'now' | 'past' | 'future' | 'timeless';     // as the lorebook format names it (10)
   name: string; aliases: string[];
   keys: string[];                                   // retrieval keys (§7)
   summary: string;                                  // first-sentence formula: "Mara is a smuggler in Lowmarket."
@@ -242,7 +242,7 @@ This is where "retrieval keys in the tracker become real retrieval keys" is impl
 
 ### 7.1 Where keys come from
 1. **Model-provided:** `keys Record: k1, k2, …` ledger lines. The preset asks for keys whenever a record is created or its meaning shifts.
-2. **Automatic:** name plus aliases (always matched; never stored as keys); capitalised aliases from lore titles (VELLUM III rule); concrete nouns from `know` facts, `item` names, `thread` titles and document titles.
+2. **Automatic:** name plus aliases (always matched; never stored as keys); capitalised aliases from lore entries' keys; concrete nouns from `know` facts, `item` names, `thread` titles and document titles.
 3. **Archivist:** refreshes stale keys at chapter boundaries.
 4. **User:** editable in the Codex UI (locked keys survive archivist passes).
 
@@ -362,8 +362,9 @@ When over budget, records render in compressed tiers (full body → summary + ke
 All scopes Lumiverse activates for the chat: the **character's** books (`character.extensions.world_book_ids`), the **persona's** attached book, the **chat's** books (`chat.metadata.chat_world_book_ids`) and **global** books.
 
 ### 9.2 Classification pipeline (per entry)
-1. `extensions.almanac` / `extensions.vellum3` metadata: exact kind, tense, participants, place, visibility, expected, members.
-2. **Title label** (the VELLUM III table): `Character:` → person, `Location:` → place, `CURRENT -` → situation or belief (belief words: believe, think, assume, unaware), `Upcoming:` / `Prophecy:` → forecast, `Timeline Boundary -` → boundary, `Customs:` → texture, `Rule:` → law, `History:` → history, `OOC:` → meta (never a fact).
+The Almanac lorebook format and its reader are in [10](10-lorebook-format.md) (1.17). In short:
+1. `extensions.almanac.lore` metadata (a block other tools wrote in the same shape is read alike): exact category, kind, tense, participants, place, visibility, expected, members, holder, parent.
+2. **Title label**: `Character:` → person, `Relationship:` → bond, `Voice:` → the person's voice, `Location:` → place, `CURRENT -` → situation or belief (belief words: believe, think, assume, unaware), `Belief:` → belief, `Upcoming:` / `Prophecy:` → forecast, `Timeline Boundary -` → boundary, `Customs:` → texture, `Secret:` → narrator-only texture, `Rule:` → law, `History:` → history, `Scene:` → playbook, `OOC:` → meta (never a fact). Content tags (`RULE:`, `STORY ARC:`, `AI DIRECTIVE:`) and free-form title shapes (`Name - Role`, `A & B - …`, `What X Knows`, dated titles, ranks) come next.
 3. **First-sentence rules:** "X is a/an role in Parent" → role and parent place; the item holder is the first person named; `open 20:00 to 02:00` → hours; "twenty minutes' walk from Y" → route; climate phrases → the weather engine's profile; "unbeknownst", "in truth" → a mistaken belief; secret words plus a sign sentence → narrator-only secret plus a perceivable sign.
 4. **LLM classifier** (batched, structured output) for unlabelled or ambiguous entries.
 5. **Review queue** in the Lore tab for low-confidence classifications.
@@ -371,7 +372,7 @@ All scopes Lumiverse activates for the chat: the **character's** books (`charact
 ### 9.3 Seeding
 - Each classified entry becomes a Codex record with `provenance.loreEntryId`, `source: 'lore'` and **baseline** status ("true as the story begins").
 - `Timeline Boundary` sets the era or calendar anchor.
-- `Upcoming` becomes a tracked **forecast**, marked *diverged* when a participant dies, a group disbands or a place is destroyed (VELLUM III semantics).
+- `Upcoming` becomes a tracked **forecast**, marked *diverged* when a participant dies, a group disbands or a place is destroyed.
 - `CURRENT` situations become threads; beliefs become knowledge rows.
 - Places build the location graph and the weather engine's climate.
 - **Result: the Codex starts populated.** Characters, places, factions, laws, customs and open situations exist from turn one, and the Knowledge Brief can already protect secrets that are only in the lore.
@@ -395,14 +396,16 @@ Per-book permission: **Read-only** *(default)* · **Overlay** (writes go to a ch
 
 ---
 
-## 10. Lorebook Creator (VELLUM III-compatible)
+## 10. Lorebook Creator
 
-### 10.1 Wizard flow
+> **Superseded in 1.17** by the Creator as a conversation and the Almanac lorebook format: see [10](10-lorebook-format.md). The wizard below is how it was first built; the validator, linker, activation simulator, writers, health check and Codex export carry over.
+
+### 10.1 Wizard flow (1.0–1.16)
 1. **Mode:** ⚡ Quick (JSON only) · 🤝 Guided (Analysis → Generation → Optimization with checkpoints) · 📋 Entry generator (Option A: suggest a list from a premise · B: parse raw lore · C: example entries for a category).
-2. **Source:** premise text · pasted lore · an uploaded document · **this character card** · **this chat's Codex** ("harvest the story so far") · an existing lorebook ("upgrade to VELLUM III conventions").
+2. **Source:** premise text · pasted lore · an uploaded document · **this character card** · **this chat's Codex** ("harvest the story so far") · an existing lorebook ("upgrade to the format").
 3. **Analysis:** a categorised plan showing each entry's **final title** (`Character: Willow Rosenberg`, `CURRENT - Hellion Biker Raid`), a one-line description and a configuration preview (N constants at position 4, N character entries at position 1, N world entries at position 0, N CURRENT/Upcoming).
 4. **Edit plan:** add, remove or rename; set priority tier (the 300 → 80 ladder); toggle constant; merge or split concepts.
-5. **Generate:** batches of 8–12 entries via `generate.quiet/raw` with **structured output** (JSON schema for the SillyTavern `{"entries": {...}}` format, including `extensions.vellum3` and `extensions.almanac`). The system prompt is the VELLUM III creator prompt (Auto edition). Each batch receives the full list of planned titles and canonical names, so cross-references (members, holders, parents, participants) stay consistent across batches.
+5. **Generate:** batches of 8–12 entries via `generate.quiet/raw` with **structured output** (JSON schema for the SillyTavern `{"entries": {...}}` format, including the entry's metadata block). The system prompt carried the title and first-sentence conventions. Each batch receives the full list of planned titles and canonical names, so cross-references (members, holders, parents, participants) stay consistent across batches.
 6. **Validate** with the prompt's QA checklist implemented in code:
    - **Auto-fix (deterministic):** `priority = order`, `selective = false` when no secondary keys, `vectorized: false`, `matchWholeWords: true`, `useProbability: true`, `excludeRecursion: false`, depth 4 (2 for scene events), string keys matching uids, `preventRecursion` by kind.
    - **Re-ask (model):** first-sentence formula violated, label/kind mismatch, future event not in future tense, 200 tokens or more, generic keywords, `{{char}}`/`{{user}}` in title or first sentence, a CURRENT title without participants before the verb, public words in a private situation.
@@ -413,14 +416,13 @@ Per-book permission: **Read-only** *(default)* · **Overlay** (writes go to a ch
 ### 10.2 Metadata written
 ```json
 "extensions": {
-  "vellum3": { "kind": "situation", "tense": "now", "participants": ["Spike", "Dawn Summers"], "place": "Sunnydale", "visibility": "private" },
-  "almanac": { "keys": ["raid", "bikers"], "scope": { "public": true }, "codexId": "thread:hellion_raid", "creator": "0.1.0" }
+  "almanac": { "lore": { "category": "current", "kind": "situation", "tense": "now", "participants": ["Spike", "Dawn Summers"], "place": "Sunnydale", "visibility": "private" }, "creator": "2.0.0" }
 }
 ```
-Both namespaces are kept, so books built here work with VELLUM III and with ALMANAC.
+One namespace, ALMANAC's own (1.17; [10 §2](10-lorebook-format.md)). Blocks other tools wrote are left in place.
 
 ### 10.3 Round-trips
-- **Codex → Lorebook** ("save the story so far"): exports the live Codex into a new book for sequels. Now-situations become `CURRENT -`, past becomes `History:`, forecasts become `Upcoming:`, secrets become narrator-only `Customs:` with a sign sentence, beliefs become `CURRENT - X Believes Y` with "unbeknownst" when false.
+- **Codex → Lorebook** ("save the story so far"): exports the live Codex into a new book for sequels. Now-situations become `CURRENT -`, past becomes `History:`, forecasts become `Upcoming:`, secrets become narrator-only `Customs:` with a sign sentence, beliefs become `Belief: X believe — Y` with "unbeknownst" when false.
 - **Health check** for any existing book: missing priority (which imports as 10), SillyTavern-vs-Lumiverse `selectiveLogic` confusion, future events in present tense, oversized entries, duplicate or generic keys, unreachable entries, constant-token cost.
 
 ### 10.4 Safety
@@ -573,7 +575,7 @@ These let tool-capable models retrieve on demand (the TunnelVision idea) without
 |---|---|
 | **LumiBooks** | Run one summariser. The Ledger can **import** LumiBooks chapters and Codex via its RPC snapshot on first run, then take over |
 | **Lore Recall** | Choose one retrieval owner per book. Books managed by Lore Recall should be set to **Native** in the Ledger |
-| **VELLUM II / III** | Don't run two state engines on one chat. ALMANAC reads `extensions.vellum3` natively, and the Creator writes it |
+| **VELLUM II** | Don't run two state engines on one chat |
 | **Memory Cortex** | Optional signal source. Its memory section auto-injects whenever enabled; set its formatter to Minimal, or disable vectorised chat memory, to avoid duplication. The Ledger's mirror book with vectorised entries is the preferred semantic path |
 | **Loom Summary** | Disable it, or at least its message limit. The Chronicle replaces it |
 | **Council** | Ledger tools are Council-eligible; a "continuity auditor" member can call `ledger_who_knows` |
