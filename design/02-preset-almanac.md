@@ -231,9 +231,9 @@ State changes with elapsed story time, not just with events. The Ledger computes
 
 | Meter | Drift |
 |---|---|
-| Hunger | +1 per ~5 h awake; a meal resets to 0–1 |
-| Thirst | +1 per ~3 h (faster in heat or exertion) |
-| Fatigue | +1 per ~4 h awake or per hard exertion; sleep −3 to −5; <4 h sleep leaves ≥ 2 |
+| Hunger | +1 per ~6 h awake, none asleep; a meal, or an off-page jump past a mealtime (08:00 · 13:00 · 19:00), resets to ≤ 1; the clock stops at 3 unless they're cut off from food |
+| Thirst | +1 per ~5 h awake; resets with meals as hunger does; the clock stops at 3 unless they're cut off |
+| Fatigue | +1 per ~5 h awake or per hard exertion; the clock stops at 4; sleep (downtime, or a jump of 3 h+ through 23:00–07:00 outside conflict/crisis) −1 per 90 min; < 5 h sleep leaves ≥ 2 |
 | Pain | Follows untreated injuries; treatment −1 to −2 |
 | Intoxication | −1 per ~1.5 h |
 | Composure | +1 per calm scene; −1 to −2 per humiliation, threat or shock |

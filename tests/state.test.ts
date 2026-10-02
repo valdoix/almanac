@@ -82,16 +82,43 @@ bond Mara>Kael: affection +5 — shared a drink
     expect(state.items["item:locket"].holder).toBe("user");
   });
 
-  test("time drift and sleep", () => {
-    const rt = new LedgerRuntime();
-    const r = `<ledger>\nbody Mara: hunger 1; fatigue 1\nclock: +10h\n</ledger>`;
-    const s = rt.fold(toPath([msg(0, R1), msg(1, r)]), OPTS).state;
-    expect(s.chars.mara.meters.hunger).toBe(3);
-    expect(s.chars.mara.meters.fatigue).toBe(3);
-    const sleep = `<ledger>\nmode: downtime\n</ledger>`;
-    const wake = `<ledger>\nclock: +8h\n</ledger>`;
-    const s2 = rt.fold(toPath([msg(0, R1), msg(1, r), msg(2, sleep), msg(3, wake)]), OPTS).state;
-    expect(s2.chars.mara.meters.fatigue).toBe(0);
+  describe("hunger, thirst and fatigue", () => {
+    // R1 starts at Day 1 18:40.
+    const meters = (...rs: string[]) => new LedgerRuntime().fold(toPath([msg(0, R1), ...rs.map((r, i) => msg(i + 1, `<ledger>\n${r}\n</ledger>`))]), OPTS).state.chars.mara.meters;
+    test("build slowly on the page and stop at the mild level", () => {
+      // Four hours of scene in small steps: no change yet.
+      const steps = Array.from({ length: 24 }, () => "clock: +10m");
+      expect(meters("body Mara: hunger 1; thirst 1; fatigue 1", ...steps)).toMatchObject({ hunger: 1, thirst: 1, fatigue: 1 });
+      // A whole sleepless night of scene: no further than "a little hungry" / "exhausted".
+      const night = Array.from({ length: 30 }, () => "mode: crisis\nclock: +1h");
+      const m = meters("body Mara: hunger 1; thirst 1; fatigue 1", ...night);
+      expect(m.hunger).toBe(3);
+      expect(m.thirst).toBe(3);
+      expect(m.fatigue).toBe(4);
+    });
+    test("a jump past a mealtime means they ate and drank", () => {
+      const m = meters("body Mara: hunger 3; thirst 3", "clock: +4h");
+      expect(m.hunger).toBe(1);
+      expect(m.thirst).toBe(1);
+    });
+    test("a jump through the night is sleep, in any mode", () => {
+      const m = meters("body Mara: hunger 1; fatigue 4", "clock: → Day 2 07:30");
+      expect(m.fatigue).toBe(0);
+      expect(m.hunger).toBe(1);
+    });
+    test("a short night leaves them tired; downtime sleep counts by day too", () => {
+      expect(meters("body Mara: fatigue 5", "mode: downtime\nclock: +4h").fatigue).toBe(3);
+      expect(meters("body Mara: fatigue 5", "mode: downtime\nclock: +8h").fatigue).toBe(0);
+    });
+    test("someone without food goes past hungry, and a set value isn't pulled down by the clock", () => {
+      expect(meters("body Mara: hunger 3; trapped", "mode: crisis\nclock: +12h").hunger).toBe(5);
+      expect(meters("body Mara: hunger 5", "clock: +30m").hunger).toBe(5);
+    });
+    test("needs written as words move the meters", () => {
+      const m = meters("body Mara: hunger 5; thirst 5; fatigue 4", "body Mara: fed (steak ×2); thirst easing; rested");
+      expect(m).toMatchObject({ hunger: 1, thirst: 3, fatigue: 1 });
+      expect(meters("body Mara: hungry, parched, exhausted")).toMatchObject({ hunger: 3, thirst: 4, fatigue: 4 });
+    });
   });
 
   test("snapshots give identical results", () => {

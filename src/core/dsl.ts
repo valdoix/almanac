@@ -358,7 +358,7 @@ const PARSERS: Record<OpName, LineParser> = {
       for (const f of seg.split(/\s*,\s*(?![^()]*\))/)) {
         const ff = f.trim();
         if (!ff) continue;
-        if (readMeter(ff, meters)) continue;
+        if (readMeter(ff, meters) || readNeedWords(ff, meters)) continue;
         if (ff.startsWith("-") || ff.startsWith("no longer ")) unflags.push(ff.replace(/^-|^no longer /, "").trim().toLowerCase());
         else if (/^(dead|died|killed)$/i.test(ff)) flags.push("dead");
         else {
@@ -781,6 +781,34 @@ function readMeter(seg: string, meters: Record<string, { v: number; rel: boolean
   }
   const arrow = /→|->|=>|\bto\b/.test(seg);
   meters[k] = { v: parseInt(mm[2], 10), rel: !arrow && /^[+-]/.test(mm[2]) };
+  return true;
+}
+
+/**
+ * Needs written as words: "fed (steak ×2)", "thirst easing", "drank a glass", "rested",
+ * "hungry", "parched". Without this they stay flags and the meter never comes down.
+ */
+const NEED_WORDS: [RegExp, string, number, boolean][] = [
+  [/^(?:fed|ate\b|full|sated|well[- ]fed|has eaten)/, "hunger", 1, false],
+  [/^(?:eating|hunger (?:eas|partly|partially|sated|satisfied|gone|fading))/, "hunger", -2, true],
+  [/^(?:drank|hydrated|thirst (?:quenched|slaked|gone|sated|satisfied))/, "thirst", 1, false],
+  [/^(?:drinking|thirst (?:eas|partly|partially|fading))/, "thirst", -2, true],
+  [/^(?:rested|well[- ]rested|refreshed|slept (?:well|through|the night|\d|for))/, "fatigue", 1, false],
+  [/^(?:still )?(?:very hungry|ravenous)$/, "hunger", 4, false],
+  [/^(?:still )?(?:starving|famished)$/, "hunger", 5, false],
+  [/^(?:still )?hungry$/, "hunger", 3, false],
+  [/^(?:still )?(?:parched|dehydrated)$/, "thirst", 4, false],
+  [/^(?:still )?thirsty$/, "thirst", 3, false],
+  [/^(?:still )?(?:exhausted|worn out|spent)$/, "fatigue", 4, false],
+  [/^(?:still )?(?:tired|weary|drowsy|sleepy)$/, "fatigue", 3, false],
+];
+
+function readNeedWords(seg: string, meters: Record<string, { v: number; rel: boolean }>): boolean {
+  const s = seg.trim().toLowerCase().replace(/\s*\([^)]*\)\s*$/, "").replace(/[.!]$/, "");
+  const hit = NEED_WORDS.find(([re]) => re.test(s));
+  if (!hit) return false;
+  // "hunger 4→3, eating fast": the number wins; the words are just its reason.
+  meters[hit[1]] ??= { v: hit[2], rel: hit[3] };
   return true;
 }
 

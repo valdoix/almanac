@@ -1290,32 +1290,56 @@ export class Folder {
     return `custom:${s}`;
   }
 
-  /** Clock-driven drift for meters that are being tracked (§6.3). */
+  /**
+   * Clock-driven drift for meters that are being tracked (§6.3). Needs build slowly
+   * and only while awake; ordinary life happens off the page, so a jump in the clock
+   * past a mealtime means they ate and drank, and a jump through the night means they
+   * slept. The clock alone stops at "hungry", "thirsty" or "exhausted": worse takes a
+   * cause the story names (a body line, or someone trapped, lost or without food).
+   */
   private drift(fromAbs0: number, toAbs: number) {
     const span = toAbs - fromAbs0;
     if (span <= 0) return;
-    const sleeping = this.state.mode === "downtime" && span >= 360;
+    const offPage = span >= OFF_PAGE;
+    const night = nightIn(fromAbs0, toAbs);
     for (const c of Object.values(this.state.chars)) {
       if (c.dead) continue;
       const present = c.tier === "spot" || c.tier === "peri" || c.isUser;
       if (!present) continue;
       const m = c.meters;
       const acc = ((c as any)._acc ??= { hunger: 0, thirst: 0, fatigue: 0, intox: 0 });
-      const bump = (k: "hunger" | "thirst" | "fatigue", rate: number) => {
+      const said = `${c.flags.join(" ")} ${c.activity ?? ""}`;
+      const deprived = DEPRIVED.test(said);
+      const watchful = this.state.mode === "conflict" || this.state.mode === "crisis";
+      const asleep = ASLEEP_NOW.test(said) || (span >= 240 && (this.state.mode === "downtime" || (night >= 180 && !watchful)));
+      // Asleep, they don't grow hungry or tired; only the waking part of a jump counts.
+      const slept = asleep ? (ASLEEP_NOW.test(said) || this.state.mode === "downtime" ? span : night) : 0;
+      const awake = span - slept;
+      const meal = offPage && !deprived ? lastMeal(fromAbs0, toAbs) : null;
+      const bump = (k: "hunger" | "thirst" | "fatigue", rate: number, minutes: number, cap: number) => {
         if (m[k] == null) return;
-        acc[k] += span;
+        acc[k] += minutes;
         const n = Math.floor(acc[k] / rate);
         if (n > 0) {
-          m[k] = clamp((m[k] ?? 0) + n, 0, 5);
           acc[k] -= n * rate;
+          // The clock never pushes past the cap; a higher value the story set stays.
+          if (m[k]! < cap) m[k] = Math.min(m[k]! + n, cap);
         }
       };
-      bump("hunger", 300);
-      bump("thirst", 180);
-      if (sleeping && m.fatigue != null) {
-        m.fatigue = clamp(m.fatigue - (span >= 420 ? 4 : 3), span < 240 ? 2 : 0, 5);
+      for (const [k, rate] of [["hunger", HUNGER_RATE], ["thirst", THIRST_RATE]] as const) {
+        if (meal != null && m[k] != null) {
+          // Ate and drank off the page: back to comfortable, counting only the time since.
+          m[k] = Math.min(m[k]!, 1);
+          acc[k] = 0;
+          bump(k, rate, Math.max(0, Math.min(awake, toAbs - meal)), deprived ? 5 : 3);
+        } else bump(k, rate, awake, deprived ? 5 : 3);
+      }
+      if (slept >= 180 && m.fatigue != null) {
+        // About one step for every ninety minutes; a short night leaves them tired.
+        m.fatigue = clamp(m.fatigue - Math.floor(slept / 90), slept < 300 ? 2 : 0, 5);
         acc.fatigue = 0;
-      } else bump("fatigue", 240);
+        bump("fatigue", FATIGUE_RATE, awake, 4);
+      } else bump("fatigue", FATIGUE_RATE, awake, 4);
       if (m.intox != null && m.intox > 0) {
         acc.intox += span;
         const n = Math.floor(acc.intox / 90);
@@ -1342,6 +1366,39 @@ export class Folder {
 type ThreadOpName = "new" | "advance" | "complicate" | "bridge" | "resolve" | "stall";
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Minutes awake per step of hunger, thirst and fatigue: from rested and fed, "hungry" is about 13 hours without a meal. */
+const HUNGER_RATE = 360;
+const THIRST_RATE = 300;
+const FATIGUE_RATE = 300;
+/** A clock jump this long is time off the page, where ordinary meals and drinks happen. */
+const OFF_PAGE = 180;
+/** Mealtimes (minute of the day) an off-page jump can pass: breakfast, lunch, dinner. */
+const MEALS = [8 * 60, 13 * 60, 19 * 60];
+/** Someone who can't simply eat, drink or sleep: the clock may take them past "hungry". */
+const DEPRIVED = /\b(trapped|captive|captured|imprisoned|prisoner|chained|shackled|locked (?:in|up)|stranded|starv\w*|fasting|famished|no food|no water|without (?:food|water)|rationing|besieged|marooned)\b/i;
+const ASLEEP_NOW = /\b(asleep|sleeping|unconscious|passed out|out cold|dozing)\b/i;
+
+/** The latest mealtime in (from, to], or null. */
+function lastMeal(from: number, to: number): number | null {
+  for (let day = Math.floor(to / MIN_PER_DAY); day >= Math.floor(from / MIN_PER_DAY); day--) {
+    for (let i = MEALS.length - 1; i >= 0; i--) {
+      const t = day * MIN_PER_DAY + MEALS[i];
+      if (t <= to && t > from) return t;
+    }
+  }
+  return null;
+}
+
+/** Minutes of (from, to] that fall in the night, 23:00 to 07:00. */
+function nightIn(from: number, to: number): number {
+  let n = 0;
+  for (let day = Math.floor(from / MIN_PER_DAY) - 1; day <= Math.floor(to / MIN_PER_DAY); day++) {
+    const s = day * MIN_PER_DAY + 23 * 60, e = s + 8 * 60;
+    n += Math.max(0, Math.min(to, e) - Math.max(from, s));
+  }
+  return n;
+}
 
 /** A cast note that puts someone out of the scene: another room, another floor, out of earshot. */
 const ELSEWHERE = /\b(?:next|another|other|adjoining|adjacent) room\b|\b(?:next door|elsewhere|off-?screen|off-?scene|out of (?:sight|earshot|the room)|not (?:here|present|in the (?:room|scene)))\b/i;

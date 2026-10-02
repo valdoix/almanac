@@ -61,9 +61,9 @@ function vad(c: CharacterState): string {
  */
 const METER_WORDS: Record<string, string[]> = {
   health: ["near death", "badly hurt", "hurt", "", "", ""],
-  fatigue: ["", "", "", "tired", "exhausted", "dead on their feet"],
-  hunger: ["", "", "", "hungry", "very hungry", "starving"],
-  thirst: ["", "", "", "thirsty", "parched", "desperate for water"],
+  fatigue: ["", "", "", "a little tired", "exhausted", "dead on their feet"],
+  hunger: ["", "", "", "a little hungry", "very hungry", "starving"],
+  thirst: ["", "", "", "a little thirsty", "parched", "desperate for water"],
   pain: ["", "", "", "in pain", "in bad pain", "in agony"],
   intox: ["", "", "", "tipsy", "drunk", "blind drunk"],
   arousal: ["", "", "", "aroused", "very aroused", "desperate with want"],

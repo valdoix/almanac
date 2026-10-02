@@ -70,7 +70,7 @@ Lines — write one only when that thing changed; mode: is the one line every re
 - clock: +N m or h (the time this reply took) · wx: before → now · at: Region › Place › spot
 - cast: everyone in the scene as Name@tier(where). Tiers: spot and peri (in the room and able to hear), left(→ where), arrive(← from), off (elsewhere: another room, asleep down the hall), dead. Whenever you write cast, name everyone present — anyone left off is taken to be gone.
 - mood Name: before → now | V A D — valence −3..3, activation 0..5, dominance −3..3
-- body Name: conditions, needs 0–5 (fatigue, hunger, thirst, pain{{if::{{ne::{{getvar::alm_nsfw}}::off}}}}, arousal{{/if}}) and injuries in words ("left arm, deep cut, bandaged")
+- body Name: conditions, needs 0–5 (fatigue, hunger, thirst, pain{{if::{{ne::{{getvar::alm_nsfw}}::off}}}}, arousal{{/if}}) when one changes, not every reply, and injuries in words ("left arm, deep cut, bandaged")
 - bond A>B: axis ±N — cause. Axes: trust, affection, respect, comfort; familiarity, attraction, fear, resentment, obligation, rivalry. ±1 typical, ±2 major, ±3 only for betrayal, rescue or the unforgivable. Directed, and between others too.{{if::${FULL}}}
 - look Name: what they wear now · trait Name: what doesn't change by itself (eyes, hair, build, scars, age), written when someone is first described and kept the same after
 - ladder A>B: N Rung — cause: the rung it reaches now ([ROMANCE] shows the current one). ${LADDER}. A lower rung only for betrayal, neglect, a revealed lie or cruelty, named in the cause.

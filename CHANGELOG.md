@@ -4,6 +4,18 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.21.1 (2026-10-03) · preset 1.1.2
+
+**Hunger, thirst and tiredness come less often.** Characters were hungry, thirsty or tired most of the time. Needs now build slowly: about 13 hours without a meal before someone is a little hungry, 10 hours without a drink before they are a little thirsty, and 15 hours awake before they are a little tired. The clock alone stops there. "Starving" or "desperate for water" needs a cause in the story, like a body line or someone trapped, captive, stranded or without food.
+
+Ordinary life happens off the page:
+- A jump in the clock past breakfast, lunch or dinner (08:00, 13:00, 19:00) means they ate and drank.
+- A jump through the night means they slept, whatever the scene mode, unless it was a fight or a crisis. Sleep no longer makes anyone hungry, and a short night still leaves them tired.
+
+Needs written in words now count. "Fed", "ate", "drank", "thirst easing", "rested", "hungry", "parched" and "exhausted" in a body line move the meters. Before, they were kept only as notes, so a character who "drained a full glass" stayed "desperate for water" for hours.
+
+The note calls the mild level "a little hungry", "a little thirsty" and "a little tired". The preset asks for a need only when it changes, and says that ordinary meals and sleep reset needs.
+
 ## 1.20.0 (2026-10-02)
 
 **Five new skins, and your own fonts and sizes.** Pick them in Settings › Look or in Session Zero. Each has a light and a dark palette:
