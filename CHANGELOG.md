@@ -4,6 +4,12 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.16.1 (2026-10-02)
+
+**The clock follows a time you state.** "When they're finally done, it's 15:15" in your message left the clock at 14:05: only a stated day ("it's day 12") or a calendar date was read, and the reply's `clock: +5m` outranks its own header. Now "it's 15:15", "it's now 3:15 pm" and "the clock reads 15:15" set the clock (not Dawn's "It's 1111").
+- A time up to three hours behind the clock corrects it on the same day instead of jumping to tomorrow.
+- "The next day. … It is now 7:45" moves the day and keeps 7:45.
+
 ## 1.16.0 (2026-10-02)
 
 **Elsewhere: proposed subplots.** The world still finds its own subplots in the story and the lorebooks: open threads, debts, kept secrets, soured or charged bonds, lore forecasts and situations, what drives people, hidden pressures. Now it can ask you first.

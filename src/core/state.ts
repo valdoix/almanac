@@ -571,7 +571,8 @@ export class Folder {
           return { verdict: "accepted", line: `🕰 Day ${st.time.day} ${fmtClock(a.minute)}` };
         }
         let day = a.day ?? cur.day;
-        if (a.day == null && a.minute < cur.minute) day = cur.day + 1; // passed midnight
+        // Passed midnight; but the player saying a time a little behind the clock corrects it.
+        if (a.day == null && a.minute < cur.minute && !(a.fromPlayer && cur.minute - a.minute <= 180)) day = cur.day + 1;
         const target = { day, minute: a.minute };
         const diff = absMinutes(target) - absMinutes(cur);
         // "+5m → 22:10" when the clock says 22:15: a target a little behind the clock is

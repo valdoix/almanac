@@ -2479,7 +2479,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.16.0";
+var VERSION = "1.16.1";
 
 // src/core/facts.ts
 function stem(w) {
@@ -4010,7 +4010,7 @@ class Folder {
           return { verdict: "accepted", line: `\uD83D\uDD70 Day ${st.time.day} ${fmtClock(a.minute)}` };
         }
         let day = a.day ?? cur.day;
-        if (a.day == null && a.minute < cur.minute)
+        if (a.day == null && a.minute < cur.minute && !(a.fromPlayer && cur.minute - a.minute <= 180))
           day = cur.day + 1;
         const target = { day, minute: a.minute };
         const diff = absMinutes(target) - absMinutes(cur);
@@ -8107,13 +8107,17 @@ function playerClock(text, ctx) {
     if (day != null)
       return { op: "clock", args: { kind: "abs", day, minute: timeOf(date[1]), keepMinute: true, fromPlayer: true }, raw: `(you said) ${date[0].trim()}` };
   }
+  const clockSaid = /\b(?:it'?s|it is|now it'?s|the time is|the clock (?:says|reads|shows))\s+(?:now\s+|already\s+|just\s+(?:past|after)\s+|about\s+|around\s+)?(\d{1,2}:\d{2}(?:\s*[ap]\.?m\b\.?)?|\d{1,2}\s*[ap]\.?m\b\.?)/i.exec(t);
+  const saidMinute = clockSaid ? timeOf(clockSaid[1].replace(/\./g, "")) : undefined;
   const lead = [...asides(text), t.slice(0, 80)].join(` 
  `);
   const next = /\b(?:the\s+)?(?:next|following)\s+(morning|day|evening|night)\b/i.exec(lead);
   if (next && ctx.day != null) {
-    const minute = { morning: 8 * 60, day: 9 * 60, evening: 19 * 60, night: 22 * 60 }[next[1].toLowerCase()];
-    return { op: "clock", args: { kind: "abs", day: ctx.day + 1, minute, fromPlayer: true }, raw: `(you said) ${next[0].trim()}` };
+    const minute = saidMinute ?? { morning: 8 * 60, day: 9 * 60, evening: 19 * 60, night: 22 * 60 }[next[1].toLowerCase()];
+    return { op: "clock", args: { kind: "abs", day: ctx.day + 1, minute, fromPlayer: true }, raw: `(you said) ${next[0].trim()}${clockSaid ? ` \xB7 ${clockSaid[0].trim()}` : ""}` };
   }
+  if (saidMinute != null)
+    return { op: "clock", args: { kind: "abs", minute: saidMinute, fromPlayer: true }, raw: `(you said) ${clockSaid[0].trim()}` };
   const later = /\b(\d{1,3}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|twelve|several|few)\s+(minutes?|hours?|days?|weeks?)\s+later\b/i.exec(lead);
   if (later) {
     const n = /^\d+$/.test(later[1]) ? parseInt(later[1], 10) : WORD_NUM[later[1].toLowerCase()] ?? 1;

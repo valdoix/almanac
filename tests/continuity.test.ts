@@ -140,6 +140,19 @@ describe("the player's own facts", () => {
     expect(dateFor(cal, d).dayOfMonth).toBe(7);
     expect(d).toBe(7);
   });
+  test("a time said in the prose sets the clock", () => {
+    const { state } = fold([reply(0, "clock: Day 4 14:05"), msg(1, "When they're finally done, it's 15:15. Dawn is in the living room.", true)]);
+    expect(state.time).toEqual({ day: 4, minute: 15 * 60 + 15 });
+    expect(playerClock("It's now 3:15 p.m. and raining.", { names: [], day: 2 })!.args).toMatchObject({ minute: 15 * 60 + 15 });
+    expect(playerClock("Dawn rolls her eyes. \"Dude. It's 1111.\"", { names: [], day: 2 })).toBeNull();
+  });
+  test("a time a little behind the clock corrects it, same day", () => {
+    const { state } = fold([reply(0, "clock: Day 4 16:00"), msg(1, "((it's 15:15))", true)]);
+    expect(state.time).toEqual({ day: 4, minute: 15 * 60 + 15 });
+  });
+  test("the next day with a stated time keeps both", () => {
+    expect(playerClock("The next day. Daeron sits in his study. It is now 7:45 and he waits.", { names: [], day: 4 })!.args).toMatchObject({ day: 5, minute: 7 * 60 + 45 });
+  });
   test("the next morning, in an aside", () => {
     expect(playerClock("((The next morning.)) She wakes.", { names: [], day: 4 })!.args).toMatchObject({ day: 5, minute: 480 });
   });

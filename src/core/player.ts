@@ -47,13 +47,18 @@ export function playerClock(text: string, ctx: PlayerCtx): ParsedOp | null {
     const day = ctx.dayOfDate(date[1], ctx.day);
     if (day != null) return { op: "clock", args: { kind: "abs", day, minute: timeOf(date[1]), keepMinute: true, fromPlayer: true }, raw: `(you said) ${date[0].trim()}` };
   }
+  // A time said outright: "it's 15:15", "it's now 3:15 pm", "the clock reads 15:15". Not "it's 1111".
+  const clockSaid = /\b(?:it'?s|it is|now it'?s|the time is|the clock (?:says|reads|shows))\s+(?:now\s+|already\s+|just\s+(?:past|after)\s+|about\s+|around\s+)?(\d{1,2}:\d{2}(?:\s*[ap]\.?m\b\.?)?|\d{1,2}\s*[ap]\.?m\b\.?)/i.exec(t);
+  const saidMinute = clockSaid ? timeOf(clockSaid[1].replace(/\./g, "")) : undefined;
   // In an aside or opening the message: "The next morning.", "((three hours later))"
   const lead = [...asides(text), t.slice(0, 80)].join(" \n ");
   const next = /\b(?:the\s+)?(?:next|following)\s+(morning|day|evening|night)\b/i.exec(lead);
   if (next && ctx.day != null) {
-    const minute = { morning: 8 * 60, day: 9 * 60, evening: 19 * 60, night: 22 * 60 }[next[1].toLowerCase() as "morning"];
-    return { op: "clock", args: { kind: "abs", day: ctx.day + 1, minute, fromPlayer: true }, raw: `(you said) ${next[0].trim()}` };
+    // "The next day. … It is now 7:45": the day moves and the stated time holds.
+    const minute = saidMinute ?? { morning: 8 * 60, day: 9 * 60, evening: 19 * 60, night: 22 * 60 }[next[1].toLowerCase() as "morning"];
+    return { op: "clock", args: { kind: "abs", day: ctx.day + 1, minute, fromPlayer: true }, raw: `(you said) ${next[0].trim()}${clockSaid ? ` · ${clockSaid[0].trim()}` : ""}` };
   }
+  if (saidMinute != null) return { op: "clock", args: { kind: "abs", minute: saidMinute, fromPlayer: true }, raw: `(you said) ${clockSaid![0].trim()}` };
   const later = /\b(\d{1,3}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|twelve|several|few)\s+(minutes?|hours?|days?|weeks?)\s+later\b/i.exec(lead);
   if (later) {
     const n = /^\d+$/.test(later[1]) ? parseInt(later[1], 10) : WORD_NUM[later[1].toLowerCase()] ?? 1;
