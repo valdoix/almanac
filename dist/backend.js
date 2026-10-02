@@ -659,6 +659,7 @@ var init_types = __esm(() => {
     theme: "preset",
     skinMode: "auto",
     skinColors: {},
+    skinFonts: {},
     fonts: false,
     narratorOnlyToTools: false,
     telemetry: true,
@@ -7599,7 +7600,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.19.3";
+var VERSION = "1.20.0";
 
 // src/core/render.ts
 function slotColor(slot) {

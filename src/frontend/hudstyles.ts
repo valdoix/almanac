@@ -342,6 +342,30 @@ ${S("posy")} .alm-om{box-shadow:0 0 0 2px var(--alm-hud-ring),0 0 0 4px color-mi
 ${S("posy")} .alm-hudc__pane{position:relative}
 ${S("posy")} .alm-hudc__pane::after{content:"";position:sticky;display:block;float:right;bottom:-10px;margin:-40px -12px -16px 0;width:64px;height:64px;background:var(--alm-sprig) center/contain no-repeat;opacity:.55;pointer-events:none}
 ${S("posy")} .alm-hudc h6>span:first-child::after{content:" ✿";color:var(--alm-accent)}
+
+/* Airmail: an airmail-striped edge */
+${S("airmail")} .alm-hudc{border:5px solid transparent;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,repeating-linear-gradient(135deg,var(--alm-accent) 0 10px,var(--alm-panel) 10px 15px,var(--alm-accent-2) 15px 25px,var(--alm-panel) 25px 30px) border-box}
+${S("airmail")} .alm-om{background:transparent;color:var(--c);box-shadow:0 0 0 1.5px var(--c),0 0 0 3px var(--alm-hud-ring),0 0 0 4px var(--c);transform:rotate(-8deg)}
+
+/* Lido: square brass edges, octagon voices */
+${S("lido")} .alm-hudw,${S("lido")} .alm-hudc{--alm-hud-pill:0px;--alm-hud-r:0px}
+${S("lido")} .alm-hudw,${S("lido")} .alm-hudc{box-shadow:inset 0 0 0 1px var(--alm-gold),inset 0 0 0 4px var(--alm-panel),inset 0 0 0 5px color-mix(in oklab,var(--alm-gold) 55%,transparent),0 14px 30px -16px rgba(0,0,0,.6)}
+${S("lido")} .alm-om{border-radius:0;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+${S("lido")} .alm-hudc h6{letter-spacing:.3em;color:var(--alm-gold)}
+
+/* Riso: ink outline, second ink off register */
+${S("riso")} .alm-hudw,${S("riso")} .alm-hudc{border:2px solid var(--alm-ink);box-shadow:var(--alm-shadow)}
+${S("riso")} .alm-om{background:radial-gradient(var(--c) 1.3px,transparent 1.7px) 0 0/4px 4px,color-mix(in oklab,var(--c) 22%,var(--alm-panel));color:var(--alm-ink);box-shadow:0 0 0 2px var(--c)}
+
+/* Neon: a lit frame at night */
+${S("neon")} .alm-hudw,${S("neon")} .alm-hudc{border-color:color-mix(in oklab,var(--alm-accent) 55%,var(--alm-line));box-shadow:0 0 calc(16px * var(--alm-gl)) calc(-4px * var(--alm-gl)) var(--alm-accent),0 14px 30px -16px rgba(0,0,0,.6)}
+${S("neon")} .alm-om{background:transparent;color:var(--c);box-shadow:0 0 0 1.5px var(--c),0 0 calc(8px * var(--alm-gl)) var(--c)}
+${S("neon")} .alm-hudw__t{color:var(--alm-accent-2);text-shadow:0 0 calc(8px * var(--alm-gl)) var(--alm-accent-2)}
+
+/* Splash Page: a comic panel */
+${S("splash")} .alm-hudw,${S("splash")} .alm-hudc{--alm-hud-pill:3px;--alm-hud-r:2px;border:2.5px solid var(--alm-line);box-shadow:4px 4px 0 var(--alm-pow)}
+${S("splash")} .alm-om{box-shadow:0 0 0 2px var(--alm-line)}
+${S("splash")} .alm-hudc h6{font-family:var(--alm-font-display);letter-spacing:.08em;color:var(--alm-accent)}
 `;
 
 export const HUD_CSS = BASE + SIGNATURES;

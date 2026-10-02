@@ -8,7 +8,7 @@ import { PRESET_VERSION, olderThan } from "../core/version";
 import { renderGraph, type GEdge, type GNode } from "./graph";
 import { CreatorUI } from "./creator-ui";
 import { VERSION } from "../core/version";
-import { SKIN_COLORS, SKIN_LIST, skinPalette } from "./skins";
+import { FONT_CHOICES, FONT_ROLES, FONT_SIZES, SIZE_MAX, SIZE_MIN, SKIN_COLORS, SKIN_LIST, cleanFontName, skinPalette } from "./skins";
 import { NOT_A_PERSON } from "../core/state";
 import { PAGES, dock, emptySky, engineKeys, groupOf, pageTitle, skyHeader, type Page } from "./orrery";
 import { dots, ic, medal, n, ring, sec, stk, toggle, type Tone } from "./ui";
@@ -85,6 +85,9 @@ export class AlmanacApp {
   /** Cast page: people away from the scene shown as full cards. Settings: sections left open. */
   castOpen = new Set<string>();
   openSecs = new Set<string>();
+  /** Settings › Look: fonts for the skin on screen or for every skin, and the font menus showing a name box. */
+  fontScope: "skin" | "all" = "skin";
+  fontCustom = new Set<string>();
   clerkProgress = "";
   /** Chronicle page: which level to list, and which units show their folded children. */
   chronFilter: "all" | "volume" | "arc" | "chapter" = "all";
@@ -127,6 +130,11 @@ export class AlmanacApp {
       const t = ev.target as HTMLInputElement;
       if (this.creator.onInput(t)) return;
       if (t?.dataset?.skinColor) this.ctx.events.emit("almanac:skinColors", this.withSkinColor(t.dataset.skinColor, t.value));
+      if (t?.dataset?.skinSize) {
+        this.ctx.events.emit("almanac:skinFonts", this.withSkinFont(t.dataset.skinSize, Number(t.value)));
+        const out = t.nextElementSibling;
+        if (out?.tagName === "OUTPUT") out.textContent = `${t.value}%`;
+      }
     });
     // The creator's message box keeps its focus and caret across redraws.
     this.root.addEventListener("focusin", (ev) => this.creator.onFocus(ev.target as HTMLElement, true));
@@ -776,7 +784,7 @@ ${set("world", "moon", "#5fcfc0", "World and Elsewhere", `${elsewhereLab[s.elsew
 ${set("director", "film", "#c2c9de", "Director", `planner timeout ${s.sidecarTimeout} s`, `<p class="muted" style="margin:0 0 10px"><small>Used when the preset's Director's Pass channel is set to Sidecar.</small></p><label class="f">Planner connection${conn("sidecarConnection", "your default connection")}</label><label class="f">Planner timeout (seconds)${num("sidecarTimeout", 5, 90)}</label>`)}
 ${sec("Look")}<div class="card"><div class="almx-skins">${`<button type="button" data-act="setting" data-key="theme" data-id="preset" aria-pressed="${s.theme === "preset"}"><span><i style="background:conic-gradient(#ff8fa3,#ffc46b,#5fcfc0,#a99bff,#ff8fa3)"></i></span>By genre</button>`}${look}</div>
 <div class="almx-lbl" style="margin-top:14px">Light or dark</div><div style="margin-top:6px">${toggle("setting", s.skinMode ?? "auto", [["auto", "Follow Lumiverse", 'data-key="skinMode"'], ["light", "Light", 'data-key="skinMode"'], ["dark", "Dark", 'data-key="skinMode"']], "Light or dark")}</div>
-${this.skinColors(v)}${chk("fonts", "Load the skins' web fonts from Google Fonts (your browser contacts Google)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="almx-row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn sm" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${e(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>
+${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fonts from Google Fonts (your browser contacts Google)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="almx-row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn sm" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${e(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>
 <p class="muted" style="margin:14px 0 0;text-align:center"><small>ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${e(v.version)}` : ""}</small></p>`;
   }
 
@@ -816,6 +824,59 @@ ${this.skinColors(v)}${chk("fonts", "Load the skins' web fonts from Google Fonts
     return `<div class="almc"><div class="row"><span class="grow"><b>Colours</b> <span class="muted">— ${e(skin === "lumiverse" ? "Lumiverse's theme" : name)}, ${mode}</span></span>${Object.keys(mine).length ? `<button class="btn" data-act="skinColorsReset" title="Put back every colour of this palette">Reset all</button>` : ""}</div>
 <div class="almc-grid">${rows}</div>
 <p class="muted" style="margin:0"><small>Your colours are kept for each skin, and for its light and its dark palette separately. To change the other palette, switch <b>Light or dark</b> above.</small></p></div>`;
+  }
+
+  /** Where font picks go: "all" (every skin) or the skin on screen. */
+  fontKey(): string {
+    return this.fontScope === "all" ? "all" : this.lookTarget().skin;
+  }
+
+  /** The player's fonts with one field changed (null: back to the default; no field: the whole set). */
+  withSkinFont(field: string | null, value: string | number | null): Record<string, any> {
+    const key = this.fontKey();
+    const all = { ...(this.view?.settings?.skinFonts ?? {}) };
+    const mine = field ? { ...(all[key] ?? {}) } : {};
+    if (field && value != null && value !== "") mine[field] = value;
+    else if (field) delete mine[field];
+    if (Object.keys(mine).length) all[key] = mine;
+    else delete all[key];
+    return all;
+  }
+
+  saveSkinFonts(picks: Record<string, any>) {
+    this.send({ type: "settings", patch: { skinFonts: picks } });
+    if (this.view?.settings) this.view.settings.skinFonts = picks;
+    this.ctx.events.emit("almanac:skinFonts", picks);
+    this.render();
+  }
+
+  /** Settings › Look: a font for each of the skin's four faces and two sizes, for the skin on screen or every skin. */
+  skinFonts(v: any): string {
+    const { skin } = this.lookTarget();
+    const picks = v.settings?.skinFonts ?? {};
+    const key = this.fontKey();
+    const mine: Record<string, any> = picks[key] ?? {};
+    const under: Record<string, any> = key === "all" ? {} : picks.all ?? {};
+    const name = skin === "lumiverse" ? "Follow Lumiverse" : SKIN_LIST.find(([id]) => id === skin)?.[1] ?? skin;
+    const label = (pick: unknown) => typeof pick !== "string" ? "" : pick.startsWith("custom:") ? pick.slice(7) : FONT_CHOICES.find((c) => c[0] === pick)?.[1] ?? "";
+    const groups = [...new Set(FONT_CHOICES.map((c) => c[2]))];
+    const rows = FONT_ROLES.map(([role, lab, what]) => {
+      const cur = typeof mine[role] === "string" ? String(mine[role]) : "";
+      const custom = cur.startsWith("custom:") || this.fontCustom.has(`${key}:${role}`);
+      const base = key === "all" ? "each skin's own" : under[role] ? `every skin's: ${label(under[role])}` : "the skin's own";
+      const opts = `<option value=""${!cur && !custom ? " selected" : ""}>${e(base)}</option>`
+        + groups.map((g) => `<optgroup label="${e(g)}">${FONT_CHOICES.filter((c) => c[2] === g).map(([id, l]) => `<option value="${id}"${cur === id ? " selected" : ""}>${e(l)}</option>`).join("")}</optgroup>`).join("")
+        + `<option value="custom"${custom ? " selected" : ""}>Another font…</option>`;
+      return `<div class="almf-row"><span class="almf-aa" style="font-family:var(--alm-font-${role})" aria-hidden="true">Aa</span><label class="f">${lab} <small class="muted">${what}</small><select data-skin-font="${role}">${opts}</select></label>${custom ? `<input type="text" data-skin-font-name="${role}" value="${e(cur.startsWith("custom:") ? cur.slice(7) : "")}" placeholder="Font name, e.g. Lora" aria-label="${e(lab)}: font name" spellcheck="false">` : ""}</div>`;
+    }).join("");
+    const sizes = FONT_SIZES.map(([k, lab, what]) => {
+      const val = typeof mine[k] === "number" ? mine[k] : typeof under[k] === "number" ? under[k] : 100;
+      return `<label class="almf-size">${lab} <small class="muted">${what}</small><span class="row"><input type="range" data-skin-size="${k}" min="${SIZE_MIN}" max="${SIZE_MAX}" step="5" value="${val}"><output>${val}%</output>${typeof mine[k] === "number" ? `<button class="btn" data-act="skinFontReset" data-id="${k}" title="Back to ${key === "all" ? "100%" : "the size for every skin"}" aria-label="Reset the ${e(lab.toLowerCase())} size">reset</button>` : ""}</span></label>`;
+    }).join("");
+    return `<div class="almc"><div class="row"><span class="grow"><b>Fonts and sizes</b></span>${Object.keys(mine).length ? `<button class="btn" data-act="skinFontsReset" title="Put back every font and size ${key === "all" ? "set for every skin" : "of this skin"}">Reset all</button>` : ""}</div>
+<div style="margin-top:8px">${toggle("fontScope", this.fontScope, [["skin", `This skin (${e(name)})`], ["all", "Every skin"]], "Fonts and sizes for")}</div>
+<div class="almf-grid">${rows}</div>${sizes}
+<p class="muted" style="margin:0"><small>A skin's own choice wins over one for every skin. Fonts from the menu come from Google Fonts while <b>Load the skins' web fonts</b> is on; otherwise a font shows only if it is installed on this device. <b>Another font…</b> takes the name of any Google Fonts family or installed font. Sizes scale what the Almanac draws, not Lumiverse's own message text.</small></p></div>`;
   }
 
   // -------------------------------------------------------------------------
@@ -1094,6 +1155,9 @@ ${this.skinColors(v)}${chk("fonts", "Load the skins' web fonts from Google Fonts
       case "recheck": this.send({ type: "recheck" }); break;
       case "skinColorReset": if (id) this.saveSkinColors(this.withSkinColor(id, null)); break;
       case "skinColorsReset": this.saveSkinColors(this.withSkinColor(null, null)); break;
+      case "fontScope": this.fontScope = id === "all" ? "all" : "skin"; this.render(); break;
+      case "skinFontReset": if (id) this.saveSkinFonts(this.withSkinFont(id, null)); break;
+      case "skinFontsReset": this.fontCustom.clear(); this.saveSkinFonts(this.withSkinFont(null, null)); break;
       case "saveTruths": this.send({ type: "config", patch: { truths: val("#almTruths").split("\n").map((s) => s.trim()).filter(Boolean) } }); break;
       case "loreClassify": this.send({ type: "lore", action: "classify" }); break;
       case "mirrorSync": this.send({ type: "mirrorSync" }); break;
@@ -1153,6 +1217,33 @@ ${this.skinColors(v)}${chk("fonts", "Load the skins' web fonts from Google Fonts
     }
     if (d.skinColor) {
       this.saveSkinColors(this.withSkinColor(d.skinColor, t.value));
+      return;
+    }
+    if (d.skinFont) {
+      // "Another font…" waits for a name before anything is saved.
+      const k = `${this.fontKey()}:${d.skinFont}`;
+      if (t.value === "custom") {
+        this.fontCustom.add(k);
+        this.render();
+        return;
+      }
+      this.fontCustom.delete(k);
+      this.saveSkinFonts(this.withSkinFont(d.skinFont, t.value || null));
+      return;
+    }
+    if (d.skinFontName) {
+      const name = cleanFontName(t.value);
+      if (!name && t.value.trim()) {
+        t.setCustomValidity("Letters, digits, spaces and hyphens only.");
+        t.reportValidity();
+        return;
+      }
+      t.setCustomValidity("");
+      this.saveSkinFonts(this.withSkinFont(d.skinFontName, name ? `custom:${name}` : null));
+      return;
+    }
+    if (d.skinSize) {
+      this.saveSkinFonts(this.withSkinFont(d.skinSize, Number(t.value)));
       return;
     }
     if (d.set) {

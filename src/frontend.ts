@@ -5,7 +5,8 @@
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { AlmanacApp } from "./frontend/app";
 import { MESSAGE_CSS, PANEL_CSS, TOKENS } from "./frontend/styles";
-import { SKIN_CSS, customCss, fontsFor } from "./frontend/skins";
+import { SKIN_CSS, customCss, fontCss, fontsFor, pickedFontImports } from "./frontend/skins";
+import type { SkinFonts } from "./core/types";
 import { openSessionZero } from "./frontend/sessionzero";
 import { HUD_SIZE, hasThoughtsTab, hudCard, hudPill, hudTab, measure, type HudUi } from "./frontend/hud";
 import { HUD_CSS } from "./frontend/hudstyles";
@@ -25,16 +26,18 @@ export function setup(ctx: SpindleFrontendContext) {
   let fontsOn = true;
   let skin = "almanac";
   let fontStyle: (() => void) | null = null;
-  let fontSkin = "";
-  // Web fonts: the base set plus the active skin's, swapped when the skin changes.
+  let fontKey = "";
+  let fontPicks: SkinFonts = {};
+  // Web fonts: the base set, the active skin's and the ones the player picked for it; swapped when any changes.
   const setFonts = (on: boolean) => {
-    if (fontStyle && (!on || fontSkin !== skin)) {
+    const css = fontsFor(skin) + "\n" + pickedFontImports(skin, fontPicks);
+    if (fontStyle && (!on || fontKey !== css)) {
       fontStyle();
       fontStyle = null;
     }
     if (on && !fontStyle) {
-      fontStyle = ctx.dom.addStyle(fontsFor(skin));
-      fontSkin = skin;
+      fontStyle = ctx.dom.addStyle(css);
+      fontKey = css;
     }
     fontsOn = on;
   };
@@ -49,6 +52,19 @@ export function setup(ctx: SpindleFrontendContext) {
     customStyle?.();
     customStyle = css ? ctx.dom.addStyle(css) : null;
     lastCustom = css;
+  };
+  // The player's fonts and sizes, likewise.
+  let pickStyle: (() => void) | null = null;
+  let lastPicks = "";
+  const applyFontPicks = (picks: unknown) => {
+    fontPicks = picks && typeof picks === "object" ? (picks as SkinFonts) : {};
+    const css = fontCss(fontPicks);
+    if (css !== lastPicks) {
+      pickStyle?.();
+      pickStyle = css ? ctx.dom.addStyle(css) : null;
+      lastPicks = css;
+    }
+    if (fontsOn) setFonts(true);
   };
 
   // Light or dark: the player's choice, or Lumiverse's own mode read from its background.
@@ -551,13 +567,14 @@ export function setup(ctx: SpindleFrontendContext) {
       }
       skin = v.theme || "almanac";
       document.documentElement.setAttribute("data-alm-skin", skin);
-      if (fontsOn && fontSkin !== skin) setFonts(true);
+      if (fontsOn) setFonts(true);
       const pref = v.settings?.skinMode ?? "auto";
       if (pref !== modePref) {
         modePref = pref;
         applyMode();
       }
       applyCustom(v.settings?.skinColors);
+      applyFontPicks(v.settings?.skinFonts);
       if (v.speakerCss !== lastSpeakerCss) {
         speakerStyle?.();
         speakerStyle = v.speakerCss ? ctx.dom.addStyle(v.speakerCss) : null;
@@ -631,6 +648,8 @@ export function setup(ctx: SpindleFrontendContext) {
 
   // A colour picker in Settings › Look, live while it's dragged.
   removers.push(ctx.events.on("almanac:skinColors", (p: any) => applyCustom(p)));
+  // A font or size in Settings › Look, live while a slider is dragged.
+  removers.push(ctx.events.on("almanac:skinFonts", (p: any) => applyFontPicks(p)));
 
   // Command button in the input bar's Extras popover.
   try {

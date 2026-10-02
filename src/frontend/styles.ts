@@ -114,6 +114,9 @@ export const MESSAGE_CSS = `
 .alm-chapter::before,.alm-chapter::after{content:"";height:10px;background:radial-gradient(circle,var(--alm-gold) 0 2.5px,transparent 3px) center/10px 10px no-repeat,linear-gradient(var(--alm-gold),var(--alm-gold)) center/100% 1px no-repeat;
   -webkit-mask:linear-gradient(90deg,transparent,#000 60%);mask:linear-gradient(90deg,transparent,#000 60%)}
 .alm-chapter::after{transform:scaleX(-1)}
+.alm-chapter::before{grid-column:1;grid-row:1/span 2}
+.alm-chapter::after{grid-column:3;grid-row:1/span 2}
+.alm-chapter>small,.alm-chapter>b{grid-column:2}
 .alm-chapter small{display:block!important;font:500 10.5px/1 var(--alm-font-mono)!important;letter-spacing:.3em!important;text-transform:uppercase!important;color:var(--alm-accent)!important}
 .alm-chapter b{display:block!important;margin-top:6px!important;font:600 italic 26px/1.1 var(--alm-font-display)!important;color:var(--alm-ink)!important}
 .alm-chapter b::before,.alm-chapter b::after{content:"❦";font-style:normal;font-size:.6em;color:var(--alm-gold);margin:0 .5em;vertical-align:.18em}
@@ -406,6 +409,18 @@ export const PANEL_CSS = `
 .almp .almc-row label{display:flex;gap:8px;align-items:center;flex:1;min-width:0;cursor:pointer;font-size:13px}
 .almp .almc-row .swatch{flex:none;width:26px;height:26px}
 .almp .almc-row .btn{padding:4px 7px}
+/* Settings › Look: fonts and sizes */
+.almp .almf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px 14px;margin:12px 0 6px}
+.almp .almf-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:6px 10px;align-items:end}
+.almp .almf-aa{grid-row:span 2;align-self:center;font-size:24px;line-height:1;text-align:center;color:var(--alm-accent)}
+.almp .almf-row .f{margin:0;min-width:0}
+.almp .almf-row select{width:100%}
+.almp .almf-row input[type=text]{grid-column:2;width:100%}
+.almp .almf-size{display:grid;gap:4px;margin:8px 0;font-size:13px}
+.almp .almf-size .row{display:flex;gap:10px;align-items:center}
+.almp .almf-size input[type=range]{flex:1;min-width:0;accent-color:var(--alm-accent)}
+.almp .almf-size output{min-width:42px;text-align:right;font:500 12px/1 var(--alm-font-mono)}
+.almp .almf-size .btn{padding:4px 7px}
 .almp .spoiler{filter:blur(5px);transition:filter .2s;cursor:pointer}.almp .spoiler:hover,.almp .spoiler:focus{filter:none}
 .almp .timeline{position:relative;padding-left:18px}
 .almp .timeline::before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:var(--alm-line)}

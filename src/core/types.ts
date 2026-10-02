@@ -592,11 +592,13 @@ export interface Settings {
   mirror: "off" | "summaries" | "full";
   mirrorVectorize: boolean;
   hud: boolean;
-  theme: "preset" | "almanac" | "night" | "solar" | "nocturne" | "botanical" | "prism" | "candy" | "dossier" | "scriptorium" | "arcana" | "orbital" | "posy" | "lumiverse";
+  theme: "preset" | "almanac" | "night" | "solar" | "nocturne" | "botanical" | "prism" | "candy" | "dossier" | "scriptorium" | "arcana" | "orbital" | "posy" | "airmail" | "lido" | "riso" | "neon" | "splash" | "lumiverse";
   /** Light or dark palette for the skin; auto follows Lumiverse. */
   skinMode: "auto" | "light" | "dark";
   /** The player's own colours, laid over a skin's palette. */
   skinColors: SkinColors;
+  /** The player's fonts and sizes, for every skin ("all") or one. */
+  skinFonts: SkinFonts;
   fonts: boolean;
   narratorOnlyToTools: boolean;
   telemetry: boolean;
@@ -616,6 +618,9 @@ export interface Settings {
 
 /** Colours changed by the player: skin id → mode → token ("panel", "accent"…) → #rrggbb. */
 export type SkinColors = Record<string, { light?: Record<string, string>; dark?: Record<string, string> }>;
+
+/** Fonts and sizes changed by the player: "all" or a skin id → a role ("display", "body", "mono", "hand") → a menu id or "custom:Name"; "story" / "drawer" → percent. */
+export type SkinFonts = Record<string, Record<string, string | number>>;
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: "auto",
@@ -662,6 +667,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "preset",
   skinMode: "auto",
   skinColors: {},
+  skinFonts: {},
   fonts: false,
   narratorOnlyToTools: false,
   telemetry: true,

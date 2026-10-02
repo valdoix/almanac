@@ -101,3 +101,35 @@ test("the player's colours repaint one skin and mode, and nothing unsafe gets th
     `html:root[data-alm-skin="nocturne"][data-alm-mode="dark"]{--alm-accent:#301020;--alm-on-accent:#fff;}`,
   ]);
 });
+
+test("the player's fonts and sizes apply to every skin or one, and nothing unsafe gets through", async () => {
+  const { fontCss, pickedFontImports, cleanFontName, SKIN_LIST, skinPalette } = await import("../src/frontend/skins");
+  expect(fontCss(undefined)).toBe("");
+  const css = fontCss({
+    all: { body: "lora", story: 120 },
+    neon: { display: "custom:Major Mono Display", hand: "custom:x\";}body{display:none", mono: "nope", drawer: 400 },
+    "x]{}": { body: "inter" },
+  });
+  expect(css.split("\n")).toEqual([
+    `html:root[data-alm-skin]{--alm-font-body:"Lora",Georgia,serif;--alm-zoom-story:1.2;}`,
+    `html:root[data-alm-skin="neon"][data-alm-skin]{--alm-font-display:"Major Mono Display",system-ui,sans-serif;--alm-zoom-drawer:1.5;}`,
+    expect.stringContaining("zoom:var(--alm-zoom-story,1)"),
+    `.almp{zoom:var(--alm-zoom-drawer,1)}`,
+  ]);
+  // No size picked: no zoom rules at all.
+  expect(fontCss({ riso: { hand: "caveat" } })).not.toContain("zoom");
+  expect(cleanFontName("  EB   Garamond ")).toBe("EB Garamond");
+  expect(cleanFontName("a(b)")).toBe("");
+  // Menu fonts share one request; a typed name gets its own, so an unknown one fails alone. The skin's own pick wins.
+  const imp = pickedFontImports("neon", { all: { body: "lora", mono: "jetbrains" }, neon: { body: "inter", display: "custom:Major Mono Display" } }).split("\n");
+  expect(imp).toEqual([
+    `@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap");`,
+    `@import url("https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap");`,
+  ]);
+  // The five new skins are listed and have both palettes.
+  for (const id of ["airmail", "lido", "riso", "neon", "splash"]) {
+    expect(SKIN_LIST.some(([s]) => s === id)).toBe(true);
+    expect(skinPalette(id, "light")?.panel).toMatch(/^#/);
+    expect(skinPalette(id, "dark")?.panel).toMatch(/^#/);
+  }
+});

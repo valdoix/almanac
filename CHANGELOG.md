@@ -4,6 +4,19 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.20.0 (2026-10-02)
+
+**Five new skins, and your own fonts and sizes.** Pick them in Settings › Look or in Session Zero. Each has a light and a dark palette:
+- **Airmail**: a postcard. Red-and-blue airmail stripes round the ledger, postmarks for speakers, ruled bubbles, perforated stamps, and thoughts as a handwritten P.S.
+- **Lido**: Art Deco. Stepped corners with brass rules, octagon medals, sunburst rays behind chapter titles, and thoughts engraved between two lines.
+- **Riso**: a two-ink zine. A second ink just off register, halftone medals, marker highlights for thoughts, chapter titles on a cut-out label, and two staples on the ledger.
+- **Neon**: signs at night. Speakers glow in their colours and the chapter title flickers in a neon script (still when reduced motion is on). In light mode the signs are switched off: the same tubes, unlit.
+- **Splash Page**: a comic book. White balloons with tails, thought clouds, yellow caption boxes for chapters, and panel borders. Balloons stay white in dark mode.
+
+**Fonts and sizes** (Settings › Look, under Colours). Every skin sets four faces: headings, text, labels and handwriting. Each can be changed to one of about sixty fonts, or to any Google Fonts family or installed font typed by name. Two sliders, from 80% to 150%, scale what the Almanac draws in messages (voice cards, thoughts, chapters, the ledger) and the drawer. The floating widget keeps its size. Choices can apply to the skin on screen or to every skin, and a skin's own choice wins over one for every skin. Menu fonts load from Google Fonts while "Load the skins' web fonts" is on.
+
+Chapter headings draw on one line between their rules again. The scene line and the title had been split into two columns.
+
 ## 1.19.3 (2026-10-02)
 
 **The extension marks who speaks when the model doesn't.** Some models, GLM among them, drop the speaker marks for most of a reply even though the prompt asks for them. Without marks the page draws no voice cards. After each reply, any spoken lines left without a mark go to a quiet model call (the clerk's connection, or the summariser's). The call works out who speaks each line from the narration around it ("she says", "Dawn points her fork"), the lines that are already marked, and the flow of the conversation. The marks are then written into the message, in the reply's own names and voice numbers, and the reply redraws with voice cards. It also adds the voice number to the reply's own marks that left it out (`[spk=Dawn]`), so their colours match.

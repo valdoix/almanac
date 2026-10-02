@@ -1,14 +1,16 @@
-// Skins: eleven fixed palettes, each with a light and a dark mode, plus
+// Skins: sixteen fixed palettes, each with a light and a dark mode, plus
 // "lumiverse", which follows the host theme (the base tokens in styles.ts).
 // The frontend sets data-alm-skin and data-alm-mode on <html>; the tokens and a
-// few signature overrides per skin live here. Mockups: design/mockups/skins.html.
-// The player can repaint any palette (Settings › Look): customCss() at the end.
+// few signature overrides per skin live here. Mockups: design/mockups/skins.html and skins-new.html.
+// The player can repaint any palette and pick its fonts and sizes (Settings › Look):
+// customCss() and fontCss() at the end.
 
-import type { SkinColors } from "../core/types";
+import type { SkinColors, SkinFonts } from "../core/types";
 
 export const SKIN_LIST: [string, string][] = [
   ["almanac", "Almanac"], ["night", "Night Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"],
   ["dossier", "Dossier"], ["scriptorium", "Scriptorium"], ["arcana", "Arcana"], ["orbital", "Orbital"], ["posy", "Posy"],
+  ["airmail", "Airmail"], ["lido", "Lido"], ["riso", "Riso"], ["neon", "Neon"], ["splash", "Splash Page"],
   ["lumiverse", "Follow Lumiverse"],
 ];
 
@@ -125,6 +127,50 @@ const SKINS: Record<string, Skin> = {
     dark: { panel: "#172a20", "panel-2": "#0f1f17", ink: "#fbe9ee", muted: "#b5c8b9", line: "#2f4a3b", accent: "#ff8fb1", "accent-2": "#8fd19e", gold: "#f0c07a", good: "#8fd19e", warn: "#f0c07a", danger: "#ff7f98", "on-accent": "#0f1f17",
       shadow: "0 22px 44px -28px rgba(0,0,0,.9)", lift: "0 10px 22px -18px rgba(0,0,0,.9)", texture: `linear-gradient(rgba(15,31,23,.62),rgba(15,31,23,.62)),${FLOWERS} 0 0/96px 96px` },
     fonts: ["DM+Serif+Display:ital@0;1", "Nunito:wght@400;600;700", "Dancing+Script:wght@600"],
+  },
+  airmail: {
+    shared: { "font-display": `"Yeseva One",Georgia,serif`, "font-body": `"Karla","Segoe UI",system-ui,sans-serif`, "font-mono": `"Karla","Segoe UI",system-ui,sans-serif`, "font-hand": `"Homemade Apple",cursive`, radius: "6px", "r-sm": "4px" },
+    light: { panel: "#fdf9f1", "panel-2": "#eee4d0", ink: "#2a2f3a", muted: "#786c5c", line: "#e0d4bb", accent: "#d2312f", "accent-2": "#1f4fa0", gold: "#c9952e", good: "#3a7d55", warn: "#b27a14", danger: "#d2312f", "on-accent": "#fff",
+      shadow: "0 2px 0 rgba(0,0,0,.04),0 20px 34px -24px rgba(60,40,20,.5)", lift: "0 8px 18px -14px rgba(60,40,20,.45)", texture: "repeating-linear-gradient(0deg,rgba(60,40,20,.03) 0 1px,transparent 1px 4px),repeating-linear-gradient(90deg,rgba(60,40,20,.03) 0 1px,transparent 1px 4px)" },
+    dark: { panel: "#1b2030", "panel-2": "#121621", ink: "#f2ecdf", muted: "#a9a497", line: "#313852", accent: "#ff6b5e", "accent-2": "#7ea6ff", gold: "#e8bd6a", good: "#84cfa0", warn: "#e8bd6a", danger: "#ff6b5e", "on-accent": "#121621",
+      shadow: "0 22px 40px -26px rgba(0,0,0,.9)", lift: "0 10px 22px -16px rgba(0,0,0,.9)", texture: "repeating-linear-gradient(0deg,rgba(242,236,223,.02) 0 1px,transparent 1px 4px),repeating-linear-gradient(90deg,rgba(242,236,223,.02) 0 1px,transparent 1px 4px)" },
+    fonts: ["Yeseva+One", "Karla:ital,wght@0,400;0,500;0,700;1,400", "Homemade+Apple"],
+  },
+  lido: {
+    shared: { "font-display": `"Limelight",Georgia,serif`, "font-body": `"Josefin Sans","Segoe UI",system-ui,sans-serif`, "font-mono": `"Josefin Sans","Segoe UI",system-ui,sans-serif`, "font-hand": `"Poiret One","Segoe UI",system-ui,sans-serif`, radius: "0px", "r-sm": "0px", lift: "none",
+      step: "polygon(0 12px,6px 12px,6px 6px,12px 6px,12px 0,calc(100% - 12px) 0,calc(100% - 12px) 6px,calc(100% - 6px) 6px,calc(100% - 6px) 12px,100% 12px,100% calc(100% - 12px),calc(100% - 6px) calc(100% - 12px),calc(100% - 6px) calc(100% - 6px),calc(100% - 12px) calc(100% - 6px),calc(100% - 12px) 100%,12px 100%,12px calc(100% - 6px),6px calc(100% - 6px),6px calc(100% - 12px),0 calc(100% - 12px))" },
+    light: { panel: "#f7f2e6", "panel-2": "#e9dfc8", ink: "#141414", muted: "#5e584c", line: "#d4c59f", accent: "#0f6b5c", "accent-2": "#1d3c6e", gold: "#a8741a", good: "#2e7a4f", warn: "#a8741a", danger: "#a33030", "on-accent": "#fff",
+      shadow: "0 22px 40px -28px rgba(20,20,20,.5)", texture: "repeating-linear-gradient(90deg,rgba(168,116,26,.09) 0 1px,transparent 1px 12px)" },
+    dark: { panel: "#111113", "panel-2": "#08080a", ink: "#f1e9d6", muted: "#a69f8c", line: "#2e2a22", accent: "#e0b25a", "accent-2": "#5fd0b6", gold: "#e0b25a", good: "#7fd6a6", warn: "#e9c46a", danger: "#ff7b6e", "on-accent": "#08080a",
+      shadow: "0 26px 50px -28px rgba(0,0,0,.95)", texture: "repeating-linear-gradient(90deg,rgba(224,178,90,.06) 0 1px,transparent 1px 12px)" },
+    fonts: ["Limelight", "Josefin+Sans:wght@400;600;700", "Poiret+One"],
+  },
+  riso: {
+    shared: { "font-display": `"Rubik Mono One","Segoe UI",system-ui,sans-serif`, "font-body": `"Work Sans","Segoe UI",system-ui,sans-serif`, "font-mono": `"Work Sans","Segoe UI",system-ui,sans-serif`, "font-hand": `"Permanent Marker",cursive`, radius: "4px", "r-sm": "3px" },
+    light: { panel: "#f5f1e8", "panel-2": "#e9e3d4", ink: "#1b1b3a", muted: "#5c5a78", line: "#d6cfbd", accent: "#ff48b0", "accent-2": "#00a3a3", gold: "#ffb000", good: "#00866e", warn: "#c97a00", danger: "#e8336d", "on-accent": "#1b1b3a", "on-hl": "#1b1b3a",
+      shadow: "5px 4px 0 color-mix(in oklab,#00a3a3 75%,transparent)", lift: "3px 3px 0 color-mix(in oklab,#ff48b0 70%,transparent)",
+      texture: "radial-gradient(rgba(255,72,176,.16) 1.2px,transparent 1.6px) 0 0/7px 7px,radial-gradient(rgba(0,163,163,.13) 1.2px,transparent 1.6px) 3px 2px/7px 7px" },
+    dark: { panel: "#1d1d45", "panel-2": "#131331", ink: "#f5f1e8", muted: "#b3b0d0", line: "#34346a", accent: "#ff6cc4", "accent-2": "#3ee0d0", gold: "#ffc94a", good: "#3ee0b0", warn: "#ffc94a", danger: "#ff6b8f", "on-accent": "#131331", "on-hl": "#131331",
+      shadow: "5px 4px 0 color-mix(in oklab,#3ee0d0 60%,transparent)", lift: "3px 3px 0 color-mix(in oklab,#ff6cc4 60%,transparent)",
+      texture: "radial-gradient(rgba(255,108,196,.12) 1.2px,transparent 1.6px) 0 0/7px 7px,radial-gradient(rgba(62,224,208,.10) 1.2px,transparent 1.6px) 3px 2px/7px 7px" },
+    fonts: ["Rubik+Mono+One", "Work+Sans:wght@400;500;600;700", "Permanent+Marker"],
+  },
+  neon: {
+    shared: { "font-display": `"Tilt Neon","Segoe UI",system-ui,sans-serif`, "font-body": `"Outfit","Segoe UI",system-ui,sans-serif`, "font-mono": `"Share Tech Mono",ui-monospace,monospace`, "font-hand": `"Neonderthaw",cursive`, radius: "14px", "r-sm": "10px" },
+    light: { panel: "#f7f5f2", "panel-2": "#e7e3dd", ink: "#1c1826", muted: "#6a6478", line: "#d9d3cb", accent: "#d4127a", "accent-2": "#0091a1", gold: "#c99400", good: "#0f8f58", warn: "#b87800", danger: "#d61f45", "on-accent": "#fff", gl: "0",
+      shadow: "0 18px 34px -26px rgba(28,24,38,.4)", lift: "0 8px 18px -16px rgba(28,24,38,.4)", texture: "conic-gradient(from 90deg at 1px 1px,transparent 90deg,rgba(28,24,38,.06) 0) 0 0/48px 24px" },
+    dark: { panel: "#100d16", "panel-2": "#07060a", ink: "#f3ecff", muted: "#a79fbf", line: "#2b2438", accent: "#ff3ea5", "accent-2": "#36f1ff", gold: "#ffe066", good: "#5cffa1", warn: "#ffbe3d", danger: "#ff4d6d", "on-accent": "#07060a", gl: "1",
+      shadow: "0 0 0 1px rgba(255,62,165,.15),0 30px 60px -30px rgba(0,0,0,.95)", lift: "0 10px 24px -16px rgba(0,0,0,.9)",
+      texture: "radial-gradient(60% 40% at 50% 0%,rgba(255,62,165,.12),transparent 70%),conic-gradient(from 90deg at 1px 1px,transparent 90deg,rgba(255,255,255,.035) 0) 0 0/48px 24px" },
+    fonts: ["Tilt+Neon", "Outfit:wght@400;500;600", "Share+Tech+Mono", "Neonderthaw"],
+  },
+  splash: {
+    shared: { "font-display": `"Bangers","Impact",system-ui,sans-serif`, "font-body": `"Comic Neue","Comic Sans MS",system-ui,sans-serif`, "font-mono": `"Bangers","Impact",system-ui,sans-serif`, "font-hand": `"Patrick Hand","Comic Sans MS",cursive`, radius: "3px", "r-sm": "2px" },
+    light: { panel: "#fffdf6", "panel-2": "#fff1b8", ink: "#111111", muted: "#4a4a4a", line: "#111111", accent: "#e8202a", "accent-2": "#1d6fe0", gold: "#ffd400", good: "#18a058", warn: "#f08c00", danger: "#e8202a", "on-accent": "#fff",
+      pow: "#111", shadow: "6px 6px 0 #111", lift: "3px 3px 0 #111", texture: "radial-gradient(rgba(232,32,42,.22) 1.6px,transparent 2px) 0 0/8px 8px" },
+    dark: { panel: "#16161a", "panel-2": "#0b0b0d", ink: "#f4f1e8", muted: "#b0aca0", line: "#e9e5da", accent: "#ff3b3b", "accent-2": "#ffd400", gold: "#ffd400", good: "#4be08a", warn: "#ffb02e", danger: "#ff3b3b", "on-accent": "#0b0b0d",
+      pow: "#ff3b3b", shadow: "6px 6px 0 #ff3b3b", lift: "3px 3px 0 #ff3b3b", texture: "radial-gradient(rgba(255,255,255,.07) 1.6px,transparent 2px) 0 0/8px 8px" },
+    fonts: ["Bangers", "Comic+Neue:ital,wght@0,400;0,700;1,400;1,700", "Patrick+Hand"],
   },
 };
 
@@ -297,6 +343,103 @@ ${S("posy")} .alm-drawer__body{position:relative}
 ${S("posy")} .alm-drawer__body::after{content:"";position:absolute;right:-6px;bottom:-6px;width:84px;height:84px;background:var(--alm-sprig) center/contain no-repeat;opacity:.6;pointer-events:none}
 ${S("posy")} .alm-btn,${S("posy")} .almp .btn,${S("posy")} .alm-caret{border-radius:99px!important}
 ${S("posy")} .alm-btn--primary,${S("posy")} .almp .btn.primary{background:var(--alm-accent-2)!important;border-color:color-mix(in oklab,var(--alm-accent-2) 70%,#000)!important}
+
+/* Airmail: airmail stripes, postmarks, stamps, a handwritten P.S. */
+${FLAT_BUBBLE("airmail")}
+${S("airmail")} details.alm-drawer{border:6px solid transparent!important;background:linear-gradient(var(--alm-panel),var(--alm-panel)) padding-box,repeating-linear-gradient(135deg,var(--alm-accent) 0 12px,var(--alm-panel) 12px 18px,var(--alm-accent-2) 18px 30px,var(--alm-panel) 30px 36px) border-box!important}
+${S("airmail")} .alm-say__medal{background:transparent!important;color:var(--c)!important;border:2px solid var(--c);box-shadow:0 0 0 3px var(--alm-panel),0 0 0 4.5px var(--c)!important;font:400 20px/1 var(--alm-font-display)!important;transform:rotate(-10deg)}
+${S("airmail")} .alm-say--user .alm-say__medal{transform:rotate(8deg)}
+${S("airmail")} .alm-say__bubble{background:repeating-linear-gradient(transparent 0 25px,color-mix(in oklab,var(--alm-line) 80%,transparent) 25px 26px) 0 6px,var(--alm-panel)!important;border:1px solid var(--alm-line)!important;border-radius:4px!important}
+${S("airmail")} .alm-say__who{border-radius:2px!important;font-weight:700!important;letter-spacing:.14em!important}
+${S("airmail")} .alm-thk{border:0!important;border-radius:0!important;background:none!important;padding:4px 6px!important;transform:rotate(-1.5deg);font:400 15px/1.9 var(--alm-font-hand)!important;color:color-mix(in oklab,var(--c) 55%,var(--alm-ink))!important}
+${S("airmail")} .alm-thk__lab{font-family:var(--alm-font-body)!important;font-weight:700!important}
+${S("airmail")} .alm-thk__lab::before{content:"P.S. · "}
+${S("airmail")} .alm-chapter::before,${S("airmail")} .alm-chapter::after{height:3px;-webkit-mask:none;mask:none;background:linear-gradient(90deg,var(--alm-accent) 50%,var(--alm-accent-2) 0) 0 0/24px 3px repeat-x}
+${S("airmail")} .alm-chapter small{color:var(--alm-accent-2)!important;font-weight:700!important}
+${S("airmail")} .alm-chapter b{font:400 24px/1.15 var(--alm-font-display)!important;padding:8px 16px;background:var(--alm-panel);border:5px dotted var(--alm-panel-2);outline:1px solid var(--alm-line);outline-offset:-9px}
+${S("airmail")} .almp .card{border:5px dotted var(--alm-panel-2);border-radius:0}
+${S("airmail")} .alm-btn--primary,${S("airmail")} .almp .btn.primary,${S("airmail")} .alm-caret{border-radius:99px!important}
+
+/* Lido: stepped corners, octagons, sunbursts, brass rules */
+${FLAT_BUBBLE("lido")}
+${S("lido")} details.alm-drawer,${S("lido")} .almp .card{clip-path:var(--alm-step);border:0!important;box-shadow:inset 0 0 0 1px var(--alm-gold),inset 0 0 0 5px var(--alm-panel),inset 0 0 0 6px color-mix(in oklab,var(--alm-gold) 55%,transparent)!important}
+${S("lido")} .almp .card{padding:16px}
+${S("lido")} .alm-say__medal{border-radius:0!important;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);box-shadow:none!important;font:400 20px/1 var(--alm-font-display)!important}
+${S("lido")} .alm-say__bubble{background:var(--alm-panel)!important;border:1px solid var(--alm-gold)!important;border-radius:0!important;box-shadow:inset 0 0 0 3px var(--alm-panel),inset 0 0 0 4px color-mix(in oklab,var(--c) 45%,transparent)!important;padding:20px 18px 12px!important}
+${S("lido")} .alm-say__who{border-radius:0!important;font:600 10.5px/1 var(--alm-font-mono)!important;letter-spacing:.32em!important;box-shadow:none!important}
+${S("lido")} .alm-say__tone{font-family:var(--alm-font-hand)!important;font-size:13px!important}
+${S("lido")} .alm-thk{margin:20px auto!important;border:0!important;border-top:1px solid var(--alm-gold)!important;border-bottom:1px solid var(--alm-gold)!important;border-radius:0!important;background:none!important;text-align:center;padding:10px 20px!important;font:400 23px/1.3 var(--alm-font-hand)!important;color:var(--alm-ink)!important}
+${S("lido")} .alm-thk__lab{letter-spacing:.32em!important;color:var(--alm-gold)!important}
+${S("lido")} .alm-chapter::before,${S("lido")} .alm-chapter::after{height:9px;-webkit-mask:none;mask:none;background:linear-gradient(var(--alm-gold),var(--alm-gold)) 0 0/100% 1px no-repeat,linear-gradient(var(--alm-gold),var(--alm-gold)) 0 4px/100% 1px no-repeat,linear-gradient(var(--alm-gold),var(--alm-gold)) 0 8px/100% 1px no-repeat}
+${S("lido")} .alm-chapter small{color:var(--alm-gold)!important;letter-spacing:.42em!important;font-weight:600!important}
+${S("lido")} .alm-chapter b{font:400 26px/1.1 var(--alm-font-display)!important;padding:14px 22px 6px;background:repeating-conic-gradient(from -90deg at 50% 100%,color-mix(in oklab,var(--alm-gold) 28%,transparent) 0 5deg,transparent 5deg 12deg)}
+${S("lido")} .alm-btn,${S("lido")} .almp .btn,${S("lido")} .alm-caret,${S("lido")} .alm-pill,${S("lido")} .alm-tag{border-radius:0!important}
+${S("lido")} .alm-btn,${S("lido")} .almp .btn{border:1px solid var(--alm-gold)!important;box-shadow:none!important;text-transform:uppercase;letter-spacing:.2em;font-weight:600!important}
+
+/* Riso: a second ink just off register, halftone dots, staples, marker highlights */
+${FLAT_BUBBLE("riso")}
+${S("riso")} details.alm-drawer,${S("riso")} .almp .card{border:2px solid var(--alm-ink)!important;box-shadow:var(--alm-shadow)!important}
+${S("riso")} details.alm-drawer{position:relative;overflow:visible!important;margin-top:20px!important}
+${S("riso")} details.alm-drawer::before,${S("riso")} details.alm-drawer::after{content:"";position:absolute;top:-6px;width:34px;height:7px;border-radius:1px;background:linear-gradient(#c3c8cf,#8d939b);box-shadow:inset 0 -2px 0 rgba(0,0,0,.2);pointer-events:none}
+${S("riso")} details.alm-drawer::before{left:24%}
+${S("riso")} details.alm-drawer::after{right:24%}
+${S("riso")} .alm-say__medal{border:2px solid var(--c);box-shadow:none!important;color:var(--alm-ink)!important;font:400 16px/1 var(--alm-font-display)!important;text-shadow:0 0 2px var(--alm-panel),0 0 4px var(--alm-panel),0 0 6px var(--alm-panel);
+  background:radial-gradient(var(--c) 1.6px,transparent 2.1px) 0 0/4.5px 4.5px,color-mix(in oklab,var(--c) 22%,var(--alm-panel))!important}
+${S("riso")} .alm-say__bubble{background:var(--alm-panel)!important;border:2px solid var(--alm-ink)!important;border-radius:4px!important;box-shadow:4px 3px 0 var(--c)!important}
+${S("riso")} .alm-say__who{border-radius:2px!important;font:400 10px/1 var(--alm-font-display)!important;letter-spacing:.04em!important;transform:rotate(-2deg);box-shadow:none!important}
+${S("riso")} .alm-say--user .alm-say__who{transform:rotate(2deg)}
+${S("riso")} .alm-thk{border:0!important;border-radius:0!important;padding:6px 14px!important;font:400 20px/1.3 var(--alm-font-hand)!important;color:var(--alm-on-hl)!important;
+  background:linear-gradient(98deg,transparent 0 1.5%,var(--alm-gold) 1.5% 97%,transparent 97%) 0 100%/100% 64% no-repeat!important}
+${S("riso")} .alm-thk__lab{font-family:var(--alm-font-body)!important;font-weight:700!important;color:var(--alm-ink)!important}
+${S("riso")} .alm-chapter::before,${S("riso")} .alm-chapter::after{height:14px;-webkit-mask:none;mask:none;background:repeating-linear-gradient(90deg,var(--alm-ink) 0 6px,transparent 6px 11px) center/100% 2px no-repeat}
+${S("riso")} .alm-chapter::before{content:"✂";font-size:15px;line-height:14px;text-align:left;color:var(--alm-ink)}
+${S("riso")} .alm-chapter small{color:var(--alm-accent-2)!important;font-weight:700!important}
+${S("riso")} .alm-chapter b{font:400 17px/1.15 var(--alm-font-display)!important;text-transform:uppercase;padding:8px 14px;background:var(--alm-panel);border:2px solid var(--alm-ink);box-shadow:3px 3px 0 var(--alm-accent);transform:rotate(-2deg);text-shadow:2px 1px 0 color-mix(in oklab,var(--alm-accent) 65%,transparent)}
+${S("riso")} .alm-btn,${S("riso")} .almp .btn{border:2px solid var(--alm-ink)!important;border-radius:3px!important;box-shadow:2px 2px 0 var(--alm-accent-2)!important;text-transform:uppercase;letter-spacing:.06em;font-weight:600!important}
+
+/* Neon: glowing tubes at night (--alm-gl 1), the same tubes switched off by day (0) */
+${FLAT_BUBBLE("neon")}
+${S("neon")} details.alm-drawer,${S("neon")} .almp .card{border-color:color-mix(in oklab,var(--alm-accent) 45%,var(--alm-line))!important;box-shadow:0 0 calc(18px * var(--alm-gl)) calc(-6px * var(--alm-gl)) var(--alm-accent),var(--alm-lift)!important}
+${S("neon")} .alm-say__medal{background:transparent!important;color:var(--c)!important;border:2px solid var(--c);font:400 21px/1 var(--alm-font-display)!important;
+  box-shadow:0 0 calc(10px * var(--alm-gl)) var(--c),inset 0 0 calc(8px * var(--alm-gl)) var(--c)!important;text-shadow:0 0 calc(8px * var(--alm-gl)) var(--c)}
+${S("neon")} .alm-say__bubble{background:color-mix(in oklab,var(--c) 6%,var(--alm-panel))!important;border:1.5px solid var(--c)!important;
+  box-shadow:0 0 calc(14px * var(--alm-gl)) calc(-2px * var(--alm-gl)) var(--c),inset 0 0 calc(16px * var(--alm-gl)) calc(-6px * var(--alm-gl)) var(--c)!important}
+${S("neon")} .alm-say__who{background:var(--alm-panel)!important;color:var(--c)!important;border:1.5px solid var(--c);box-shadow:none!important;text-shadow:0 0 calc(6px * var(--alm-gl)) var(--c)}
+${S("neon")} .alm-say__tone{border-left-color:color-mix(in oklab,var(--c) 40%,transparent)!important}
+${S("neon")} .alm-thk{background:none!important;border:1.5px dashed color-mix(in oklab,var(--c) 70%,transparent)!important;font:400 30px/1.15 var(--alm-font-hand)!important;color:var(--c)!important;text-shadow:0 0 calc(10px * var(--alm-gl)) var(--c)}
+${S("neon")}[data-alm-mode="light"] .alm-thk{color:color-mix(in oklab,var(--c) 80%,var(--alm-ink))!important}
+${S("neon")} .alm-thk__lab{text-shadow:none}
+${S("neon")} .alm-chapter::before,${S("neon")} .alm-chapter::after{height:3px;border-radius:3px;-webkit-mask:none;mask:none;background:var(--alm-accent);box-shadow:0 0 calc(10px * var(--alm-gl)) var(--alm-accent)}
+${S("neon")}[data-alm-mode="light"] .alm-chapter::before,${S("neon")}[data-alm-mode="light"] .alm-chapter::after{background:color-mix(in oklab,var(--alm-accent) 40%,var(--alm-panel))}
+${S("neon")} .alm-chapter small{color:var(--alm-muted)!important}
+${S("neon")} .alm-chapter b{font:400 40px/1 var(--alm-font-hand)!important;color:var(--alm-accent)!important;text-shadow:0 0 calc(3px * var(--alm-gl)) #fff,0 0 calc(12px * var(--alm-gl)) var(--alm-accent),0 0 calc(28px * var(--alm-gl)) var(--alm-accent)}
+@media (prefers-reduced-motion:no-preference){${S("neon")}[data-alm-mode="dark"] .alm-chapter b{animation:alm-flicker 6s linear infinite}}
+@keyframes alm-flicker{0%,7%,9%,52%,100%{opacity:1}8%{opacity:.35}53%{opacity:.6}54%{opacity:1}55%{opacity:.4}}
+${S("neon")} .alm-btn,${S("neon")} .almp .btn{border-radius:99px!important;border:1.5px solid var(--alm-accent-2)!important;background:transparent!important;color:var(--alm-accent-2)!important;box-shadow:0 0 calc(10px * var(--alm-gl)) calc(-2px * var(--alm-gl)) var(--alm-accent-2)!important}
+${S("neon")} .alm-btn--primary,${S("neon")} .almp .btn.primary,${S("neon")} .alm-caret{border-radius:99px!important;border:1.5px solid var(--alm-accent)!important;background:transparent!important;color:var(--alm-accent)!important;box-shadow:0 0 calc(12px * var(--alm-gl)) calc(-2px * var(--alm-gl)) var(--alm-accent)!important}
+
+/* Splash Page: balloons with tails, thought clouds, caption boxes. Balloons stay white in both modes. */
+${S("splash")} details.alm-drawer,${S("splash")} .almp .card{border:3px solid var(--alm-line)!important;border-radius:2px!important;box-shadow:var(--alm-lift)!important}
+${S("splash")} .alm-say__medal{border:2.5px solid var(--alm-line);box-shadow:3px 3px 0 var(--alm-pow)!important;font:400 24px/1 var(--alm-font-display)!important;letter-spacing:.02em}
+${S("splash")} .alm-say .alm-say__bubble{background:#fff!important;color:#111!important;border:2.5px solid #111!important;border-radius:30px!important;box-shadow:none!important;padding:20px 22px 14px!important;transform:none}
+${S("splash")} .alm-say .alm-say__bubble::before,${S("splash")} .alm-say .alm-say__bubble::after{content:"";position:absolute;top:16px;right:auto;width:22px;height:18px;transform:none;border:0;opacity:1;font-size:0}
+${S("splash")} .alm-say .alm-say__bubble::before{left:-21px;background:#111;clip-path:polygon(0 30%,100% 0,100% 100%)}
+${S("splash")} .alm-say .alm-say__bubble::after{left:-16px;top:19.5px;width:19px;height:12px;background:#fff;clip-path:polygon(0 30%,100% 0,100% 100%)}
+${S("splash")} .alm-say.alm-say--user .alm-say__bubble::before{left:auto;right:-21px;clip-path:polygon(100% 30%,0 0,0 100%)}
+${S("splash")} .alm-say.alm-say--user .alm-say__bubble::after{left:auto;right:-16px;clip-path:polygon(100% 30%,0 0,0 100%)}
+${S("splash")} .alm-say.alm-say--follow .alm-say__bubble::before,${S("splash")} .alm-say.alm-say--follow .alm-say__bubble::after{content:none}
+${S("splash")} .alm-say__who{top:-14px!important;border:2px solid #111;border-radius:2px!important;font:400 14px/1 var(--alm-font-display)!important;letter-spacing:.08em!important;transform:rotate(-2deg);box-shadow:none!important}
+${S("splash")} .alm-say__tone{font:italic 700 12px/1 var(--alm-font-body)!important;letter-spacing:0!important}
+${S("splash")} .alm-say .alm-say__line{color:#111!important;font-weight:700;text-transform:uppercase;font-size:.98em!important;letter-spacing:.02em}
+${S("splash")} .alm-say .alm-say__beat{color:#555!important;border-top-color:#bbb!important}
+${S("splash")} .alm-thk{background:#fff!important;color:#111!important;border:2.5px solid #111!important;border-radius:44px!important;font:400 20px/1.3 var(--alm-font-hand)!important}
+${S("splash")} .alm-thk__lab{font:400 13px/1.4 var(--alm-font-display)!important;letter-spacing:.08em!important}
+${S("splash")} .alm-chapter{display:block!important;width:fit-content;max-width:100%;text-align:left!important;background:var(--alm-gold);border:2.5px solid var(--alm-line);box-shadow:4px 4px 0 var(--alm-pow);padding:8px 14px}
+${S("splash")} .alm-chapter::before,${S("splash")} .alm-chapter::after{display:none}
+${S("splash")} .alm-chapter small{font:400 15px/1 var(--alm-font-display)!important;letter-spacing:.1em!important;color:#111!important;text-transform:none!important}
+${S("splash")} .alm-chapter b{font:italic 700 17px/1.2 var(--alm-font-body)!important;text-transform:uppercase;color:#111!important}
+${S("splash")} .alm-chapter b::before,${S("splash")} .alm-chapter b::after{content:none!important}
+${S("splash")} .alm-btn,${S("splash")} .almp .btn{font-family:var(--alm-font-display)!important;letter-spacing:.06em;border:2.5px solid var(--alm-line)!important;border-radius:2px!important;box-shadow:3px 3px 0 var(--alm-pow)!important}
 `;
 
 export const SKIN_CSS = tokens() + "\n" + SIGNATURES;
@@ -355,4 +498,166 @@ export function customCss(custom: SkinColors | null | undefined): string {
     }
   }
   return out.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// The player's own fonts and sizes
+// ---------------------------------------------------------------------------
+
+/** The four faces a skin sets: [role, label, what it sets]. */
+export const FONT_ROLES: [string, string, string][] = [
+  ["display", "Headings", "titles, chapters, the clock"],
+  ["body", "Text", "speech and the drawer"],
+  ["mono", "Labels", "names, tags, small capitals"],
+  ["hand", "Handwriting", "thoughts"],
+];
+
+/** The sizes a player can scale, in percent: [key, label, what it scales]. */
+export const FONT_SIZES: [string, string, string][] = [
+  ["story", "Story", "voice cards, thoughts, chapters, the ledger in messages"],
+  ["drawer", "Drawer", "this Almanac panel"],
+];
+export const SIZE_MIN = 80;
+export const SIZE_MAX = 150;
+
+/** Fonts on the menu: [id, label, group, CSS stack, Google Fonts family (css2), or "" for a font already on the device]. */
+export const FONT_CHOICES: [string, string, string, string, string][] = [
+  ["inherit", "Lumiverse's own font", "On your device", "inherit", ""],
+  ["system-sans", "System sans-serif", "On your device", `system-ui,"Segoe UI",Roboto,sans-serif`, ""],
+  ["system-serif", "System serif", "On your device", `"Iowan Old Style",Palatino,Georgia,serif`, ""],
+  ["system-mono", "System monospace", "On your device", `ui-monospace,"SF Mono",Menlo,Consolas,monospace`, ""],
+  ["fraunces", "Fraunces", "Serif", `"Fraunces",Georgia,serif`, ""],
+  ["newsreader", "Newsreader", "Serif", `"Newsreader",Georgia,serif`, ""],
+  ["playfair", "Playfair Display", "Serif", `"Playfair Display",Georgia,serif`, "Playfair+Display:ital,wght@0,400..900;1,400..900"],
+  ["cormorant", "Cormorant Garamond", "Serif", `"Cormorant Garamond",Georgia,serif`, ""],
+  ["crimson", "Crimson Pro", "Serif", `"Crimson Pro",Georgia,serif`, "Crimson+Pro:ital,wght@0,400;0,600;1,400"],
+  ["sourceserif", "Source Serif 4", "Serif", `"Source Serif 4",Georgia,serif`, "Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400"],
+  ["lora", "Lora", "Serif", `"Lora",Georgia,serif`, "Lora:ital,wght@0,400;0,600;1,400"],
+  ["merriweather", "Merriweather", "Serif", `"Merriweather",Georgia,serif`, "Merriweather:ital,wght@0,400;0,700;1,400"],
+  ["ebgaramond", "EB Garamond", "Serif", `"EB Garamond",Georgia,serif`, "EB+Garamond:ital,wght@0,400;0,600;1,400"],
+  ["plexserif", "IBM Plex Serif", "Serif", `"IBM Plex Serif",Georgia,serif`, "IBM+Plex+Serif:ital,wght@0,400;0,600;1,400"],
+  ["alegreya", "Alegreya", "Serif", `"Alegreya",Georgia,serif`, "Alegreya:ital,wght@0,400;0,600;1,400"],
+  ["imfell", "IM Fell English", "Serif", `"IM Fell English",Georgia,serif`, "IM+Fell+English:ital@0;1"],
+  ["youngserif", "Young Serif", "Serif", `"Young Serif",Georgia,serif`, "Young+Serif"],
+  ["dmserif", "DM Serif Display", "Serif", `"DM Serif Display",Georgia,serif`, "DM+Serif+Display:ital@0;1"],
+  ["yeseva", "Yeseva One", "Serif", `"Yeseva One",Georgia,serif`, "Yeseva+One"],
+  ["inter", "Inter", "Sans-serif", `"Inter",system-ui,sans-serif`, "Inter:wght@400;500;600;700"],
+  ["atkinson", "Atkinson Hyperlegible", "Sans-serif", `"Atkinson Hyperlegible Next","Atkinson Hyperlegible",system-ui,sans-serif`, "Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400"],
+  ["lexend", "Lexend", "Sans-serif", `"Lexend",system-ui,sans-serif`, "Lexend:wght@400;500;700"],
+  ["nunito", "Nunito", "Sans-serif", `"Nunito",system-ui,sans-serif`, "Nunito:ital,wght@0,400;0,600;0,700;1,400"],
+  ["worksans", "Work Sans", "Sans-serif", `"Work Sans",system-ui,sans-serif`, "Work+Sans:wght@400;500;600;700"],
+  ["karla", "Karla", "Sans-serif", `"Karla",system-ui,sans-serif`, "Karla:ital,wght@0,400;0,700;1,400"],
+  ["josefin", "Josefin Sans", "Sans-serif", `"Josefin Sans",system-ui,sans-serif`, "Josefin+Sans:wght@400;600;700"],
+  ["outfit", "Outfit", "Sans-serif", `"Outfit",system-ui,sans-serif`, "Outfit:wght@400;500;600"],
+  ["spacegrotesk", "Space Grotesk", "Sans-serif", `"Space Grotesk",system-ui,sans-serif`, "Space+Grotesk:wght@400;500;700"],
+  ["plexsans", "IBM Plex Sans", "Sans-serif", `"IBM Plex Sans",system-ui,sans-serif`, "IBM+Plex+Sans:ital,wght@0,400;0,600;1,400"],
+  ["librefranklin", "Libre Franklin", "Sans-serif", `"Libre Franklin",system-ui,sans-serif`, "Libre+Franklin:ital,wght@0,400;0,700;1,400"],
+  ["bricolage", "Bricolage Grotesque", "Sans-serif", `"Bricolage Grotesque",system-ui,sans-serif`, "Bricolage+Grotesque:opsz,wght@12..96,400..800"],
+  ["comicneue", "Comic Neue", "Sans-serif", `"Comic Neue","Comic Sans MS",system-ui,sans-serif`, "Comic+Neue:ital,wght@0,400;0,700;1,400"],
+  ["dmmono", "DM Mono", "Monospace", `"DM Mono",ui-monospace,monospace`, ""],
+  ["jetbrains", "JetBrains Mono", "Monospace", `"JetBrains Mono",ui-monospace,monospace`, "JetBrains+Mono:wght@400;500;700"],
+  ["plexmono", "IBM Plex Mono", "Monospace", `"IBM Plex Mono",ui-monospace,monospace`, "IBM+Plex+Mono:wght@400;500"],
+  ["courierprime", "Courier Prime", "Monospace", `"Courier Prime","Courier New",monospace`, "Courier+Prime:ital@0;1"],
+  ["spacemono", "Space Mono", "Monospace", `"Space Mono",ui-monospace,monospace`, "Space+Mono"],
+  ["overpassmono", "Overpass Mono", "Monospace", `"Overpass Mono",ui-monospace,monospace`, "Overpass+Mono:wght@400;600"],
+  ["sharetech", "Share Tech Mono", "Monospace", `"Share Tech Mono",ui-monospace,monospace`, "Share+Tech+Mono"],
+  ["syne", "Syne", "Display", `"Syne",system-ui,sans-serif`, ""],
+  ["oswald", "Oswald", "Display", `"Oswald",system-ui,sans-serif`, ""],
+  ["cinzel", "Cinzel", "Display", `"Cinzel",Georgia,serif`, "Cinzel:wght@500;700"],
+  ["limelight", "Limelight", "Display", `"Limelight",Georgia,serif`, "Limelight"],
+  ["chakra", "Chakra Petch", "Display", `"Chakra Petch",system-ui,sans-serif`, "Chakra+Petch:wght@500;600;700"],
+  ["fredoka", "Fredoka", "Display", `"Fredoka",system-ui,sans-serif`, "Fredoka:wght@400;500;600;700"],
+  ["bangers", "Bangers", "Display", `"Bangers",Impact,sans-serif`, "Bangers"],
+  ["rubikmono", "Rubik Mono One", "Display", `"Rubik Mono One",system-ui,sans-serif`, "Rubik+Mono+One"],
+  ["tiltneon", "Tilt Neon", "Display", `"Tilt Neon",system-ui,sans-serif`, "Tilt+Neon"],
+  ["caveat", "Caveat", "Handwriting", `"Caveat",cursive`, ""],
+  ["dancing", "Dancing Script", "Handwriting", `"Dancing Script",cursive`, "Dancing+Script:wght@400..700"],
+  ["patrickhand", "Patrick Hand", "Handwriting", `"Patrick Hand",cursive`, "Patrick+Hand"],
+  ["kalam", "Kalam", "Handwriting", `"Kalam",cursive`, "Kalam:wght@400;700"],
+  ["homemadeapple", "Homemade Apple", "Handwriting", `"Homemade Apple",cursive`, "Homemade+Apple"],
+  ["marker", "Permanent Marker", "Handwriting", `"Permanent Marker",cursive`, "Permanent+Marker"],
+  ["reenie", "Reenie Beanie", "Handwriting", `"Reenie Beanie",cursive`, "Reenie+Beanie"],
+  ["poiret", "Poiret One", "Handwriting", `"Poiret One",cursive`, "Poiret+One"],
+  ["neonderthaw", "Neonderthaw", "Handwriting", `"Neonderthaw",cursive`, "Neonderthaw"],
+];
+const CHOICE = new Map(FONT_CHOICES.map((c) => [c[0], c]));
+
+/** A font typed by name: letters, digits, spaces and hyphens only (it goes into CSS and a URL). */
+const FONT_NAME = /^[A-Za-z0-9][A-Za-z0-9 -]{0,48}$/;
+export function cleanFontName(name: string): string {
+  const n = String(name ?? "").trim().replace(/\s+/g, " ");
+  return FONT_NAME.test(n) ? n : "";
+}
+
+/** The CSS stack for a stored pick (a menu id or "custom:Name"), or "" when it isn't one. */
+export function fontStack(pick: unknown): string {
+  if (typeof pick !== "string" || !pick) return "";
+  if (pick.startsWith("custom:")) {
+    const n = cleanFontName(pick.slice(7));
+    return n ? `"${n}",system-ui,sans-serif` : "";
+  }
+  return CHOICE.get(pick)?.[3] ?? "";
+}
+
+/** A stored size as a zoom factor (0.8–1.5), or null when it isn't a number. */
+export function sizeScale(v: unknown): number | null {
+  if (typeof v !== "number" || !Number.isFinite(v)) return null;
+  return Math.min(SIZE_MAX, Math.max(SIZE_MIN, Math.round(v))) / 100;
+}
+
+/** The picks that apply on a skin: "all" (every skin), then the skin's own on top. */
+export function fontPicksFor(skin: string, picks: SkinFonts | null | undefined): Record<string, unknown> {
+  return { ...(picks?.all ?? {}), ...(picks?.[skin] ?? {}) };
+}
+
+// Sizes scale with CSS zoom: every top-level piece the extension draws in a message
+// (anything with an alm- class not inside another), and the drawer's root. The floating
+// widget measures itself, so it keeps its size.
+const ZOOM_CSS = `:where([class^="alm-"],[class*=" alm-"]):not([class*="alm-hud"]):not(:where([class^="alm"],[class*=" alm"]) *){zoom:var(--alm-zoom-story,1)}
+.almp{zoom:var(--alm-zoom-drawer,1)}`;
+
+/** The stylesheet for the player's fonts and sizes ("all" applies to every skin; a skin's own wins). */
+export function fontCss(picks: SkinFonts | null | undefined): string {
+  const out: string[] = [];
+  let zoom = false;
+  for (const [id, p] of Object.entries(picks ?? {})) {
+    if ((id !== "all" && !isSkin(id)) || !p || typeof p !== "object") continue;
+    const pal: Pal = {};
+    for (const [role] of FONT_ROLES) {
+      const st = fontStack((p as any)[role]);
+      if (st) pal[`font-${role}`] = st;
+    }
+    for (const [k] of FONT_SIZES) {
+      const z = sizeScale((p as any)[k]);
+      if (z != null) {
+        pal[`zoom-${k}`] = String(z);
+        zoom = true;
+      }
+    }
+    if (!Object.keys(pal).length) continue;
+    out.push(`${id === "all" ? "html:root[data-alm-skin]" : `html:root[data-alm-skin="${id}"][data-alm-skin]`}{${decl(pal)}}`);
+  }
+  if (zoom) out.push(ZOOM_CSS);
+  return out.join("\n");
+}
+
+/** Google Fonts imports for the picks on a skin: the menu's families in one request, each typed name in its own (an unknown name then fails alone). */
+export function pickedFontImports(skin: string, picks: SkinFonts | null | undefined): string {
+  const p = fontPicksFor(skin, picks);
+  const fams = new Set<string>();
+  const custom = new Set<string>();
+  for (const [role] of FONT_ROLES) {
+    const v = p[role];
+    if (typeof v !== "string") continue;
+    if (v.startsWith("custom:")) {
+      const n = cleanFontName(v.slice(7));
+      if (n) custom.add(n);
+    } else {
+      const g = CHOICE.get(v)?.[4];
+      if (g) fams.add(g);
+    }
+  }
+  const css = fams.size ? [`@import url("https://fonts.googleapis.com/css2?${[...fams].map((f) => `family=${f}`).join("&")}&display=swap");`] : [];
+  for (const n of custom) css.push(`@import url("https://fonts.googleapis.com/css2?family=${encodeURIComponent(n).replace(/%20/g, "+")}&display=swap");`);
+  return css.join("\n");
 }
