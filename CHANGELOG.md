@@ -4,6 +4,11 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.16.3 (2026-10-02)
+
+**Retell any step.** Every beat can be told again, not only the last twelve steps': an older step's card is rebuilt from the beat and its subplot, and its line is rewritten where its step left it.
+- **"The model gave nothing usable."** A reply with a bracket before its JSON ("[b1] …") was read as nothing; every model reply is now read past such brackets, and a retelling also takes a bare beat. If a reply still has no telling, the warning quotes its start.
+
 ## 1.16.2 (2026-10-02)
 
 **Retell a step.** Each beat on the Elsewhere page has a **retell** button: the model tells that step again, same outcome, new words, through the same checks (if it fails, the step stands and you're told why). It also rewrites the step's unused "reaches you" text. Works for the last twelve steps; steps made before 1.16.2 didn't keep what they were made of.

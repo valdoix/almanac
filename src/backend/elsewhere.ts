@@ -14,7 +14,7 @@ import { absMinutes, estTokens, hash, plainProse } from "../core/util";
 import { callFits, confirmArrivals, elsewhereLane, upgradeArrival, type Arrival } from "../core/elsewhere/crossings";
 import { buildRoster, type Actor, type Profile, type Roster } from "../core/elsewhere/roster";
 import { isLight } from "../core/elsewhere/arcs";
-import { authorArc, tick, type BeatCard, type Mode, type Proposal } from "../core/elsewhere/storyteller";
+import { authorArc, cardForBeat, tick, type BeatCard, type Mode, type Proposal } from "../core/elsewhere/storyteller";
 import { shapePrompt, tellingPrompt, validateProfile, validateSeed, validateShape, validateTold, type TellingCtx } from "../core/elsewhere/telling";
 import { debug, describe, serial, warn } from "./host";
 import { ledgerFor } from "./ledger";
@@ -357,23 +357,26 @@ export async function tell(chatId: string, tickId: string, userId?: string): Pro
 }
 
 /**
- * Tell one step again with the model, when its words read oddly or the engine's stood. Only the
- * last twelve ticks keep their cards. The step's outcome stays; only its telling changes.
+ * Tell one step again with the model, when its words read oddly or the engine's stood. The step's
+ * outcome stays; only its telling changes. A recent tick keeps the step's card; an older one's is
+ * rebuilt from the beat and its subplot. The step's line is rewritten where its tick anchored it.
  */
 export async function retellBeat(chatId: string, arcId: string, atAbs: number, tickId: string, userId?: string): Promise<{ warn?: string; info?: string }> {
   const settings = await loadSettings(userId);
   const L = ledgerFor(chatId, userId);
   await L.refresh();
-  const beat = L.state.arcs?.[arcId]?.beats.find((b) => b.tick === tickId && b.atAbs === atAbs);
-  if (!beat?.tick) return { warn: "That step can't be told again." };
+  const st = L.state;
+  const arc = st.arcs?.[arcId];
+  const beat = arc?.beats.find((b) => b.tick === tickId && b.atAbs === atAbs);
+  if (!arc || !beat?.tick) return { warn: "That step can't be told again." };
   const files = await loadChat(chatId, userId);
   const E = elsewhereOf(files.meta);
   const rec = E.ticks[beat.tick];
   if (rec?.status === "telling") return { warn: "The model is still telling that step." };
-  const mine = (rec?.cards ?? []).filter((c) => !c.seed && !c.ending && c.arcId === arcId);
-  const card = mine.find((c) => c.atAbs === beat.atAbs) ?? mine[mine.length - 1];
-  if (!rec?.lines || !card) return { warn: "That step is too old to tell again: only the last twelve steps keep what they were made of." };
   const ctx = { ...tellingCtx(L, files.meta, settings, E, beat.tick, [], []), retry: beat.text };
+  const mine = (rec?.cards ?? []).filter((c) => !c.seed && !c.ending && c.arcId === arcId);
+  const kept = mine.find((c) => c.atAbs === beat.atAbs) ?? (mine.length === 1 ? mine[0] : undefined);
+  const card = kept ?? cardForBeat(arc, beat, ctx.roster, st, ctx.offPage, L.records);
   const p = tellingPrompt([card], ctx);
   let text = "";
   try {
@@ -381,35 +384,52 @@ export async function retellBeat(chatId: string, arcId: string, atAbs: number, t
   } catch (err) {
     return { warn: `The model couldn't be asked: ${describe(err)}` };
   }
-  const res = extractJson<{ beats?: any[] }>(text);
-  const raw = res?.beats?.find((b) => b?.card === card.id) ?? res?.beats?.[0];
-  if (!raw) return { warn: "The model gave nothing usable; the step stands as it was." };
+  // {"beats":[…]} as asked, or the one beat bare.
+  const res = extractJson<any>(text);
+  const beats: any[] = Array.isArray(res) ? res : Array.isArray(res?.beats) ? res.beats : res?.text ? [res] : [];
+  const raw = beats.find((b) => b?.card === card.id) ?? beats.find((b) => b?.text);
+  if (!raw) {
+    warn(`elsewhere: retelling ${arcId} got no telling: ${text.slice(0, 2000)}`);
+    return { warn: `The model's reply had no telling in it${text.trim() ? ` (“${text.replace(/\s+/g, " ").trim().slice(0, 140)}…”)` : " (it was empty)"}; the step stands as it was.` };
+  }
   const v = validateTold(card, raw, ctx);
   if (v.rejected || !v.text) return { warn: `The new telling was set aside too (${v.rejected}); the step stands as it was.` };
   const told = v.text;
+  const id = `${SIM_ID}${beat.tick}`;
+  const head = `arc beat #${arcId}:`;
   const ok = await serial(`chat:${chatId}`, async () => {
     const fresh = await loadChat(chatId, userId);
+    // The tick's own entry, wherever it was anchored.
+    const entry = Object.values(fresh.side).flat().find((s) => s.id === id);
+    const at = entry?.ops.findIndex((o) => (o.raw ?? "").startsWith(head) && new RegExp(`\\|\\s*at:\\s*${beat.atAbs}\\s*(?:\\||$)`).test(o.raw ?? "")) ?? -1;
+    if (!entry || at < 0) return false;
+    const line = dropField(setField(setField(entry.ops[at].raw!, "told", "model"), "text", told), "note");
+    const op = parseLine(line);
+    if (!op) return false;
     const r2 = elsewhereOf(fresh.meta).ticks[beat.tick!];
-    if (!r2?.lines?.[card.line]) return false;
-    const lines = [...r2.lines];
-    lines[card.line] = dropField(setField(setField(lines[card.line], "told", "model"), "text", told), "note");
-    const extra = { ...(r2.extra ?? {}) };
-    if (v.lines.length) extra[card.line] = v.lines;
-    else delete extra[card.line];
+    // The last telling's extra lines for this step give way to the new ones.
+    const old = new Set(kept && r2?.extra?.[kept.line] ? r2.extra[kept.line] : []);
+    const extra = v.lines.map((l) => parseLine(l)).filter((o): o is ParsedOp => !!o);
+    const ops = entry.ops.filter((o, i) => i <= at || !old.has(o.raw ?? ""));
+    ops.splice(at, 1, op, ...extra);
+    entry.ops = ops;
+    if (kept && r2?.lines?.[kept.line]) {
+      r2.lines[kept.line] = line;
+      r2.extra = { ...(r2.extra ?? {}) };
+      if (v.lines.length) r2.extra[kept.line] = v.lines;
+      else delete r2.extra[kept.line];
+    }
     for (const a of arrivalsOf(fresh.meta)) {
       if (a.tick !== beat.tick || a.arc !== arcId || a.status === "used") continue;
       if (v.arrival) a.text = v.arrival;
       else if (a.template && (a.kind === "trace" || a.kind === "ambient")) a.text = a.template.replace(card.template, told);
     }
-    r2.lines = lines;
-    r2.extra = extra;
-    putLines(fresh, r2.anchor, `${SIM_ID}${beat.tick}`, withExtra(lines, extra));
     save(chatId, "side", userId);
     save(chatId, "meta", userId);
     await ledgerFor(chatId, userId).refresh();
     return true;
   });
-  if (!ok) return { warn: "That step changed meanwhile; nothing was told again." };
+  if (!ok) return { warn: "That step's line wasn't found where its tick left it; nothing was told again." };
   const { pushState } = await import("./view");
   pushState(chatId, userId);
   return { info: "Told again by the model." };
@@ -583,8 +603,7 @@ export function elsewhereView(o: { state: WorldState; records: ReturnType<typeof
       status: a.status, crossed: !!a.crossed, by: a.by, locked: !!a.locked, heat: a.heat, note: a.note, ending: a.ending ? { ...a.ending, at: o.fmt(a.ending.atAbs) } : null, fate: a.fate ?? null,
       grounds: a.grounds.map((g) => ({ id: g, name: groundName(g) })), earlier: a.earlier ?? "",
       beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "", note: b.note ?? "", telling: b.told === "template" && !!b.tick && telling.has(b.tick),
-        // Only the last twelve ticks keep the cards a step can be told again from.
-        tick: b.tick ?? "", atAbs: b.atAbs, retell: !!b.tick && !telling.has(b.tick) && !!E.ticks[b.tick]?.cards?.some((c) => c.arcId === a.id && !c.seed && !c.ending) })),
+        tick: b.tick ?? "", atAbs: b.atAbs, retell: !!b.tick && !telling.has(b.tick) })),
       // When its next step can come, and why it waits.
       next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "", wait: a.status === "running" ? a.wait ?? "" : "", pushed: !!a.push,
       reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered") && callFits(x, st, roster)).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" })),

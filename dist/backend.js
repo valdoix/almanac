@@ -2479,7 +2479,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.16.2";
+var VERSION = "1.16.3";
 
 // src/core/facts.ts
 function stem(w) {
@@ -7975,17 +7975,18 @@ function extractJson(text) {
   for (const c of candidates) {
     if (!c)
       continue;
-    const start = c.search(/[[{]/);
-    if (start < 0)
-      continue;
-    const open = c[start];
-    const close = open === "{" ? "}" : "]";
-    const end = c.lastIndexOf(close);
-    if (end <= start)
-      continue;
-    try {
-      return JSON.parse(c.slice(start, end + 1));
-    } catch {}
+    for (let start = c.search(/[[{]/), tries = 0;start >= 0 && tries < 40; tries++) {
+      const open = c[start];
+      const close = open === "{" ? "}" : "]";
+      const end = c.lastIndexOf(close);
+      if (end > start) {
+        try {
+          return JSON.parse(c.slice(start, end + 1));
+        } catch {}
+      }
+      const next = c.slice(start + 1).search(/[[{]/);
+      start = next < 0 ? -1 : start + 1 + next;
+    }
   }
   return null;
 }
@@ -13441,6 +13442,22 @@ function tick(inp) {
   }
   return { tickId: inp.tickId, hours, lines, cards, arrivals, awake: awake.map((a) => a.name), hops, seeded, proposals, log, roster };
 }
+function cardForBeat(arc, beat, roster, st, offPage, records) {
+  const before = { ...arc, beats: arc.beats.filter((b) => b.atAbs < beat.atAbs) };
+  return cardFor(before, roster.find(arc.lead), roster, st, {
+    result: beat.result,
+    roll: beat.roll,
+    mod: beat.mod,
+    stage: arc.stage,
+    atAbs: beat.atAbs,
+    template: beat.text,
+    line: 0,
+    twist: beat.twist,
+    place: beat.place,
+    offPage,
+    records
+  });
+}
 function cardFor(arc, lead, r, st, o) {
   const off = new Set(o.offPage.map((x) => x.key));
   const offWords = o.offPage.flatMap((x) => x.words.map((w) => w.toLowerCase()));
@@ -16344,19 +16361,20 @@ async function retellBeat(chatId, arcId, atAbs, tickId, userId) {
   const settings = await loadSettings(userId);
   const L = ledgerFor(chatId, userId);
   await L.refresh();
-  const beat = L.state.arcs?.[arcId]?.beats.find((b) => b.tick === tickId && b.atAbs === atAbs);
-  if (!beat?.tick)
+  const st = L.state;
+  const arc = st.arcs?.[arcId];
+  const beat = arc?.beats.find((b) => b.tick === tickId && b.atAbs === atAbs);
+  if (!arc || !beat?.tick)
     return { warn: "That step can't be told again." };
   const files = await loadChat(chatId, userId);
   const E = elsewhereOf(files.meta);
   const rec = E.ticks[beat.tick];
   if (rec?.status === "telling")
     return { warn: "The model is still telling that step." };
-  const mine = (rec?.cards ?? []).filter((c) => !c.seed && !c.ending && c.arcId === arcId);
-  const card = mine.find((c) => c.atAbs === beat.atAbs) ?? mine[mine.length - 1];
-  if (!rec?.lines || !card)
-    return { warn: "That step is too old to tell again: only the last twelve steps keep what they were made of." };
   const ctx = { ...tellingCtx(L, files.meta, settings, E, beat.tick, [], []), retry: beat.text };
+  const mine = (rec?.cards ?? []).filter((c) => !c.seed && !c.ending && c.arcId === arcId);
+  const kept = mine.find((c) => c.atAbs === beat.atAbs) ?? (mine.length === 1 ? mine[0] : undefined);
+  const card = kept ?? cardForBeat(arc, beat, ctx.roster, st, ctx.offPage, L.records);
   const p = tellingPrompt([card], ctx);
   let text = "";
   try {
@@ -16365,25 +16383,42 @@ async function retellBeat(chatId, arcId, atAbs, tickId, userId) {
     return { warn: `The model couldn't be asked: ${describe(err)}` };
   }
   const res = extractJson(text);
-  const raw = res?.beats?.find((b) => b?.card === card.id) ?? res?.beats?.[0];
-  if (!raw)
-    return { warn: "The model gave nothing usable; the step stands as it was." };
+  const beats = Array.isArray(res) ? res : Array.isArray(res?.beats) ? res.beats : res?.text ? [res] : [];
+  const raw = beats.find((b) => b?.card === card.id) ?? beats.find((b) => b?.text);
+  if (!raw) {
+    warn(`elsewhere: retelling ${arcId} got no telling: ${text.slice(0, 2000)}`);
+    return { warn: `The model's reply had no telling in it${text.trim() ? ` (\u201C${text.replace(/\s+/g, " ").trim().slice(0, 140)}\u2026\u201D)` : " (it was empty)"}; the step stands as it was.` };
+  }
   const v = validateTold(card, raw, ctx);
   if (v.rejected || !v.text)
     return { warn: `The new telling was set aside too (${v.rejected}); the step stands as it was.` };
   const told = v.text;
+  const id = `${SIM_ID}${beat.tick}`;
+  const head = `arc beat #${arcId}:`;
   const ok = await serial(`chat:${chatId}`, async () => {
     const fresh = await loadChat(chatId, userId);
-    const r2 = elsewhereOf(fresh.meta).ticks[beat.tick];
-    if (!r2?.lines?.[card.line])
+    const entry = Object.values(fresh.side).flat().find((s) => s.id === id);
+    const at = entry?.ops.findIndex((o) => (o.raw ?? "").startsWith(head) && new RegExp(`\\|\\s*at:\\s*${beat.atAbs}\\s*(?:\\||$)`).test(o.raw ?? "")) ?? -1;
+    if (!entry || at < 0)
       return false;
-    const lines = [...r2.lines];
-    lines[card.line] = dropField(setField(setField(lines[card.line], "told", "model"), "text", told), "note");
-    const extra = { ...r2.extra ?? {} };
-    if (v.lines.length)
-      extra[card.line] = v.lines;
-    else
-      delete extra[card.line];
+    const line = dropField(setField(setField(entry.ops[at].raw, "told", "model"), "text", told), "note");
+    const op = parseLine(line);
+    if (!op)
+      return false;
+    const r2 = elsewhereOf(fresh.meta).ticks[beat.tick];
+    const old = new Set(kept && r2?.extra?.[kept.line] ? r2.extra[kept.line] : []);
+    const extra = v.lines.map((l) => parseLine(l)).filter((o) => !!o);
+    const ops = entry.ops.filter((o, i) => i <= at || !old.has(o.raw ?? ""));
+    ops.splice(at, 1, op, ...extra);
+    entry.ops = ops;
+    if (kept && r2?.lines?.[kept.line]) {
+      r2.lines[kept.line] = line;
+      r2.extra = { ...r2.extra ?? {} };
+      if (v.lines.length)
+        r2.extra[kept.line] = v.lines;
+      else
+        delete r2.extra[kept.line];
+    }
     for (const a of arrivalsOf(fresh.meta)) {
       if (a.tick !== beat.tick || a.arc !== arcId || a.status === "used")
         continue;
@@ -16392,16 +16427,13 @@ async function retellBeat(chatId, arcId, atAbs, tickId, userId) {
       else if (a.template && (a.kind === "trace" || a.kind === "ambient"))
         a.text = a.template.replace(card.template, told);
     }
-    r2.lines = lines;
-    r2.extra = extra;
-    putLines(fresh, r2.anchor, `${SIM_ID}${beat.tick}`, withExtra(lines, extra));
     save(chatId, "side", userId);
     save(chatId, "meta", userId);
     await ledgerFor(chatId, userId).refresh();
     return true;
   });
   if (!ok)
-    return { warn: "That step changed meanwhile; nothing was told again." };
+    return { warn: "That step's line wasn't found where its tick left it; nothing was told again." };
   await Promise.resolve().then(() => init_view());
   pushState(chatId, userId);
   return { info: "Told again by the model." };
@@ -16628,7 +16660,7 @@ function elsewhereView(o) {
       telling: b.told === "template" && !!b.tick && telling.has(b.tick),
       tick: b.tick ?? "",
       atAbs: b.atAbs,
-      retell: !!b.tick && !telling.has(b.tick) && !!E.ticks[b.tick]?.cards?.some((c) => c.arcId === a.id && !c.seed && !c.ending)
+      retell: !!b.tick && !telling.has(b.tick)
     })),
     next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "",
     wait: a.status === "running" ? a.wait ?? "" : "",

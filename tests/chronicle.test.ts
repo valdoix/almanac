@@ -191,5 +191,7 @@ describe("extractor and json", () => {
   test("json extraction", () => {
     expect(extractJson<any>('Sure!\n```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(extractJson<any>('noise [1,2] noise')).toEqual([1, 2]);
+    // Brackets in the prose before the JSON don't hide it.
+    expect(extractJson<any>('Card [b1] retold: {"beats":[{"card":"b1","text":"x"}]}')).toEqual({ beats: [{ card: "b1", text: "x" }] });
   });
 });

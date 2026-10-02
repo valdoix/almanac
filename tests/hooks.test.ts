@@ -557,5 +557,26 @@ describe("Elsewhere against the host (1.14)", () => {
     expect(after).toMatchObject({ told: "model", text: `${beat!.lead} kept at it through the afternoon. It isn't settled yet.` });
     expect(after.note).toBeUndefined();
     expect((await retellBeat(EC, beat!.arc, beat!.atAbs, "w0", USER)).warn).toBeDefined();
+
+    // A step from before ticks kept their cards: the card is rebuilt, and the reply may come bare after bracketed prose.
+    const { loadChat, save } = await import("../src/backend/store");
+    const { elsewhereOf } = await import("../src/backend/elsewhere");
+    const f = await loadChat(EC, USER);
+    const t = elsewhereOf(f.meta).ticks[beat!.tick];
+    delete t.cards;
+    delete t.lines;
+    delete t.extra;
+    save(EC, "meta", USER, 0);
+    const again = `${beat!.lead} tried another way round. Nothing is settled.`;
+    spindle.generate = { quiet: async () => ({ content: `[b0] Here it is: {"card":"b0","result":"cost","text":"${again}"}` }) };
+    try {
+      expect((await retellBeat(EC, beat!.arc, beat!.atAbs, beat!.tick, USER)).warn).toBeUndefined();
+    } finally {
+      spindle.generate = saved;
+    }
+    const st2 = (await ledgerFor(EC, USER).refresh()).state;
+    expect(st2.arcs![beat!.arc].beats.find((b) => b.tick === beat!.tick && b.atAbs === beat!.atAbs)).toMatchObject({ told: "model", text: again });
+    // Nothing else in the chat moved: one beat for that step, still.
+    expect(st2.arcs![beat!.arc].beats.filter((b) => b.tick === beat!.tick && b.atAbs === beat!.atAbs).length).toBe(1);
   });
 });

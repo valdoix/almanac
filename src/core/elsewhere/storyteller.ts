@@ -6,7 +6,7 @@
 import type { CodexRecord } from "../codex";
 import type { WeaverWorld } from "../lore";
 import type { OffPage } from "../offpage";
-import type { ArcKind, ArcStage, ArcState, BeatResult, ElsewhereConfig, WorldState } from "../types";
+import type { ArcBeat, ArcKind, ArcStage, ArcState, BeatResult, ElsewhereConfig, WorldState } from "../types";
 import { rng, slug } from "../util";
 import { arcNewLine, awakeAt, beatLine, cleanVal, gate, isLight, namesIn, seedCandidates, sentence, threadLatest, type GateResult, type SeedCand } from "./arcs";
 import { routeFor, soughtOf, type Arrival } from "./crossings";
@@ -478,6 +478,17 @@ export function tick(inp: TickInput): TickResult {
   }
 
   return { tickId: inp.tickId, hours, lines, cards, arrivals, awake: awake.map((a) => a.name), hops, seeded, proposals, log, roster };
+}
+
+/**
+ * A card for a step already taken, rebuilt from the beat and its subplot, for telling it again when its
+ * tick no longer keeps one. "So far" is what came before it; its words stand in for the engine draft.
+ */
+export function cardForBeat(arc: ArcState, beat: ArcBeat, roster: Roster, st: WorldState, offPage: OffPage[], records: CodexRecord[]): BeatCard {
+  const before = { ...arc, beats: arc.beats.filter((b) => b.atAbs < beat.atAbs) };
+  return cardFor(before, roster.find(arc.lead), roster, st, {
+    result: beat.result, roll: beat.roll, mod: beat.mod, stage: arc.stage, atAbs: beat.atAbs, template: beat.text, line: 0, twist: beat.twist, place: beat.place, offPage, records,
+  });
 }
 
 function cardFor(arc: ArcState, lead: Actor | undefined, r: Roster, st: WorldState, o: { result: BeatCard["result"]; roll: [number, number]; mod: number; stage: ArcStage; atAbs: number; template: string; line: number; twist?: string; price?: string; worse?: string; place?: string; ending?: boolean; seed?: boolean; fateOk?: boolean; offPage: OffPage[]; records: CodexRecord[]; offHours?: string }): BeatCard {

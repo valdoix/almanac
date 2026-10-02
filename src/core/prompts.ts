@@ -142,16 +142,20 @@ export function extractJson<T = any>(text: string): T | null {
   const candidates = [fenced?.[1], text];
   for (const c of candidates) {
     if (!c) continue;
-    const start = c.search(/[[{]/);
-    if (start < 0) continue;
-    const open = c[start];
-    const close = open === "{" ? "}" : "]";
-    const end = c.lastIndexOf(close);
-    if (end <= start) continue;
-    try {
-      return JSON.parse(c.slice(start, end + 1)) as T;
-    } catch {
-      /* try next */
+    // The first bracket that opens valid JSON: prose before it may carry brackets of its own ("[b1]").
+    for (let start = c.search(/[[{]/), tries = 0; start >= 0 && tries < 40; tries++) {
+      const open = c[start];
+      const close = open === "{" ? "}" : "]";
+      const end = c.lastIndexOf(close);
+      if (end > start) {
+        try {
+          return JSON.parse(c.slice(start, end + 1)) as T;
+        } catch {
+          /* try the next bracket */
+        }
+      }
+      const next = c.slice(start + 1).search(/[[{]/);
+      start = next < 0 ? -1 : start + 1 + next;
     }
   }
   return null;
