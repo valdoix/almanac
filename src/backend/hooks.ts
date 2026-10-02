@@ -4,7 +4,7 @@
 
 import type { InterceptorResultDTO, LlmMessageDTO } from "lumiverse-spindle-types";
 import { splice, validateUnits } from "../core/chronicle";
-import { extractLedgerBlock, fixSpeakerLabels, rewriteKnowledgeLines } from "../core/dsl";
+import { extractLedgerBlock, fixSpeech, rewriteKnowledgeLines } from "../core/dsl";
 import { renderDrawer, plateSuffix, fillHeader } from "../core/render";
 import { drawPlates } from "../core/plate";
 import { sidecarPrompt } from "../core/prompts";
@@ -223,13 +223,13 @@ export function registerPromptInterceptor() {
         if (files.chronicle.hidden.length) syncHidden(chatId, userId).catch((err) => warn(`release hidden turns: ${describe(err)}`));
         return msgs;
       }
-      // Speech labelled `Name#N|tone:` in earlier replies teaches the model the
+      // Speech labelled `Name#N|tone:`, or marked after its quote, in earlier replies teaches the model the
       // wrong shape (and outlives the [spk] marks thinned from older turns). A planning block
       // another system left in a reply (<weaver_deliberation>) is dropped: the model would copy it.
       for (let i = 0; i < msgs.length; i++) {
         if (msgs[i].role !== "assistant") continue;
         const t = textOf(msgs[i]);
-        const f = fixSpeakerLabels(t).replace(PLANNING_BLOCK, "");
+        const f = fixSpeech(t).replace(PLANNING_BLOCK, "");
         if (f !== t) msgs[i] = setText(msgs[i], f);
       }
       if (genType === "impersonate") return msgs;
@@ -354,14 +354,14 @@ export function registerRenderProcessor() {
   if (!has("chat_mutation")) return;
   host.registerMessageContentProcessor(async (ctx) => {
     if (ctx.origin !== "render" || ctx.isUser || !ctx.messageId) return;
-    const labelled = /#\d/.test(ctx.content);
+    const labelled = /#\d|\[\/sp/.test(ctx.content);
     if (!labelled && !/<ledger\b|🗓/u.test(ctx.content)) return;
     try {
       const files = await loadChat(ctx.chatId, ctx.userId);
       const settings = await loadSettings(ctx.userId);
       if (!isEnabled(files.meta, settings)) return;
-      // `Name#N|tone: "…"` → a proper speaker mark, so the voice card draws.
-      const fixed = labelled ? fixSpeakerLabels(ctx.content) : ctx.content;
+      // `Name#N|tone: "…"`, a mark after its quote or a garbled closer → a proper speaker mark, so the voice card draws.
+      const fixed = labelled ? fixSpeech(ctx.content) : ctx.content;
       if (!/<ledger\b|🗓/u.test(fixed)) return fixed !== ctx.content ? { content: fixed } : undefined;
       const L = ledgerFor(ctx.chatId, ctx.userId);
       const key = `${ctx.chatId}:${ctx.messageId}:${hash(ctx.content)}:${L.stamp}:${hash(JSON.stringify(files.meta.config.colors))}:${files.meta.detected.trackerView ?? ""}:${files.meta.detected.header ?? ""}:${files.meta.detected.lead ?? ""}:${hash(JSON.stringify(Object.entries(files.meta.checks ?? {}).filter(([k]) => k.startsWith(`${ctx.messageId}:`))))}`;

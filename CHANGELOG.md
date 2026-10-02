@@ -4,6 +4,15 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.19.2 — preset 1.1.1 (2026-10-02)
+
+**Voice cards draw when the model misplaces the speaker mark.** Some replies put the mark after the words (`"Words."[spk=Dawn#2][/spk]`), which drew an empty badge after a line in the plain text colour. Others garbled the closer (`[/spkbuffy]`, `[/spspk]`, `[/sp]`) or left a `Buffy#1:` label partway through a line. The extension now repairs these when the reply is shown, in the prompt history, and when it reads who said what:
+- A mark after its line moves to the front. Other unmarked lines in the same paragraph get the same speaker.
+- A garbled closer that names someone ("buffy") takes that person's voice. A closer with no name goes to the paragraph's only speaker, or is dropped.
+- A second mark right after a line that is already marked is removed.
+
+The next turn tells the model what went wrong. It also points out a line left without a mark between voice cards ("Shut up. I'm cold."), including the player's own words when the reply repeats them. The preset's speech rule now says that short replies get marks too, and that the mark comes first and `[/spk]` closes the line. In the Buffy chat this repairs replies #90, #112, #160, #164, #306, #308, #342, #350, #362 and #364.
+
 ## 1.19.1 (2026-10-02)
 
 **Bonds: cards fit the drawer.** A long label ("possessive attachment") wraps under the names instead of pushing the card wider than the drawer, which had hidden the right half of every bar and the numbers. Changes of 0 are no longer listed as a bond's last changes. Long stickers wrap everywhere in the drawer.

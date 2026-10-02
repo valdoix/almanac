@@ -147,6 +147,33 @@ describe("speaker labels", () => {
     expect(hasUnmarkedSpeech(`One "quote" only.`)).toBe(false);
     expect(hasUnmarkedSpeech(`Prose.\n<ledger>\njournal Buffy: "a" "b"\n</ledger>`)).toBe(false);
   });
+  test("marks after their quotes and garbled closers are put right (Buffy chat #90, #160, #308, #364)", async () => {
+    const { fixSpeech, hasMisplacedMarks, unmarkedLines, parseSpeech } = await import("../src/core/dsl");
+    const after = `"He would — he would *sing* it?"[spk=Dawn#2][/spk]\n\n"It's a spoonful, babe."[spk=Gabriel#4][/spk]`;
+    expect(hasMisplacedMarks(after)).toBe(true);
+    expect(fixSpeech(after)).toBe(`[spk=Dawn#2]"He would — he would *sing* it?"[/spk]\n\n[spk=Gabriel#4]"It's a spoonful, babe."[/spk]`);
+    // the moved mark covers the paragraph's other quote; a duplicate mark after a marked quote goes
+    expect(fixSpeech(`"What is on my food." She swallows. "Is this caviar —"[spk=Buffy#1][/spk]`))
+      .toBe(`[spk=Buffy#1]"What is on my food."[/spk] She swallows. [spk=Buffy#1]"Is this caviar —"[/spk]`);
+    expect(fixSpeech(`[spk=Buffy#1]"You're staying, right?"[spk=Buffy#1][/spk]`)).toBe(`[spk=Buffy#1]"You're staying, right?"[/spk]`);
+    // garbled closers: a name takes the reply's voice number; nameless ones close the paragraph's one speaker
+    expect(fixSpeech(`[spk=Buffy#1]"Hi."[/spk]\n\n"She likes it."[/spkbuffy]\n\n"Someday."[/spkbuffy1]`))
+      .toBe(`[spk=Buffy#1]"Hi."[/spk]\n\n[spk=Buffy#1]"She likes it."[/spk]\n\n[spk=Buffy#1]"Someday."[/spk]`);
+    expect(fixSpeech(`[spk=Dawn#2]"Yeah."[/spspk] [spk=Dawn#2]"No — "[/spk]*she looks*"— okay."[/spk]`))
+      .toBe(`[spk=Dawn#2]"Yeah."[/spk] [spk=Dawn#2]"No — "[/spk]*she looks*[spk=Dawn#2]"— okay."[/spk]`);
+    // a closer with no speaker in its paragraph just goes; a label left mid-line goes
+    expect(fixSpeech(`[spk=Dawn#2]"x"[/spk]\n\n"Wow. Back me up — "[/spk]`)).toBe(`[spk=Dawn#2]"x"[/spk]\n\n"Wow. Back me up — "`);
+    expect(fixSpeech(`[spk=Buffy#1]"So. Xena."[/spk] Flat. Casual. Buffy#1: "Who's second."[/spk]`))
+      .toBe(`[spk=Buffy#1]"So. Xena."[/spk] Flat. Casual. [spk=Buffy#1]"Who's second."[/spk]`);
+    // well-formed replies and other marks are left alone
+    const good = `[spk=Buffy#1]"Hi."[/spk] She "plans".\n\n[thk=Dawn#2]Ugh.[/thk] "Fine."[/thk]`;
+    expect(fixSpeech(good)).toBe(good);
+    expect(hasMisplacedMarks(`[spk=Buffy#1]"Hi."[/spk]`)).toBe(false);
+    expect(parseSpeech(after).map((l) => l.who)).toEqual(["Dawn", "Gabriel"]);
+    // a bare line between voice cards is reported; an inline scare quote isn't
+    expect(unmarkedLines(`[spk=Dawn#2]"Hi."[/spk]\n\n"Shut up. I'm cold."\n\nThe "plan" holds.`)).toEqual([`"Shut up. I'm cold."`]);
+    expect(unmarkedLines(`"Bare."\n\n"Only."`)).toEqual([]);
+  });
   test("the handshake carries the Dialogue blocks switch", () => {
     expect(JSON.stringify(buildPreset().blocks)).toContain(`color=\\"{{default::{{var::dialogue_color}}::1}}\\"`);
   });

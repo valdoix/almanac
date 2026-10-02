@@ -967,6 +967,88 @@ export function fixSpeakerLabels(text: string): string {
   });
 }
 
+const QUOTED = `["\\u201C][^"\\u201C\\u201D\\n]{1,1200}["\\u201D]`;
+/** A quote with an empty mark after it, `"Words."[spk=Dawn#2][/spk]` (or no closer at the line end); `$1` an opener already before the quote. */
+const MARK_AFTER = new RegExp(`(\\[spk=[^\\]\\n]*\\][ \\t]*)?(${QUOTED})[ \\t]*(\\[spk=[^\\]\\n]*\\])(?:[ \\t]*\\[\\/spk\\]|[ \\t]*(?=\\n|$))`, "g");
+/** A garbled closer — `[/spkbuffy]`, `[/spkbuffy1]`, `[/spspk]`, `[/spk=Buffy]` — after a quote. */
+const JUNK_CLOSER = new RegExp(`(\\[spk=[^\\]\\n]*\\][ \\t]*)?(${QUOTED})[ \\t]*\\[\\/sp(?!k\\])(?:sp)*k?[ =]?([A-Za-z\\u00C0-\\u024F' .-]{0,40}?)[ \\t]*#?(\\d{0,2})\\]`, "g");
+
+/**
+ * Repairs speaker marks the model put in the wrong place, so the voice card draws and the
+ * engine knows who spoke: a mark after its quote moves in front of it (and covers the
+ * paragraph's other bare quotes, the same speaker's), a duplicate mark after a marked quote
+ * goes, a garbled closer becomes a proper mark (its name matched against the reply's other
+ * marks for the voice number), and a closer with no mark in its paragraph goes. Script labels
+ * are fixed too.
+ */
+export function fixSpeech(text: string): string {
+  text = fixSpeakerLabels(text);
+  if (!/\[\/?sp/i.test(text)) return text;
+  const slots = new Map<string, string>();
+  for (const m of text.matchAll(/\[spk=([^\]#|\n]{1,60}?)\s*#(\d{1,2})/g)) if (!slots.has(m[1].trim().toLowerCase())) slots.set(m[1].trim().toLowerCase(), `${m[1].trim()}#${m[2]}`);
+  const MARKED = /\[spk=[^\]\n]*\][\s\S]*?\[\/spk\]/g;
+  return text.split(/(\n[ \t]*\n)/).map((para, i) => {
+    if (i % 2 || !/\[\/?sp/i.test(para)) return para;
+    const moved = new Set<string>();
+    para = para.replace(JUNK_CLOSER, (_all, open: string | undefined, q: string, name: string, slot: string) => {
+      if (open) return `${open}${q}[/spk]`;
+      const key = name.trim().toLowerCase();
+      const known = key ? slots.get(key) ?? [...slots.entries()].find(([k]) => k.split(/\s+/)[0] === key)?.[1] : undefined;
+      const mark = known ? `[spk=${known}]` : key && slot ? `[spk=${name.trim().replace(/^./, (c) => c.toUpperCase())}#${slot}]` : "";
+      if (!mark) return `${q}[/spk]`;
+      moved.add(mark);
+      return `${mark}${q}[/spk]`;
+    });
+    para = para.replace(MARK_AFTER, (_all, open: string | undefined, q: string, mark: string) => {
+      if (open) return `${open}${q}[/spk]`;
+      moved.add(mark);
+      return `${mark}${q}[/spk]`;
+    });
+    // Outside the paragraph's whole marks: bare quotes join a moved mark when it is the only one; a quote
+    // closed by a stray closer joins the paragraph's one speaker; other stray closers go.
+    const only = moved.size === 1 ? [...moved][0] : undefined;
+    const speakers = new Set([...para.matchAll(/\[spk=[^\]\n]*\]/g)].map((m) => m[0]));
+    const one = speakers.size === 1 ? [...speakers][0] : undefined;
+    let out = "";
+    let last = 0;
+    const outside = (seg: string) => {
+      if (/\[spk=/.test(seg)) return seg;
+      if (one) seg = seg.replace(new RegExp(`(${QUOTED})[ \\t]*\\[\\/spk\\]`, "g"), (_m, q: string) => `${one}${q}[/spk]`);
+      return seg.replace(new RegExp(`(\\[spk=[^\\]\\n]*\\])?(${QUOTED})(\\[\\/spk\\])?|[ \\t]*\\[\\/spk\\]`, "g"), (m, open: string | undefined, q: string | undefined) =>
+        open ? m : q ? (only ? `${only}${q}[/spk]` : q) : "");
+    };
+    for (const m of para.matchAll(MARKED)) {
+      out += outside(para.slice(last, m.index)) + m[0];
+      last = m.index! + m[0].length;
+    }
+    // A script label left mid-line in front of a mark (`Flat. Buffy#1: [spk=Buffy#1]"…"`) goes: the mark names the speaker.
+    return (out + outside(para.slice(last))).replace(/(^|[.!?*—–-][ \t]*|[ \t])(?:\*\*)?[A-ZÀ-Þ][\p{L}'’-]*(?:[ \t][A-ZÀ-Þ][\p{L}'’-]*){0,2}[ \t]*#\d{1,2}(?:\|[a-z]+)?(?:\*\*)?:[ \t]*(?=\[spk=)/gu, "$1");
+  }).join("");
+}
+
+/** True when a reply put speaker marks after their quotes or garbled their closers (what {@link fixSpeech} repairs beyond labels). */
+export function hasMisplacedMarks(text: string): boolean {
+  MARK_AFTER.lastIndex = 0;
+  JUNK_CLOSER.lastIndex = 0;
+  const hit = MARK_AFTER.test(text) || JUNK_CLOSER.test(text);
+  MARK_AFTER.lastIndex = 0;
+  JUNK_CLOSER.lastIndex = 0;
+  return hit;
+}
+
+/**
+ * Spoken lines a marked reply left bare: paragraphs that open with a quote outside any mark
+ * (`"Shut up. I'm cold."` between voice cards). Inline quotes in narration don't count.
+ */
+export function unmarkedLines(text: string): string[] {
+  const t = fixSpeech(text ?? "")
+    .replace(/<(ledger|unspoken|plan|think|thinking|ooc|folio)\b[^>]*>[\s\S]*?(<\/\1>|$)/gi, " ")
+    .replace(/\[(vtk|txt)=[^\]]*\][\s\S]*?\[\/\1\]/gi, " ");
+  if (!/\[spk=/.test(t)) return [];
+  const bare = t.replace(/\[(spk|thk)=[^\]\n]*\][\s\S]*?(?:\[\/\1\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)/g, " ");
+  return [...bare.matchAll(/(?:^|\n)[ \t]*(?:\*\*)?(["“][^"“”\n]{2,300}["”])/g)].map((m) => m[1]);
+}
+
 /** True when a reply labels speech as `Name#N|tone:` instead of using [spk] marks. */
 export function hasSpeakerLabels(text: string): boolean {
   SPEAKER_LABEL.lastIndex = 0;
@@ -984,7 +1066,7 @@ const QUIET_TONE = /whisper|murmur|breath|hush|sotto|mouth|under/i;
  * ledgers and filed documents are not speech.
  */
 export function parseSpeech(text: string): SpokenLine[] {
-  let t = fixSpeakerLabels(text ?? "")
+  let t = fixSpeech(text ?? "")
     .replace(/<(ledger|unspoken|plan|think|thinking|ooc|folio)\b[^>]*>[\s\S]*?(<\/\1>|$)/gi, " ")
     .replace(/\[vtk=[^\]]*\][\s\S]*?\[\/vtk\]/gi, " ")
     .replace(/\(\([\s\S]*?\)\)|\[OOC[^\]]*\]|^\s*OOC:.*$/gim, " ");
@@ -1027,7 +1109,7 @@ export function hasUnmarkedSpeech(text: string): boolean {
 }
 
 export function parseSpeakers(text: string): { name: string; slot?: number }[] {
-  text = fixSpeakerLabels(text);
+  text = fixSpeech(text);
   const seen = new Map<string, { name: string; slot?: number }>();
   const re = /\[(?:spk|thk)=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|[^\]]*)?\]/g;
   let m: RegExpExecArray | null;

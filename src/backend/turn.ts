@@ -13,7 +13,7 @@ import { NOT_A_PERSON } from "../core/state";
 import { offPageFacts, redact } from "../core/offpage";
 import { chronicleBits, unitHeader } from "../core/chronicle";
 import { seedTraitsFor } from "./traitseed";
-import { SPEAKER_LABEL, extractLedgerBlock, hasSpeakerLabels, hasUnmarkedSpeech } from "../core/dsl";
+import { SPEAKER_LABEL, extractLedgerBlock, hasMisplacedMarks, hasSpeakerLabels, hasUnmarkedSpeech, unmarkedLines } from "../core/dsl";
 import { debug, describe, has, host, warn, within } from "./host";
 import { ledgerFor, type ChatLedger } from "./ledger";
 import { waitForClerk } from "./clerk";
@@ -190,6 +190,11 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     const v = Object.values(st.chars).filter((c) => !c.isUser && !c.dead && c.slot != null).sort((a, b) => b.lastSeen - a.lastSeen)[0];
     const who = v ? `${v.name}#${v.slot}` : "Name#N";
     speechFix = `Speech format: your last reply wrote its dialogue as bare quotes, so the page drew no voice cards. Wrap every spoken line again: [spk=${who}]"Words."[/spk] — each speaker with their own voice number.`;
+  } else if (lastReplyMsg && lastReplyMsg.index > 0 && meta.detected.dialogueMarks !== false && hasMisplacedMarks(lastReplyMsg.content)) {
+    speechFix = `Speech format: your last reply put speaker marks after the words ("Words."[spk=Name#N][/spk]) or garbled the closer ([/spkname]). The mark opens the line and [/spk] closes it: [spk=Name#N]"Words."[/spk].`;
+  } else if (lastReplyMsg && lastReplyMsg.index > 0 && meta.detected.dialogueMarks !== false) {
+    const bare = unmarkedLines(lastReplyMsg.content);
+    if (bare.length) speechFix = `Speech format: your last reply left ${bare.length === 1 ? "a spoken line" : `${bare.length} spoken lines`} without a mark (${bare[0].length > 60 ? `${bare[0].slice(0, 57)}…"` : bare[0]}), so ${bare.length === 1 ? "it" : "they"} drew no voice card. Every line someone says aloud is wrapped: [spk=Name#N]"Words."[/spk], including ${L.names.user}'s words when you repeat them.`;
   }
 
   // The ceiling on what the Almanac adds to this prompt. Over it: the summaries narrow to the

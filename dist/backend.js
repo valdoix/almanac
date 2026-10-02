@@ -1596,6 +1596,70 @@ function fixSpeakerLabels(text) {
     return `${lead}${ws}${mark}"${words}"[/spk]`;
   });
 }
+function fixSpeech(text) {
+  text = fixSpeakerLabels(text);
+  if (!/\[\/?sp/i.test(text))
+    return text;
+  const slots = new Map;
+  for (const m of text.matchAll(/\[spk=([^\]#|\n]{1,60}?)\s*#(\d{1,2})/g))
+    if (!slots.has(m[1].trim().toLowerCase()))
+      slots.set(m[1].trim().toLowerCase(), `${m[1].trim()}#${m[2]}`);
+  const MARKED = /\[spk=[^\]\n]*\][\s\S]*?\[\/spk\]/g;
+  return text.split(/(\n[ \t]*\n)/).map((para, i) => {
+    if (i % 2 || !/\[\/?sp/i.test(para))
+      return para;
+    const moved = new Set;
+    para = para.replace(JUNK_CLOSER, (_all, open, q, name, slot) => {
+      if (open)
+        return `${open}${q}[/spk]`;
+      const key = name.trim().toLowerCase();
+      const known = key ? slots.get(key) ?? [...slots.entries()].find(([k]) => k.split(/\s+/)[0] === key)?.[1] : undefined;
+      const mark = known ? `[spk=${known}]` : key && slot ? `[spk=${name.trim().replace(/^./, (c) => c.toUpperCase())}#${slot}]` : "";
+      if (!mark)
+        return `${q}[/spk]`;
+      moved.add(mark);
+      return `${mark}${q}[/spk]`;
+    });
+    para = para.replace(MARK_AFTER, (_all, open, q, mark) => {
+      if (open)
+        return `${open}${q}[/spk]`;
+      moved.add(mark);
+      return `${mark}${q}[/spk]`;
+    });
+    const only = moved.size === 1 ? [...moved][0] : undefined;
+    const speakers = new Set([...para.matchAll(/\[spk=[^\]\n]*\]/g)].map((m) => m[0]));
+    const one = speakers.size === 1 ? [...speakers][0] : undefined;
+    let out = "";
+    let last = 0;
+    const outside = (seg) => {
+      if (/\[spk=/.test(seg))
+        return seg;
+      if (one)
+        seg = seg.replace(new RegExp(`(${QUOTED})[ \\t]*\\[\\/spk\\]`, "g"), (_m, q) => `${one}${q}[/spk]`);
+      return seg.replace(new RegExp(`(\\[spk=[^\\]\\n]*\\])?(${QUOTED})(\\[\\/spk\\])?|[ \\t]*\\[\\/spk\\]`, "g"), (m, open, q) => open ? m : q ? only ? `${only}${q}[/spk]` : q : "");
+    };
+    for (const m of para.matchAll(MARKED)) {
+      out += outside(para.slice(last, m.index)) + m[0];
+      last = m.index + m[0].length;
+    }
+    return (out + outside(para.slice(last))).replace(/(^|[.!?*\u2014\u2013-][ \t]*|[ \t])(?:\*\*)?[A-Z\u00C0-\u00DE][\p{L}'\u2019-]*(?:[ \t][A-Z\u00C0-\u00DE][\p{L}'\u2019-]*){0,2}[ \t]*#\d{1,2}(?:\|[a-z]+)?(?:\*\*)?:[ \t]*(?=\[spk=)/gu, "$1");
+  }).join("");
+}
+function hasMisplacedMarks(text) {
+  MARK_AFTER.lastIndex = 0;
+  JUNK_CLOSER.lastIndex = 0;
+  const hit = MARK_AFTER.test(text) || JUNK_CLOSER.test(text);
+  MARK_AFTER.lastIndex = 0;
+  JUNK_CLOSER.lastIndex = 0;
+  return hit;
+}
+function unmarkedLines(text) {
+  const t = fixSpeech(text ?? "").replace(/<(ledger|unspoken|plan|think|thinking|ooc|folio)\b[^>]*>[\s\S]*?(<\/\1>|$)/gi, " ").replace(/\[(vtk|txt)=[^\]]*\][\s\S]*?\[\/\1\]/gi, " ");
+  if (!/\[spk=/.test(t))
+    return [];
+  const bare = t.replace(/\[(spk|thk)=[^\]\n]*\][\s\S]*?(?:\[\/\1\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)/g, " ");
+  return [...bare.matchAll(/(?:^|\n)[ \t]*(?:\*\*)?(["\u201C][^"\u201C\u201D\n]{2,300}["\u201D])/g)].map((m) => m[1]);
+}
 function hasSpeakerLabels(text) {
   SPEAKER_LABEL.lastIndex = 0;
   const hit = SPEAKER_LABEL.test(text);
@@ -1603,7 +1667,7 @@ function hasSpeakerLabels(text) {
   return hit;
 }
 function parseSpeech(text) {
-  let t = fixSpeakerLabels(text ?? "").replace(/<(ledger|unspoken|plan|think|thinking|ooc|folio)\b[^>]*>[\s\S]*?(<\/\1>|$)/gi, " ").replace(/\[vtk=[^\]]*\][\s\S]*?\[\/vtk\]/gi, " ").replace(/\(\([\s\S]*?\)\)|\[OOC[^\]]*\]|^\s*OOC:.*$/gim, " ");
+  let t = fixSpeech(text ?? "").replace(/<(ledger|unspoken|plan|think|thinking|ooc|folio)\b[^>]*>[\s\S]*?(<\/\1>|$)/gi, " ").replace(/\[vtk=[^\]]*\][\s\S]*?\[\/vtk\]/gi, " ").replace(/\(\([\s\S]*?\)\)|\[OOC[^\]]*\]|^\s*OOC:.*$/gim, " ");
   const out = [];
   t = t.replace(/\[spk=([^\]#|\n]{1,60}?)\s*(?:#\d{1,2})?\s*(?:\|([^\]]*))?\]([\s\S]*?)\[\/spk\]/g, (_, who, tone, body) => {
     const words = body.replace(/^\s*["\u201C]|["\u201D]\s*$/g, "").replace(/[*_]/g, "").trim();
@@ -1636,7 +1700,7 @@ function hasUnmarkedSpeech(text) {
   return plain >= 2 && plain > marked;
 }
 function parseSpeakers(text) {
-  text = fixSpeakerLabels(text);
+  text = fixSpeech(text);
   const seen = new Map;
   const re = /\[(?:spk|thk)=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|[^\]]*)?\]/g;
   let m;
@@ -1740,7 +1804,7 @@ function rewriteKnowledgeLines(text, filed) {
   const next = `${rest.slice(0, at)}${insert}${rest.slice(at)}`;
   return text.slice(0, block.index) + `<ledger>${next}</ledger>` + text.slice(block.index + block[0].length);
 }
-var OP_ALIASES, SUBJECT_OPS, SCENE_MODES, AXIS_ALIASES, METER_ALIASES, SEVERITY, TIER_ALIASES, CAUSE_SPLIT, PARSERS, INJURY, NOT_HURT, PART, MILD, BAD, TENDED, NOT_YET, CARE, REGION, hasPart = (where) => PART.test(where), isBareWound = (where) => /^wound$/i.test(where.trim()), METER, NOUN, GLYPHS = "\u2600\uFE0F|\u2600|\uD83C\uDF19|\u2728|\uD83C\uDF24\uFE0F|\uD83C\uDF24|\u26C5\uFE0F|\u26C5|\uD83C\uDF25\uFE0F|\uD83C\uDF25|\u2601\uFE0F|\u2601|\uD83C\uDF26\uFE0F|\uD83C\uDF26|\uD83C\uDF27\uFE0F|\uD83C\uDF27|\u26C8\uFE0F|\u26C8|\uD83C\uDF29\uFE0F|\uD83C\uDF29|\uD83C\uDF28\uFE0F|\uD83C\uDF28|\u2744\uFE0F|\u2744|\uD83C\uDF2B\uFE0F|\uD83C\uDF2B|\uD83C\uDF2C\uFE0F|\uD83C\uDF2C|\uD83C\uDF2A\uFE0F|\uD83C\uDF2A|\uD83D\uDD25|\uD83E\uDDCA|\uD83C\uDF21\uFE0F|\uD83C\uDF21", CLOCK = "(?:\uD83D\uDD70|[\\u{1F550}-\\u{1F567}]|\u23F0|\u231A|\u23F1|\u23F2)\\uFE0F?", SPEAKER_LABEL, QUIET_TONE, KNOW_LINE;
+var OP_ALIASES, SUBJECT_OPS, SCENE_MODES, AXIS_ALIASES, METER_ALIASES, SEVERITY, TIER_ALIASES, CAUSE_SPLIT, PARSERS, INJURY, NOT_HURT, PART, MILD, BAD, TENDED, NOT_YET, CARE, REGION, hasPart = (where) => PART.test(where), isBareWound = (where) => /^wound$/i.test(where.trim()), METER, NOUN, GLYPHS = "\u2600\uFE0F|\u2600|\uD83C\uDF19|\u2728|\uD83C\uDF24\uFE0F|\uD83C\uDF24|\u26C5\uFE0F|\u26C5|\uD83C\uDF25\uFE0F|\uD83C\uDF25|\u2601\uFE0F|\u2601|\uD83C\uDF26\uFE0F|\uD83C\uDF26|\uD83C\uDF27\uFE0F|\uD83C\uDF27|\u26C8\uFE0F|\u26C8|\uD83C\uDF29\uFE0F|\uD83C\uDF29|\uD83C\uDF28\uFE0F|\uD83C\uDF28|\u2744\uFE0F|\u2744|\uD83C\uDF2B\uFE0F|\uD83C\uDF2B|\uD83C\uDF2C\uFE0F|\uD83C\uDF2C|\uD83C\uDF2A\uFE0F|\uD83C\uDF2A|\uD83D\uDD25|\uD83E\uDDCA|\uD83C\uDF21\uFE0F|\uD83C\uDF21", CLOCK = "(?:\uD83D\uDD70|[\\u{1F550}-\\u{1F567}]|\u23F0|\u231A|\u23F1|\u23F2)\\uFE0F?", SPEAKER_LABEL, QUOTED = `["\\u201C][^"\\u201C\\u201D\\n]{1,1200}["\\u201D]`, MARK_AFTER, JUNK_CLOSER, QUIET_TONE, KNOW_LINE;
 var init_dsl = __esm(() => {
   init_types();
   init_traits();
@@ -2482,12 +2546,14 @@ var init_dsl = __esm(() => {
   METER = /^([a-zA-Z]+)\s*[:=]?\s*(?:[+-]?\d+\s*(?:\u2192|->|=>|to)\s*)?([+-]?\d+)\s*\+?\s*(?:\/\s*5)?\s*(?:\([^)]*\))?(?:\s+(?:from|after|because|due to|\u2014|-)\s.*)?[.]?$/;
   NOUN = [[/^(wound|stitch)/, "wound"], [/^bruis/, "bruise"], [/^burn/, "burn"], [/^scrap/, "scrape"], [/^graz/, "graze"], [/^stab/, "stab wound"], [/^slash/, "slash"], [/^fractur/, "fracture"], [/^sprain/, "sprain"], [/^bite/, "bite"], [/^cut/, "cut"], [/^gash/, "gash"], [/^lacerat/, "laceration"], [/^blister/, "blister"], [/^welt/, "welt"], [/^punctur/, "puncture"]];
   SPEAKER_LABEL = /(^|\n)([ \t]*)(?:\*\*|__)?\[?([A-Z\u00C0-\u00D6\u00D8-\u00DE?][^\n\[\]#|:*_"\u201C=<>]{0,59}?)[ \t]*#(\d{1,2})[ \t]*(?:\|[ \t]*([a-z]+)[ \t]*)?\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[ \t]*([^\n]*)/g;
+  MARK_AFTER = new RegExp(`(\\[spk=[^\\]\\n]*\\][ \\t]*)?(${QUOTED})[ \\t]*(\\[spk=[^\\]\\n]*\\])(?:[ \\t]*\\[\\/spk\\]|[ \\t]*(?=\\n|$))`, "g");
+  JUNK_CLOSER = new RegExp(`(\\[spk=[^\\]\\n]*\\][ \\t]*)?(${QUOTED})[ \\t]*\\[\\/sp(?!k\\])(?:sp)*k?[ =]?([A-Za-z\\u00C0-\\u024F' .-]{0,40}?)[ \\t]*#?(\\d{0,2})\\]`, "g");
   QUIET_TONE = /whisper|murmur|breath|hush|sotto|mouth|under/i;
   KNOW_LINE = /^[ \t]*(?:[-*\u2022]\s+)?(?:know|knows|knowledge|belief|reveal|reveals|revealed|tell|told|disclose|secret|secrets|hidden|unaware|lacks|ignorant)\b[^:\n]*:[^\n]*\n?/gim;
 });
 
 // src/core/version.ts
-var VERSION = "1.19.1";
+var VERSION = "1.19.2";
 
 // src/core/facts.ts
 function stem(w) {
@@ -14889,7 +14955,7 @@ function isScene(title, content, role = "depth") {
     return true;
   const first = firstSentence2(c);
   const scenic = /\b(when|if|once|tonight|the first time)\b/i.test(first) || /:\s|\s[\u2014\u2013]\s/.test(title);
-  return scenic && QUOTED.test(c);
+  return scenic && QUOTED2.test(c);
 }
 function playbookPlayed(pb, chapter) {
   const low = chapter.toLowerCase();
@@ -15032,7 +15098,7 @@ function seedOverlays(items, opts = {}) {
   }
   return out;
 }
-var WORLD_RULE, WEAVER_BOOKS, GROUP_HINT, OBJECT_HINT, PLACE_HINT, HISTORY_HINT, LAW_HINT, TEXTURE_HINT, LORE_TITLE_HINTS, BELIEF, MISTAKEN, PUBLIC, SECRET, SIGN, EVENT_NOUN, TITLE_VERB, PRESENT, PAST2, STOP_END, NAME, IS_ROLE, PERSON_NOUN, SCENE_OPEN, SCENE_TITLE, QUOTED, TITLE_STOP, KIND_PREFIX;
+var WORLD_RULE, WEAVER_BOOKS, GROUP_HINT, OBJECT_HINT, PLACE_HINT, HISTORY_HINT, LAW_HINT, TEXTURE_HINT, LORE_TITLE_HINTS, BELIEF, MISTAKEN, PUBLIC, SECRET, SIGN, EVENT_NOUN, TITLE_VERB, PRESENT, PAST2, STOP_END, NAME, IS_ROLE, PERSON_NOUN, SCENE_OPEN, SCENE_TITLE, QUOTED2, TITLE_STOP, KIND_PREFIX;
 var init_lore = __esm(() => {
   init_util();
   init_traits();
@@ -15074,7 +15140,7 @@ var init_lore = __esm(() => {
   PERSON_NOUN = /^(?:authority|leader|member|head|chief|officer|agent|man|woman|girl|boy|child|figure|director|founder|heir|ruler|lord|lady|servant|guard|soldier|knight|priest|priestess|witch|wizard|mage|sorcerer|sorceress|vampire|demon|god|goddess|slayer|watcher|hunter|student|teacher|professor|doctor|friend|ally|enemy|rival|lover|wife|husband|son|daughter|mother|father|sister|brother|twin|cousin|uncle|aunt|prince|princess|king|queen|official|clerk|scholar|merchant|captain|commander|advisor|adviser|maester|steward|castellan|smith|cook|maid|nanny|nurse|physician|healer|engineer|historian|financier|jurist|poet|musician|singer|dancer|actor|artist|writer|thief|assassin|spy|mercenary|warrior|rider|dragon|creature|beast|cat|dog|wolf|horse|robot|android|construct|ghost|spirit|entity|being)s?$/i;
   SCENE_OPEN = /^(?:when|whenever|if|once|the first time|the next time|the moment|it happens|after|as soon as|the day|the night|until|learning|seeing|hearing)\b/i;
   SCENE_TITLE = /^(?:learning|seeing|hearing|arriving|finding|meeting|the first|the word|(?:her|his|their) first|when|if|once)\b/i;
-  QUOTED = /['\u2018"\u201C][^'\u2019"\u201D\n]{4,}['\u2019"\u201D]/;
+  QUOTED2 = /['\u2018"\u201C][^'\u2019"\u201D\n]{4,}['\u2019"\u201D]/;
   TITLE_STOP = new Set("with that this from their them then into when where what which while about after before have been were said says aloud".split(" "));
   KIND_PREFIX = {
     person: "char:",
@@ -17493,6 +17559,12 @@ ${b.body}
     const v = Object.values(st.chars).filter((c) => !c.isUser && !c.dead && c.slot != null).sort((a, b) => b.lastSeen - a.lastSeen)[0];
     const who = v ? `${v.name}#${v.slot}` : "Name#N";
     speechFix = `Speech format: your last reply wrote its dialogue as bare quotes, so the page drew no voice cards. Wrap every spoken line again: [spk=${who}]"Words."[/spk] \u2014 each speaker with their own voice number.`;
+  } else if (lastReplyMsg && lastReplyMsg.index > 0 && meta.detected.dialogueMarks !== false && hasMisplacedMarks(lastReplyMsg.content)) {
+    speechFix = `Speech format: your last reply put speaker marks after the words ("Words."[spk=Name#N][/spk]) or garbled the closer ([/spkname]). The mark opens the line and [/spk] closes it: [spk=Name#N]"Words."[/spk].`;
+  } else if (lastReplyMsg && lastReplyMsg.index > 0 && meta.detected.dialogueMarks !== false) {
+    const bare = unmarkedLines(lastReplyMsg.content);
+    if (bare.length)
+      speechFix = `Speech format: your last reply left ${bare.length === 1 ? "a spoken line" : `${bare.length} spoken lines`} without a mark (${bare[0].length > 60 ? `${bare[0].slice(0, 57)}\u2026"` : bare[0]}), so ${bare.length === 1 ? "it" : "they"} drew no voice card. Every line someone says aloud is wrapped: [spk=Name#N]"Words."[/spk], including ${L.names.user}'s words when you repeat them.`;
   }
   const unitTokens = (ids) => ids.reduce((n, id) => {
     const u = files.chronicle.units.find((x) => x.id === id);
@@ -17884,7 +17956,7 @@ function registerPromptInterceptor() {
         if (msgs[i].role !== "assistant")
           continue;
         const t = textOf(msgs[i]);
-        const f = fixSpeakerLabels(t).replace(PLANNING_BLOCK, "");
+        const f = fixSpeech(t).replace(PLANNING_BLOCK, "");
         if (f !== t)
           msgs[i] = setText(msgs[i], f);
       }
@@ -18008,7 +18080,7 @@ function registerRenderProcessor() {
   host.registerMessageContentProcessor(async (ctx) => {
     if (ctx.origin !== "render" || ctx.isUser || !ctx.messageId)
       return;
-    const labelled = /#\d/.test(ctx.content);
+    const labelled = /#\d|\[\/sp/.test(ctx.content);
     if (!labelled && !/<ledger\b|\uD83D\uDDD3/u.test(ctx.content))
       return;
     try {
@@ -18016,7 +18088,7 @@ function registerRenderProcessor() {
       const settings = await loadSettings(ctx.userId);
       if (!isEnabled(files.meta, settings))
         return;
-      const fixed = labelled ? fixSpeakerLabels(ctx.content) : ctx.content;
+      const fixed = labelled ? fixSpeech(ctx.content) : ctx.content;
       if (!/<ledger\b|\uD83D\uDDD3/u.test(fixed))
         return fixed !== ctx.content ? { content: fixed } : undefined;
       const L = ledgerFor(ctx.chatId, ctx.userId);

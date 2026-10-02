@@ -29,7 +29,7 @@ Scene length — how many replies a sex scene spans, never how long one reply is
 {{/if}}Violence: {{switch::{{var::violence}}::restrained::restrained — impact over anatomy::graphic::graphic when the story calls for it::grounded — real, costly, not lingered on}}.`;
 
 export const MARKS = R`[PRESENTATION — the page renders these marks; write them exactly]
-{{if::{{var::dialogue_color}}}}Speech: wrap each unbroken line of speech whose speaker is certain: [spk=Name#N]"Words."[/spk]
+{{if::{{var::dialogue_color}}}}Speech: wrap each unbroken line of speech whose speaker is certain, short replies too: [spk=Name#N]"Words."[/spk] — the mark first, the words inside it, then exactly [/spk].
 Name exactly as established; #N is that person's voice number{{if::{{len::{{almVoices}}}}}} from this roster: {{almVoices}}. Anyone new takes an unused number from 1 to 12{{else}}: give each speaker an unused number from 1 to 12 and keep it{{/if}}; {{user}} is 0. When delivery matters, add a tone after a bar: [spk=Name#N|whisper] — whisper, murmur, shout, sing, sob, cold, tender, sly, breathless, flat. Narration stays outside the wrapper. An unseen or uncertain speaker is [spk=?]. The mark is the only speaker label: never write Name#N: or Name#N|tone: in front of a line, and never a bare "Name:" script line.{{if::${SEALED}}} Tag {{user}}'s words only when quoting what the player wrote.{{/if}}
 {{/if}}{{if::{{eq::{{var::inner_voice}}::prose}}}}A thought on the page: [thk=Name#N]the thought[/thk]
 {{/if}}Words a character reads in passing — a sign, a carving, a screen: [txt=sign]THE GILDED STAG[/txt] (kinds: sign, screen, neon, chalk).
