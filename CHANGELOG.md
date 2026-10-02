@@ -4,6 +4,14 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.21.3 (2026-10-03) · preset 1.1.3
+
+**Your character speaks only in Director and Full cast.** With Persona set to Sealed or Continuity, the story no longer gives your character lines of dialogue. That includes repeating your own line back to you.
+- The preset says so in both modes, and it stops giving your character a voice number in Sealed and Continuity.
+- If a reply still has a line for your character, the Ledger takes it out of the message, along with its tag ("Gabriel says solemnly,", "— mumbled against her"). Everything else in the reply stays as written. Lines the model left unmarked are checked too: the speaker reader names your character only when the narration plainly gives the line to them.
+- Your character's lines in earlier replies are left out of what the model sees, so it doesn't copy them.
+- Director and Full cast work as before.
+
 ## 1.21.2 (2026-10-03)
 
 **Looks stay with the right person and wear off.**

@@ -5,7 +5,8 @@
 import type { InterceptorResultDTO, LlmMessageDTO } from "lumiverse-spindle-types";
 import { splice, validateUnits } from "../core/chronicle";
 import { extractLedgerBlock, fixSpeech, rewriteKnowledgeLines } from "../core/dsl";
-import { readSpeakers } from "./speakers";
+import { dropUserSpeech } from "../core/speakers";
+import { personaTest, readSpeakers } from "./speakers";
 import { renderDrawer, plateSuffix, fillHeader } from "../core/render";
 import { drawPlates } from "../core/plate";
 import { sidecarPrompt } from "../core/prompts";
@@ -241,6 +242,17 @@ export function registerPromptInterceptor() {
       if (!context.isDryRun) plan.used = true;
       const L = ledgerFor(chatId, userId);
 
+      // Under Sealed and Continuity the persona's lines in earlier replies are left out: the model would copy them.
+      if (L.foldOptions(meta, settings).sealed) {
+        const persona = personaTest(chatId, userId);
+        for (let i = 0; i < msgs.length; i++) {
+          if (msgs[i].role !== "assistant") continue;
+          const t = textOf(msgs[i]);
+          const f = dropUserSpeech(t, persona);
+          if (f !== t) msgs[i] = setText(msgs[i], f);
+        }
+      }
+
       // Knowledge lines in earlier replies, as the Almanac filed them (one fact a line, #keys, no diary):
       // the model writes its next ledger in the shape of the last one it sees.
       const canon = L.state?.knowCanon ?? {};
@@ -363,7 +375,7 @@ export function registerRenderProcessor() {
       if (!isEnabled(files.meta, settings)) return;
       // The latest reply, written before the speaker reader ran (or while it was off): its bare lines are marked
       // in the background, and the edit redraws it.
-      if (settings.speakerRead !== false && ledgerFor(ctx.chatId, ctx.userId).lastAssistant()?.id === ctx.messageId) void readSpeakers(ctx.chatId, ctx.messageId, ctx.userId);
+      if (ledgerFor(ctx.chatId, ctx.userId).lastAssistant()?.id === ctx.messageId) void readSpeakers(ctx.chatId, ctx.messageId, ctx.userId);
       // `Name#N|tone: "…"`, a mark after its quote or a garbled closer → a proper speaker mark, so the voice card draws.
       const fixed = labelled ? fixSpeech(ctx.content) : ctx.content;
       if (!/<ledger\b|🗓/u.test(fixed)) return fixed !== ctx.content ? { content: fixed } : undefined;

@@ -108,6 +108,20 @@ describe("extension hooks with the preset", () => {
     expect(meta.detected.innerVoice).toBe("register");
   });
 
+  test("a Sealed persona's lines in earlier replies stay out of the prompt", async () => {
+    const reply = SAMPLE_REPLY.replace("[spk=Joss#3]", `[spk=Wren#0]"Stay,"[/spk] Wren says. [spk=Joss#3]`);
+    const res = await hooks.prompt([
+      { role: "system", content: `${CHARTER}\n${HANDSHAKE}` },
+      { role: "assistant", content: OPENING },
+      { role: "user", content: SAMPLE_USER },
+      { role: "assistant", content: reply },
+      { role: "user", content: "I wait." },
+    ], { chatId: CHAT, userId: USER, generationType: "normal" });
+    const all = (Array.isArray(res) ? res : res.messages).map((m: any) => (typeof m.content === "string" ? m.content : "")).join("\n");
+    expect(all).not.toContain("Stay,");
+    expect(all).toContain(`[spk=Joss#3]"I'll just— the cart."[/spk]`);
+  });
+
   test("macros report the linked state the preset branches on", async () => {
     await hooks.context({ chatId: CHAT, userId: USER, generationType: "normal" });
     expect(macro("almActive")).toBe("yes");

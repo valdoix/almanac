@@ -52,7 +52,7 @@ export function bareLines(text: string): BareLine[] {
   return out;
 }
 
-export function speakerPrompt(opts: { text: string; lines: BareLine[]; voices: Voice[]; userName: string }): { system: string; user: string } {
+export function speakerPrompt(opts: { text: string; lines: BareLine[]; voices: Voice[]; userName: string; sealed?: boolean }): { system: string; user: string } {
   let marked = "";
   let at = 0;
   opts.lines.forEach((l, i) => {
@@ -69,7 +69,7 @@ Answer one line per number, nothing else:
 n: Name — the person who says it aloud, named as in the list
 n: ? — when you can't tell who says it
 n: - — when it isn't someone speaking aloud in this scene (a sign, a title, a text message, words remembered from before, a word quoted in narration)
-People: ${people || "(none listed)"}. The player is ${opts.userName}.`,
+People: ${people || "(none listed)"}. The player is ${opts.userName}.${opts.sealed ? ` ${opts.userName}'s words belong to the player and their lines will be taken out, so name ${opts.userName} only when the narration plainly gives the line to them; when in doubt, answer ?.` : ""}`,
     user: `<story>\n${marked}\n</story>`,
   };
 }
@@ -124,6 +124,63 @@ export function applySpeakers(text: string, lines: BareLine[], answer: (string |
     const slot = label ? label.split("#")[1] : v?.slot;
     return slot != null && name.trim() !== "?" ? `[spk=${name.trim()}#${slot}${tone ?? ""}]` : m;
   });
+}
+
+const TERMINAL = /[.!?…]["”*_\s]*$/;
+
+/**
+ * The persona's spoken lines taken out of a reply: under Sealed and Continuity only the player
+ * gives the persona words. A line goes with its dialogue tag ("Gabriel says solemnly," · "— a
+ * murmur against her ribs."), and a lead-in that opens on it ("He leans in and says,"); the rest
+ * of the text is left as it was. `isUser` says whether a mark's name is the persona's.
+ */
+export function dropUserSpeech(text: string, isUser: (name: string) => boolean): string {
+  const ranges: [number, number][] = [];
+  for (const m of text.matchAll(/\[spk=([^\]\n]*)\]([\s\S]*?)\[\/spk\]/g)) {
+    const name = m[1].split(/[#|]/)[0].trim();
+    if (!name || name === "?" || !isUser(name)) continue;
+    let a = m.index!;
+    let b = a + m[0].length;
+    // A lead-in on the same sentence: `He leans in and says, ` / `She hears him: `.
+    const lineStart = text.lastIndexOf("\n", a - 1) + 1;
+    const before = text.slice(lineStart, a);
+    const lead = /(?:^|[.!?…]["”*_]*\s+)([^.!?…"“”\[\]\n]*?[,:]\s*)$/.exec(before);
+    if (lead && /\p{L}/u.test(lead[1])) a -= lead[1].length;
+    // A tag after it: the line ends mid-sentence ("Best girl," / "So this year you had a —"), or the
+    // narration carries on in lower case or after a dash, up to the sentence's end or the next mark.
+    const rest = text.slice(b);
+    const tail = /^[ \t]*([^\n]*)/.exec(rest)![1];
+    if (tail && (!TERMINAL.test(m[2]) || /^[\p{Ll}—–-]/u.test(tail))) {
+      const end = /^[^\n]*?(?:[.!?…]["”*_]*(?=\s|$)|(?=\[spk=)|$)/mu.exec(rest.replace(/^[ \t]*/, ""))![0];
+      b += rest.length - rest.replace(/^[ \t]*/, "").length + end.length;
+    }
+    const prev = ranges[ranges.length - 1];
+    if (prev && a <= prev[1]) prev[1] = Math.max(prev[1], b);
+    else ranges.push([a, b]);
+  }
+  if (!ranges.length) return text;
+  let out = text;
+  for (let i = ranges.length - 1; i >= 0; i--) {
+    let [a, b] = ranges[i];
+    // The spaces the cut leaves: one between words, none at a line's edge.
+    while (b < out.length && /[ \t]/.test(out[b])) b++;
+    while (a > 0 && /[ \t]/.test(out[a - 1])) a--;
+    const edge = a === 0 || out[a - 1] === "\n" || b === out.length || out[b] === "\n";
+    out = out.slice(0, a) + (edge ? "" : " ") + out.slice(b);
+  }
+  // A paragraph that was only the persona's lines leaves no gap.
+  return out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n").replace(/^\s*\n/, "");
+}
+
+/** A mark's name is the persona's: their name, an alias the story gave them, or the first name of either, unless someone else in the story goes by it. */
+export function isPersona(name: string, voices: Voice[], userName: string): boolean {
+  const k = name.trim().toLowerCase();
+  const first = (n: string) => n.split(/\s+/)[0];
+  const user = voices.find((v) => v.isUser);
+  const names = [userName, user?.name ?? "", ...(user?.aliases ?? [])].filter(Boolean).map((n) => n.toLowerCase());
+  if (names.includes(k)) return true;
+  if (!names.some((n) => first(n) === first(k))) return false;
+  return !voices.some((v) => !v.isUser && [v.name, ...(v.aliases ?? [])].some((n) => n.toLowerCase() === k || first(n.toLowerCase()) === first(k)));
 }
 
 /** The text with speaker marks taken out, to prove a rewrite only added marks. */

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { applySpeakers, bareLines, parseSpeakerAnswer, speakerPrompt, withoutSpeakerMarks } from "../src/core/speakers";
+import { applySpeakers, bareLines, dropUserSpeech, isPersona, parseSpeakerAnswer, speakerPrompt, withoutSpeakerMarks } from "../src/core/speakers";
 
 const VOICES = [
   { name: "Buffy Summers", slot: 1 },
@@ -61,5 +61,47 @@ describe("speaker marks for bare lines", () => {
     const out = applySpeakers(text, bareLines(text), ["Buffy Summers", null, "Spike"], VOICES);
     expect(out).toBe(`[spk=Buffy#7]"Hi."[/spk]\n\n[spk=Buffy#7]"Hey."[/spk]\n\n"Who's there?"\n\n"Me."`);
     expect(applySpeakers(text, bareLines(text), [null, null, null], VOICES)).toBe(text);
+  });
+});
+
+describe("persona speech (Sealed, Continuity)", () => {
+  const isGabriel = (n: string) => /^gabriel( winters)?$/i.test(n);
+  test("takes out the persona's lines with their tags and keeps everything else", () => {
+    // Buffy chat #364 and #368, as a Sealed chat would have them.
+    const text = `[spk=Buffy#1]"Who's that for?"[/spk]
+
+[spk=Gabriel#0]"That's for you, best girl."[/spk]
+
+Ruth eats it in two bites. [spk=Gabriel#0]"Best girl,"[/spk] Gabriel says solemnly, [spk=Gabriel#0]"earns her keep."[/spk] Dawn snorts.
+
+[spk=Gabriel#0]"Twenty-one. January."[/spk] His eyes open a slit. [spk=Gabriel#0]"So this year you had a —"[/spk]
+
+[spk=Gabriel Winters#0|murmur]"Close?"[/spk] — mumbled against her, not lifting. Buffy shivers.
+
+He leans in and says, [spk=Gabriel#0]"Hi."[/spk] [spk=Buffy#1]"Hi yourself."[/spk]`;
+    expect(dropUserSpeech(text, isGabriel)).toBe(`[spk=Buffy#1]"Who's that for?"[/spk]
+
+Ruth eats it in two bites. Dawn snorts.
+
+His eyes open a slit.
+
+Buffy shivers.
+
+[spk=Buffy#1]"Hi yourself."[/spk]`);
+  });
+  test("leaves a reply without the persona's lines alone", () => {
+    const text = `[spk=Buffy#1]"Hey."[/spk] She grins.\n\n[spk=?]"Who's there?"[/spk]\n`;
+    expect(dropUserSpeech(text, isGabriel)).toBe(text);
+  });
+});
+
+describe("isPersona", () => {
+  const voices = [{ name: "Buffy Summers", aliases: ["Buff"] }, { name: "Gabriel Winters", isUser: true, aliases: ["Gabe"] }, { name: "Gabriel Reyes" }];
+  test("the persona's name and aliases; a first name only when no one else has it", () => {
+    expect(isPersona("Gabriel Winters", voices, "Gabriel Winters")).toBe(true);
+    expect(isPersona("gabe", voices, "Gabriel Winters")).toBe(true);
+    expect(isPersona("Gabriel", voices, "Gabriel Winters")).toBe(false);
+    expect(isPersona("Gabriel", voices.slice(0, 2), "Gabriel Winters")).toBe(true);
+    expect(isPersona("Buffy", voices, "Gabriel Winters")).toBe(false);
   });
 });

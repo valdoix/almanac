@@ -179,8 +179,9 @@ When a scene nears either line, turn it inside the story (an interruption, a ref
 | `persona_thoughts` | on/off | **off**: with the Unspoken register, also voice the persona's private thought (never their actions) |
 
 ### 5.2 Block body (key rules)
-- **Sealed:** never write {{user}}'s words, thoughts, feelings, intentions, decisions, consent, or reactions, nor any action the player did not state. Show only what happens *to* {{user}} from outside. **An attempt the player writes is only an attempt: its outcome belongs to the world, its reaction to the player.**
-- **Continuity:** you may finish the plain, inevitable tail of a stated action (the door they reached for opens).
+- **Sealed:** {{user}} speaks only in the player's messages: no line of dialogue for {{user}}, not even the player's own words repeated. Never write {{user}}'s thoughts, feelings, intentions, decisions, consent, or reactions, nor any action the player did not state. Show only what happens *to* {{user}} from outside. **An attempt the player writes is only an attempt: its outcome belongs to the world, its reaction to the player.**
+- **Continuity:** you may finish the plain, inevitable tail of a stated action (the door they reached for opens). No line of dialogue for {{user}}, as in Sealed.
+- **Persona speech is Director and Full cast only.** In Sealed and Continuity the Ledger enforces it: lines a reply still gives {{user}} (marked by the model or by the speaker reader) are taken out of the message with their dialogue tags, and out of earlier replies in the prompt.
 - **Director:** perform {{user}} inside the intent set this turn, in {{user}}'s established voice. No invented consent, no changed values, no irreversible step they did not ask for.
 - **Full cast:** write {{user}} like anyone else, true to the persona. The player's latest message is direction; honour it, then let {{user}} live.
 - **Ending:** in Sealed or Continuity mode, end on live pressure where {{user}}'s next choice begins. **Never** ask "What do you do?" and never offer a menu of options.
