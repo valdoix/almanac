@@ -372,3 +372,32 @@ describe("the reply check looks a claim up before calling it invented", () => {
     expect(AGREES.test("the record describes Buffy's clothing as a sage shirt and jeans")).toBe(false);
   });
 });
+
+describe("what someone wears", () => {
+  const she = '[spk=Mara#1]"Fine."[/spk] she says. [spk=Mara#1]"Go."[/spk] she snaps.';
+  const he = '[spk=Kael#2]"Later."[/spk] he says. [spk=Kael#2]"Now."[/spk] he mutters.';
+  const start = reply(0, "clock: day 3 19:00\ncast: Mara@spot · Kael@spot\nlook Mara: grey coat\nlook Kael: black shirt", `${she} ${he}`);
+  const lookOf = (st: any, name: string) => Object.values(st.chars).find((c: any) => c.name === name) as any;
+  test("two looks on one line go to two people", () => {
+    const ops = parseMessage("<ledger>\nlook Mara: green pajamas, damp hair · look Kael: blue pajamas\n</ledger>").ops;
+    expect(ops.map((o) => [o.subject, o.args.text])).toEqual([["Mara", "green pajamas, damp hair"], ["Kael", "blue pajamas"]]);
+    expect(parseMessage("<ledger>\nlook Mara: coat · body language: tense\n</ledger>").ops).toHaveLength(1);
+  });
+  test("the player's 'she's wearing' wins over the reply that answers it", () => {
+    const st = fold([start, msg(1, "He's wearing green pajamas. She's wearing blue pajamas.", true), reply(2, "look Mara: green pajamas (Kael's)\nlook Kael: blue pajamas")]).state;
+    expect(lookOf(st, "Mara").look).toBe("blue pajamas");
+    expect(lookOf(st, "Kael").look).toBe("green pajamas");
+    // A later reply may change it again.
+    expect(lookOf(fold([start, msg(1, "She's wearing blue pajamas.", true), reply(2, "clock: +5m"), reply(3, "look Mara: robe")]).state, "Mara").look).toBe("robe");
+  });
+  test("'puts on' adds; a pronoun two people fit is left alone", () => {
+    expect(lookOf(fold([start, msg(1, "He puts on *glasses*.", true)]).state, "Kael").look).toBe("black shirt, glasses");
+    const two = reply(0, "clock: day 3 19:00\ncast: Mara@spot · Dawn@spot\nlook Mara: grey coat", `${she} [spk=Dawn#3]"Hi."[/spk] she says. [spk=Dawn#3]"Bye."[/spk] she says.`);
+    expect(lookOf(fold([two, msg(1, "She's wearing a red dress.", true)]).state, "Mara").look).toBe("grey coat");
+  });
+  test("damp hair dries and a pose passes as the clock moves", () => {
+    const st = fold([start, reply(1, "look Mara: blue pajamas, damp hair, sitting on the bed"), reply(2, "clock: +40m")]).state;
+    expect(lookOf(st, "Mara").look).toBe("blue pajamas, damp hair");
+    expect(lookOf(fold([start, reply(1, "look Mara: blue pajamas, damp hair, barefoot"), reply(2, "clock: 07:00")]).state, "Mara").look).toBe("blue pajamas, barefoot");
+  });
+});

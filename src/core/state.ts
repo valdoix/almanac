@@ -339,7 +339,17 @@ export class Folder {
     const hadMode = st.mode;
     const hadTitle = st.title;
 
-    if (parsed.speakers?.length) this.adoptSpeakers(parsed.speakers, msgIndex);
+    if (parsed.speakers?.length) {
+      this.adoptSpeakers(parsed.speakers, msgIndex);
+      for (const s of parsed.speakers) {
+        if (!s.she && !s.he) continue;
+        const id = this.charId(s.name, msgIndex, false);
+        if (!id) continue;
+        const p = (st.chars[id].pron ??= { she: 0, he: 0 });
+        p.she += s.she ?? 0;
+        p.he += s.he ?? 0;
+      }
+    }
 
     // Header is a fallback source of time/place/weather when the ledger omits them.
     const ops = [...parsed.ops];
@@ -778,7 +788,15 @@ export class Folder {
       }
       case "look": {
         const id = this.charId(op.subject!, mi)!;
-        st.chars[id].look = a.text;
+        const c = st.chars[id];
+        // What the player just said someone wears stands for the reply that answers it: the model
+        // swaps who wears what ("He's in green. She's in blue." → "Buffy: green pajamas").
+        if (src !== "user" && c.lookByUser != null && mi - c.lookByUser <= 1) return reject(`the player said what ${c.name} wears: ${c.look}`);
+        // "He puts on glasses": added to what they wear, not all of it.
+        c.look = a.add && c.look ? (c.look.toLowerCase().includes(String(a.text).toLowerCase()) ? c.look : `${c.look}, ${a.text}`) : a.text;
+        c.lookAt = st.time ? { ...st.time } : null;
+        if (src === "user") c.lookByUser = mi;
+        else delete c.lookByUser;
         this.care.push({ id, marks: careIn(String(a.text)) });
         // "new boots, his jacket": an item left at a shop or a place that the outfit now names is on them.
         const low = String(a.text).toLowerCase();
@@ -1304,6 +1322,10 @@ export class Folder {
     const night = nightIn(fromAbs0, toAbs);
     for (const c of Object.values(this.state.chars)) {
       if (c.dead) continue;
+      if (c.look && c.lookAt) {
+        const look = fadeLook(c.look, toAbs - absMinutes(c.lookAt));
+        if (look !== c.look) look ? (c.look = look) : delete c.look;
+      }
       const present = c.tier === "spot" || c.tier === "peri" || c.isUser;
       if (!present) continue;
       const m = c.meters;
@@ -1373,6 +1395,15 @@ const THIRST_RATE = 300;
 const FATIGUE_RATE = 300;
 /** A clock jump this long is time off the page, where ordinary meals and drinks happen. */
 const OFF_PAGE = 180;
+/** A look's passing parts: wet hair and sweat are gone in a couple of hours, a pose in half an hour. */
+const LOOK_WET = /\b(?:damp|wet|dripping|soaked|towel[- ]?dried|sweat(?:y|ing)?|flush(?:ed)?|steam(?:ing)?|tear[- ]?streaked|teary|breathless|out of breath|glistening|fresh from the (?:bath|shower|pool))\b/i;
+const LOOK_POSE = /^(?:sitting|standing|lying|kneeling|leaning|curled|perched|straddling|wrapped|beneath|under|over|on top|inside|holding|pinned|(?:hands?|nails|forehead|head|arms?|legs?|thighs?|fingers?)\s+(?:on|in|around|against))\b|\b(?:inside (?:her|him)|over (?:her|him)|on (?:the )?(?:counter|bed|sofa|couch|floor|pillow))\b/i;
+export function fadeLook(look: string, ageMin: number): string {
+  if (ageMin < 30) return look;
+  const parts = look.split(/\s*[,;\u00B7]\s*(?![^()]*\))/).filter(Boolean);
+  const kept = parts.filter((p) => !LOOK_POSE.test(p) && !(ageMin >= 120 && LOOK_WET.test(p)));
+  return kept.length === parts.length ? look : kept.join(", ");
+}
 /** Mealtimes (minute of the day) an off-page jump can pass: breakfast, lunch, dinner. */
 const MEALS = [8 * 60, 13 * 60, 19 * 60];
 /** Someone who can't simply eat, drink or sleep: the clock may take them past "hungry". */

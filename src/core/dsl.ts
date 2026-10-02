@@ -1136,9 +1136,9 @@ export function hasUnmarkedSpeech(text: string): boolean {
   return plain >= 2 && plain > marked;
 }
 
-export function parseSpeakers(text: string): { name: string; slot?: number }[] {
+export function parseSpeakers(text: string): { name: string; slot?: number; she?: number; he?: number }[] {
   text = fixSpeech(text);
-  const seen = new Map<string, { name: string; slot?: number }>();
+  const seen = new Map<string, { name: string; slot?: number; she?: number; he?: number }>();
   const re = /\[(?:spk|thk)=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|[^\]]*)?\]/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
@@ -1146,6 +1146,12 @@ export function parseSpeakers(text: string): { name: string; slot?: number }[] {
     if (!name || name === "?") continue;
     const k = name.toLowerCase();
     if (!seen.has(k)) seen.set(k, { name, slot: m[2] ? parseInt(m[2], 10) : undefined });
+  }
+  // '[spk=Buffy#1]"…"[/spk] she says': whether the story calls them she or he.
+  for (const p of text.matchAll(/\[spk=([^\]#|\n]{1,60})(?:#\d{1,2})?[^\]\n]*\][^[]*?\[\/spk\][,.]?\s+(she|he)\s+[a-z]+s\b/gi)) {
+    const s = seen.get(p[1].trim().toLowerCase());
+    const w = p[2].toLowerCase() as "she" | "he";
+    if (s) s[w] = (s[w] ?? 0) + 1;
   }
   return [...seen.values()];
 }
@@ -1209,7 +1215,7 @@ export function parseMessage(text: string): ParsedLedger {
     result.ops = j.ops;
     result.unknown = j.unknown;
   } else {
-    for (const line of block.body.split(/\r?\n/)) {
+    for (const line of block.body.split(/\r?\n/).flatMap(splitJoined)) {
       if (!line.trim()) continue;
       const op = parseLine(line);
       if (op) result.ops.push(op);
@@ -1217,6 +1223,26 @@ export function parseMessage(text: string): ParsedLedger {
     }
   }
   return result;
+}
+
+/**
+ * Two ops written on one line ("look Buffy: green pajamas · look Gabriel: blue pajamas"): one line
+ * each. A break counts only before an op word, a name and a colon ("· look Gabriel:", "; clock:"),
+ * so "· body language: tense" stays part of its line.
+ */
+export function splitJoined(line: string): string[] {
+  const out: string[] = [];
+  const re = /\s+[·;]\s+(?=([A-Za-z_]+)(\s+\p{Lu}[^:·;]{0,40}?)?\s*:)/gu;
+  let from = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line))) {
+    const op = OP_ALIASES[m[1].toLowerCase()];
+    if (!op || (m[2] ? !SUBJECT_OPS.has(op) : SUBJECT_OPS.has(op))) continue;
+    out.push(line.slice(from, m.index));
+    from = m.index + m[0].length;
+  }
+  out.push(line.slice(from));
+  return out;
 }
 
 const KNOW_LINE = /^[ \t]*(?:[-*•]\s+)?(?:know|knows|knowledge|belief|reveal|reveals|revealed|tell|told|disclose|secret|secrets|hidden|unaware|lacks|ignorant)\b[^:\n]*:[^\n]*\n?/gim;

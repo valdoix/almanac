@@ -4,6 +4,14 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.21.2 (2026-10-03)
+
+**Looks stay with the right person and wear off.**
+- When the model writes two looks on one line ("look Buffy: … · look Gabriel: …"), each person now gets their own. Before, Buffy's look also held Gabriel's.
+- What you say someone is wearing in your own message ("He's wearing green pajamas. She's wearing blue pajamas.") now sets their look. "He" and "she" go to the one person present the story calls that; if two people fit, nothing is filed. "I'm wearing" is your character. "Puts on glasses" adds to the outfit instead of replacing it.
+- Your outfit stands for the reply that answers your message, so a model that swaps who wears what can't overwrite it. Later replies can still change it.
+- Passing details wear off with the clock. Poses ("sitting on the counter", "over her") go after half an hour. Damp hair, sweat and flushed skin go after two hours. The clothes stay.
+
 ## 1.21.1 (2026-10-03) · preset 1.1.2
 
 **Hunger, thirst and tiredness come less often.** Characters were hungry, thirsty or tired most of the time. Needs now build slowly: about 13 hours without a meal before someone is a little hungry, 10 hours without a drink before they are a little thirsty, and 15 hours awake before they are a little tired. The clock alone stops there. "Starving" or "desperate for water" needs a cause in the story, like a body line or someone trapped, captive, stranded or without food.

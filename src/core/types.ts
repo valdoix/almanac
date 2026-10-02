@@ -44,7 +44,7 @@ export interface ParsedLedger {
   /** Filed artifacts ([vtk=…]) found in the same message. */
   vtks?: { kind: string; title: string; meta: string; body: string }[];
   /** Speakers named in [spk=Name#N] marks, first occurrence each. */
-  speakers?: { name: string; slot?: number }[];
+  speakers?: { name: string; slot?: number; she?: number; he?: number }[];
   /** Everything said aloud in the message: [spk] lines and plain quotes (whispers marked). */
   speech?: SpokenLine[];
   /** The player's message (it carries speech and speaker marks, never ledger ops). */
@@ -122,6 +122,11 @@ export interface CharacterState {
   flags: string[];
   injuries: Injury[];
   look?: string;
+  /** When the look was written, and the player's message that said it ("she's wearing blue pajamas"). */
+  lookAt?: StoryTime | null;
+  lookByUser?: number;
+  /** How often the story says "she says" / "he says" after their lines: who "she" and "he" are in the player's messages. */
+  pron?: { she: number; he: number };
   /** Set by the player on the Cast page. */
   age?: string;
   appearance?: string;

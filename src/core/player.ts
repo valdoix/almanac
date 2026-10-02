@@ -13,6 +13,33 @@ export interface PlayerCtx {
   day: number | null;
   /** The day a calendar date names ("Second Moon 7", "17 October"), near the current day. */
   dayOfDate?: (text: string, nearDay: number) => number | null;
+  /** Who "she" or "he" (or "I") is in this scene, when only one person present fits. */
+  pronoun?: (word: "she" | "he" | "i") => string | null;
+}
+
+/** "He's wearing", "is dressed in", "changes into": what follows is what someone wears. */
+const WEARS = /^(?:\s+(?:is|are)\s+(?:now\s+|still\s+)?(?:wearing|dressed in)|\s+(?:wears?|changes? into|changed into|puts? on|pulls? on|pulled on|slips? into|slipped into))\s+/i;
+
+/** "He's wearing green pajamas. She's wearing blue pajamas.": what someone wears, said outright. */
+export function looksStated(text: string, ctx: PlayerCtx): { who: string; text: string; add?: boolean }[] {
+  // Narration only: what someone says aloud isn't the player's word on the scene.
+  const t = text.replace(/"[^"\n]*"|“[^”\n]*”/g, " ");
+  const out: { who: string; text: string; add?: boolean }[] = [];
+  const names = ctx.names.filter((n) => n && n.length >= 2);
+  const lower = new Map(names.map((n) => [n.toLowerCase(), n]));
+  // A name or a pronoun, then "'s wearing", "is dressed in", "wears"…; "She's" and "I'm" read as "… is".
+  for (const m of t.matchAll(/(?<![\p{L}'’])(\p{L}[\p{L}-]*)(['’][sm]\b|\s+am\b)?/gu)) {
+    const w = m[1].toLowerCase();
+    const who = w === "she" || w === "he" || w === "i" ? ctx.pronoun?.(w) : lower.get(w);
+    if (!who) continue;
+    const rest = (m[2] ? " is" : "") + t.slice(m.index + m[0].length);
+    const verb = WEARS.exec(rest);
+    if (!verb) continue;
+    const what = /^([^.;!?\n]{3,80}?)(?=\s+(?:and|while|as|but|then)\s+(?:she|he|I|they|\p{Lu}\p{L}+)\b|[.;!?\n]|$)/u.exec(rest.slice(verb[0].length));
+    // "Puts on glasses" adds to what they wear; "is wearing", "changes into" says all of it.
+    if (what) out.push({ who, text: what[1].replace(/[*_]/g, "").trim(), ...(/\b(?:puts?|put|pulls?|pulled|slips?|slipped) (?:on|into)\b/i.test(verb[0]) ? { add: true } : {}) });
+  }
+  return out;
 }
 
 /** Out-of-character asides and direction lines: where a player states facts. */
@@ -116,6 +143,9 @@ export function playerOps(text: string, ctx: PlayerCtx): ParsedOp[] {
   const byWho = new Map<string, { kind: any; text: string }[]>();
   for (const x of traitsStated(text, ctx.names)) byWho.set(x.who, [...(byWho.get(x.who) ?? []), { kind: x.kind, text: x.text }]);
   for (const [who, traits] of byWho) ops.push({ op: "trait", subject: who, args: { traits }, raw: `(you said) ${who}: ${traits.map((t) => t.text).join(", ")}` });
+  // What someone wears, said outright ("She's wearing blue pajamas"): the latest line per person.
+  const wears = new Map(looksStated(text, ctx).map((x) => [x.who, x]));
+  for (const [who, { text: look, add }] of wears) ops.push({ op: "look", subject: who, args: { text: look, ...(add ? { add } : {}) }, raw: `(you said) look ${who}: ${add ? "+ " : ""}${look}` });
   // Pinned lines in an aside: ((truth: …)) · ((canon: …)) · ((bit: …))
   for (const a of asides(text)) {
     const m = /^\s*(truth|canon|fact|bit|motif|running joke)\s*:\s*(.{3,300})$/i.exec(a.trim());

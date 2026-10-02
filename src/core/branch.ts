@@ -179,6 +179,13 @@ export class LedgerRuntime {
               names: [opts.userName, ...Object.values(folder.state.chars).flatMap((c) => (c.isUser ? [] : [c.name, ...c.aliases]))].filter(Boolean),
               day: folder.state.time?.day ?? null,
               dayOfDate: opts.dayOfDate,
+              pronoun: (w) => {
+                const chars = Object.values(folder.state.chars).filter((c) => !c.dead && (c.tier === "spot" || c.isUser));
+                if (w === "i") return chars.find((c) => c.isUser)?.name ?? opts.userName ?? null;
+                // The story's own "she says" / "he says" after their lines; only one person here may fit.
+                const fit = chars.filter((c) => c.pron && c.pron[w] >= 2 && c.pron[w] > 2 * c.pron[w === "she" ? "he" : "she"]);
+                return fit.length === 1 ? fit[0].name : null;
+              },
             })
           : [];
         // The reader's lines stand only as far as the message bears them out (lines filed before the check too).
