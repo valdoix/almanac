@@ -166,9 +166,10 @@ details.alm-env[open] .alm-env__wax{transform:translateY(-44px) scale(.7);opacit
 
 /* director's call sheet */
 .alm-clap{height:14px;margin:-14px -14px 14px;background:repeating-linear-gradient(-45deg,var(--alm-ink) 0 14px,var(--alm-panel) 14px 28px);opacity:.85}
-.alm-cs{display:grid!important;grid-template-columns:auto 1fr!important;gap:7px 12px!important;margin:0!important;font-size:14px;line-height:1.45}
-.alm-cs dt{align-self:start;font:500 10px/1 var(--alm-font-mono)!important;letter-spacing:.12em;padding:5px 8px!important;border-radius:6px;color:var(--alm-panel)!important;background:var(--g,var(--alm-accent-2))!important;text-align:center}
-.alm-cs dd{margin:0!important;padding-top:1px}
+.alm-cs{display:block!important;margin:-7px 0 0!important;font-size:14px;line-height:1.45;overflow-wrap:anywhere}
+.alm-cs__r{display:grid!important;grid-template-columns:7.5em minmax(0,1fr)!important;gap:12px!important;margin:7px 0 0!important}
+.alm-cs dt{align-self:start;overflow-wrap:anywhere;font:500 10px/1 var(--alm-font-mono)!important;letter-spacing:.12em;padding:5px 8px!important;border-radius:6px;color:var(--alm-panel)!important;background:var(--g,var(--alm-accent-2))!important;text-align:center}
+.alm-cs dd{margin:0!important;padding-top:1px;min-width:0}
 .alm-cs .g1{--g:var(--alm-accent-2)} .alm-cs .g2{--g:#7b5bd6} .alm-cs .g3{--g:var(--alm-accent)} .alm-cs .g4{--g:var(--alm-good)}
 .alm-cs .risk{color:var(--alm-danger);font-weight:600}
 
@@ -315,9 +316,8 @@ details.alm-sub[open]>summary .alm-sub__ct::after{transform:rotate(90deg)}
   .alm-say__medal{width:34px!important;height:34px!important;font-size:15px!important}
   .alm-say--user{margin-left:0!important;grid-template-columns:minmax(0,1fr) 34px!important}
   .alm-thk{margin-left:40px!important;font-size:20px!important}
-  .alm-cs{grid-template-columns:1fr!important;gap:3px!important}
+  .alm-cs__r{grid-template-columns:1fr!important;gap:3px!important;margin-top:10px!important}
   .alm-cs dt{justify-self:start}
-  .alm-cs dd{margin-bottom:8px!important}
   .alm-km{min-width:0;gap:8px!important}
   .alm-km__h{display:none!important}
   .alm-km__r{grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;border-radius:12px}

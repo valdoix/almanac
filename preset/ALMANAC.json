@@ -2,7 +2,7 @@
   "name": "ALMANAC",
   "description": "A living-world roleplay preset: deep characters with private minds, autonomous NPCs who relate to each other, a knowledge firewall, real time and weather, genre contracts that change the story, a sealed persona, and a line-based ledger that drives trackers and memory. Works alone; pairs with the ALMANAC Ledger extension for verified state, chapters, recall and a deterministic almanac.",
   "coverUrl": null,
-  "presetVersion": "1.0.13",
+  "presetVersion": "1.0.14",
   "schemaVersion": 2,
   "samplerOverrides": {
     "enabled": false,
@@ -143,7 +143,7 @@
       "characterTagTrigger": [],
       "group": null,
       "categoryMode": null,
-      "content": "{{if::{{or::{{eq::{{almActive}}::yes}}::{{eq::{{almActive}}::no}}}}}}<almanac-config persona=\"{{getvar::alm_persona}}\" thoughts=\"{{default::{{var::persona_thoughts}}::0}}\" inner=\"{{default::{{var::inner_voice}}::register}}\" genres=\"{{getvar::alm_genres}}\" lead=\"{{getvar::alm_lead}}\" nsfw=\"{{getvar::alm_nsfw}}\" romance=\"{{getvar::alm_romance}}\" dialogue=\"{{default::{{var::dialogue}}::adaptive}}\" style=\"{{default::{{var::dialogue_style}}::blocks}}\" color=\"{{default::{{var::dialogue_color}}::1}}\" cot=\"{{getvar::alm_cotch}}\" ledger=\"{{default::{{var::ledger}}::full}}\" trackers=\"{{default::{{getchatvar::alm_cfg_trackers}}::{{var::trackers}}}}\" view=\"{{default::{{var::tracker_view}}::drawer}}\" header=\"{{default::{{var::header}}::change}}\" theme=\"{{default::{{getchatvar::alm_cfg_theme}}::{{default::{{var::theme}}::auto}}}}\" lang=\"{{default::{{var::language}}::English}}\" v=\"1.0.13\"/>{{/if}}",
+      "content": "{{if::{{or::{{eq::{{almActive}}::yes}}::{{eq::{{almActive}}::no}}}}}}<almanac-config persona=\"{{getvar::alm_persona}}\" thoughts=\"{{default::{{var::persona_thoughts}}::0}}\" inner=\"{{default::{{var::inner_voice}}::register}}\" genres=\"{{getvar::alm_genres}}\" lead=\"{{getvar::alm_lead}}\" nsfw=\"{{getvar::alm_nsfw}}\" romance=\"{{getvar::alm_romance}}\" dialogue=\"{{default::{{var::dialogue}}::adaptive}}\" style=\"{{default::{{var::dialogue_style}}::blocks}}\" color=\"{{default::{{var::dialogue_color}}::1}}\" cot=\"{{getvar::alm_cotch}}\" ledger=\"{{default::{{var::ledger}}::full}}\" trackers=\"{{default::{{getchatvar::alm_cfg_trackers}}::{{var::trackers}}}}\" view=\"{{default::{{var::tracker_view}}::drawer}}\" header=\"{{default::{{var::header}}::change}}\" theme=\"{{default::{{getchatvar::alm_cfg_theme}}::{{default::{{var::theme}}::auto}}}}\" lang=\"{{default::{{var::language}}::English}}\" v=\"1.0.14\"/>{{/if}}",
       "id": "alm-handshake",
       "name": "Ledger handshake (hidden; stripped by the extension)"
     },
@@ -4068,12 +4068,42 @@
         }
       },
       {
+        "script_id": "alm-show-plan-split",
+        "name": "ALMANAC · Director's notes · one step per line",
+        "folder": "ALMANAC",
+        "description": "Notes written as one paragraph (“SEAL: … GNOSIS: …”) are split so each step becomes its own row.",
+        "find_regex": "([.!?;)\"”'’*])[ \\t]+(?=\\**(?:ROUTE|TIER|ANCHOR|SEAL|GNOSIS|MINDS|WEB|WORLD|MOVE|PREMORTEM|VOICE|LEDGER)(?:[ \\t]*\\/[ \\t]*(?:ROUTE|TIER|ANCHOR|SEAL|GNOSIS|MINDS|WEB|WORLD|MOVE|PREMORTEM|VOICE|LEDGER))*\\**[ \\t]*(?:[—:–]|-{1,2}|as above\\b))(?=(?:(?!<plan>)[\\s\\S])*?<\\/plan>)",
+        "replace_string": "$1\n",
+        "flags": "g",
+        "placement": [
+          "ai_output"
+        ],
+        "scope": "global",
+        "scope_id": null,
+        "target": [
+          "display"
+        ],
+        "min_depth": null,
+        "max_depth": null,
+        "trim_strings": [],
+        "run_on_edit": true,
+        "substitute_macros": "none",
+        "disabled": false,
+        "sort_order": 8,
+        "actions": [],
+        "metadata": {
+          "suite": "ALMANAC",
+          "schema": "lumiverse-regex-v1",
+          "layer": "display"
+        }
+      },
+      {
         "script_id": "alm-show-plan-rows",
         "name": "ALMANAC · Director's notes · rows",
         "folder": "ALMANAC",
         "description": "",
-        "find_regex": "^[ \\t]*[-*•]?[ \\t]*\\**(ROUTE|TIER|ANCHOR|SEAL|GNOSIS|MINDS|WEB|WORLD|MOVE|PREMORTEM|VOICE|LEDGER)\\**[ \\t]*(?:[—:–]|-{1,2})+[ \\t]*([^\\n]*)\\n?(?=(?:(?!<plan>)[\\s\\S])*?<\\/plan>)",
-        "replace_string": "<dt class=\"{{switch::{{upper::$1}}::ROUTE::g1::TIER::g1::ANCHOR::g1::SEAL::g1::GNOSIS::g2::MINDS::g2::WEB::g2::WORLD::g3::MOVE::g3::g4}}\" style=\"font:500 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;padding:5px 8px;border-radius:6px;color:#fff;background:{{switch::{{upper::$1}}::ROUTE::#35587e::TIER::#35587e::ANCHOR::#35587e::SEAL::#35587e::GNOSIS::#7b5bd6::MINDS::#7b5bd6::WEB::#7b5bd6::WORLD::#b5602a::MOVE::#b5602a::#2f7d4f}};text-align:center;align-self:start\">{{upper::$1}}</dt><dd style=\"margin:0{{if::{{eq::{{upper::$1}}::PREMORTEM}}}};color:#e46a6a;font-weight:600{{/if}}\"{{if::{{eq::{{upper::$1}}::PREMORTEM}}}} class=\"risk\"{{/if}}>$2</dd>",
+        "find_regex": "^[ \\t]*[-*•]?[ \\t]*\\**((ROUTE|TIER|ANCHOR|SEAL|GNOSIS|MINDS|WEB|WORLD|MOVE|PREMORTEM|VOICE|LEDGER)(?:[ \\t]*\\/[ \\t]*(?:ROUTE|TIER|ANCHOR|SEAL|GNOSIS|MINDS|WEB|WORLD|MOVE|PREMORTEM|VOICE|LEDGER))*)\\**(?:[ \\t]*(?:[—:–]|-{1,2})+[ \\t]*|[ \\t]+(?=as above))([^\\n]*)\\n?(?=(?:(?!<plan>)[\\s\\S])*?<\\/plan>)",
+        "replace_string": "<dl class=\"alm-cs__r\" style=\"display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:12px;margin:7px 0 0\"><dt class=\"{{switch::{{upper::$2}}::ROUTE::g1::TIER::g1::ANCHOR::g1::SEAL::g1::GNOSIS::g2::MINDS::g2::WEB::g2::WORLD::g3::MOVE::g3::g4}}\" style=\"font:500 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;padding:5px 8px;border-radius:6px;color:#fff;background:{{switch::{{upper::$2}}::ROUTE::#35587e::TIER::#35587e::ANCHOR::#35587e::SEAL::#35587e::GNOSIS::#7b5bd6::MINDS::#7b5bd6::WEB::#7b5bd6::WORLD::#b5602a::MOVE::#b5602a::#2f7d4f}};text-align:center;align-self:start;overflow-wrap:anywhere\">{{upper::$1}}</dt><dd style=\"margin:0;min-width:0;overflow-wrap:anywhere{{if::{{eq::{{upper::$2}}::PREMORTEM}}}};color:#e46a6a;font-weight:600{{/if}}\"{{if::{{eq::{{upper::$2}}::PREMORTEM}}}} class=\"risk\"{{/if}}>$3</dd></dl>",
         "flags": "gmi",
         "placement": [
           "ai_output"
@@ -4103,7 +4133,7 @@
         "folder": "ALMANAC",
         "description": "",
         "find_regex": "<plan>\\s*([\\s\\S]*?)\\s*<\\/plan>",
-        "replace_string": "<details class=\"alm-drawer alm-notes\" style=\"margin:14px 0 0;border:1px dashed rgba(127,127,127,.35);border-radius:12px;overflow:hidden\"><summary style=\"cursor:pointer;padding:9px 12px;font:500 12.5px/1.2 ui-monospace,Menlo,monospace;opacity:.8\">🎬 Director's notes<span class=\"alm-caret\"></span></summary><div class=\"alm-drawer__body\" style=\"padding:12px 14px\"><div class=\"alm-clap\"></div><dl class=\"alm-cs\" style=\"display:grid;grid-template-columns:auto 1fr;gap:7px 12px;margin:0;font-size:14px;line-height:1.45\">$1</dl></div></details>",
+        "replace_string": "<details class=\"alm-drawer alm-notes\" style=\"margin:14px 0 0;border:1px dashed rgba(127,127,127,.35);border-radius:12px;overflow:hidden\"><summary style=\"cursor:pointer;padding:9px 12px;font:500 12.5px/1.2 ui-monospace,Menlo,monospace;opacity:.8\">🎬 Director's notes<span class=\"alm-caret\"></span></summary><div class=\"alm-drawer__body\" style=\"padding:12px 14px\"><div class=\"alm-clap\"></div><div class=\"alm-cs\" style=\"margin:-7px 0 0;font-size:14px;line-height:1.45;overflow-wrap:anywhere\">$1</div></div></details>",
         "flags": "g",
         "placement": [
           "ai_output"
@@ -5332,7 +5362,7 @@
   },
   "metadata": {
     "almanac": {
-      "version": "1.0.13",
+      "version": "1.0.14",
       "companion": "almanac_ledger",
       "design": "design/02-preset-almanac.md"
     }

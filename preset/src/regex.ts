@@ -74,6 +74,9 @@ const inside = (open: string, close: string) => `(?=(?:(?!${open})[\\s\\S])*?${c
 const TONE_LINE = (c: string, p: string) => `{{switch::${c}::whisper::font-style:italic;opacity:.8::breathless::font-style:italic;opacity:.85::murmur::font-style:italic::shout::font-weight:700;font-size:1.13em::sob::font-style:italic::cold::letter-spacing:.04em::sly::font-style:italic::sing::font-style:italic;text-decoration:underline wavy color-mix(in oklab,${p} 55%,transparent);text-underline-offset:5px::flat::opacity:.85::}}`;
 const TONE_BUBBLE = (c: string, p: string) => `{{switch::${c}::whisper::border-style:dashed;background:transparent::breathless::border-style:dashed;background:transparent::shout::border-width:2.5px;border-color:${p};box-shadow:4px 4px 0 color-mix(in oklab,${p} 35%,transparent);transform:rotate(-.5deg)::tender::box-shadow:0 0 22px -6px ${p}::sob::box-shadow:0 0 22px -6px ${p}::cold::background:color-mix(in oklab,#9fd3ff 14%,transparent);border-color:color-mix(in oklab,#9fd3ff 55%,transparent)::flat::background:color-mix(in oklab,${p} 5%,transparent)::}}`;
 
+// The Director's Pass steps, as they head a line of the notes.
+const PLAN_KEYS = "ROUTE|TIER|ANCHOR|SEAL|GNOSIS|MINDS|WEB|WORLD|MOVE|PREMORTEM|VOICE|LEDGER";
+
 // A script-style speaker label at the start of a line: Name#N|tone:  (bold or bracketed too).
 const LABEL = R`(^|\n)([ \t]*)(?:\*\*|__)?\[?([A-ZÀ-ÖØ-Þ?][^\n\[\]#|:*_"“=<>]{0,59}?)[ \t]*#(\d{1,2})[ \t]*`;
 const LABEL_END = R`[ \t]*\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[ \t]*`;
@@ -207,14 +210,20 @@ export const REGEX: RegexDef[] = [
     find: R`<session-zero\b[^>]*>`, rep: `<span class="alm-pill" style="display:inline-flex;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid rgba(127,127,127,.3);font:500 12px/1 ui-monospace,Menlo,monospace">✓ Session Zero saved to this chat</span>`,
   },
   {
+    id: "alm-show-plan-split", name: "Director's notes · one step per line", layer: "display", target: ["display"], order: 8, flags: "g",
+    find: R`([.!?;)"”'’*])[ \t]+(?=\**(?:${PLAN_KEYS})(?:[ \t]*\/[ \t]*(?:${PLAN_KEYS}))*\**[ \t]*(?:[—:–]|-{1,2}|as above\b))` + inside("<plan>", "<\\/plan>"),
+    rep: "$1\n",
+    description: "Notes written as one paragraph (“SEAL: … GNOSIS: …”) are split so each step becomes its own row.",
+  },
+  {
     id: "alm-show-plan-rows", name: "Director's notes · rows", layer: "display", target: ["display"], order: 9, flags: "gmi", macros: "raw",
-    find: R`^[ \t]*[-*•]?[ \t]*\**(ROUTE|TIER|ANCHOR|SEAL|GNOSIS|MINDS|WEB|WORLD|MOVE|PREMORTEM|VOICE|LEDGER)\**[ \t]*(?:[—:–]|-{1,2})+[ \t]*([^\n]*)\n?` + inside("<plan>", "<\\/plan>"),
-    rep: `<dt class="{{switch::{{upper::$1}}::ROUTE::g1::TIER::g1::ANCHOR::g1::SEAL::g1::GNOSIS::g2::MINDS::g2::WEB::g2::WORLD::g3::MOVE::g3::g4}}" style="font:500 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;padding:5px 8px;border-radius:6px;color:#fff;background:{{switch::{{upper::$1}}::ROUTE::#35587e::TIER::#35587e::ANCHOR::#35587e::SEAL::#35587e::GNOSIS::#7b5bd6::MINDS::#7b5bd6::WEB::#7b5bd6::WORLD::#b5602a::MOVE::#b5602a::#2f7d4f}};text-align:center;align-self:start">{{upper::$1}}</dt><dd style="margin:0{{if::{{eq::{{upper::$1}}::PREMORTEM}}}};color:#e46a6a;font-weight:600{{/if}}"{{if::{{eq::{{upper::$1}}::PREMORTEM}}}} class="risk"{{/if}}>$2</dd>`,
+    find: R`^[ \t]*[-*•]?[ \t]*\**((${PLAN_KEYS})(?:[ \t]*\/[ \t]*(?:${PLAN_KEYS}))*)\**(?:[ \t]*(?:[—:–]|-{1,2})+[ \t]*|[ \t]+(?=as above))([^\n]*)\n?` + inside("<plan>", "<\\/plan>"),
+    rep: `<dl class="alm-cs__r" style="display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:12px;margin:7px 0 0"><dt class="{{switch::{{upper::$2}}::ROUTE::g1::TIER::g1::ANCHOR::g1::SEAL::g1::GNOSIS::g2::MINDS::g2::WEB::g2::WORLD::g3::MOVE::g3::g4}}" style="font:500 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;padding:5px 8px;border-radius:6px;color:#fff;background:{{switch::{{upper::$2}}::ROUTE::#35587e::TIER::#35587e::ANCHOR::#35587e::SEAL::#35587e::GNOSIS::#7b5bd6::MINDS::#7b5bd6::WEB::#7b5bd6::WORLD::#b5602a::MOVE::#b5602a::#2f7d4f}};text-align:center;align-self:start;overflow-wrap:anywhere">{{upper::$1}}</dt><dd style="margin:0;min-width:0;overflow-wrap:anywhere{{if::{{eq::{{upper::$2}}::PREMORTEM}}}};color:#e46a6a;font-weight:600{{/if}}"{{if::{{eq::{{upper::$2}}::PREMORTEM}}}} class="risk"{{/if}}>$3</dd></dl>`,
   },
   {
     id: "alm-show-plan", name: "Director's notes · call-sheet drawer", layer: "display", target: ["display"], order: 11,
     find: R`<plan>\s*([\s\S]*?)\s*<\/plan>`,
-    rep: `<details class="alm-drawer alm-notes" style="margin:14px 0 0;border:1px dashed rgba(127,127,127,.35);border-radius:12px;overflow:hidden"><summary style="cursor:pointer;padding:9px 12px;font:500 12.5px/1.2 ui-monospace,Menlo,monospace;opacity:.8">🎬 Director's notes<span class="alm-caret"></span></summary><div class="alm-drawer__body" style="padding:12px 14px"><div class="alm-clap"></div><dl class="alm-cs" style="display:grid;grid-template-columns:auto 1fr;gap:7px 12px;margin:0;font-size:14px;line-height:1.45">$1</dl></div></details>`,
+    rep: `<details class="alm-drawer alm-notes" style="margin:14px 0 0;border:1px dashed rgba(127,127,127,.35);border-radius:12px;overflow:hidden"><summary style="cursor:pointer;padding:9px 12px;font:500 12.5px/1.2 ui-monospace,Menlo,monospace;opacity:.8">🎬 Director's notes<span class="alm-caret"></span></summary><div class="alm-drawer__body" style="padding:12px 14px"><div class="alm-clap"></div><div class="alm-cs" style="margin:-7px 0 0;font-size:14px;line-height:1.45;overflow-wrap:anywhere">$1</div></div></details>`,
   },
   {
     id: "alm-show-unspoken-rows", name: "Unspoken register · sealed envelopes", layer: "display", target: ["display"], order: 20, macros: "raw",

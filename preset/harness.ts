@@ -210,6 +210,15 @@ sections.push(`<section><h2>older reply (depth 3)</h2><div class="msg">${await d
 const linked = linkedReply();
 sections.push(`<section class="linked"><h2>linked (extension rendered the drawer)</h2><div class="msg">${await display(linked.html, false, 0, { ...uiVars, alm_ui_lead: "fantasy" })}</div></section>`);
 sections.push(`<section><h2>player</h2><div class="msg user">${await display(SAMPLE_USER, true, 1, uiVars)}</div></section>`);
+// Notes written as one paragraph, with a quoted phrase: every step gets its own row, the preface stays text.
+const ONE_LINE_PLAN = `She laughs.\n\n<plan>\nRoutine beat: banter escalation. ROUTE/ANCHOR as above. SEAL: Gabriel's lines rendered as given; Buffy reacts; end before any invite decision. GNOSIS: #dawn-crush becomes fully aloud this beat — drop the "never say" tag; no other leaks. MINDS: Buffy gleeful payback over guardian worry. PREMORTEM: avoid repeated tell-images. VOICE: Buffy POV, present, dialogue-dense, ~350w.\n</plan>`;
+const oneLine = await display(ONE_LINE_PLAN, false, 0, uiVars);
+const rows = (oneLine.match(/class="alm-cs__r"/g) ?? []).length;
+if (rows !== 6 || !/>ROUTE\/ANCHOR</.test(oneLine) || !/Routine beat: banter escalation\./.test(oneLine)) {
+  failures++;
+  console.log(`  ✗ display: a one-paragraph plan made ${rows} rows (want 6, ROUTE/ANCHOR first, the preface kept)`);
+}
+sections.push(`<section><h2>one-paragraph Director's notes</h2><div class="msg">${oneLine}</div></section>`);
 if (htmlArg > 0) {
   const out = process.argv[htmlArg + 1];
   const ext = process.argv.includes("--ext") ? await import("../src/frontend/styles") : null;

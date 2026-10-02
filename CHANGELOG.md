@@ -4,6 +4,10 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.17.2 — preset 1.0.14 (2026-10-02)
+
+**Director's notes written as one paragraph** ("SEAL: … GNOSIS: … MINDS: …") are split into their steps, one labelled row each, instead of pouring into the call sheet's two columns, where a quoted phrase became a separate cell squeezed into a narrow column one letter per line. Combined steps ("ROUTE/ANCHOR as above") get one row; any text that isn't a step (a preface like "Routine beat: …") reads as an ordinary line above the rows. Re-import `preset/ALMANAC.json`; existing messages redraw with it.
+
 ## 1.17.1 (2026-10-02)
 
 **The Now widget docks.** The window's new dock button tucks it against the nearer screen edge as a slim tab (time, weather, who is here, the change count). Drag the tab along the edge to move it, across to the other edge, or away from the edges to float it again (arrow keys move it too). Opened, the window sits against that edge; the button floats it back where it was. Remembered in this browser.

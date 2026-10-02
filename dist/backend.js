@@ -2487,7 +2487,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.17.1";
+var VERSION = "1.17.2";
 
 // src/core/facts.ts
 function stem(w) {
