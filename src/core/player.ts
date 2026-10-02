@@ -69,6 +69,44 @@ export function playerClock(text: string, ctx: PlayerCtx): ParsedOp | null {
   return null;
 }
 
+/** A note the reader added to its own line ("— player-stated, suggests a pet", "— per Gabriel"): a guess or someone's view, not a fact. */
+const HEDGED = /\s[—–-]\s+(?:[^—–]*\b(?:player[- ]stated|suggests?|implie[sd]|seems?|maybe|perhaps|probably|per \p{Lu}[\p{L}'’-]*|according to|joking(?:ly)?|figure of speech)\b)/iu;
+/** What happens or passes through someone in the scene, not a lasting fact about them. */
+const SCENE = /^(?:recogni[sz]es|reali[sz]es|notices|thinks|believes|feels|wonders|sees|watches|decides|is (?:now )?(?:watching|thinking|feeling))\b/i;
+
+/**
+ * A line the player-facts reader filed, as far as the player's message bears it out. A trait about a
+ * qualified or several people ("Buffy (Gabriel's sister)", "Buffy and Dawn") is a guess at who; a name
+ * the message never uses ("is Xander's daughter" when Xander isn't in it) was made up; a hedged line
+ * is someone's view or a guess. Null when nothing of it stands.
+ */
+export function keepPlayerOp(op: ParsedOp, message: string, known: string[] = []): ParsedOp | null {
+  const raw = op.raw ?? "";
+  if (HEDGED.test(raw)) return null;
+  // The player's own character goes by "he" or "I" in their messages: their names always count.
+  const own = new Set(known.flatMap((n) => n.toLowerCase().split(/\s+/)));
+  const said = (w: string) => own.has(w.toLowerCase()) || new RegExp(`(?<![\\p{L}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu").test(message);
+  // Every name in the line is one the message uses.
+  const madeUp = (text: string) => (text.match(/(?<![\p{L}'’])\p{Lu}[\p{L}'’-]+/gu) ?? []).map((w) => w.replace(/['’]s$/, "")).some((w) => !said(w) && !/^(I|I'm|The|A|An|He|She|They|It|His|Her|Their|My|Mr|Mrs|Ms|Dr)$/.test(w));
+  // An item line says who has it ("Thing: → Holder"); "pool: large with a jacuzzi" describes a place.
+  if (op.op === "item" && !/:\s*(?:→|->)/.test(raw)) return null;
+  // Whose it is, as the message says it: "Buffy's mom's" when the message only says "my mom" is a guess.
+  for (const m of (op.op === "item" ? op.subject ?? "" : "").matchAll(/(\p{Lu}[\p{L}-]+)['’]s\s+(\p{L}+)/gu)) {
+    if (own.has(m[1].toLowerCase())) continue;
+    if (!new RegExp(`${m[1]}['’]s\\s+${m[2]}`, "iu").test(message)) return null;
+  }
+  if (op.op !== "trait") {
+    // The thing's own name counts too ("Buffy's mom's therapist's contact"); the reader's note after a dash doesn't.
+    const text = `${op.op === "item" ? op.subject ?? "" : ""} ${String(op.args.text ?? raw.replace(/^[^:]*:/, "")).split(/\s[—–]\s/)[0]}`;
+    return madeUp(text) ? null : op;
+  }
+  const who = (op.subject ?? "").trim();
+  if (!who || /[()[\],&]|\band\b|\bor\b/i.test(who)) return null;
+  const traits = ((op.args.traits ?? []) as { kind: string; text: string }[]).filter((t) => !/\(kept where\)|\?/.test(t.text) && !SCENE.test(t.text.trim()) && !madeUp(t.text));
+  if (!traits.length) return null;
+  return { ...op, args: { ...op.args, traits }, raw: `trait ${who}: ${traits.map((t) => t.text).join("; ")}` };
+}
+
 /** Everything the rules can read from one player message. */
 export function playerOps(text: string, ctx: PlayerCtx): ParsedOp[] {
   const ops: ParsedOp[] = [];

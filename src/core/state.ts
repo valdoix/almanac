@@ -5,7 +5,7 @@
 
 import type {
   BondAxis, BondState, CastEdit, CharacterState, EventSource, FactEdit, KnowRow, LedgerEvent, MessageDelta,
-  ParsedLedger, ParsedOp, ThoughtState, Trait, WorldState,
+  ItemState, ParsedLedger, ParsedOp, ThoughtState, Trait, WorldState,
 } from "./types";
 import { KNOW_OPS } from "./types";
 import { applyFactEdits, canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
@@ -190,9 +190,21 @@ export class Folder {
       this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
       return "user";
     }
-    const low = n.toLowerCase();
+    let low = n.toLowerCase();
     for (const c of Object.values(this.state.chars)) {
       if (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low)) return c.id;
+    }
+    // "Buffy (Gabriel's sister)": a relation in brackets says who is meant; a name alone can't tell, so no one.
+    // Other brackets ("Mara (asleep)") are a note on the name.
+    const note = /\s*\(([^()]*)\)\s*/.exec(n);
+    if (note) {
+      if (RELATION.test(note[1])) return null;
+      n = n.replace(note[0], " ").trim();
+      low = n.toLowerCase();
+      if (!n) return null;
+      for (const c of Object.values(this.state.chars)) {
+        if (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low)) return c.id;
+      }
     }
     // "Mara Voss" vs "Mara": match on first name when unambiguous
     const first = low.split(/\s+/)[0];
@@ -203,13 +215,13 @@ export class Folder {
       if (n.length > c.name.length && /^\p{Lu}[\p{L}'’.-]*(?:\s+(?:\p{Lu}[\p{L}'’.-]*|of|the|de|van|von|al))*$/u.test(n)) {
         c.aliases.push(c.name);
         c.name = n;
-      } else if (!c.aliases.includes(n)) c.aliases.push(n);
+      } else if (!c.aliases.includes(n) && ALIAS_SHAPE.test(n)) c.aliases.push(n);
       return c.id;
     }
     // A misspelling of someone already here ("Bufy") is them, not a newcomer.
     const typo = Object.values(this.state.chars).filter((c) => !c.isUser && [c.name, ...c.aliases].some((a) => isTypoOf(low, a.toLowerCase())));
     if (typo.length === 1) {
-      if (!typo[0].aliases.includes(n)) typo[0].aliases.push(n);
+      if (!typo[0].aliases.includes(n) && ALIAS_SHAPE.test(n)) typo[0].aliases.push(n);
       return typo[0].id;
     }
     if (!create) return null;
@@ -238,6 +250,12 @@ export class Folder {
       }
       if (e.age !== undefined) c.age = e.age.trim() || undefined;
       if (e.appearance !== undefined) c.appearance = e.appearance.trim() || undefined;
+      if (e.always !== undefined) c.always = e.always.trim() || undefined;
+      if (e.dropAliases?.length) {
+        const drop = new Set(e.dropAliases.map((a) => a.toLowerCase()));
+        c.aliases = c.aliases.filter((a) => !drop.has(a.toLowerCase()));
+      }
+      for (const a of e.addAliases ?? []) if (a.trim() && a.toLowerCase() !== c.name.toLowerCase() && !c.aliases.some((x) => x.toLowerCase() === a.toLowerCase())) c.aliases.push(a.trim());
     }
   }
 
@@ -917,6 +935,7 @@ export class Folder {
         if (!st.items[iid] && FIXTURE.test(op.subject!.trim())) return reject(`${op.subject} is part of the place, not something anyone carries`);
         const it = st.items[iid] ?? { id: iid, name: op.subject!, custody: [] };
         st.items[iid] = it;
+        it.lastMsg = mi;
         if (a.condition) {
           it.condition = a.condition;
           return { verdict: "accepted", line: `🎒 ${it.name}: ${a.condition}` };
@@ -1206,6 +1225,14 @@ export class Folder {
    * holder; the rest is kept as the spot (`where`), never as a new character.
    */
   parseHolder(raw: string, mi: number): { id?: string; where?: string; same?: boolean } {
+    const r = this.holderOf(raw, mi);
+    // "→ Mara (pocket)": the brackets name the spot when nothing else does (not "(visible)" or "(via his mom)").
+    const spot = /\(([^()]{2,40})\)/.exec(raw)?.[1].trim();
+    if (r.id && !r.where && spot && !/^(?:visible|hidden|no change|unchanged|same|still|now|again|new|×\s*\d+|\d+|via\b.*|from\b.*|for\b.*|the player said.*)$/i.test(spot)) r.where = spot;
+    return r;
+  }
+
+  private holderOf(raw: string, mi: number): { id?: string; where?: string; same?: boolean } {
     let s = raw;
     for (let i = 0; i < 4 && /\([^()]*\)/.test(s); i++) s = s.replace(/\s*\([^()]*\)/g, "");
     s = s.replace(/\s+/g, " ").replace(/[.;,]+$/, "").trim();
@@ -1341,6 +1368,17 @@ const FIXTURE = /^(?:the\s+)?(?:fridge|refrigerator|freezer|oven|stove|sink|coun
 
 /** The merge target that marks a name as not a person (removed from the cast). */
 export const NOT_A_PERSON = "-";
+/** Where a thing stays with someone from scene to scene: worn, pocketed, at the wrist or belt. Hands, arms and laps put things down. */
+const ON_PERSON = /\b(?:worn|wearing|wears|pockets?|wrist|neck|necklace|finger|ears?|belt|holster|sheath|scabbard|purse|wallet|keyring|key ring|on (?:him|her|them))\b/i;
+
+/** What someone has on them now: what came to hand this scene, and what they wear or keep on them. Owning isn't holding. */
+export function carried(st: WorldState, id: string): ItemState[] {
+  return Object.values(st.items).filter((i) => i.holder === id && !i.gone && ((i.lastMsg ?? i.custody[i.custody.length - 1]?.msgIndex ?? -1) >= st.sceneStartMsg || ON_PERSON.test(i.where ?? "")));
+}
+/** A name worth keeping as an alias: capitalised words ("Buffy Anne Summers", "Lady Mara of Voss"), not a phrase or a list. */
+const ALIAS_SHAPE = /^\p{Lu}[\p{L}'’.-]*(?:\s+(?:\p{Lu}[\p{L}'’.-]*|of|the|de|van|von|al|du|da|le|la))*$/u;
+/** A relation in brackets after a name ("Gabriel's sister", "his mother"): who is meant, not a note. */
+const RELATION = /['’]s\b|\b(?:his|her|their|my|your)\s|\b(?:mother|mom|mum|father|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|aunt|uncle|cousin|niece|nephew|grand\w+|friend|boss|ex)\b/i;
 /** Ops whose subject or object must be a person. */
 const CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "unaware", "status", "journal"]);
 

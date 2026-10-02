@@ -72,7 +72,10 @@ const COLOUR = "(?:(?:pale|light|dark|deep|bright|clear|cold|warm|steel|ice|stor
 const HAIR_SHAPE = "(?:(?:short|long|cropped|shoulder-length|waist-length|curly|wavy|straight|thick|thin|messy|tousled|braided|close-cropped|shaved|greying|graying|silvering|streaked)[ ,-]*){0,3}";
 const EYES = new RegExp(`\\b(${COLOUR})[- ]?eyed\\b|\\b(${COLOUR})\\s+eyes\\b|\\beyes\\s+(?:are|were|of)\\s+(?:a\\s+)?(${COLOUR})\\b`, "i");
 const HAIR = new RegExp(`\\b(${HAIR_SHAPE}${COLOUR})[- ]haired\\b|\\b(${HAIR_SHAPE}${COLOUR})\\s+(?:hair|curls|locks|braids?)\\b|\\bhair\\s+(?:is|was)\\s+(${HAIR_SHAPE}${COLOUR})\\b`, "i");
-const NUM_WORDS = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ");
+/** A colour (eyes), or a colour or a cut (hair): what stays, not how they look this minute. */
+const LASTING_EYES = new RegExp(`^(?:a\\s+)?${COLOUR}(?:\\s|$)`, "i");
+const LASTING_HAIR = new RegExp(`^(?:a\\s+)?(?:${HAIR_SHAPE}${COLOUR}(?:\\s|$)|(?:short|long|cropped|shoulder-length|waist-length|curly|wavy|straight|braided|close-cropped|shaved|greying|graying|silvering|streaked|bobbed|buzzed|dreadlocked|cornrowed|in a bob|a pixie cut)\\b)`, "i");
+const NUM_WORDS ="one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ");
 const TENS: Record<string, number> = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
 
 /** An age given in words or numbers ("seventy-five", "24"). */
@@ -129,7 +132,12 @@ export function traitsStated(text: string, names: string[]): { who: string; kind
     let m: RegExpExecArray | null;
     while ((m = has.exec(text))) for (const x of traitsFromText(m[1])) if (x.kind !== "age") out.push({ who: name, ...x });
     const poss = new RegExp(`\\b${n}['’]s\\s+(eyes|hair)\\s+(?:is|are|was|were)\\s+([^.;!?\\n,]{3,40})`, "gi");
-    while ((m = poss.exec(text))) out.push({ who: name, kind: m[1].toLowerCase() as TraitKind, text: `${m[2].trim().toLowerCase()} ${m[1].toLowerCase()}` });
+    // "Dawn's eyes are hazel" is her eyes; "Dawn's eyes are wide", "her hair is damp from the pool" is the moment.
+    while ((m = poss.exec(text))) {
+      const kind = m[1].toLowerCase() as TraitKind;
+      if (!(kind === "eyes" ? LASTING_EYES : LASTING_HAIR).test(m[2].trim())) continue;
+      out.push({ who: name, kind, text: `${m[2].trim().toLowerCase()} ${kind}` });
+    }
     const age = new RegExp(`\\b${n}\\s+(?:is|was|turned|turns)\\s+(\\d{1,3}|[a-z]+(?:-[a-z]+)?)(?:\\s+years?\\s+old)?\\b(?![\\s-]*(?:minutes?|hours?|days?|feet|foot|inches|times|percent|steps?|men|of))`, "g");
     while ((m = age.exec(text))) {
       const a = ageNumber(m[1]);
@@ -145,8 +153,10 @@ export function traitLine(traits: Trait[] | undefined, extra: { age?: string; ap
   const list = [...(traits ?? [])];
   if (extra.age) list.push({ kind: "age", text: extra.age, by: "user", msgIndex: 0 });
   const bits = order.flatMap((k) => list.filter((t) => t.kind === k && !(k === "age" && extra.age && t.by !== "user")).map((t) => (k === "age" && /^\d{1,3}$/.test(t.text) ? `${t.text} years old` : t.text)));
-  const seen = new Set<string>();
-  const uniq = bits.filter((b) => (seen.has(b.toLowerCase()) ? false : (seen.add(b.toLowerCase()), true)));
   const app = extra.appearance?.trim();
+  // What the appearance already says ("20 years old, green eyes") isn't said twice.
+  const said = (app ?? "").toLowerCase();
+  const seen = new Set<string>();
+  const uniq = bits.filter((b) => (seen.has(b.toLowerCase()) || said.includes(b.toLowerCase()) ? false : (seen.add(b.toLowerCase()), true)));
   return [...(app ? [app] : []), ...uniq].join(", ").slice(0, 220);
 }

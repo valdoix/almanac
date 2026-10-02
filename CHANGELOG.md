@@ -4,6 +4,14 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.16.4 (2026-10-02)
+
+**Edit a character's aliases and "always" line.** The Cast editor has **Also called** (aliases, separated by `;`; one you take away stays away) and **Always** (the whole line sent every turn; empty it to go back to what the card, lore and story say).
+- **What the reader of your messages files, checked.** A trait or item it read stands only as far as your message bears it out: no names the message doesn't use ("Ruth is Xander's daughter"), no one named with a relation in brackets ("Buffy (Gabriel's sister)"), no guesses or notes ("— per Gabriel"), no moments ("recognizes…"), no item without a holder or with an owner the message doesn't give ("Buffy's mom's therapist's contact"). Lines it filed before are checked too.
+- **Aliases are names**, never a phrase or a list ("Buffy and Dawn, full, from mall clothing stores").
+- **"Holds" is this scene's**: what came to hand now, and what's worn or pocketed. Owning isn't holding; the spot in brackets ("cabinet", "pocket") is kept.
+- "Dawn's eyes are wide" is no eye colour; the always line no longer repeats what the appearance says.
+
 ## 1.16.3 (2026-10-02)
 
 **Retell any step.** Every beat can be told again, not only the last twelve steps': an older step's card is rebuilt from the beat and its subplot, and its line is rewritten where its step left it.

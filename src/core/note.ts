@@ -9,7 +9,7 @@ import type { CharacterState, MessageDelta, Trait, WorldState } from "./types";
 import { mergeTraits, traitLine } from "./traits";
 import { offPageFacts, offPageLines } from "./offpage";
 import { absMinutes, estTokens, fmtSpan, fmtTime, partyName, truncateTokens } from "./util";
-import { LADDER_NAMES, normFact, overlap } from "./state";
+import { carried, LADDER_NAMES, normFact, overlap } from "./state";
 import { factsInPlay, gapsOf, lackOf, lackText, peopleHere, standsOn, stanceVerb } from "./facts";
 import { isOpen, parseHours } from "./engines/almanac";
 
@@ -77,6 +77,7 @@ export function meterWord(k: string, v: number): string {
 
 /** The traits that hold for a person: the story's and the player's over the card's and the lore's. */
 export function fixedTraits(c: CharacterState, seed?: Trait[]): string {
+  if (c.always) return c.always;
   const merged = mergeTraits(seed ?? [], c.traits ?? []).list;
   return traitLine(merged, { age: c.age, appearance: c.appearance });
 }
@@ -98,7 +99,7 @@ export function capsule(c: CharacterState, state: WorldState, opts: { sealed: bo
   if (flags.length) bits.push(flags.slice(-3).join(", "));
   if (c.injuries.length) bits.push(c.injuries.map((i) => `${i.where} (${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? ", treated" : ""})`).join(", "));
   if (opts.full && c.look) bits.push(`wearing: ${c.look}`);
-  const held = Object.values(state.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name);
+  const held = carried(state, c.id).map((i) => i.name);
   if (opts.full && held.length) bits.push(`holds ${held.slice(0, 4).join(", ")}`);
   let s = `${c.name} (${bits.join("; ")})`;
   if (opts.full && opts.pressure && !c.isUser) s += ` [narrator-only pressure: ${opts.pressure}]`;

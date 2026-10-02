@@ -6,7 +6,7 @@
 // folded only when their message+swipe is on the path.
 
 import { parseLine, parseMessage } from "./dsl";
-import { playerOps } from "./player";
+import { keepPlayerOp, playerOps } from "./player";
 import { Folder, type FoldOptions } from "./state";
 import type { EventSource, LedgerEvent, OpName, ParsedLedger, ParsedOp, WorldState } from "./types";
 import { deepClone, fastHash, hash } from "./util";
@@ -181,7 +181,11 @@ export class LedgerRuntime {
               dayOfDate: opts.dayOfDate,
             })
           : [];
-        const extraOps = [...said, ...sides.filter((s) => !s.player || !s.hash || s.hash === hash(m.content)).flatMap((s) => s.ops.map((o) => ({ ...o, src: s.source })))];
+        // The reader's lines stand only as far as the message bears them out (lines filed before the check too).
+        const extraOps = [...said, ...sides.filter((s) => !s.player || !s.hash || s.hash === hash(m.content)).flatMap((s) => s.ops.flatMap((o) => {
+          const k = s.player ? keepPlayerOp(o, m.content, [opts.userName ?? "", ...(folder.state.chars.user?.aliases ?? [])]) : o;
+          return k ? [{ ...k, src: s.source }] : [];
+        }))];
         // Player messages only contribute speaker marks, what was said aloud, and extension-authored ops.
         events.push(...folder.applyMessage(m.index, m.id, m.swipe, { ops: [], unknown: [], format: "none", truncated: false, speakers: parsed.speakers, speech: parsed.speech, fromUser: true }, "user", extraOps, sides[0]?.source ?? "user"));
       }

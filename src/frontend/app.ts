@@ -251,7 +251,7 @@ ${v.recall ? `<details><summary class="muted">Recall block</summary><pre>${e(v.r
 <div class="alm-cc__bd"><div class="alm-cc__nm">${e(c.name)}</div>${c.mood?.name ? `<div class="alm-cc__em">${e(c.mood.name)}</div>` : ""}${vad}
 ${meters.length ? `<div class="alm-meters">${meters.map(([k, x]) => `<span>${e(k)}</span>${seg(x as number)}`).join("")}</div>` : ""}
 <div class="alm-tags">${(c.flags ?? []).slice(-4).map((f: string) => `<span class="alm-tag">${e(f)}</span>`).join("")}${(c.injuries ?? []).map((i: any) => `<span class="alm-tag warn">${e(i.where)}</span>`).join("")}${(c.held ?? []).slice(0, 3).map((h: string) => `<span class="alm-tag">holds: ${e(h)}</span>`).join("")}</div>
-${c.fixed ? `<div class="alm-cc__row" title="Sent to the model every turn while they're present: eyes, hair, age and the appearance you set"><b>always</b>${e(c.fixed)}</div>` : ""}${c.activity ? `<div class="alm-cc__row"><b>doing</b>${e(c.activity)}</div>` : ""}${!compact && c.age ? `<div class="alm-cc__row"><b>age</b>${e(c.age)}${c.ageSet ? "" : ` <small class="muted" title="From the lore">(lore)</small>`}</div>` : ""}${!compact && c.appearance ? `<div class="alm-cc__row"><b>appearance</b>${e(c.appearance)}</div>` : ""}${!compact && c.look ? `<div class="alm-cc__row"><b>wearing</b>${e(c.look)}</div>` : ""}${!compact && c.place ? `<div class="alm-cc__row"><b>where</b>${e(c.place)}</div>` : ""}
+${c.fixed ? `<div class="alm-cc__row" title="Sent to the model every turn while they're present. Edit them to change it"><b>always</b>${e(c.fixed)}</div>` : ""}${c.activity ? `<div class="alm-cc__row"><b>doing</b>${e(c.activity)}</div>` : ""}${!compact && c.age ? `<div class="alm-cc__row"><b>age</b>${e(c.age)}${c.ageSet ? "" : ` <small class="muted" title="From the lore">(lore)</small>`}</div>` : ""}${!compact && c.appearance ? `<div class="alm-cc__row"><b>appearance</b>${e(c.appearance)}</div>` : ""}${!compact && c.look ? `<div class="alm-cc__row"><b>wearing</b>${e(c.look)}</div>` : ""}${!compact && c.place ? `<div class="alm-cc__row"><b>where</b>${e(c.place)}</div>` : ""}
 </div></article>`;
   }
 
@@ -275,8 +275,9 @@ ${c.isUser ? "" : `<div class="row" style="justify-content:flex-end;margin-top:8
     const name = c?.isUser ? `<p class="muted"><small>Your persona's name comes from Lumiverse.</small></p>` : `<label class="f">Name<input type="text" id="almCharName" value="${e(c?.name ?? "")}" placeholder="${c ? "" : "Walter Hale"}"></label>${c ? `<p class="muted"><small>The old name keeps working in the story's lines.</small></p>` : ""}`;
     return `<div class="card almk--edit">${name}
 <label class="f">Age<input type="text" id="almCharAge" value="${e(c?.ageSet ? c.age : "")}" placeholder="${e(c?.age && !c.ageSet ? `${c.age} (from the lore)` : "e.g. 24, early fifties, ageless")}"></label>
-<label class="f">Appearance<textarea id="almCharLook" placeholder="${e(c?.fixed && !c?.appearance ? `Now: ${c.fixed}` : "Build, hair, eyes, what people notice first")}">${e(c?.appearance ?? "")}</textarea></label>
-<p class="muted"><small>What you set here is sent with them every turn and holds whatever the story writes.</small></p>
+<label class="f">Also called<input type="text" id="almCharAliases" value="${e((c?.aliases ?? []).join("; "))}" placeholder="Other names they go by, separated by ;"></label>
+<label class="f">Always<textarea id="almCharAlways" placeholder="Eyes, hair, build, what people notice first">${e(c?.fixed ?? "")}</textarea></label>
+<p class="muted"><small>Always is sent with them every turn while they're present, and holds whatever the story writes. Change or delete anything in it; empty it to go back to what the card, the lore and the story say.</small></p>
 <div class="row"><button class="btn primary" data-act="charSave" data-id="${e(id)}">${c ? "Save" : "Add"}</button><button class="btn" data-act="charCancel">Cancel</button></div></div>`;
   }
 
@@ -778,7 +779,9 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
         const val = (sel: string) => (this.root.querySelector(sel) as HTMLInputElement | HTMLTextAreaElement | null)?.value?.trim();
         const name = val("#almCharName");
         const age = val("#almCharAge") ?? "";
-        const appearance = val("#almCharLook") ?? "";
+        const always = val("#almCharAlways") ?? "";
+        const aliases = (val("#almCharAliases") ?? "").split(/\s*[;\n]\s*/).map((a) => a.trim()).filter(Boolean);
+        const low = (a: string) => a.toLowerCase();
         const edits = { ...(this.view?.config?.castEdits ?? {}) };
         const cast: any[] = this.view?.cast ?? [];
         if (id === "__new") {
@@ -791,13 +794,27 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
           }
           let key = low.normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "person";
           while (cast.some((c) => c.id === key) || edits[key]) key += "_";
-          edits[key] = { name, ...(age ? { age } : {}), ...(appearance ? { appearance } : {}), added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
+          edits[key] = { name, ...(age ? { age } : {}), ...(always ? { always } : {}), ...(aliases.length ? { addAliases: aliases } : {}), added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
         } else {
           const c = cast.find((x) => x.id === id);
           const next: any = { ...(edits[id] ?? {}) };
           if (name && !c?.isUser && name !== c?.name) next.name = name;
           next.age = age;
-          next.appearance = appearance;
+          // Aliases taken away stay away; ones given are kept, and giving one back undoes taking it.
+          const before: string[] = c?.aliases ?? [];
+          const removed = before.filter((a) => !aliases.some((x) => low(x) === low(a)));
+          const added = aliases.filter((x) => !before.some((a) => low(a) === low(x)));
+          const drop = [...((next.dropAliases ?? []) as string[]).filter((a) => !added.some((x) => low(x) === low(a))), ...removed];
+          const add = [...((next.addAliases ?? []) as string[]).filter((a) => !removed.some((x) => low(x) === low(a))), ...added];
+          if (drop.length) next.dropAliases = drop;
+          else delete next.dropAliases;
+          if (add.length) next.addAliases = add;
+          else delete next.addAliases;
+          // The line as written replaces what the sources say; untouched, nothing changes; emptied, the sources speak again.
+          if (always !== (c?.fixed ?? "")) {
+            next.always = always;
+            next.appearance = "";
+          }
           edits[id] = next;
         }
         this.editingChar = null;

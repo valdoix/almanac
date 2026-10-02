@@ -7,7 +7,7 @@ import { VERSION } from "./version";
 import type { AlmanacReport } from "./engines/almanac";
 import type { CharacterState, MessageDelta, WorldState } from "./types";
 import { absMinutes, escapeHtml as e, fmtSpan, fmtTime, hhmm, initials, kpNote, partyName } from "./util";
-import { LADDER_NAMES } from "./state";
+import { carried, LADDER_NAMES } from "./state";
 import { factKind, factsInPlay, isKnower, lackOf, lackText, stanceVerb } from "./facts";
 
 /** Voice-slot palette (slot 0 = the player). Tuned for contrast on both paper and night skins. */
@@ -45,7 +45,7 @@ function card(c: CharacterState, state: WorldState, colors: Record<string, strin
   const inner = !(c.isUser && opts.sealed);
   const vad = inner && c.mood ? vadRow("V", c.mood.v, -3, 3) + vadRow("A", c.mood.a, 0, 5) + vadRow("D", c.mood.d, -3, 3) : "";
   const meters = Object.entries(c.meters).filter(([k, v]) => v != null && (k !== "arousal" || opts.nsfw) && (inner || !["composure", "arousal"].includes(k)));
-  const held = Object.values(state.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name);
+  const held = carried(state, c.id).map((i) => i.name);
   const tags = [
     ...c.flags.slice(-4).map((f) => `<span class="alm-tag">${e(f)}</span>`),
     ...c.injuries.map((i) => `<span class="alm-tag${i.severity >= 3 || !i.treated ? " warn" : ""}">${e(i.where)} · ${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? "" : " · untreated"}</span>`),

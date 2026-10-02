@@ -768,8 +768,12 @@ function traitsStated(text, names) {
         if (x.kind !== "age")
           out.push({ who: name, ...x });
     const poss = new RegExp(`\\b${n}['\u2019]s\\s+(eyes|hair)\\s+(?:is|are|was|were)\\s+([^.;!?\\n,]{3,40})`, "gi");
-    while (m = poss.exec(text))
-      out.push({ who: name, kind: m[1].toLowerCase(), text: `${m[2].trim().toLowerCase()} ${m[1].toLowerCase()}` });
+    while (m = poss.exec(text)) {
+      const kind = m[1].toLowerCase();
+      if (!(kind === "eyes" ? LASTING_EYES : LASTING_HAIR).test(m[2].trim()))
+        continue;
+      out.push({ who: name, kind, text: `${m[2].trim().toLowerCase()} ${kind}` });
+    }
     const age = new RegExp(`\\b${n}\\s+(?:is|was|turned|turns)\\s+(\\d{1,3}|[a-z]+(?:-[a-z]+)?)(?:\\s+years?\\s+old)?\\b(?![\\s-]*(?:minutes?|hours?|days?|feet|foot|inches|times|percent|steps?|men|of))`, "g");
     while (m = age.exec(text)) {
       const a = ageNumber(m[1]);
@@ -785,12 +789,13 @@ function traitLine(traits, extra = {}) {
   if (extra.age)
     list.push({ kind: "age", text: extra.age, by: "user", msgIndex: 0 });
   const bits = order.flatMap((k) => list.filter((t) => t.kind === k && !(k === "age" && extra.age && t.by !== "user")).map((t) => k === "age" && /^\d{1,3}$/.test(t.text) ? `${t.text} years old` : t.text));
-  const seen = new Set;
-  const uniq = bits.filter((b) => seen.has(b.toLowerCase()) ? false : (seen.add(b.toLowerCase()), true));
   const app = extra.appearance?.trim();
+  const said = (app ?? "").toLowerCase();
+  const seen = new Set;
+  const uniq = bits.filter((b) => seen.has(b.toLowerCase()) || said.includes(b.toLowerCase()) ? false : (seen.add(b.toLowerCase()), true));
   return [...app ? [app] : [], ...uniq].join(", ").slice(0, 220);
 }
-var KINDS, RANK, COLOUR = "(?:(?:pale|light|dark|deep|bright|clear|cold|warm|steel|ice|storm|sea|ocean|sky|forest|bottle|moss|grey|gray|blue|green|brown|hazel|amber|gold(?:en)?|violet|purple|lilac|indigo|amethyst|black|silver|white|red|auburn|copper|chestnut|honey|ash|platinum|strawberry|dirty|sandy|mousy|jet|raven|emerald|jade|sapphire|blonde|blond|fair|ginger|mahogany|salt-and-pepper)[- ]?){1,3}", HAIR_SHAPE = "(?:(?:short|long|cropped|shoulder-length|waist-length|curly|wavy|straight|thick|thin|messy|tousled|braided|close-cropped|shaved|greying|graying|silvering|streaked)[ ,-]*){0,3}", EYES, HAIR, NUM_WORDS, TENS;
+var KINDS, RANK, COLOUR = "(?:(?:pale|light|dark|deep|bright|clear|cold|warm|steel|ice|storm|sea|ocean|sky|forest|bottle|moss|grey|gray|blue|green|brown|hazel|amber|gold(?:en)?|violet|purple|lilac|indigo|amethyst|black|silver|white|red|auburn|copper|chestnut|honey|ash|platinum|strawberry|dirty|sandy|mousy|jet|raven|emerald|jade|sapphire|blonde|blond|fair|ginger|mahogany|salt-and-pepper)[- ]?){1,3}", HAIR_SHAPE = "(?:(?:short|long|cropped|shoulder-length|waist-length|curly|wavy|straight|thick|thin|messy|tousled|braided|close-cropped|shaved|greying|graying|silvering|streaked)[ ,-]*){0,3}", EYES, HAIR, LASTING_EYES, LASTING_HAIR, NUM_WORDS, TENS;
 var init_traits = __esm(() => {
   KINDS = [
     ["age", /^(?:age[ds]?\s*:?\s*\d|\d{1,3}\s*(?:years?|yrs?)(?:[- ]old)?\b|(?:[a-z]+-)?[a-z]+[- ]years?[- ]old\b|(?:in (?:her|his|their) )?(?:early |mid-?|late )?(?:teens|twenties|thirties|forties|fifties|sixties|seventies|eighties)\b|ageless\b)/i],
@@ -807,6 +812,8 @@ var init_traits = __esm(() => {
   RANK = { user: 4, model: 3, card: 2, lore: 1 };
   EYES = new RegExp(`\\b(${COLOUR})[- ]?eyed\\b|\\b(${COLOUR})\\s+eyes\\b|\\beyes\\s+(?:are|were|of)\\s+(?:a\\s+)?(${COLOUR})\\b`, "i");
   HAIR = new RegExp(`\\b(${HAIR_SHAPE}${COLOUR})[- ]haired\\b|\\b(${HAIR_SHAPE}${COLOUR})\\s+(?:hair|curls|locks|braids?)\\b|\\bhair\\s+(?:is|was)\\s+(${HAIR_SHAPE}${COLOUR})\\b`, "i");
+  LASTING_EYES = new RegExp(`^(?:a\\s+)?${COLOUR}(?:\\s|$)`, "i");
+  LASTING_HAIR = new RegExp(`^(?:a\\s+)?(?:${HAIR_SHAPE}${COLOUR}(?:\\s|$)|(?:short|long|cropped|shoulder-length|waist-length|curly|wavy|straight|braided|close-cropped|shaved|greying|graying|silvering|streaked|bobbed|buzzed|dreadlocked|cornrowed|in a bob|a pixie cut)\\b)`, "i");
   NUM_WORDS = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ");
   TENS = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
 });
@@ -2479,7 +2486,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.16.3";
+var VERSION = "1.16.4";
 
 // src/core/facts.ts
 function stem(w) {
@@ -3626,10 +3633,23 @@ class Folder {
       this.ensureChar("user", this.opts.userName || "You", msgIndex, true);
       return "user";
     }
-    const low = n.toLowerCase();
+    let low = n.toLowerCase();
     for (const c of Object.values(this.state.chars)) {
       if (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low))
         return c.id;
+    }
+    const note = /\s*\(([^()]*)\)\s*/.exec(n);
+    if (note) {
+      if (RELATION.test(note[1]))
+        return null;
+      n = n.replace(note[0], " ").trim();
+      low = n.toLowerCase();
+      if (!n)
+        return null;
+      for (const c of Object.values(this.state.chars)) {
+        if (c.name.toLowerCase() === low || c.aliases.some((a) => a.toLowerCase() === low))
+          return c.id;
+      }
     }
     const first = low.split(/\s+/)[0];
     const byFirst = Object.values(this.state.chars).filter((c) => c.name.toLowerCase().split(/\s+/)[0] === first);
@@ -3638,13 +3658,13 @@ class Folder {
       if (n.length > c.name.length && /^\p{Lu}[\p{L}'\u2019.-]*(?:\s+(?:\p{Lu}[\p{L}'\u2019.-]*|of|the|de|van|von|al))*$/u.test(n)) {
         c.aliases.push(c.name);
         c.name = n;
-      } else if (!c.aliases.includes(n))
+      } else if (!c.aliases.includes(n) && ALIAS_SHAPE.test(n))
         c.aliases.push(n);
       return c.id;
     }
     const typo = Object.values(this.state.chars).filter((c) => !c.isUser && [c.name, ...c.aliases].some((a) => isTypoOf(low, a.toLowerCase())));
     if (typo.length === 1) {
-      if (!typo[0].aliases.includes(n))
+      if (!typo[0].aliases.includes(n) && ALIAS_SHAPE.test(n))
         typo[0].aliases.push(n);
       return typo[0].id;
     }
@@ -3679,6 +3699,15 @@ class Folder {
         c.age = e.age.trim() || undefined;
       if (e.appearance !== undefined)
         c.appearance = e.appearance.trim() || undefined;
+      if (e.always !== undefined)
+        c.always = e.always.trim() || undefined;
+      if (e.dropAliases?.length) {
+        const drop = new Set(e.dropAliases.map((a) => a.toLowerCase()));
+        c.aliases = c.aliases.filter((a) => !drop.has(a.toLowerCase()));
+      }
+      for (const a of e.addAliases ?? [])
+        if (a.trim() && a.toLowerCase() !== c.name.toLowerCase() && !c.aliases.some((x) => x.toLowerCase() === a.toLowerCase()))
+          c.aliases.push(a.trim());
     }
   }
   ensureChar(id, name, msgIndex, isUser) {
@@ -4394,6 +4423,7 @@ class Folder {
           return reject(`${op.subject} is part of the place, not something anyone carries`);
         const it = st.items[iid] ?? { id: iid, name: op.subject, custody: [] };
         st.items[iid] = it;
+        it.lastMsg = mi;
         if (a.condition) {
           it.condition = a.condition;
           return { verdict: "accepted", line: `\uD83C\uDF92 ${it.name}: ${a.condition}` };
@@ -4709,6 +4739,13 @@ class Folder {
     return this.parseHolder(n, mi).id;
   }
   parseHolder(raw, mi) {
+    const r = this.holderOf(raw, mi);
+    const spot = /\(([^()]{2,40})\)/.exec(raw)?.[1].trim();
+    if (r.id && !r.where && spot && !/^(?:visible|hidden|no change|unchanged|same|still|now|again|new|\u00D7\s*\d+|\d+|via\b.*|from\b.*|for\b.*|the player said.*)$/i.test(spot))
+      r.where = spot;
+    return r;
+  }
+  holderOf(raw, mi) {
     let s = raw;
     for (let i = 0;i < 4 && /\([^()]*\)/.test(s); i++)
       s = s.replace(/\s*\([^()]*\)/g, "");
@@ -4827,6 +4864,9 @@ function fmtClock(minute) {
   const m = (minute % MIN_PER_DAY + MIN_PER_DAY) % MIN_PER_DAY;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
+function carried(st, id) {
+  return Object.values(st.items).filter((i) => i.holder === id && !i.gone && ((i.lastMsg ?? i.custody[i.custody.length - 1]?.msgIndex ?? -1) >= st.sceneStartMsg || ON_PERSON.test(i.where ?? "")));
+}
 function normFact(s) {
   return s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
 }
@@ -4856,7 +4896,7 @@ function parseDue(raw, now) {
     return { at: { day: now.day, minute: 21 * 60 }, raw };
   return { trigger: raw, raw };
 }
-var CONFIDENCE, PIVOTAL, escapeRe2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), ELSEWHERE, LADDER_FALL, LADDER_FALL_HARD, LADDER_WARM, LASTING, isLasting = (f) => LASTING.test(f), FIXTURE, NOT_A_PERSON = "-", CHAR_OPS, STOP3;
+var CONFIDENCE, PIVOTAL, escapeRe2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), ELSEWHERE, LADDER_FALL, LADDER_FALL_HARD, LADDER_WARM, LASTING, isLasting = (f) => LASTING.test(f), FIXTURE, NOT_A_PERSON = "-", ON_PERSON, ALIAS_SHAPE, RELATION, CHAR_OPS, STOP3;
 var init_state = __esm(() => {
   init_types();
   init_facts();
@@ -4883,6 +4923,9 @@ var init_state = __esm(() => {
   LADDER_WARM = /\bheld\b|\bhold|hug|embrac|kiss|smil|laugh|comfort|warm|tender|gentle|\bsafe\b|protect|saved|rescued|confess|\bstayed\b|didn't (pull|let) (away|go)|leaned|touch|\bhand\b|close|trust|open(ed)? up|let (him|her|them) (in|hold)|blush|flirt|charm|spark|linger/i;
   LASTING = /\bscar|pregnan|\bblind\b|\bdeaf\b|\bmute\b|\blimp(?:s|ing)?\b|\bmissing\b|amputat|\blame\b|\bsick\b|\bill\b|fever|poison|infect|curse|tattoo|pierc|\bbound\b|chained|shackl|collared|disguis|vampir|possess|comatose|hungover|wheelchair|crutch|\bcast\b|\bsling\b|splint|glasses|concuss|recovering|\bweak\b|frail|malnourish/i;
   FIXTURE = /^(?:the\s+)?(?:fridge|refrigerator|freezer|oven|stove|sink|counter(?:top)?|table|desk|bed|sofa|couch|chair|door|window|wall|floor|ceiling|stairs?|fireplace|hearth|bathtub|shower|toilet|cupboard|cabinet|wardrobe|shelf|shelves)$/i;
+  ON_PERSON = /\b(?:worn|wearing|wears|pockets?|wrist|neck|necklace|finger|ears?|belt|holster|sheath|scabbard|purse|wallet|keyring|key ring|on (?:him|her|them))\b/i;
+  ALIAS_SHAPE = /^\p{Lu}[\p{L}'\u2019.-]*(?:\s+(?:\p{Lu}[\p{L}'\u2019.-]*|of|the|de|van|von|al|du|da|le|la))*$/u;
+  RELATION = /['\u2019]s\b|\b(?:his|her|their|my|your)\s|\b(?:mother|mom|mum|father|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|aunt|uncle|cousin|niece|nephew|grand\w+|friend|boss|ex)\b/i;
   CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "unaware", "status", "journal"]);
   STOP3 = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
 });
@@ -4916,7 +4959,7 @@ function card(c, state, colors, opts) {
   const inner = !(c.isUser && opts.sealed);
   const vad = inner && c.mood ? vadRow("V", c.mood.v, -3, 3) + vadRow("A", c.mood.a, 0, 5) + vadRow("D", c.mood.d, -3, 3) : "";
   const meters = Object.entries(c.meters).filter(([k, v]) => v != null && (k !== "arousal" || opts.nsfw) && (inner || !["composure", "arousal"].includes(k)));
-  const held = Object.values(state.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name);
+  const held = carried(state, c.id).map((i) => i.name);
   const tags = [
     ...c.flags.slice(-4).map((f) => `<span class="alm-tag">${escapeHtml(f)}</span>`),
     ...c.injuries.map((i) => `<span class="alm-tag${i.severity >= 3 || !i.treated ? " warn" : ""}">${escapeHtml(i.where)} \xB7 ${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? "" : " \xB7 untreated"}</span>`),
@@ -8128,6 +8171,33 @@ function playerClock(text, ctx) {
   }
   return null;
 }
+function keepPlayerOp(op, message, known = []) {
+  const raw = op.raw ?? "";
+  if (HEDGED.test(raw))
+    return null;
+  const own = new Set(known.flatMap((n) => n.toLowerCase().split(/\s+/)));
+  const said = (w) => own.has(w.toLowerCase()) || new RegExp(`(?<![\\p{L}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu").test(message);
+  const madeUp = (text) => (text.match(/(?<![\p{L}'\u2019])\p{Lu}[\p{L}'\u2019-]+/gu) ?? []).map((w) => w.replace(/['\u2019]s$/, "")).some((w) => !said(w) && !/^(I|I'm|The|A|An|He|She|They|It|His|Her|Their|My|Mr|Mrs|Ms|Dr)$/.test(w));
+  if (op.op === "item" && !/:\s*(?:\u2192|->)/.test(raw))
+    return null;
+  for (const m of (op.op === "item" ? op.subject ?? "" : "").matchAll(/(\p{Lu}[\p{L}-]+)['\u2019]s\s+(\p{L}+)/gu)) {
+    if (own.has(m[1].toLowerCase()))
+      continue;
+    if (!new RegExp(`${m[1]}['\u2019]s\\s+${m[2]}`, "iu").test(message))
+      return null;
+  }
+  if (op.op !== "trait") {
+    const text = `${op.op === "item" ? op.subject ?? "" : ""} ${String(op.args.text ?? raw.replace(/^[^:]*:/, "")).split(/\s[\u2014\u2013]\s/)[0]}`;
+    return madeUp(text) ? null : op;
+  }
+  const who = (op.subject ?? "").trim();
+  if (!who || /[()[\],&]|\band\b|\bor\b/i.test(who))
+    return null;
+  const traits = (op.args.traits ?? []).filter((t) => !/\(kept where\)|\?/.test(t.text) && !SCENE.test(t.text.trim()) && !madeUp(t.text));
+  if (!traits.length)
+    return null;
+  return { ...op, args: { ...op.args, traits }, raw: `trait ${who}: ${traits.map((t) => t.text).join("; ")}` };
+}
 function playerOps(text, ctx) {
   const ops = [];
   const clock = playerClock(text, ctx);
@@ -8150,10 +8220,12 @@ function playerOps(text, ctx) {
   }
   return ops;
 }
-var WORD_NUM;
+var WORD_NUM, HEDGED, SCENE;
 var init_player = __esm(() => {
   init_traits();
   WORD_NUM = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12, several: 3, few: 3 };
+  HEDGED = /\s[\u2014\u2013-]\s+(?:[^\u2014\u2013]*\b(?:player[- ]stated|suggests?|implie[sd]|seems?|maybe|perhaps|probably|per \p{Lu}[\p{L}'\u2019-]*|according to|joking(?:ly)?|figure of speech)\b)/iu;
+  SCENE = /^(?:recogni[sz]es|reali[sz]es|notices|thinks|believes|feels|wonders|sees|watches|decides|is (?:now )?(?:watching|thinking|feeling))\b/i;
 });
 
 // src/core/branch.ts
@@ -8244,7 +8316,10 @@ class LedgerRuntime {
           day: folder.state.time?.day ?? null,
           dayOfDate: opts.dayOfDate
         }) : [];
-        const extraOps = [...said, ...sides.filter((s) => !s.player || !s.hash || s.hash === hash(m.content)).flatMap((s) => s.ops.map((o) => ({ ...o, src: s.source })))];
+        const extraOps = [...said, ...sides.filter((s) => !s.player || !s.hash || s.hash === hash(m.content)).flatMap((s) => s.ops.flatMap((o) => {
+          const k = s.player ? keepPlayerOp(o, m.content, [opts.userName ?? "", ...folder.state.chars.user?.aliases ?? []]) : o;
+          return k ? [{ ...k, src: s.source }] : [];
+        }))];
         events.push(...folder.applyMessage(m.index, m.id, m.swipe, { ops: [], unknown: [], format: "none", truncated: false, speakers: parsed.speakers, speech: parsed.speech, fromUser: true }, "user", extraOps, sides[0]?.source ?? "user"));
       }
       const pos = i + 1;
@@ -8300,7 +8375,7 @@ function buildCodex(state, store) {
       bits.push(`last seen at ${c.place}`);
     if (c.mood?.name)
       bits.push(`mood: ${c.mood.name}`);
-    const heldItems = Object.values(state.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name);
+    const heldItems = carried(state, c.id).map((i) => i.name);
     const links = [];
     for (const b of Object.values(state.bonds)) {
       if (b.from === c.id)
@@ -8338,7 +8413,7 @@ function buildCodex(state, store) {
         traits: c.traits,
         age: c.age,
         appearance: c.appearance,
-        fixed: traitLine(c.traits, { age: c.age, appearance: c.appearance }) || undefined
+        fixed: c.always || traitLine(c.traits, { age: c.age, appearance: c.appearance }) || undefined
       },
       links,
       scope: {},
@@ -10281,6 +10356,8 @@ function meterWord(k, v) {
   return w || `${v >= 4 ? "very " : ""}${k === "cold" ? "cold" : `high ${k}`}`;
 }
 function fixedTraits(c, seed) {
+  if (c.always)
+    return c.always;
   const merged = mergeTraits(seed ?? [], c.traits ?? []).list;
   return traitLine(merged, { age: c.age, appearance: c.appearance });
 }
@@ -10305,7 +10382,7 @@ function capsule(c, state, opts) {
     bits.push(c.injuries.map((i) => `${i.where} (${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? ", treated" : ""})`).join(", "));
   if (opts.full && c.look)
     bits.push(`wearing: ${c.look}`);
-  const held = Object.values(state.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name);
+  const held = carried(state, c.id).map((i) => i.name);
   if (opts.full && held.length)
     bits.push(`holds ${held.slice(0, 4).join(", ")}`);
   let s = `${c.name} (${bits.join("; ")})`;
@@ -15170,6 +15247,8 @@ function playerFactsPrompt(opts) {
   return {
     system: `You read a roleplay player's message for facts they state as true about the story. ${SAFETY_DATA}
 The player is ${opts.userName}. Record only what the player states outright, often in an aside or a direction to the writer: someone's looks or age, where a thing is kept or who has it, a rule of this story that differs from the source material, a running joke. Never record what happens in the scene now, what anyone says or feels, or anything the player only suggests.
+Name each person plainly, by a name the message or the list gives; never a description or relation in brackets ("Buffy (his sister)"), never two people at once. When the message says only "she" or "he" and doesn't make plain who, leave it out: never guess. Dialogue is what a character says, not a fact: a joke, a pet name or a figure of speech ("that's my daughter" about a cat) records nothing, and neither does one person's opinion of another ("the most beautiful person he's seen"). Use only names the message uses. No notes, guesses or comments after a line.
+An item line is for what the player says someone keeps, owns or carries for good; never what someone picks up, uses or puts down in the scene (the story's own lines track that), and never something offered, asked for or that may happen. Name the thing as the message does, owner included ("his mom's therapist" said by Gabriel is Gabriel's mom's).
 Write one ledger line per fact, or the single word none:
 trait Name: violet eyes; silver hair; 24
 item Thing: \u2192 Holder (where) \u2014 the player said
@@ -15200,7 +15279,7 @@ async function readPlayerFacts(chatId, replyId, userId) {
     const p = playerFactsPrompt({ message: msg.content.slice(0, 6000), names, userName: L.names.user });
     const text = await quiet([sys(p.system), usr(p.user)], { userId, reasoningOff: true, timeoutMs: 60000, connectionId: settings.clerkConnection || settings.summarizerConnection || undefined, label: "player facts" });
     const ops = text.split(`
-`).map((l) => parseLine(l.replace(/^[-*\u2022]\s*/, "").trim())).filter((o) => !!o && ALLOWED.has(o.op)).slice(0, 12);
+`).map((l) => parseLine(l.replace(/^[-*\u2022]\s*/, "").trim())).filter((o) => !!o && ALLOWED.has(o.op)).map((o) => keepPlayerOp(o, msg.content, [L.names.user, ...L.state.chars.user?.aliases ?? []])).filter((o) => !!o).slice(0, 12);
     const fresh = await loadChat(chatId, userId);
     fresh.side[key] = [...(fresh.side[key] ?? []).filter((s) => !s.player), ...ops.length ? [{ source: "user", ops, player: true, hash: h }] : []];
     (fresh.meta.playerRead ??= {})[key] = h;
@@ -15217,6 +15296,7 @@ var ALLOWED;
 var init_playerfacts = __esm(() => {
   init_branch();
   init_dsl();
+  init_player();
   init_prompts();
   init_util();
   init_host();
@@ -15880,7 +15960,7 @@ async function buildView(chatId, userId) {
       edit: meta.config.castEdits?.[c.id] ?? null,
       fixed: fixedTraits(c, seed[c.id]),
       traits: (c.traits ?? []).map((t) => ({ kind: t.kind, text: t.text, by: t.by })),
-      held: Object.values(st.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name),
+      held: carried(st, c.id).map((i) => i.name),
       moodFresh: !!c.mood?.prev && c.mood.prev !== c.mood.name && c.mood.msg != null && c.mood.msg === st.replyDelta?.msgIndex,
       toYou: bondToUser(st, c.id)
     })),
@@ -16000,6 +16080,7 @@ var init_view = __esm(() => {
   init_check();
   init_chronicle();
   init_note();
+  init_state();
   init_traitseed();
   AUTO_THEME = {
     horror: "nocturne",

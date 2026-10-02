@@ -2,9 +2,9 @@
 // page, the check of each reply, the ledger lines models actually write, stale detail, fixed looks,
 // the player's own facts, and running bits. Fixtures are invented; shapes follow real replays.
 import { describe, expect, test } from "bun:test";
-import { LedgerRuntime, toPath, type RawChatMessage } from "../src/core/branch";
+import { LedgerRuntime, sideKey, toPath, type RawChatMessage } from "../src/core/branch";
 import { injuriesIn, opWordOf, parseLine, parseMessage } from "../src/core/dsl";
-import type { FoldOptions } from "../src/core/state";
+import { carried, type FoldOptions } from "../src/core/state";
 import { classify, isScene, playbookPlayed, seedOverlays, weaverBook } from "../src/core/lore";
 import { buildCodex, emptyCodexStore } from "../src/core/codex";
 import { KeyIndex, cleanKeys, DEFAULT_STOP } from "../src/core/keys";
@@ -12,7 +12,8 @@ import { recall } from "../src/core/recall";
 import { buildLedgerNote } from "../src/core/note";
 import { isOffPage, offPageFacts, redact } from "../src/core/offpage";
 import { AGREES, checkReply, passageIndex, saidBefore, supported, supportOf } from "../src/core/audit";
-import { playerClock, playerOps } from "../src/core/player";
+import { keepPlayerOp, playerClock, playerOps } from "../src/core/player";
+import { hash } from "../src/core/util";
 import { traitsFromText, traitsStated } from "../src/core/traits";
 import { buildCalendar, dayOfDate, dateFor } from "../src/core/engines/calendar";
 import { runningBits } from "../src/core/chronicle";
@@ -123,6 +124,29 @@ describe("fixed looks", () => {
   });
   test("stated by the player about named people", () => {
     expect(traitsStated("Daeron has violet eyes and Cersei has green eyes.", ["Daeron", "Cersei"]).map((t) => `${t.who}:${t.text}`)).toEqual(["Daeron:violet eyes", "Cersei:green eyes"]);
+    // How they look this minute isn't their eyes or hair.
+    expect(traitsStated(`Dawn's eyes are wide. "This is too much." Dawn's hair is damp from the pool and the shower.`, ["Dawn"])).toEqual([]);
+    expect(traitsStated("Dawn's eyes are blue-green. Dawn's hair is long and brown.", ["Dawn"]).map((t) => t.text)).toEqual(["blue-green eyes", "long and brown hair"]);
+  });
+  test("the player's own line replaces it; what the appearance says isn't said twice", () => {
+    const st = fold([reply(0, "cast: Daeron@spot\ntrait Daeron: violet eyes; silver hair")], { ...OPTS, castEdits: { daeron: { always: "violet eyes, a scar through one brow" } } }).state;
+    expect(buildLedgerNote({ state: st, almanac: null, records: [], userName: "Wren", sealed: true, query: "" }).text).toContain("always: violet eyes, a scar through one brow)");
+    const st2 = fold([reply(0, "cast: Daeron@spot\ntrait Daeron: violet eyes; silver hair")], { ...OPTS, castEdits: { daeron: { appearance: "violet eyes, tall" } } }).state;
+    expect(buildLedgerNote({ state: st2, almanac: null, records: [], userName: "Wren", sealed: true, query: "" }).text).toContain("always: violet eyes, tall, silver hair");
+  });
+  test("holding is this scene's: what came to hand now, and what's worn or pocketed; owning isn't holding", () => {
+    const { state } = fold([
+      reply(0, "clock: Day 1 09:00\ncast: Mara@spot\nitem Espresso machine: → Mara (counter)\nitem Ring: → Mara (finger)\nitem Locket: → Mara (pocket)"),
+      reply(1, "clock: Day 1 13:00\ncast: Mara@spot\nitem Lantern: → Mara (hand)"),
+    ]);
+    expect(state.sceneStartMsg).toBe(1);
+    expect(carried(state, "mara").map((i) => i.name).sort()).toEqual(["Lantern", "Locket", "Ring"]);
+  });
+  test("aliases: only names, never a phrase or a list; the player can take one away or give one", () => {
+    const lines = "cast: Buffy Summers@spot · Dawn@spot\nitem Wardrobes (×2): Buffy and Dawn, full, from mall clothing stores\nmood Buffy (asleep): calm";
+    expect(fold([reply(0, lines)]).state.chars.buffy_summers.aliases).toEqual(["Buffy"]);
+    const st = fold([reply(0, lines)], { ...OPTS, castEdits: { buffy_summers: { dropAliases: ["Buffy"], addAliases: ["the Slayer"] } } }).state;
+    expect(st.chars.buffy_summers.aliases).toEqual(["the Slayer"]);
   });
 });
 
@@ -155,6 +179,27 @@ describe("the player's own facts", () => {
   });
   test("the next morning, in an aside", () => {
     expect(playerClock("((The next morning.)) She wakes.", { names: [], day: 4 })!.args).toMatchObject({ day: 5, minute: 480 });
+  });
+  test("the reader's lines stand only as far as the message bears them out", () => {
+    const line = (l: string) => parseLine(l)!;
+    const m259 = `He nods, grinning. "Yup. That's my daughter right there." He pours kibble into Ruth's bowl.`;
+    expect(keepPlayerOp(line("trait Ruth: is Xander's daughter"), m259)).toBeNull();
+    expect(keepPlayerOp(line("trait Ruth: has her own food bowl (kept where) — player-stated, suggests a pet"), m259)).toBeNull();
+    const m299 = `"Yeah, she got scholarships. She's the one who insisted I should get a job." "And Buffy - she knows you're my girlfriend already."`;
+    expect(keepPlayerOp(line("trait Buffy (Gabriel's sister): got scholarships; insisted Gabriel get a job"), m299)).toBeNull();
+    expect(keepPlayerOp(line("trait Buffy: most beautiful person Gabriel has ever seen — per Gabriel"), "Buffy, you're the most beautiful person I've ever seen.")).toBeNull();
+    expect(keepPlayerOp(line("trait Dawn: recognizes Buffy and Ruth as a pair"), "Dawn looks at Buffy and Ruth.")).toBeNull();
+    // Items: a holder is said, whose it is matches the message, and the player's own names always count.
+    const m205 = `"My mom goes to a therapist. The therapist - she's a witch." He looks at Buffy. "I can ask my mom, if you want."`;
+    expect(keepPlayerOp(line("item Buffy's mom's therapist's contact: → Gabriel (via his mom) — the player said"), m205, ["Gabriel Winters"])).toBeNull();
+    expect(keepPlayerOp(line("item pool: large with jacuzzi, dedicated bathroom"), "The pool is large, with a jacuzzi.")).toBeNull();
+    expect(keepPlayerOp(line("item espresso machine: → Gabriel Winters (cabinet)"), "He takes out an espresso machine from the cabinet.", ["Gabriel Winters"])).not.toBeNull();
+    // A plain fact the message states stands.
+    expect(keepPlayerOp(line("trait Eleanor: warm and kind voice; loves shopping"), `Eleanor's voice comes out from the phone - warm and kind. "She really loves shopping."`)!.args.traits).toHaveLength(2);
+    // The fold drops a bad line filed before the check, and keeps the rest of the entry.
+    const side = { [sideKey("m1", 0)]: [{ source: "user" as const, player: true, ops: [line("trait Ruth: is Xander's daughter"), line("trait Ruth: orange tabby")], hash: hash("Ruth, the orange tabby, yowls.") }] };
+    const st = new LedgerRuntime().fold([{ id: "m0", index: 0, isUser: false, content: "<ledger>\ncast: Ruth@spot\n</ledger>", swipe: 0 }, { id: "m1", index: 1, isUser: true, content: "Ruth, the orange tabby, yowls.", swipe: 0 }], { ...OPTS, playerFacts: "model" }, side).state;
+    expect(st.chars.ruth.traits?.map((t) => t.text)).toEqual(["orange tabby"]);
   });
   test("pinned truths and running bits from an aside", () => {
     const ops = playerOps("((truth: Jaime and Cersei are strictly family)) ((bit: the oil joke))", { names: [], day: 1 });

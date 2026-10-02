@@ -18,6 +18,7 @@ import { clerkRunning, unreadReplies } from "./clerk";
 import { checksFor } from "./check";
 import { chronicleBits } from "../core/chronicle";
 import { fixedTraits } from "../core/note";
+import { carried } from "../core/state";
 import { isOffPage } from "../core/offpage";
 import { seedTraitsFor } from "./traitseed";
 
@@ -210,7 +211,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       journal: c.journal.slice(-5), dead: !!c.dead, isUser: c.isUser, lastSeen: c.lastSeen,
       age: c.age ?? c.traits?.find((t) => t.kind === "age")?.text ?? loreAge(L.records, c.name, c.aliases), ageSet: !!c.age, appearance: c.appearance, edit: meta.config.castEdits?.[c.id] ?? null,
       fixed: fixedTraits(c, seed[c.id]), traits: (c.traits ?? []).map((t) => ({ kind: t.kind, text: t.text, by: t.by })),
-      held: Object.values(st.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name),
+      held: carried(st, c.id).map((i) => i.name),
       moodFresh: !!c.mood?.prev && c.mood.prev !== c.mood.name && c.mood.msg != null && c.mood.msg === st.replyDelta?.msgIndex,
       toYou: bondToUser(st, c.id),
     })),

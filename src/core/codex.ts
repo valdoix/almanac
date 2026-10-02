@@ -5,7 +5,7 @@
 
 import type { WorldState } from "./types";
 import { fmtTime, slug, uniq } from "./util";
-import { LADDER_NAMES, normFact, overlap } from "./state";
+import { carried, LADDER_NAMES, normFact, overlap } from "./state";
 import { factKind } from "./facts";
 import { traitLine } from "./traits";
 
@@ -89,7 +89,7 @@ export function buildCodex(state: WorldState, store: CodexStore): CodexRecord[] 
     if (c.tier === "spot" || c.tier === "peri") bits.push(`present${c.activity ? ` (${c.activity})` : ""}`);
     else if (c.place) bits.push(`last seen at ${c.place}`);
     if (c.mood?.name) bits.push(`mood: ${c.mood.name}`);
-    const heldItems = Object.values(state.items).filter((i) => i.holder === c.id && !i.gone).map((i) => i.name);
+    const heldItems = carried(state, c.id).map((i) => i.name);
     const links: { rel: string; to: string }[] = [];
     for (const b of Object.values(state.bonds)) {
       if (b.from === c.id) links.push({ rel: "bond", to: `char:${b.to}` });
@@ -105,7 +105,7 @@ export function buildCodex(state: WorldState, store: CodexStore): CodexRecord[] 
         tier: c.tier, place: c.place, activity: c.activity, slot: c.slot, held: heldItems,
         journal: c.journal.slice(-3), pressure: c.pressure, isUser: c.isUser,
         traits: c.traits, age: c.age, appearance: c.appearance,
-        fixed: traitLine(c.traits, { age: c.age, appearance: c.appearance }) || undefined,
+        fixed: c.always || traitLine(c.traits, { age: c.age, appearance: c.appearance }) || undefined,
       },
       links, scope: {}, provenance: { msgIndex: [c.firstSeen, c.lastSeen], source: "story" },
       salience: (c.tier === "spot" ? 0.9 : c.tier === "peri" ? 0.7 : 0.4) * recency(c.lastSeen) + (c.isUser ? 0.1 : 0),

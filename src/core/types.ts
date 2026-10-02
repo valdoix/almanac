@@ -125,6 +125,8 @@ export interface CharacterState {
   /** Set by the player on the Cast page. */
   age?: string;
   appearance?: string;
+  /** The player's own "always" line: replaces what the card, lore and story say. */
+  always?: string;
   status?: string;
   journal: { text: string; at: StoryTime | null; msgIndex: number }[];
   dead?: boolean;
@@ -335,6 +337,8 @@ export interface ItemState {
   quantity?: number;
   custody: { from?: string; to?: string; how?: string; at: StoryTime | null; msgIndex: number }[];
   gone?: boolean;
+  /** The last message a line named it (moved or not): whether it's in someone's hands this scene. */
+  lastMsg?: number;
 }
 
 export type ThreadOp = "new" | "advance" | "complicate" | "bridge" | "resolve" | "stall";
@@ -699,6 +703,11 @@ export interface CastEdit {
   name?: string;
   age?: string;
   appearance?: string;
+  /** The "always" line as the player wrote it (empty: back to what the card, lore and story say). */
+  always?: string;
+  /** Aliases the player took away, and ones they gave. */
+  dropAliases?: string[];
+  addAliases?: string[];
   /** Added by the player: the message they join the story at. */
   added?: number;
 }
