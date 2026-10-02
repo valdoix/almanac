@@ -225,7 +225,7 @@ export function expireArrivals(arrivals: Arrival[], now: number | null): { id: s
     if (a.untilAbs == null || now <= a.untilAbs) continue;
     if (a.kind === "signal") {
       // An unanswered call is a missed call; a letter waits.
-      const missed = a.medium === "phone" ? `A missed call and a message from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
+      const missed = missedCall(a);
       Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, untilAbs: now + 2880, why: UNANSWERED });
       continue;
     }
@@ -237,6 +237,27 @@ export function expireArrivals(arrivals: Arrival[], now: number | null): { id: s
 }
 
 const UNANSWERED = "the call went unanswered";
+
+/** What an unanswered phone call leaves: "A missed call from Jonathan, and a message: …". A letter just waits. */
+function missedCall(a: Arrival, said = a.text.replace(/^a call from [^:]+:\s*/i, "")): string {
+  return a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}, and a message: ${said}` : a.text;
+}
+
+/**
+ * A beat told in the story's words reaches the scene in them: the call, the message a missed call
+ * left, the trace or the news its arrival carried. `draft` is the engine's wording it replaces.
+ */
+export function retellArrival(a: Arrival, draft: string, told: string, arrival?: string): void {
+  if (a.status === "used") return;
+  if (a.kind === "trace" && a.why === UNANSWERED) {
+    // The message says what happened; the model's arrival describes a phone ringing, which it didn't.
+    a.text = a.template = missedCall(a, told);
+    return;
+  }
+  if (arrival) a.text = arrival;
+  else if (a.template?.includes(draft)) a.text = a.template.replace(draft, told);
+  else if (a.kind === "signal") a.text = `${a.text.split(/:\s/)[0]}: ${told}`;
+}
 
 /** A call, or the message an unanswered call left: what a person sends to someone, not news found about them. */
 const isMessage = (a: Arrival) => a.kind === "signal" || (a.kind === "trace" && a.why === UNANSWERED);
@@ -269,6 +290,12 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
   const onstage = r.actors.filter((a) => a.ring === "onstage");
   const present = (name?: string) => !!name && onstage.some((a) => a.names.some((n) => n.toLowerCase() === name.toLowerCase()) || a.name.toLowerCase() === name.toLowerCase());
   for (const a of inp.arrivals) Object.assign(a, upgradeArrival(a));
+  // A call still in the engine's draft though its step was told since (before 1.17.4, a call kept its draft).
+  for (const a of inp.arrivals) {
+    if ((a.status !== "pending" && a.status !== "offered") || !isMessage(a) || !a.tick || !a.arc || a.text !== a.template) continue;
+    const b = st.arcs?.[a.arc]?.beats.find((x) => x.tick === a.tick && x.told === "model");
+    if (b && !a.text.includes(b.text)) retellArrival(a, "\u0000", b.text);
+  }
   const expired = [...expireArrivals(inp.arrivals, inp.now), ...collapseMessages(inp.arrivals)];
   // A call or a letter is for someone. One for the player from a lead who doesn't know them (made
   // before the engine checked) is gone; one for someone else waits until they're in the scene.
@@ -417,7 +444,7 @@ export function confirmArrivals(arrivals: Arrival[], o: { prose: string; roster:
     } else if ((a.offered?.length ?? 0) >= (a.kind === "trace" && isMessage(a) ? MESSAGE_OFFERS : OFFERS[a.kind ?? "ambient"])) {
       if (a.kind === "signal") {
         // An unanswered call becomes a message waiting.
-        const missed = a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}, and a message: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
+        const missed = missedCall(a);
         Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, status: "pending", offered: [], untilAbs: Math.max(a.untilAbs ?? 0, (a.atAbs ?? 0) + 2880), why: UNANSWERED });
         continue;
       }

@@ -8,7 +8,7 @@ import { buildRoster, readStanding, storyTown } from "../src/core/elsewhere/rost
 import { spreadNews } from "../src/core/elsewhere/news";
 import { asWant, gate, seedCandidates, threadLatest } from "../src/core/elsewhere/arcs";
 import { authorArc, tick } from "../src/core/elsewhere/storyteller";
-import { collapseMessages, confirmArrivals, coverage, elsewhereLane, expireArrivals, routeFor, soughtOf, upgradeArrival, type Arrival } from "../src/core/elsewhere/crossings";
+import { collapseMessages, confirmArrivals, coverage, elsewhereLane, expireArrivals, retellArrival, routeFor, soughtOf, upgradeArrival, type Arrival } from "../src/core/elsewhere/crossings";
 import { validateProfile, validateTold } from "../src/core/elsewhere/telling";
 import { beatTemplate, endTemplate, kindForStory, kindFromText, stageOf, wantFromStory } from "../src/core/elsewhere/grammar";
 import { rng } from "../src/core/util";
@@ -369,6 +369,21 @@ describe("the telling's validator", () => {
     const lead = { ...card, leadText: "Rupert Giles, a Watcher — Oxford man, ex-Ripper, friend of Ethan Rayne." };
     expect(validateTold(lead, { result: "cost", text: "Giles called in a favour from an Oxford archive." }, ctx).rejected).toBeUndefined();
     expect(validateTold(lead, { result: "cost", text: "Giles called in a favour from a Harvard archive." }, ctx).rejected).toContain("Harvard");
+  });
+  test("a secret's word the card itself says isn't the secret", () => {
+    const own = { ...card, premise: "Giles is reading Heaven's Gate records for Buffy" };
+    expect(validateTold(own, { result: "cost", text: "Giles found Heaven's Gate records in an archive." }, ctx).rejected).toBeUndefined();
+  });
+});
+
+describe("a told step's arrival", () => {
+  test("a call and a missed call's message carry the told words, not the draft", () => {
+    const call = { id: "c", msgId: "m", swipe: 0, kind: "signal" as const, medium: "phone", lead: "Callum", arc: "x", status: "pending" as const, offered: [], text: "A call from Callum: Callum set out to keep playing. It left a favour owed.", template: "A call from Callum: Callum set out to keep playing. It left a favour owed." };
+    retellArrival(call, "Callum set out to keep playing. It left a favour owed.", "Clara interrupted Callum's practice; he owes her a favour.");
+    expect(call.text).toBe("A call from Callum: Clara interrupted Callum's practice; he owes her a favour.");
+    const missed = { ...call, id: "d", kind: "trace" as const, why: "the call went unanswered", text: "A missed call from Callum, and a message: draft", template: "A missed call from Callum, and a message: draft" };
+    retellArrival(missed, "nope", "Clara interrupted Callum's practice.", "Gabriel's phone rings.");
+    expect(missed.text).toBe("A missed call from Callum, and a message: Clara interrupted Callum's practice.");
   });
 });
 

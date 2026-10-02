@@ -143,7 +143,9 @@ export function validateTold(c: BeatCard, raw: { text?: string; result?: string;
     return new RegExp(`\\b(?:(?:found|finds)(?! no\\b| nothing\\b| neither\\b| only\\b)|located|locates|tracked (?:\\w+ )?down|caught up with|learned where|found out where|knows where|knew where)\\b[^.;]{0,40}?\\b(?:${names.join("|")})\\b|\\btracked (?:${names.join("|")}) down\\b`, "i").test(`${text} ${arrival ?? ""}`);
   });
   if (finds) return fail(`finds ${finds} before the search ends`);
-  const hits = offPageHits(`${text} ${arrival ?? ""}`, ctx.offPage);
+  // A secret's word the card itself says ("Joyce" in "the audit of Joyce Summers' accounts") isn't the secret.
+  const own = [c.premise, c.want, c.fear, c.template, ...(c.established ?? [])].join(" ").toLowerCase();
+  const hits = offPageHits(`${text} ${arrival ?? ""}`, ctx.offPage).filter((h) => !new RegExp(`(?<![\\p{L}\\p{N}])${h.word.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "u").test(own));
   if (hits.length) return fail(`names an off-page secret (${hits[0].word})`);
   const n = normFact(text);
   if (ctx.recent.some((r) => overlap(n, normFact(r)) > 0.6)) return fail("repeats an earlier beat");

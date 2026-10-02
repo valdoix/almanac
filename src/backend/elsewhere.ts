@@ -11,7 +11,7 @@ import { extractJson } from "../core/prompts";
 import { NOT_A_PERSON } from "../core/state";
 import type { ArcState, ParsedOp, Settings, WorldState } from "../core/types";
 import { absMinutes, estTokens, hash, plainProse } from "../core/util";
-import { callFits, collapseMessages, confirmArrivals, elsewhereLane, upgradeArrival, type Arrival } from "../core/elsewhere/crossings";
+import { callFits, collapseMessages, confirmArrivals, elsewhereLane, retellArrival, upgradeArrival, type Arrival } from "../core/elsewhere/crossings";
 import { buildRoster, type Actor, type Profile, type Roster } from "../core/elsewhere/roster";
 import { isLight } from "../core/elsewhere/arcs";
 import { authorArc, cardForBeat, tick, type BeatCard, type Mode, type Proposal } from "../core/elsewhere/storyteller";
@@ -332,9 +332,7 @@ export async function tell(chatId: string, tickId: string, userId?: string): Pro
       }
       lines[card.line] = setField(setField(lines[card.line], "told", "model"), "text", v.text);
       if (v.lines.length) extra[card.line] = v.lines;
-      if (v.arrival) for (const a of list) if (a.tick === tickId && a.arc === card.arcId && a.status !== "used") a.text = v.arrival;
-      // The beat's own wording rides the carrier and the trace when the model gave no arrival.
-      if (!v.arrival) for (const a of list) if (a.tick === tickId && a.arc === card.arcId && a.template && (a.kind === "trace" || a.kind === "ambient")) a.text = a.template.replace(card.template, v.text);
+      for (const a of list) if (a.tick === tickId && a.arc === card.arcId) retellArrival(a, card.template, v.text, v.arrival);
     }
     for (const pr of res?.profiles ?? []) {
       const who = ctx.profile?.find((x) => x.key === pr?.key);
@@ -421,9 +419,7 @@ export async function retellBeat(chatId: string, arcId: string, atAbs: number, t
       else delete r2.extra[kept.line];
     }
     for (const a of arrivalsOf(fresh.meta)) {
-      if (a.tick !== beat.tick || a.arc !== arcId || a.status === "used") continue;
-      if (v.arrival) a.text = v.arrival;
-      else if (a.template && (a.kind === "trace" || a.kind === "ambient")) a.text = a.template.replace(card.template, told);
+      if (a.tick === beat.tick && a.arc === arcId) retellArrival(a, card.template, told, v.arrival);
     }
     save(chatId, "side", userId);
     save(chatId, "meta", userId);

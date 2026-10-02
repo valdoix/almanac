@@ -2487,7 +2487,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.17.3";
+var VERSION = "1.17.4";
 
 // src/core/facts.ts
 function stem(w) {
@@ -12504,7 +12504,7 @@ function expireArrivals(arrivals, now) {
     if (a.untilAbs == null || now <= a.untilAbs)
       continue;
     if (a.kind === "signal") {
-      const missed = a.medium === "phone" ? `A missed call and a message from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
+      const missed = missedCall(a);
       Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, untilAbs: now + 2880, why: UNANSWERED });
       continue;
     }
@@ -12513,6 +12513,23 @@ function expireArrivals(arrivals, now) {
     out.push({ id: a.id, why: a.why });
   }
   return out;
+}
+function missedCall(a, said = a.text.replace(/^a call from [^:]+:\s*/i, "")) {
+  return a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}, and a message: ${said}` : a.text;
+}
+function retellArrival(a, draft, told, arrival) {
+  if (a.status === "used")
+    return;
+  if (a.kind === "trace" && a.why === UNANSWERED) {
+    a.text = a.template = missedCall(a, told);
+    return;
+  }
+  if (arrival)
+    a.text = arrival;
+  else if (a.template?.includes(draft))
+    a.text = a.template.replace(draft, told);
+  else if (a.kind === "signal")
+    a.text = `${a.text.split(/:\s/)[0]}: ${told}`;
 }
 function collapseMessages(arrivals) {
   const out = [];
@@ -12540,6 +12557,13 @@ function elsewhereLane(inp) {
   const present = (name) => !!name && onstage.some((a) => a.names.some((n) => n.toLowerCase() === name.toLowerCase()) || a.name.toLowerCase() === name.toLowerCase());
   for (const a of inp.arrivals)
     Object.assign(a, upgradeArrival(a));
+  for (const a of inp.arrivals) {
+    if (a.status !== "pending" && a.status !== "offered" || !isMessage(a) || !a.tick || !a.arc || a.text !== a.template)
+      continue;
+    const b = st.arcs?.[a.arc]?.beats.find((x) => x.tick === a.tick && x.told === "model");
+    if (b && !a.text.includes(b.text))
+      retellArrival(a, "\x00", b.text);
+  }
   const expired = [...expireArrivals(inp.arrivals, inp.now), ...collapseMessages(inp.arrivals)];
   const forHere = (a) => {
     if (!callFits(a, st, r)) {
@@ -12690,7 +12714,7 @@ function confirmArrivals(arrivals, o) {
       used.push(a.id);
     } else if ((a.offered?.length ?? 0) >= (a.kind === "trace" && isMessage(a) ? MESSAGE_OFFERS : OFFERS[a.kind ?? "ambient"])) {
       if (a.kind === "signal") {
-        const missed = a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}, and a message: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
+        const missed = missedCall(a);
         Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, status: "pending", offered: [], untilAbs: Math.max(a.untilAbs ?? 0, (a.atAbs ?? 0) + 2880), why: UNANSWERED });
         continue;
       }
@@ -13852,7 +13876,8 @@ function validateTold(c, raw, ctx) {
   });
   if (finds)
     return fail(`finds ${finds} before the search ends`);
-  const hits = offPageHits(`${text} ${arrival ?? ""}`, ctx.offPage);
+  const own = [c.premise, c.want, c.fear, c.template, ...c.established ?? []].join(" ").toLowerCase();
+  const hits = offPageHits(`${text} ${arrival ?? ""}`, ctx.offPage).filter((h) => !new RegExp(`(?<![\\p{L}\\p{N}])${h.word.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "u").test(own));
   if (hits.length)
     return fail(`names an off-page secret (${hits[0].word})`);
   const n = normFact(text);
@@ -16958,16 +16983,9 @@ async function tell(chatId, tickId, userId) {
       lines[card.line] = setField(setField(lines[card.line], "told", "model"), "text", v.text);
       if (v.lines.length)
         extra[card.line] = v.lines;
-      if (v.arrival) {
-        for (const a of list)
-          if (a.tick === tickId && a.arc === card.arcId && a.status !== "used")
-            a.text = v.arrival;
-      }
-      if (!v.arrival) {
-        for (const a of list)
-          if (a.tick === tickId && a.arc === card.arcId && a.template && (a.kind === "trace" || a.kind === "ambient"))
-            a.text = a.template.replace(card.template, v.text);
-      }
+      for (const a of list)
+        if (a.tick === tickId && a.arc === card.arcId)
+          retellArrival(a, card.template, v.text, v.arrival);
     }
     for (const pr of res?.profiles ?? []) {
       const who = ctx.profile?.find((x) => x.key === pr?.key);
@@ -17054,12 +17072,8 @@ async function retellBeat(chatId, arcId, atAbs, tickId, userId) {
         delete r2.extra[kept.line];
     }
     for (const a of arrivalsOf(fresh.meta)) {
-      if (a.tick !== beat.tick || a.arc !== arcId || a.status === "used")
-        continue;
-      if (v.arrival)
-        a.text = v.arrival;
-      else if (a.template && (a.kind === "trace" || a.kind === "ambient"))
-        a.text = a.template.replace(card.template, told);
+      if (a.tick === beat.tick && a.arc === arcId)
+        retellArrival(a, card.template, told, v.arrival);
     }
     save(chatId, "side", userId);
     save(chatId, "meta", userId);

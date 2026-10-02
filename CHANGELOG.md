@@ -4,6 +4,10 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.17.4 (2026-10-02)
+
+**Elsewhere: calls say what happened.** A call kept the engine's draft ("Callum set out to keep playing the piano. It left a favour owed.") even after the model told the step, because only news and traces took the told words; a call and the message a missed call leaves now do too, at telling and at a retell, and messages already waiting are repaired from their told step. The telling was also thrown out when it used a word of an off-page secret that the subplot itself says ("Joyce" in "the audit of Joyce Summers' accounts", against the secret about Joyce's letter); a word the card already says no longer counts. Retell a step whose telling was set aside that way to get its words.
+
 ## 1.17.3 (2026-10-02)
 
 **Elsewhere: nothing reads as delivered until a reply shows it.** A subplot's card listed waiting calls and messages under "reaches you", so a call the model never rendered (and the "missed call" it turned into) looked like it had happened. Waiting items now sit under **on its way** ("Not in the story yet"), and a separate **reached you** row lists only what a reply took up. One subplot also leaves one message waiting: a later call or message from the same person replaces an older one that hasn't reached the page yet, so they no longer stack.
