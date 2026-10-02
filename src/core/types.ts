@@ -605,6 +605,8 @@ export interface Settings {
   replyCheckConnection: string;
   /** Read facts the player states in their own messages (dates, looks, where things are). */
   playerFacts: "off" | "rules" | "model";
+  /** Mark who speaks the lines a reply left without [spk] marks (a quiet call after the reply). */
+  speakerRead: boolean;
   /** Secrets stay off the page (narration, thoughts, summaries) until they come out. */
   secretsOffPage: boolean;
   pressures: boolean;
@@ -666,6 +668,7 @@ export const DEFAULT_SETTINGS: Settings = {
   replyCheck: "rules",
   replyCheckConnection: "",
   playerFacts: "rules",
+  speakerRead: true,
   secretsOffPage: true,
   pressures: true,
   chekhov: true,

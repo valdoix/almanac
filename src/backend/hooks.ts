@@ -5,6 +5,7 @@
 import type { InterceptorResultDTO, LlmMessageDTO } from "lumiverse-spindle-types";
 import { splice, validateUnits } from "../core/chronicle";
 import { extractLedgerBlock, fixSpeech, rewriteKnowledgeLines } from "../core/dsl";
+import { readSpeakers } from "./speakers";
 import { renderDrawer, plateSuffix, fillHeader } from "../core/render";
 import { drawPlates } from "../core/plate";
 import { sidecarPrompt } from "../core/prompts";
@@ -360,6 +361,9 @@ export function registerRenderProcessor() {
       const files = await loadChat(ctx.chatId, ctx.userId);
       const settings = await loadSettings(ctx.userId);
       if (!isEnabled(files.meta, settings)) return;
+      // The latest reply, written before the speaker reader ran (or while it was off): its bare lines are marked
+      // in the background, and the edit redraws it.
+      if (settings.speakerRead !== false && ledgerFor(ctx.chatId, ctx.userId).lastAssistant()?.id === ctx.messageId) void readSpeakers(ctx.chatId, ctx.messageId, ctx.userId);
       // `Name#N|tone: "…"`, a mark after its quote or a garbled closer → a proper speaker mark, so the voice card draws.
       const fixed = labelled ? fixSpeech(ctx.content) : ctx.content;
       if (!/<ledger\b|🗓/u.test(fixed)) return fixed !== ctx.content ? { content: fixed } : undefined;

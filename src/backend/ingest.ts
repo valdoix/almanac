@@ -27,6 +27,7 @@ import { clearRenderCache } from "./hooks";
 import { scheduleClerk } from "./clerk";
 import { runCheck } from "./check";
 import { readPlayerFacts } from "./playerfacts";
+import { readSpeakers } from "./speakers";
 import { confirmElsewhere, runElsewhere } from "./elsewhere";
 
 const busy = new Set<string>();
@@ -64,6 +65,8 @@ export async function onReply(chatId: string, messageId: string | undefined, con
     if (msg && !msg.isUser) confirmElsewhere(meta, { state: L.state, records: L.records, userName: L.names.user, prose: msg.content, settings });
     save(chatId, "meta", userId);
   });
+  // Lines the reply left without speaker marks get them first: the jobs below read the marked text.
+  if (replyId && (await readSpeakers(chatId, replyId, userId))) await serial(`chat:${chatId}`, () => ledgerFor(chatId, userId).refresh());
   // Elsewhere: the world off the page moves when story time does (fast; the telling runs in the background).
   await runElsewhere(chatId, userId).catch((err) => noteProblem(chatId, userId, "Elsewhere", err));
   // The knowledge clerk reads the reply in the background; the next plan waits for it briefly.

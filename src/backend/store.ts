@@ -121,6 +121,8 @@ export interface ChatMeta {
   checks?: Record<string, { at: number; hash: string; issues: CheckIssue[]; model?: boolean }>;
   /** Player messages the player-facts reader has read (msgId:swipe → the text's hash). */
   playerRead?: Record<string, string>;
+  /** Replies whose bare lines the speaker reader has marked (msgId:swipe → the hash of the text before and after). */
+  speakersRead?: Record<string, string[]>;
   telemetry?: CraftReport | null;
   greetedReturn?: number;
   /** Prompts in a row without the ALMANAC charter or handshake (auto mode disarms after a few). */

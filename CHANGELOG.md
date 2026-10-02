@@ -4,6 +4,14 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.19.3 (2026-10-02)
+
+**The extension marks who speaks when the model doesn't.** Some models, GLM among them, drop the speaker marks for most of a reply even though the prompt asks for them. Without marks the page draws no voice cards. After each reply, any spoken lines left without a mark go to a quiet model call (the clerk's connection, or the summariser's). The call works out who speaks each line from the narration around it ("she says", "Dawn points her fork"), the lines that are already marked, and the flow of the conversation. The marks are then written into the message, in the reply's own names and voice numbers, and the reply redraws with voice cards. It also adds the voice number to the reply's own marks that left it out (`[spk=Dawn]`), so their colours match.
+- Only marks are added. The rewrite is refused if any other part of the text would change, or if the message was swiped or edited while the call ran.
+- A line the reader can't place, and quoted words nobody says aloud (a sign, a text message), are left as they are.
+- The latest reply of a chat is also read when it is shown, so a reply written before this update gets its marks.
+- Switch: Settings › Core › "Mark who speaks the lines a reply left without speaker marks".
+
 ## 1.19.2 — preset 1.1.1 (2026-10-02)
 
 **Voice cards draw when the model misplaces the speaker mark.** Some replies put the mark after the words (`"Words."[spk=Dawn#2][/spk]`), which drew an empty badge after a line in the plain text colour. Others garbled the closer (`[/spkbuffy]`, `[/spspk]`, `[/sp]`) or left a `Buffy#1:` label partway through a line. The extension now repairs these when the reply is shown, in the prompt history, and when it reads who said what:
