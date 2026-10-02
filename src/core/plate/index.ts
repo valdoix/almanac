@@ -15,6 +15,7 @@
 import { kindChunks, KIND_WORDS, ROOM_WORDS } from "./kinds";
 import { FX, GENRE_FX, pickFx } from "./fx";
 import { PLATE_CSS, PLATE_FIND, minCss } from "./style";
+import { SLOTS } from "./rooms";
 
 export { PLATE_FIND, PLATE_CSS, minCss };
 export { kindChunks };
@@ -111,9 +112,9 @@ export function drawPlate(h: PlateHeader, genre?: string, as?: string): string {
   const sun = h.rise && h.set ? `--rise:calc(${h.rise.replace(":", " + ")} / 60);--set:calc(${h.set.replace(":", " + ")} / 60);` : "";
   const style = `--h:calc(${h.hour} + ${h.minute} / 60);${sun}--ph:${moonShadow(h.moon ?? "")};--wd:${wind ? WIND_DEG[wind] : 90};${tc ? `--t:clamp(0,calc((${tc} + 10) / 50),1);` : ""}--ox:${(sd * 37) % 240 - 120}px;--kbo:${(sd * 29) % 100}%`;
   const attrs = {
-    k: `${kind}-${v}`, place: kind, band, wx, int: intensity(h.cond), season: season(h.date), genre: g,
+    k: `${kind}-${v}`, place: kind, era, band, wx, int: intensity(h.cond), season: season(h.date), genre: g,
     flip: last.length % 2, tint: Math.floor(sd / 4) % 5, frame: Math.floor(sd / 3) % 5,
-    lay: (h.title.length * 3 + vowels(h.title, /[^aeiou]/gi)) % 5, fx,
+    lay: (h.title.length * 3 + vowels(h.title, /[^aeiou]/gi)) % 8, fx,
   };
   const css = BASE + art(attrs.k)
     + (FX[fx] ? minCss(FX[fx].replaceAll("&", `[data-fx=${fx}]`)) : "")
@@ -122,6 +123,7 @@ export function drawPlate(h: PlateHeader, genre?: string, as?: string): string {
   const segs = h.place.split(/[ \t]*›[ \t]*/).filter((s) => s.length).map(esc);
   const crumb = segs.length > 1 ? `${segs.slice(0, -1).join(" <span>›</span> ")} <span>›</span> <b>${segs[segs.length - 1]}</b>` : segs.join("");
   const day = /^\s*((?:Day|Dia|Día|Jour|Tag)\s*\d+)/i.exec(h.date)?.[1] ?? h.date;
+  const dayN = /^\s*(?:Day|Dia|Día|Jour|Tag)\s*(\d+)/i.exec(h.date)?.[1] ?? "";
   const kicker = esc(day) + (lead ? ` · ${esc(lead.replace(/_/g, " "))}` : "");
   const dateOnly = h.date.replace(/^\s*(?:(?:Day|Dia|Día|Jour|Tag)\s*\d+\s*[·•|,]\s*)?/i, "");
   const pills = esc(h.cond)
@@ -134,10 +136,11 @@ export function drawPlate(h: PlateHeader, genre?: string, as?: string): string {
     + `<div class="scene"><div class="l sky"></div><div class="l wash"></div><div class="l glow"></div><div class="l stars"></div><div class="l fx"></div><div class="l fx2"></div><div class="l rays"></div><div class="l sun"></div><div class="l moon"></div><div class="l clouds"></div><div class="l clouds2"></div><div class="l gx"></div><div class="l kx2"></div><div class="l ground"></div>`
     + `<div class="far land"></div><div class="l water"></div><div class="l glint"></div><div class="l mglint"></div><div class="refl land"></div><div class="mid land"></div><div class="lit land"></div><div class="l kx"></div><div class="near land"></div><div class="fg land"></div>`
     + `<div class="l fog"></div><div class="l windl"></div><div class="l heat"></div><div class="l rain"></div><div class="l rain r2"></div><div class="l snow"></div><div class="l snow big"></div><div class="l flash"></div></div>`
-    + `<div class="l room wall"></div><div class="l room walldim"></div><div class="l room wain"></div><div class="l room lamp"></div><div class="wf"></div><div class="room ra"></div><div class="room rb"></div><div class="room rc"></div><div class="room rd"></div><div class="l room spill"></div><div class="l room motes"></div><div class="l room roomflash"></div>`
+    + (kind.startsWith("r_") ? `<div class="l room wall"></div><div class="l room walldim"></div><div class="l room wain"></div><div class="l room lamp"></div><div class="beam"></div><div class="wf"></div><div class="sill"></div><div class="room ra"></div><div class="room rb"></div><div class="room rc"></div><div class="room rd"></div>`
+      + `<div class="room set">${"<i></i>".repeat(SLOTS.i)}${"<b></b>".repeat(SLOTS.b)}</div><div class="l room spill"></div><div class="l room motes"></div><div class="l room roomflash"></div><div class="l room vig"></div>` : "")
     + `<div class="l scrim"></div><div class="l grade"></div><div class="l grain"></div><div class="l frame"></div>`
     + `<div class="top"><span class="crumb">${crumb}</span><span class="dial"><i class="mk"></i><span>${clock}</span></span></div>`
-    + `<div class="title"><span class="kicker">${kicker}</span><h3 class="ttl">${esc(h.title)}</h3></div>`
+    + `<div class="title" data-n="${dayN}"><span class="kicker">${kicker}</span><h3 class="ttl">${esc(h.title)}</h3></div>`
     + `<div class="strip"><span class="gl">🗓 ${esc(dateOnly)}</span><span class="gl">${h.glyph ? `${h.glyph} ` : ""}${pills}</span>${h.rise ? `<span class="gl">☀ ${h.rise} – ${h.set}</span>` : ""}${h.moon ? `<span class="gl"><i class="mo"></i>${esc(h.moon)}</span>` : ""}</div></div>`;
 }
 

@@ -40,6 +40,22 @@ describe("scene plate: places", () => {
     ["Ryokan › hot spring", "modern", "r_bath"],
     ["the war camp › command tent", "old", "r_tent"],
     ["somewhere › a room", "future", "r_lab"],
+    ["Mount Wilson › the observatory dome", "modern", "r_observatory"],
+    ["Monterey Bay Aquarium › the kelp tank", "modern", "r_aquarium"],
+    ["Galaxy Arcade › back row", "modern", "r_arcade"],
+    ["Suds & Duds laundromat", "modern", "r_laundromat"],
+    ["Route 66 › Rosie's Diner", "modern", "r_diner"],
+    ["Ironvale › the old forge", "old", "r_forge"],
+    ["The Golden Nugget › casino floor", "modern", "r_casino"],
+    ["Ravenhill › the wizard's tower study", "old", "r_alchemy"],
+    ["The Louvre › Denon wing gallery", "modern", "r_gallery"],
+    ["Flight 815 › first class", "modern", "r_plane"],
+    ["The Nautilus › submarine control room", "old", "r_submarine"],
+    ["Miller farm › the stables", "old", "r_stable"],
+    ["Backyard › the treehouse", "modern", "r_treehouse"],
+    ["KXLU › recording studio", "modern", "r_studio"],
+    ["The Plaza › market stall", "modern", "r_shop"],
+    ["Hargreave Manor › the flight of stairs", "old", "r_hall"],
   ];
   for (const [place, era, kind] of cases) test(`${place} → ${kind}`, () => expect(placeKind(place, era)).toBe(kind));
 
@@ -100,6 +116,25 @@ describe("scene plate: drawing", () => {
     expect(out).toContain("--rise:calc(06 + 42 / 60);--set:calc(18 + 10 / 60)");
     expect(out).toContain("☀ 06:42 – 18:10");
     expect(out).toContain("--ph:-8px");
+  });
+
+  test("a room plate stays light and fits the plate's slots", () => {
+    for (const c of kindChunks().filter((c) => c.key.startsWith("r_"))) {
+      const out = drawPlate({ date: "Day 1", hour: 21, minute: "00", glyph: "🌧", cond: "rain", place: "x", title: "T" }, "drama", c.key);
+      expect(out.length).toBeLessThan(80_000);
+      expect(new Set(out.match(/\[data-k=[a-z_]+-\d\]/g)).size).toBe(1);
+      expect(out).toContain('<div class="room set"><i></i>');
+    }
+  });
+
+  test("outdoor plates carry no room markup", () => {
+    const out = drawPlate({ date: "Day 1", hour: 12, minute: "00", glyph: "☀", cond: "clear", place: "Greywood › the old forest", title: "T" }, "drama");
+    expect(out).not.toContain("room set");
+  });
+
+  test("the day number reaches the title (for the numeral layout)", () => {
+    const out = drawPlate({ date: "Day 12 · 3 October 1888", hour: 12, minute: "00", glyph: "☀", cond: "clear", place: "x", title: "T" }, "drama");
+    expect(out).toContain('<div class="title" data-n="12">');
   });
 
   test("a plate stays light: one place's art, not every place's", () => {

@@ -134,21 +134,41 @@ export const PLATE_CSS = raw`
 .p[data-wx=wind] .windl,.p[data-wx=storm] .windl{opacity:.8}
 .heat{opacity:0;background:linear-gradient(0deg,rgba(255,160,80,.3),transparent 55%)}
 .p[data-wx=heat] .heat{opacity:1}
-.room,.wf{display:none}
-.p[data-place^=r_]{--g:0px}
-.p[data-place^=r_] :is(.room,.wf){display:block}
+.room,.wf,.beam,.sill{display:none}
+.p[data-place^=r_]{--g:0px;--fy:12%;min-height:300px}
+.p[data-place^=r_] :is(.room,.wf,.beam,.sill){display:block}
 .p[data-place^=r_] .scene{z-index:1;-webkit-mask:var(--mwin) 0 0/100% 100% no-repeat;mask:var(--mwin) 0 0/100% 100% no-repeat}
 .p[data-place^=r_] .scene:before{content:"";position:absolute;inset:0;z-index:3;background:linear-gradient(125deg,transparent 30%,rgba(255,255,255,.1) 42%,transparent 52%)}
 .wf{position:absolute;z-index:1;pointer-events:none;-webkit-mask:var(--mfr) 0 0/100% 100% no-repeat;mask:var(--mfr) 0 0/100% 100% no-repeat;background:linear-gradient(180deg,#6a4a30,#2a1a10);filter:drop-shadow(0 6px 10px rgba(0,0,0,.5))}
-.p[data-place^=r_] :is(.ra,.rb,.rc,.rd){z-index:1}
+.beam,.sill{position:absolute;z-index:1;pointer-events:none}
+.sill:before{content:"";position:absolute;left:-6%;right:-6%;top:100%;height:9px;margin-top:-4px;border-radius:2px;background:linear-gradient(180deg,#b88a5e,#6a4428 70%,#3a2414);box-shadow:0 7px 10px -3px rgba(0,0,0,.55)}
+.sill:after{content:"";position:absolute;inset:-9% -24% -12% -24%;filter:drop-shadow(0 6px 8px rgba(0,0,0,.35))}
+.beam:before,.beam:after{content:"";position:absolute;left:4%;right:4%;top:40%;height:360%;transform-origin:50% 0;transform:skewX(calc((var(--p) - .5) * -60deg));filter:blur(6px);mix-blend-mode:screen;-webkit-mask:linear-gradient(180deg,#000,transparent 92%);mask:linear-gradient(180deg,#000,transparent 92%)}
+.beam:before{background:linear-gradient(90deg,transparent,rgba(255,240,205,.34) 20% 80%,transparent);opacity:calc(var(--sun) * (1 - var(--lit)))}
+.beam:after{transform:skewX(calc((var(--q) - .5) * -60deg));background:linear-gradient(90deg,transparent,rgba(170,190,255,.22) 20% 80%,transparent);opacity:calc(var(--mvis) * var(--lit))}
+.p:is([data-wx=overcast],[data-wx=rain],[data-wx=storm],[data-wx=fog],[data-wx=snow],[data-wx=sleet],[data-wx=showers]) .beam{opacity:.25}
 .ra,.rb,.rc,.rd{position:absolute;pointer-events:none}
+.p[data-place^=r_] :is(.ra,.rb,.rc,.rd,.set,.vig,.scrim,.grade,.grain){z-index:1}
+.set{position:absolute;inset:0;pointer-events:none}
+.set i,.set b{display:none;position:absolute;font-style:normal}
+.set i{background:var(--u) 0 0/100% 100% no-repeat}
+.set i:before{content:"";position:absolute;inset:0;background:#0b0912;opacity:calc(var(--lit) * .42);-webkit-mask:var(--u) 0 0/100% 100% no-repeat;mask:var(--u) 0 0/100% 100% no-repeat}
+.set i:after{content:"";position:absolute;pointer-events:none}
+.set b{border-radius:50%;translate:-50% -50%;mix-blend-mode:screen;opacity:calc(.3 + var(--lit) * .7)}
 .wall{background:linear-gradient(180deg,#3d2819,#24170f)}
-.wain{top:auto;height:20%;background:linear-gradient(#2c1b10,#1a100a)}
+.wain{top:auto;height:20%;background:linear-gradient(#2c1b10,#1a100a);box-shadow:0 -1px 0 rgba(255,255,255,.07),0 -12px 22px -10px rgba(0,0,0,.6)}
 .lamp{opacity:calc(.35 + var(--lit) * .65);background:radial-gradient(40% 70% at 10% 96%,rgba(255,170,80,.6),transparent 70%)}
 .spill{z-index:1;opacity:calc((1 - var(--lit)) * .9);background:radial-gradient(30% 70% at var(--wx,70%) 40%,rgba(255,244,220,.16),transparent 70%)}
 .p[data-place^=r_] .walldim{opacity:calc(var(--lit) * .35);background:#05060c}
 .motes{z-index:1;background:radial-gradient(1.5px 1.5px at 20% 70%,rgba(255,220,170,.8),transparent),radial-gradient(1px 1px at 35% 40%,rgba(255,220,170,.7),transparent),radial-gradient(1.5px 1.5px at 12% 50%,rgba(255,220,170,.6),transparent);background-size:220px 180px}
 .roomflash{z-index:1;opacity:0;background:radial-gradient(60% 90% at var(--wx,70%) 32%,rgba(220,232,255,.3),transparent 70%)}
+.vig{background:radial-gradient(130% 105% at 50% 42%,transparent 52%,rgba(4,3,10,calc(.32 + var(--lit) * .28))),linear-gradient(180deg,rgba(4,3,10,.32),transparent 15%)}
+.p[data-place^=r_]:is([data-wx=rain],[data-wx=showers],[data-wx=storm],[data-wx=sleet]) .scene .heat{opacity:1;background:radial-gradient(1.4px 2.2px at 20% 30%,rgba(235,244,255,.85),transparent),radial-gradient(1.8px 2.8px at 70% 60%,rgba(235,244,255,.8),transparent),radial-gradient(1.2px 1.8px at 45% 80%,rgba(235,244,255,.7),transparent),radial-gradient(2.2px 3.2px at 85% 20%,rgba(235,244,255,.75),transparent),linear-gradient(180deg,rgba(150,170,200,.12),rgba(150,170,200,.22));background-size:37px 41px,53px 61px,29px 47px,71px 83px,100% 100%}
+.p[data-place^=r_]:is([data-wx=snow],[data-wx=sleet]) .scene .heat{opacity:1;background:radial-gradient(55% 40% at 0 100%,rgba(240,248,255,.75),transparent 70%),radial-gradient(55% 40% at 100% 100%,rgba(240,248,255,.75),transparent 70%),radial-gradient(40% 30% at 0 0,rgba(240,248,255,.55),transparent 70%),radial-gradient(40% 30% at 100% 0,rgba(240,248,255,.55),transparent 70%)}
+.p[data-place^=r_] .scrim{background:linear-gradient(0deg,rgba(6,8,18,.55),rgba(6,8,18,.08) 40%,transparent 60%)}
+.p[data-place^=r_][data-lay="3"] .title{max-width:min(max(58%,250px),420px);background:rgba(8,10,22,.42);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.p[data-place^=r_] .strip{background:linear-gradient(0deg,rgba(6,8,18,.55),transparent);border-top:0;-webkit-backdrop-filter:none;backdrop-filter:none}
+.p[data-place^=r_] .gl{background:rgba(10,10,22,.5);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .scrim{background:linear-gradient(0deg,rgba(6,8,18,.62),rgba(6,8,18,.12) 48%,transparent 70%)}
 .grain{opacity:.07;background:${NOISE} 0 0/160px 160px;mix-blend-mode:overlay}
 .frame{z-index:1;border-radius:inherit}
@@ -178,6 +198,16 @@ export const PLATE_CSS = raw`
 .p[data-lay="3"] .title{align-self:flex-end;margin:auto 14px 12px auto;max-width:min(82%,520px);padding:13px 18px 14px;text-align:right;border-radius:16px;background:rgba(8,10,22,.34);border:1px solid rgba(255,255,255,.18);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 .p[data-lay="4"] .ttl{display:inline;padding:0 .12em;background:linear-gradient(transparent 64%,color-mix(in oklab,var(--acc) 55%,transparent) 64% 88%,transparent 88%);-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .p[data-lay="4"] .kicker{display:flex;width:fit-content;margin-bottom:8px}
+.p[data-lay="5"] .title{padding-left:clamp(26px,7vw,54px)}
+.p[data-lay="5"] .title:before{content:attr(data-n);position:absolute;left:4px;bottom:-.12em;z-index:-1;font:900 clamp(96px,22vw,168px)/1 "Fraunces","Iowan Old Style",Georgia,serif;letter-spacing:-.06em;color:transparent;-webkit-text-stroke:1.5px rgba(255,255,255,.4);background:linear-gradient(180deg,color-mix(in oklab,var(--acc) 35%,transparent),transparent 80%);-webkit-background-clip:text;background-clip:text;pointer-events:none}
+.p[data-lay="5"] .kicker{padding:4px 9px;border-radius:999px;background:rgba(8,10,22,.45);border:1px solid rgba(255,255,255,.22)}
+.p[data-lay="6"] .title{text-align:center}
+.p[data-lay="6"] .kicker{padding:6px 22px;background:var(--acc);color:#1a1420;opacity:1;clip-path:polygon(0 0,100% 0,calc(100% - 11px) 50%,100% 100%,0 100%,11px 50%);filter:drop-shadow(0 3px 6px rgba(0,0,0,.4))}
+.p[data-lay="6"] .ttl:before,.p[data-lay="6"] .ttl:after{content:"";display:inline-block;width:clamp(18px,6vw,56px);height:2px;margin:0 .35em;vertical-align:.3em;background:linear-gradient(90deg,transparent,var(--acc))}
+.p[data-lay="6"] .ttl:after{background:linear-gradient(270deg,transparent,var(--acc))}
+.p[data-lay="7"] .title{display:flex;align-items:flex-end;justify-content:space-between;gap:14px}
+.p[data-lay="7"] .ttl{order:1;margin:0}
+.p[data-lay="7"] .kicker{order:2;flex:none;display:grid;place-items:center;width:78px;height:78px;padding:9px;border-radius:50%;text-align:center;white-space:normal;font-size:8.5px;line-height:1.45;letter-spacing:.16em;color:var(--acc);opacity:.9;border:2px solid currentColor;box-shadow:inset 0 0 0 3px transparent,inset 0 0 0 4px currentColor;transform:rotate(-12deg);background:repeating-linear-gradient(0deg,transparent 0 6px,color-mix(in oklab,var(--acc) 22%,transparent) 6px 7px)}
 .strip{position:relative;z-index:2;display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px 12px;background:linear-gradient(0deg,rgba(6,8,18,.62),rgba(6,8,18,.28));border-top:1px solid rgba(255,255,255,.14);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2)}
 .gl{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:999px;white-space:nowrap;font:500 12px/1 "DM Mono",ui-monospace,Menlo,monospace;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16)}
 .gl:empty{display:none}
@@ -185,6 +215,7 @@ export const PLATE_CSS = raw`
 .thermo::after{content:"";position:absolute;left:0;right:0;bottom:0;height:calc(var(--t) * 100%);background:linear-gradient(0deg,#69b7ff,#ffb86b 70%,#ff6b6b)}
 .wind{display:inline-block;font-style:normal;font-size:11px;transform:rotate(calc(var(--wd) * 1deg - 90deg))}
 .mo{width:13px;height:13px;border-radius:50%;background:#f4f1e6;box-shadow:inset calc(var(--ph) / 3) 0 0 0 #2a2f4a}
+.p{--rs:1}
 .p[data-genre=mystery] .kicker{padding:5px 10px 4px;border-radius:5px 5px 0 0;background:#efe2c4;color:#3a2c1c;opacity:1;transform:rotate(-1.2deg);box-shadow:0 3px 10px rgba(0,0,0,.35);writing-mode:horizontal-tb}
 .p[data-genre=mystery] .ttl{font-variant:small-caps;letter-spacing:.02em}
 .p[data-genre=noir] .ttl{font:600 clamp(26px,6vw,42px)/.98 "Oswald","Bebas Neue","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em}
@@ -197,6 +228,7 @@ export const PLATE_CSS = raw`
 .p:is([data-genre=romance],[data-genre=erotic]) .kicker{color:#ffd5dc}
 .p:is([data-genre=romance],[data-genre=erotic]) .kicker::before{content:"❦";font-size:15px;letter-spacing:0}
 .p:is([data-genre=horror],[data-genre=tragedy]) .ttl{font:600 clamp(26px,6vw,42px)/1 "Cormorant Garamond",Georgia,serif;letter-spacing:.03em;text-shadow:0 0 1px #000,0 3px 18px rgba(120,0,0,.55)}
+.p:is([data-genre=comedy],[data-genre=cozy],[data-genre=slice_of_life]) .kicker{display:flex;width:fit-content}.p:is([data-genre=comedy],[data-genre=cozy],[data-genre=slice_of_life]):is([data-lay="1"],[data-lay="6"]) .kicker{margin-inline:auto}.p:is([data-genre=comedy],[data-genre=cozy],[data-genre=slice_of_life])[data-lay="3"] .kicker{margin-left:auto}
 .p:is([data-genre=comedy],[data-genre=cozy],[data-genre=slice_of_life]) .ttl{font:600 clamp(26px,6vw,40px)/1.05 "Fredoka","Nunito",system-ui,sans-serif;display:inline-block;padding:4px 14px;border-radius:14px;background:rgba(255,255,255,.14);transform:rotate(-1.5deg)}
 @media (prefers-reduced-motion:no-preference){
  .scene{animation:kb 48s ease-in-out infinite alternate}
@@ -215,6 +247,7 @@ export const PLATE_CSS = raw`
  .motes{animation:motes 26s linear infinite}
  .title>*{animation:rise 1s cubic-bezier(.2,.7,.2,1) both}.title>*:nth-child(2){animation-delay:.12s}
  .mk::before{animation:pulse 2.8s ease-in-out infinite}
+ .p[data-place^=r_]:is([data-wx=rain],[data-wx=showers],[data-wx=storm]) .scene .heat{animation:trickle 9s linear infinite}
 }
 @keyframes kb{to{transform:scale(1.07)}}
 @keyframes rain{to{background-position:0 244px,0 332px,0 452px}}
@@ -247,8 +280,20 @@ export const PLATE_CSS = raw`
 @keyframes sweep{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
 @keyframes swing{from{transform:rotate(-7deg)}to{transform:rotate(7deg)}}
 @keyframes ecg{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@keyframes trickle{to{background-position:0 82px,0 122px,0 94px,0 166px,0 0}}
+@keyframes flame{0%,100%{transform:scale(1,1)}30%{transform:scale(1.05,.9)}55%{transform:scale(.95,1.1)}80%{transform:scale(1.03,.94)}}
+@keyframes bub{0%{transform:translateY(5%);opacity:0}30%{opacity:.9}100%{transform:translateY(-9%);opacity:0}}
+@keyframes zz{0%{opacity:0;transform:translate(0,0) scale(.7)}25%{opacity:.9}100%{opacity:0;transform:translate(14px,-24px) scale(1.25)}}
+@keyframes swimr{from{right:-30%}to{right:115%}}
+@keyframes bounce{to{transform:translateY(-5%)}}
+@keyframes disco{to{background-position:240px 160px}}
+@keyframes bubbles{to{background-position:0 -320px}}
+@keyframes embers{to{background-position:30px -360px}}
+@keyframes flutter{0%{transform:translate(0,0) scaleX(1)}25%{transform:translate(9px,-7px) scaleX(.35)}50%{transform:translate(18px,2px) scaleX(1)}75%{transform:translate(10px,9px) scaleX(.35)}100%{transform:translate(24px,-5px) scaleX(1)}}
+@keyframes tail{from{transform:rotate(-18deg)}to{transform:rotate(16deg)}}
+@keyframes wipe{0%,100%{rotate:-6deg}50%{rotate:-62deg}}
 @keyframes steam{0%{transform:translateY(10%);opacity:.4}50%{opacity:1}100%{transform:translateY(-14%);opacity:.3}}
-@media (max-width:560px){.p{min-height:236px;border-radius:18px}.dial{width:46px;height:46px}.dial::before{inset:6px}.dial span{font-size:9.5px}.gl{font-size:11px;padding:5px 8px}.p[data-lay="2"] .kicker{display:none}}
+@media (max-width:560px){.p{min-height:236px;border-radius:18px;--rs:.8}.p[data-place^=r_]{min-height:264px;--fy:14%}.dial{width:46px;height:46px}.dial::before{inset:6px}.dial span{font-size:9.5px}.gl{font-size:11px;padding:5px 8px}.p[data-lay="2"] .kicker{display:none}}
 `;
 
 // Header grammar (no "u" flag: emoji are matched as literal code-unit sequences).

@@ -8,6 +8,8 @@ const batFlock = (seed: number) => { const l = new Layer(); bats(l, rng(seed), 6
 const balloonUrl = (() => { const l = new Layer(); balloon(l, 20, 18, 1); return l.url(40, 40); })();
 const bolt = svgUrl(`<path fill='none' stroke='#000' stroke-width='3' stroke-linejoin='round' d='M40 0L30 40L44 46L26 92L36 98L20 140M30 40L14 62M44 46L58 74M26 92L10 108'/>`, 70, 140, true);
 const branch = cornerBranch(new Layer(), rng(41)).url(220, 110);
+const kite = (c: string, c2: string) => svgUrl(`<path d='M20 0L36 22L20 50L4 22Z' fill='${c}'/><path d='M20 0L36 22H4Z' fill='${c2}'/><path d='M20 0V50M4 22H36' stroke='#000' stroke-opacity='.25' stroke-width='1'/><path d='M20 50Q12 64 22 76T18 104' fill='none' stroke='#ffffff' stroke-width='1'/><path d='M14 62l6 -3l2 5zM16 80l6 -2l1 5zM14 96l6 -3l2 5z' fill='${c2}'/>`, 40, 110);
+const constellation = svgUrl(`<path d='M10 70L46 52L80 60L112 34L150 40M112 34L120 8M80 60L96 92' fill='none' stroke='#cfe0ff' stroke-opacity='.45' stroke-width='1' stroke-dasharray='2 3'/>` + [[10, 70, 2.4], [46, 52, 2], [80, 60, 2.8], [112, 34, 2.2], [150, 40, 3], [120, 8, 1.8], [96, 92, 2]].map(([x, y, r]) => `<circle cx='${x}' cy='${y}' r='${r}' fill='#ffffff'/><circle cx='${x}' cy='${y}' r='${(r as number) * 3}' fill='#cfe0ff' fill-opacity='.15'/>`).join(""), 160, 100);
 const isle = (() => { const l = new Layer(); floatingIsle(l, rng(5), 60, 24, 100); return l.url(120, 100); })();
 
 /** Particles: n radial dots spread over a tile. */
@@ -40,11 +42,13 @@ export const FX: Record<string, string> = {
   venus: `&.p .fx{inset:auto;top:30%;left:calc(100% - var(--sx) * .8);width:4px;height:4px;border-radius:50%;background:#fffbe8;box-shadow:0 0 8px 3px rgba(255,250,220,.8)}&.p .fx2{inset:auto;top:20%;left:calc(92% - var(--sx) * .7);width:18px;height:18px;border-radius:50%;box-shadow:inset -4px 2px 0 0 #fdf3d6;opacity:.9;transform:rotate(-30deg)}` + MOTION(`&.p .fx{animation:twinkle 4s ease-in-out infinite alternate}`),
   bolt: `&.p .fx{inset:0 auto 26% calc(30% + var(--ox) * .03);width:70px;-webkit-mask:${bolt} 0 0/100% 100%;mask:${bolt} 0 0/100% 100%;background:#f4f7ff;opacity:0}&.p .fx2{inset:0;background:radial-gradient(30% 40% at 34% 20%,rgba(200,215,255,.5),transparent 70%);opacity:0}` + MOTION(`&.p :is(.fx,.fx2){animation:flash 7s ease-out infinite}`),
   rainbow: `&.p .fx{inset:auto;left:calc(64% - var(--p) * 44%);width:min(560px,90%);aspect-ratio:1;top:34%;transform:translateX(-50%);border-radius:50%;background:radial-gradient(closest-side,transparent 80%,rgba(255,70,70,.5) 81.5%,rgba(255,170,60,.5) 83%,rgba(255,240,90,.5) 84.5%,rgba(90,210,110,.5) 86%,rgba(70,140,255,.5) 87.5%,rgba(140,80,230,.45) 89%,transparent 90.5%);-webkit-mask:linear-gradient(180deg,#000 20%,transparent 50%);mask:linear-gradient(180deg,#000 20%,transparent 50%);opacity:.7;filter:blur(1px)}`,
+  kites: `&.p .fx,&.p .fx2{inset:auto;top:14%;left:64%;width:30px;height:82px;background:${kite("#e8483a", "#f4c84a")} 0 0/100% 100% no-repeat;transform-origin:50% 0}&.p .fx2{top:24%;left:30%;width:22px;height:60px;background-image:${kite("#3a8ae8", "#f4f0e8")}}` + MOTION(`&.p .fx{animation:sweep 5s ease-in-out infinite alternate,bob 3s ease-in-out infinite alternate}&.p .fx2{animation:sweep 6.5s ease-in-out -2s infinite alternate}`),
+  constellation: `&.p .fx{inset:auto;top:6%;left:calc(100% - var(--mx) * .6 - 120px);width:180px;height:112px;background:${constellation} 0 0/100% 100% no-repeat;opacity:calc(var(--lit) * .9)}&.p .fx2{inset:auto;top:6%;left:calc(100% - var(--mx) * .6 - 120px);width:180px;height:112px;background:${constellation} 0 0/100% 100% no-repeat;filter:blur(3px);opacity:calc(var(--lit) * .5)}` + MOTION(`&.p .fx2{animation:twinkle 3s ease-in-out infinite alternate}`),
   none: "",
 };
-const DAY = ["birds", "godrays", "balloon", "cirrus", "season", "mist"];
+const DAY = ["birds", "godrays", "balloon", "cirrus", "season", "mist", "kites"];
 const TWI = ["birds", "venus", "bats", "mist", "season", "cirrus"];
-const NIGHT = ["shoot", "aurora", "milky", "fireflies", "lanterns", "comet"];
+const NIGHT = ["shoot", "aurora", "milky", "fireflies", "lanterns", "comet", "constellation"];
 const SPACE = ["shoot", "comet", "milky", "none", "shoot", "comet"];
 const at = (list: string[]) => list.map((f, i) => `${i}::${f}`).join("::");
 /** The accent: weather first, then the band's list by seed. `seed`, `band`, `wx`, `kind` are macro expressions. */
@@ -78,13 +82,13 @@ GENRE_FX.drama = `&.p .grade{background:radial-gradient(130% 110% at 50% 40%,tra
 /** The same choice as fxMacro, for the Ledger's renderer. */
 export function pickFx(seed: number, band: string, wx: string, kind: string): string {
   const grp = ["morning", "midday", "afternoon"].includes(band) ? "day" : ["dawn", "sunrise", "golden", "sunset", "dusk"].includes(band) ? "twi" : "night";
-  const i = ((seed % 6) + 6) % 6;
-  if (kind === "space") return SPACE[i];
+  const at = (list: string[]) => list[((seed % list.length) + list.length) % list.length];
+  if (kind === "space") return at(SPACE);
   if (kind === "underground") return "none";
   if (wx === "storm") return "bolt";
   if (wx === "showers") return grp === "night" ? "none" : "rainbow";
   if (wx === "fog") return "mist";
   if (["rain", "sleet", "snow"].includes(wx)) return "none";
   if (wx === "overcast") return grp === "night" ? "none" : "birds";
-  return (grp === "day" ? DAY : grp === "twi" ? TWI : NIGHT)[i];
+  return at(grp === "day" ? DAY : grp === "twi" ? TWI : NIGHT);
 }
