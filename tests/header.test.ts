@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { fillHeader } from "../src/core/render";
-import { PLATE_FIND } from "../preset/src/plate";
+import { PLATE_FIND } from "../src/core/plate/style";
+import { drawPlates } from "../src/core/plate";
 import type { AlmanacReport } from "../src/core/engines/almanac";
 
 const al = {
@@ -25,9 +26,9 @@ describe("scene header on every reply", () => {
 });
 
 describe("scene header over rendered content", () => {
-  test("a plate already drawn by the display regex gets no second header", async () => {
-    const { PLATE_REPLACE } = await import("../preset/src/plate");
-    const drawn = fillHeader("---\n\nProse.", al, ["Home"]).replace(new RegExp(PLATE_FIND), PLATE_REPLACE);
+  test("a plate already drawn gets no second header", () => {
+    const drawn = drawPlates(fillHeader("---\n\nProse.", al, ["Home"]), "drama");
+    expect(drawn).not.toBe(fillHeader("---\n\nProse.", al, ["Home"]));
     expect(fillHeader(drawn, al, ["Home"])).toBe(drawn);
   });
 });

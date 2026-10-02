@@ -17,7 +17,6 @@ export interface TellingCtx {
   roster: Roster;
   offPage: OffPage[];
   truths: string[];
-  lang?: string;
   /** The last few beats' wording (novelty). */
   recent: string[];
   /** Known places and objects (names a beat may use). */
@@ -64,7 +63,7 @@ Each CARD is already decided: who, where, when, and how it turned out. Tell it i
 For a card with REACHES THE SCENE, also write "arrival": the moment it reaches the scene as the scene would meet it (what is heard, seen, read or said, and by whom), specific about the news it carries, at most 40 words, in-world.
 You may add up to two ledger "lines" per card for the LEAD and CAST only: "know Name: #key fact | how they learned it · knows/believes", "bond A>B: trust +1 — cause", "journal Name: their own words".
 Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only. The premise is one or two plain, specific sentences: who, what they've learned or what has happened to them (naming the actual news, people and places in the grounds), and what they mean to do about it (at most 45 words, no labels or lists). The want is "to …" and the fear a plain clause, both specific and in natural words.${cards.some((c) => c.kind === "world") ? `\nA "world" card is the setting's own agenda, an actor too: tell it through consequences in the world (a move, a cost, a changed place), never by announcing it. Lines under HOLDS never break; pressure may strain them, nothing breaks them.${ctx.holds?.length ? ` HOLDS: ${ctx.holds.join(" / ")}` : ""}` : ""}${prof}
-Output JSON only: {"beats":[{"card":"b3","result":"cost","text":"…","arrival":"…","lines":["…"]}],"seeds":[{"card":"b2","premise":"…","want":"to …","fear":"…"}]${ctx.profile?.length ? `,"profiles":[{"key":"…","standing":"…","where":"…","reach":"…","want":"…","fear":"…","nocturnal":false}]` : ""}}${ctx.lang && !/^en/i.test(ctx.lang) ? `\nWrite the text in ${ctx.lang}; keep the JSON field names, op names and card ids in English.` : ""}`,
+Output JSON only: {"beats":[{"card":"b3","result":"cost","text":"…","arrival":"…","lines":["…"]}],"seeds":[{"card":"b2","premise":"…","want":"to …","fear":"…"}]${ctx.profile?.length ? `,"profiles":[{"key":"…","standing":"…","where":"…","reach":"…","want":"…","fear":"…","nocturnal":false}]` : ""}}`,
     user: `${ctx.truths.length ? `[TRUTHS] (the player's rules; they bind off the page too) ${ctx.truths.join(" · ")}\n\n` : ""}${cards.map((c) => cardText({ ...c, result: c.result }, ctx) + (c.ending && c.fateOk ? "\n  (may be told: the player allowed this ending)" : "")).join("\n\n")}${ctx.retry ? `\n\nTELL AGAIN: the player asked for this step to be told again. It reads now: “${ctx.retry}” Tell the same card afresh, plainly and true to it, in new words.` : ""}${ctx.profile?.length ? `\n\nPROFILES\n${ctx.profile.map((p) => `[${p.key}] ${p.name}: ${p.text.slice(0, 400)}`).join("\n")}` : ""}`,
   };
 }
@@ -212,7 +211,7 @@ export interface StoryShapeRaw {
 }
 
 /** The prompt that files a player's premise: its kind, want, fear and who is in it. */
-export function shapePrompt(o: { userName: string; lead: string; leadText: string; premise: string; people: string[]; groups: string[]; lang?: string }): { system: string; user: string } {
+export function shapePrompt(o: { userName: string; lead: string; leadText: string; premise: string; people: string[]; groups: string[] }): { system: string; user: string } {
   return {
     system: `A player wrote a subplot for someone off the page in their roleplay. File it for the engine that will play it out. ${SAFETY_DATA}
 Read the premise for what the LEAD does and is after. Use only the premise and who the lead is; add nothing.
@@ -222,7 +221,7 @@ Read the premise for what the LEAD does and is after. Use only the premise and w
 - "cast": the people and groups from the lists below who take part (not ${o.userName}).
 - "secrecy": "public" (anyone could hear of it), "private" (those close to it), or "secret" (hidden on purpose).
 - "place": where it happens, if the premise says; else "".
-Output JSON only: {"kind":"…","want":"to …","fear":"…","cast":["…"],"secrecy":"…","place":"…"}${o.lang && !/^en/i.test(o.lang) ? `\nWrite want and fear in ${o.lang}; keep the JSON keys and the kind in English.` : ""}`,
+Output JSON only: {"kind":"…","want":"to …","fear":"…","cast":["…"],"secrecy":"…","place":"…"}`,
     user: `LEAD ${o.lead}: ${o.leadText.slice(0, 240) || "—"}
 PREMISE ${o.premise}
 PEOPLE ${o.people.join(", ") || "—"}

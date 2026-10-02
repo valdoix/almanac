@@ -1,9 +1,9 @@
 # ALMANAC
 
-A living-world roleplay setup for [Lumiverse](https://github.com/prolix-oc/Lumiverse), in two parts that work alone and better together:
+A living-world roleplay setup for [Lumiverse](https://github.com/prolix-oc/Lumiverse), in English, in two parts that run together (the preset needs the extension):
 
-- **ALMANAC** — a preset (`preset/ALMANAC.json`). People with private minds, NPCs who act and relate to each other without waiting for you, a knowledge firewall, real time and weather, genre contracts that change what happens, a sealed persona, a step-by-step Director's Pass, and a line-based `<ledger>` of what changed each turn. Its display rules draw living scene plates, voice cards, sealed-envelope thoughts, in-world artifacts and a tracker drawer.
-- **ALMANAC Ledger** — a Spindle extension (`almanac_ledger`). It reads each ledger, checks it, and keeps the world: branch-safe state (swipes, edits and forks never corrupt it), chapters that replace old turns, a Codex, knowledge-aware recall, a computed calendar/sky/weather, off-screen life, a lore bridge to your lorebooks, and a lorebook creator. It feeds the verified state back to the model as a short `<ledger-note>` before your message.
+- **ALMANAC** — a preset (`preset/ALMANAC.json`). People with private minds, NPCs who act and relate to each other without waiting for you, a knowledge firewall, real time and weather, genre contracts that change what happens, a sealed persona, a step-by-step Director's Pass, and a line-based `<ledger>` of what changed each turn. Its display rules draw voice cards, sealed-envelope thoughts, in-world artifacts and the Director's notes.
+- **ALMANAC Ledger** — a Spindle extension (`almanac_ledger`). It reads each ledger, checks it, and keeps the world: branch-safe state (swipes, edits and forks never corrupt it), chapters that replace old turns, a Codex, knowledge-aware recall, a computed calendar/sky/weather, off-screen life, a lore bridge to your lorebooks, and a lorebook creator. It feeds the verified state back to the model as a short `<ledger-note>` before your message, and draws the scene plates and the tracker drawer.
 
 The full design is in [`design/`](design/README.md).
 
@@ -31,7 +31,7 @@ After updating the extension, import the preset again when the changelog says th
 ### The preset
 **Presets → Import** and choose `preset/ALMANAC.json`. It brings its own regex scripts (they are bound to the preset, so they switch on and off with it). Open the preset's **variables** panel to set persona mode, genres, intimacy, planning depth and the rest; each setting lives on the block that uses it.
 
-The two find each other on their own: with the extension installed, the preset sends a hidden handshake that the extension removes before the model sees it, and the extension arms itself for any chat that uses the ALMANAC charter. It disarms again after two turns without it, so a chat moved to another preset goes back to normal (turns it hid come back, and its mirror lorebook goes quiet). **Settings › This chat** can pin it on or off instead.
+The preset runs only with the extension. The two find each other on their own: the preset sends a hidden handshake that the extension removes before the model sees it, and the extension arms itself for any chat that uses the ALMANAC charter, from that chat's first ALMANAC prompt. It disarms again after two turns without it, so a chat moved to another preset goes back to normal (turns it hid come back, and its mirror lorebook goes quiet). **Settings › This chat** can pin it on or off instead. Without the extension, or with the Ledger switched off in a chat or missing its Prompt interceptor permission, the preset doesn't run the story: the model answers with one out-of-character line saying what to fix.
 
 The preset leaves sampling (temperature, top P) to your connection: newer models reject some combinations. Its **Planning channel** defaults to *Auto*: the Director's Pass runs in native reasoning for models that think before answering, and becomes a silent checklist for models that don't (they would otherwise write the plan into the reply).
 
@@ -40,13 +40,12 @@ The preset leaves sampling (temperature, top P) to your connection: newer models
 ## First run
 
 1. Start a chat with the ALMANAC preset active.
-2. With the extension, the **Session Zero** window opens (or run **ALMANAC: Session Zero** from the command palette): genres, tone, who writes your character, romance pace, difficulty, intimacy and hard limits, climate, calendar, start point, trackers and skin. The answers are stored for this chat only and override the preset's own dials.
-3. Without the extension, type `/session0` and the model runs the same interview out of character; its answers are saved to the chat by a regex script.
+2. The **Session Zero** window opens (or type `/session0`, or run **ALMANAC: Session Zero** from the command palette): genres (the first you click leads), tone, who writes your character, romance pace, difficulty, intimacy and hard limits, climate, calendar, start point, trackers and skin. The answers are stored for this chat only and override the preset's own dials.
 
 ## Playing
 
 - Write as usual. The model ends each reply with a `<ledger>`; you see it as the tracker drawer under the reply.
-- Out of character: `((like this))`, `OOC: …` or `[OOC …]`.
+- Out of character: `((like this))`, `(OOC: …)`, `OOC: …` or `[OOC …]`. Facts you state about the story (the day, someone's eye colour, a rule of your AU) are taken as true.
 - Commands: `/skip 30m`, `/skip until morning`, `/recap`, `/report bonds`, `/report threads`, `/audit`, `/session0`. The **Director's Desk** keycaps in the latest drawer send them in one click.
 - The floating **Now** widget (extension) is a small orrery. The pill shows a sky dial, the time, weather, place, who is present (a mood dot pulses when a mood just changed), the most urgent thing (a deadline, a debt that's due, the sunset) and a badge counting what the last reply changed. Click it to open the Now window: the sky with the sun and moon on their arcs, the next hours' forecast, and tabs for **Changed** (what the last reply did, bond moves shown old → new), **Stakes** (deadlines, faction clocks, gauges, debts, the clue board), **Cast** (moods, what they hold, injuries, where they stand with you; a narrator toggle reveals hidden pressures and dramatic irony), **Threads** (open and stalled threads, Chekhov plants, rumours), **Unspoken** (the last reply's private thoughts, as sealed envelopes or thought bubbles; hidden when the preset's inner voice is off) and **Backstage** (what the Almanac fed the model). The book button opens the full drawer. It takes the active skin's colours, type and shapes. Drag it anywhere, resize the open window from its bottom-right corner (double-click the corner to reset), and right-click to hide or reset it.
 - Swipes get a different take, not a paraphrase: the model is shown how the rejected take opened.
@@ -122,7 +121,7 @@ Nothing is written until you accept a plan, and nothing is saved until you say w
 
 ### Language
 
-The preset writes the story in its **Language** setting, and the extension's summaries, Codex cards and knowledge lines follow it. Its own readers (the ledger parser, injuries, dates you state, speech detection) are tuned for English; dialogue in « », „ “, 「」 and British single quotes is recognised.
+ALMANAC is English only: the story, the summaries, the Codex cards and the knowledge lines are all written in English, and the extension's readers (the ledger parser, injuries, dates you state, speech detection) are tuned for it. Dialogue in « », „ “, 「」 and British single quotes is still recognised.
 
 ## Skins
 
@@ -190,9 +189,9 @@ bun run check:dist   # the committed dist/ and preset match this commit (CI runs
 
 Lumiverse installs from a branch head, so every push to the branch users install from is a release. Work on another branch and merge to the install branch when `bun run build`, `bun test` and `bun run check:dist` pass; add a CHANGELOG entry and bump `src/core/version.ts` (`VERSION`, and `PRESET_VERSION` when the preset changed), `spindle.json` and `package.json` together.
 
-- `preset/src/` holds the preset source (blocks, variables, regex suite, the standalone scene plate); `bun run build:preset` regenerates `preset/ALMANAC.json` and validates ids, placement bindings, router targets, every regex, and macro balance.
+- `preset/src/` holds the preset source (blocks, variables, regex suite); `bun run build:preset` regenerates `preset/ALMANAC.json` and validates ids, placement bindings, every regex, macro balance and stray braces. Every content block is wrapped so it goes out only while the Ledger manages the chat; Boot, the absolute boundaries and the gate are the exceptions.
 - `src/core/plate/` draws the scene plate when the Ledger is installed: procedural silhouettes (`art.ts`), the place kinds, rooms and their four variants (`kinds.ts`), sky accents and genre atmospheres (`fx.ts`), and the shared stylesheet (`style.ts`). The render processor replaces each header with its plate before the display regex runs.
-- `LUMIVERSE_SRC=/path/to/Lumiverse bun run preset:harness -- --html preview.html` renders every block through Lumiverse's real macro engine in thirteen scenarios (standalone, linked, swipe, continue, OOC, commands, full cast, Session Zero overrides, impersonation, Auto planning on a non-reasoning model; Windows paths work too) and runs the display regex over a sample reply, including one rendered by the extension. Add `--ext` to include the extension stylesheet in the preview.
+- `LUMIVERSE_SRC=/path/to/Lumiverse bun run preset:harness -- --html preview.html` renders every block and the reasoning prefill through Lumiverse's real macro engine in 26 scenarios (a managed chat's turns, the first turn while the Ledger arms, swipe, continue, OOC, commands, an empty send, full cast, intimacy levels, Session Zero overrides, unknown setting values, impersonation, Auto planning, and the three gate states; Windows paths work too), checks what each must and mustn't send and that the ledger example parses, and runs the display regex over a reply as the extension renders it. Add `--ext` to include the extension stylesheet in the preview.
 - `bun run golden` lists the golden scenarios (agency, knowledge leak, clock, weather, NPC↔NPC, convergence, safety floor, ledger). Play each in Lumiverse, save the replies as `{ "agency": "…", … }`, and grade them with `bun run golden replies.json`.
 
 ### Notes

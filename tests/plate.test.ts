@@ -110,9 +110,3 @@ describe("scene plate: drawing", () => {
   });
 });
 
-describe("preset fallback plate", () => {
-  test("stays small: no per-place art in the preset", async () => {
-    const { PLATE_REPLACE } = await import("../preset/src/plate");
-    expect(PLATE_REPLACE.length).toBeLessThan(120_000);
-  });
-});

@@ -7,7 +7,7 @@ import { parseLine, parseSpeech } from "../src/core/dsl";
 import type { FoldOptions } from "../src/core/state";
 import { buildLedgerNote } from "../src/core/note";
 import { isSchedule } from "../src/core/codex";
-import { langRule, summaryPrompt, archivistPrompt } from "../src/core/prompts";
+import { summaryPrompt, archivistPrompt } from "../src/core/prompts";
 import { clerkPrompt } from "../src/core/clerk";
 import { olderThan, PRESET_VERSION, VERSION } from "../src/core/version";
 import { fastHash, hash, plainProse } from "../src/core/util";
@@ -124,16 +124,13 @@ describe("repairs follow the text they were written for", () => {
   });
 });
 
-describe("background prompts in the story's language", () => {
-  test("English adds nothing; another language keeps the labels", () => {
-    expect(langRule("English")).toBe("");
-    expect(langRule("")).toBe("");
-    expect(langRule("Español")).toContain("Write in Español");
-    const p = summaryPrompt("chapter", { userName: "Wren", transcript: "…", lang: "Español" });
-    expect(p.system).toContain("Write in Español");
+describe("background prompts are English", () => {
+  test("no language rule in summaries, the archivist or the clerk", () => {
+    const p = summaryPrompt("chapter", { userName: "Wren", transcript: "…" });
+    expect(p.system).not.toContain("Write in ");
     expect(p.user).toContain("Title:");
-    expect(archivistPrompt({ chapter: "…", records: "…", locked: [], lang: "Deutsch" }).system).toContain("JSON field names");
-    expect(clerkPrompt({ state: emptyState(), userName: "Wren", sealed: true, player: "", reply: "", query: "", lang: "Français" }).system).toContain("Write in Français");
+    expect(archivistPrompt({ chapter: "…", records: "…", locked: [] }).system).not.toContain("the story's language");
+    expect(clerkPrompt({ state: emptyState(), userName: "Wren", sealed: true, player: "", reply: "", query: "" }).system).not.toContain("the story's language");
   });
 });
 

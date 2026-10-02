@@ -1,6 +1,11 @@
 // Builds preset/ALMANAC.json (a Lumiverse Loom preset, schema v2) from the block
-// and regex sources, and validates it: unique ids, router and placement bindings,
-// every regex compiles, and no block leaves a macro unbalanced.
+// and regex sources, and validates it: unique ids, placement bindings, every
+// regex compiles, and no block leaves a macro unbalanced.
+//
+// ALMANAC runs only with the ALMANAC Ledger extension: every content block is
+// sent only while the Ledger manages the chat (Boot sets alm_linked from
+// {{almActive}}). Boot, the absolute boundaries and the gate (which tells the
+// player what's missing) are the only blocks sent without it.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { coreBlocks } from "./src/blocks-core";
@@ -17,21 +22,27 @@ const DEFAULTS = {
   injectionTrigger: [] as string[], characterTagTrigger: [] as string[], group: null, categoryMode: null, content: "",
 };
 
+/** Sent whether or not the Ledger manages the chat. */
+const UNGATED = new Set(["alm-boot", "alm-floor", "alm-gate"]);
+
 export function buildBlocks() {
   const raw: any[] = [...coreBlocks, ...worldBlocks, ...craftBlocks, ...sourceBlocks, ...turnBlocks];
   return raw.map((b) => {
     const block: any = { ...DEFAULTS, ...b };
-    if (block.id.startsWith("alm-scene-")) block.enabled = false; // the router opens them
+    if (!block.marker && block.content && !UNGATED.has(block.id)) block.content = `{{if::{{getvar::alm_linked}}}}${block.content}{{/if}}`;
     return block;
   });
 }
+
+/** The Director's Pass opener for models that continue a reasoning prefix (DeepSeek, Kimi): story turns with native planning only. */
+const REASONING_PREFILL = `{{if::{{and::{{getvar::alm_linked}}::{{eq::{{getvar::alm_cotch}}::native}}}}}}{{if::{{or::{{eq::{{getvar::alm_route}}::scene}}::{{eq::{{getvar::alm_route}}::variant}}}}}}Director's Pass — {{switch::{{var::cot}}::lean::ROUTE, ANCHOR, SEAL, MINDS, MOVE, VOICE, LEDGER::ROUTE, ANCHOR, SEAL, GNOSIS, MINDS, WEB, WORLD, MOVE, PREMORTEM, VOICE, LEDGER}}. Fragments only; never draft. Stop at LEDGER, then write.{{/if}}{{/if}}`;
 
 export function buildPreset() {
   const blocks = buildBlocks();
   const regex_scripts = REGEX.map(toScript);
   return {
     name: "ALMANAC",
-    description: "A living-world roleplay preset: deep characters with private minds, autonomous NPCs who relate to each other, a knowledge firewall, real time and weather, genre contracts that change the story, a sealed persona, and a line-based ledger that drives trackers and memory. Works alone; pairs with the ALMANAC Ledger extension for verified state, chapters, recall and a deterministic almanac.",
+    description: "A living-world roleplay preset in English: deep characters with private minds, autonomous NPCs who relate to each other, a knowledge firewall, real time and weather, genre contracts that change the story, a sealed persona, and a line-based ledger. Requires the ALMANAC Ledger extension, which keeps the verified state, chapters, recall, the off-screen world and the almanac; without it the preset only tells you so.",
     coverUrl: null,
     presetVersion: VERSION,
     schemaVersion: 2,
@@ -40,17 +51,17 @@ export function buildPreset() {
     samplerOverrides: { enabled: false, maxTokens: null, contextSize: null, temperature: null, topP: null, minP: null, topK: null, frequencyPenalty: null, presencePenalty: null, repetitionPenalty: null, streaming: true },
     customBody: { enabled: false, rawJson: "{}" },
     promptBehavior: {
-      continueNudge: "[Continue from the exact last word. No header, no recap, no restart, no second ledger.]",
-      emptySendNudge: "[The player waits. Let the world move on its own — within the initiative budget.]",
+      continueNudge: "[Continue from the exact last word. No header, no recap, no restart; the ledger at the end only if the reply has none yet.]",
+      emptySendNudge: "[The player waits. Let the world move on its own: at most one unprompted move, then stop where the player can act.]",
       impersonationPrompt: "[Write {{user}}'s next message in {{user}}'s own voice, in the player's usual form and length. Only {{user}} acts or speaks. No header, marks, ledger or artifacts.]",
       groupNudge: "[Write the next reply as {{char}}; everyone else present keeps living in the scene.]",
-      newChatPrompt: "[A new story begins. Seed the clock from the start point or the setting.]",
-      newGroupChatPrompt: "[A new story begins. Present: {{group}}. Seed the clock from the start point or the setting.]",
+      newChatPrompt: "[A new story begins. Open Day 1 with the scene header, from the start point or the setting.]",
+      newGroupChatPrompt: "[A new story begins. Present: {{group}}. Open Day 1 with the scene header, from the start point or the setting.]",
       sendIfEmpty: "",
     },
     completionSettings: {
       assistantPrefill: "",
-      reasoningPrefill: "Director's Pass — ROUTE, ANCHOR, SEAL, GNOSIS, MINDS, WEB, WORLD, MOVE, PREMORTEM, VOICE, LEDGER. Fragments only; never draft. Stop at LEDGER, then write.",
+      reasoningPrefill: REASONING_PREFILL,
       assistantImpersonation: "",
       continuePrefill: false,
       continuePostfix: " ",
@@ -67,7 +78,7 @@ export function buildPreset() {
     promptVariables: {},
     blocks,
     extensions: { regex_scripts },
-    metadata: { almanac: { version: VERSION, companion: "almanac_ledger", design: "design/02-preset-almanac.md" } },
+    metadata: { almanac: { version: VERSION, companion: "almanac_ledger", requires: "almanac_ledger", language: "English", design: "design/02-preset-almanac.md" } },
   };
 }
 
@@ -93,6 +104,13 @@ export function macroBalance(text: string): string | null {
   return depth === 0 ? null : `${depth} unclosed "{{"`;
 }
 
+/** A run of an odd number of braces leaves one in the text the model reads ("}}}" after a macro is one too many). */
+export function strayBrace(text: string): string | null {
+  text = text.replace(/\{\d+(?:,\d*)?\}/g, "  "); // regex quantifiers inside {{regex::…}}
+  const m = /(?<![{}])(?:\{\{)*\{(?![{}])|(?<![{}])(?:\}\})*\}(?![{}])/.exec(text);
+  return m ? `stray "${m[0].slice(-1)}" near: ${JSON.stringify(text.slice(Math.max(0, m.index - 40), m.index + 20))}` : null;
+}
+
 export function scopedBalance(text: string): string | null {
   const opens = (text.match(/\{\{(if|unless|trim)::|\{\{trim\}\}/g) ?? []).length;
   const closes = (text.match(/\{\{\/(if|unless|trim)\}\}/g) ?? []).length;
@@ -116,7 +134,7 @@ export function validate(preset: ReturnType<typeof buildPreset>): string[] {
       if (!sel) errs.push(`${b.id}: placement binding points at a missing select`);
       else for (const o of sel.options) if (!b.placementBinding.options[o.id]) errs.push(`${b.id}: placement option ${o.id} unbound`);
     }
-    const bal = macroBalance(b.content) ?? scopedBalance(b.content);
+    const bal = macroBalance(b.content) ?? scopedBalance(b.content) ?? strayBrace(b.content);
     if (bal) errs.push(`${b.id}: ${bal}`);
   }
   const scriptIds = new Set<string>();

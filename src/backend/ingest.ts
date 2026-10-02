@@ -18,7 +18,7 @@ import type { ParsedOp } from "../core/types";
 import { debounce, debug, describe, has, host, serial, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
-import { mirrorChatVars, pushMacros } from "./macros";
+import { pushMacros } from "./macros";
 import { syncMirror } from "./mirror";
 import { appendEvents, copyChat, loadChat, loadSettings, noteProblem, save } from "./store";
 import { isEnabled } from "./turn";
@@ -99,7 +99,6 @@ export function onMutation(chatId: string, userId?: string) {
 function afterChange(chatId: string, userId: string | undefined, opts: { background: boolean }) {
   clearRenderCache();
   pushMacros(chatId, userId);
-  mirrorChatVars(chatId, userId);
   pushState(chatId, userId);
   debounce(`mirror:${chatId}`, 2000, () => syncMirror(chatId, userId));
   if (opts.background) {
@@ -183,7 +182,7 @@ export async function repair(chatId: string, msgId: string, swipe: number, conte
   let ops: ParsedOp[] = [];
   let source: "repair" | "extractor" = "repair";
   try {
-    const p = repairPrompt({ prose: plainProse(content), verified, userName: L.names.user, sealed: L.foldOptions(files.meta, settings).sealed, lang: files.meta.detected.lang });
+    const p = repairPrompt({ prose: plainProse(content), verified, userName: L.names.user, sealed: L.foldOptions(files.meta, settings).sealed });
     let text = await quiet([sys(p.system), usr(p.user)], { userId, reasoningOff: true, timeoutMs: 60_000, connectionId: settings.summarizerConnection || undefined, label: "ledger repair" });
     if (!/<ledger/i.test(text)) text = await quiet([sys(p.system), usr(p.user)], { userId, timeoutMs: 90_000, connectionId: settings.summarizerConnection || undefined, label: "ledger repair (thinking)" });
     const block = extractLedgerBlock(text);
@@ -227,17 +226,16 @@ export async function runChronicle(chatId: string, userId?: string, force = fals
         const detail = settings.summaryDetail;
         const focus = settings.summaryFocus;
         const offPage = offPageFacts(L.state, settings.secretsOffPage !== false);
-        const lang = files.meta.detected.lang;
-        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, lang, prior: prev ? `${prev.title}: ${prev.text.slice(0, summaryPriorChars(detail))}` : undefined });
+        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, prior: prev ? `${prev.title}: ${prev.text.slice(0, summaryPriorChars(detail))}` : undefined });
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary" });
         const gaps = coverageGaps(text, L.events, L.state, job.startIdx, job.endIdx);
         if (gaps.length) {
           const [lo, hi] = summaryWords("chapter", detail);
-          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, lang, words: [lo, hi + 30 + gaps.length * 15], mustInclude: gaps });
+          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, words: [lo, hi + 30 + gaps.length * 15], mustInclude: gaps });
           text = await quiet([sys(p2.system), usr(p2.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: "chapter summary (coverage)" }).catch(() => text);
         }
       } else {
-        const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}\n${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus, offPageFacts(L.state, settings.secretsOffPage !== false), files.meta.detected.lang);
+        const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}\n${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus, offPageFacts(L.state, settings.secretsOffPage !== false));
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180_000, label: `${job.level} summary` });
       }
       if (!text || text.length < 40) break;
@@ -287,7 +285,7 @@ async function runArchivist(chatId: string, chapterText: string, startIdx: numbe
     .slice(0, 24);
   if (!touched.length) return;
   const locked = touched.filter((r) => r.locked).map((r) => r.id);
-  const p = archivistPrompt({ chapter: chapterText, records: touched.map((r) => `${r.id} | ${r.kind} | ${r.name} | ${r.summary} | keys: ${r.keys.join(", ")}${r.body.archivist ? ` | notes: ${r.body.archivist}` : ""}`).join("\n"), locked, lang: files.meta.detected.lang });
+  const p = archivistPrompt({ chapter: chapterText, records: touched.map((r) => `${r.id} | ${r.kind} | ${r.name} | ${r.summary} | keys: ${r.keys.join(", ")}${r.body.archivist ? ` | notes: ${r.body.archivist}` : ""}`).join("\n"), locked });
   const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, reasoningOff: true, timeoutMs: 120_000, label: "archivist" });
   const res = extractJson<{ set?: { id: string; summary?: string; keys?: string[]; body?: Record<string, unknown> }[]; drop?: string[] }>(text);
   if (!res) return;

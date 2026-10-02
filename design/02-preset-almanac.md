@@ -1,7 +1,9 @@
 # 02 — ALMANAC: Preset Design
 
 > **ALMANAC** — a living-world roleplay preset for Lumiverse.
-> It runs standalone. Paired with the **ALMANAC Ledger** extension (doc 05), it stops asking the model to remember the world and starts *telling* it the world.
+> Paired with the **ALMANAC Ledger** extension (doc 05), it stops asking the model to remember the world and starts *telling* it the world.
+>
+> **Since preset 1.1.0 (extension 1.18.0) ALMANAC runs only with the Ledger, and only in English.** Every block is sent only while the Ledger manages the chat; without it, a gate block has the model answer with one OOC line saying what's missing. The standalone parts this document still describes — the in-chat Session Zero and its tag, the persistence regex, the scene-mode router regex (modules now read `{{almMode}}` directly), the fallback plate and drawer, the Language, Climate, Calendar and Start point dials, and the Snapshot and Off ledgers — are gone. The source in `preset/src/` and the CHANGELOG entry for 1.18.0 are the reference for what changed.
 
 ---
 

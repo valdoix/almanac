@@ -1,9 +1,9 @@
 // The extension's version, shared by the backend and frontend bundles so the
 // drawer can tell when the page and the background process disagree.
-export const VERSION = "1.17.4";
+export const VERSION = "1.18.0";
 
 /** The preset release this extension was built with; the handshake reports the one in use. */
-export const PRESET_VERSION = "1.0.14";
+export const PRESET_VERSION = "1.1.0";
 
 /** Whether preset version `a` is older than `b` ("1.0.9" < "1.0.11"). */
 export function olderThan(a: string, b: string): boolean {

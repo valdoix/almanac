@@ -63,7 +63,7 @@ export async function clerkOne(chatId: string, msgId: string, userId?: string, f
   const after = L.runtime.fold(L.path.slice(0, i + 1), fo, files.side).state;
   const prevReply = L.path.slice(0, i).map((m, j) => ({ m, j })).filter((x) => !x.m.isUser).at(-1)?.j ?? -1;
   const player = L.path.slice(prevReply + 1, i).filter((m) => m.isUser).map((m) => m.content).join("\n\n");
-  const p = clerkPrompt({ state: before, here: after, userName: L.names.user, sealed: fo.sealed, player, reply: msg.content, query: `${player} ${msg.content}`.slice(-3000), lang: files.meta.detected.lang });
+  const p = clerkPrompt({ state: before, here: after, userName: L.names.user, sealed: fo.sealed, player, reply: msg.content, query: `${player} ${msg.content}`.slice(-3000) });
   let text = "";
   try {
     text = await quiet([sys(p.system), usr(p.user)], {

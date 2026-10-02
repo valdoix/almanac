@@ -1,6 +1,7 @@
 // Preset harness: renders every block through Lumiverse's real macro engine in
-// several scenarios (standalone, linked, OOC, command, swipe, continue, full cast)
-// and runs the display regex suite over a sample reply.
+// several scenarios (a managed chat's turns, OOC, commands, swipe, continue, full
+// cast, the first turn while the Ledger arms, and the gate without the Ledger),
+// checks the ledger example parses, and runs the display regex suite over a sample reply.
 //
 //   LUMIVERSE_SRC=/path/to/Lumiverse bun run preset/harness.ts [--html out.html]
 //
@@ -14,6 +15,8 @@ import { OPENING, SAMPLE_REPLY, SAMPLE_USER } from "./fixtures";
 import { LedgerRuntime, toPath } from "../src/core/branch";
 import { almanacFor } from "../src/core/engines/almanac";
 import { plateSuffix, renderDrawer, speakerCss } from "../src/core/render";
+import { parseMessage } from "../src/core/dsl";
+import { drawPlates } from "../src/core/plate";
 
 const SRC = process.env.LUMIVERSE_SRC;
 if (!SRC) {
@@ -34,12 +37,14 @@ const preset = buildPreset();
 const LINKED: Record<string, string> = {
   almActive: "yes", almDay: "3", almClock: "21:40", almTime: "Day 3 · 21:40", almWeather: "🌧️ rain, moderate · 9°C · wind SW", almForecast: "rain easing to drizzle by 01:00; clearing before dawn",
   almSun: "rise 07:12 · set 17:41", almMoon: "🌖 waning gibbous", almSeason: "late autumn", almPlace: "Lowmarket › The Rusty Flagon › back room", almVoices: "Mara#2 · Kael#5 · Joss#3 · Wren#0",
-  almCast: "Mara (spot), Kael (peri)", almMode: "conflict", almDue: "Mara owes Wren a favour", almReturning: "no", almCalendar: "",
+  almCast: "Mara (spot), Kael (peri)", almMode: "conflict", almDue: "Mara owes Wren a favour", almReturning: "no", almCalendar: "", almDie: "14",
 };
-function setLinked(on: boolean) {
-  for (const [name, value] of Object.entries(LINKED)) {
-    if (on) registry.registerMacro({ name, category: "extension:almanac_ledger", description: name, handler: () => value });
-    else registry.unregisterMacro?.(name);
+/** The first prompt of a chat the Ledger is about to arm: it reports "arming" and has no state yet. */
+const ARMING: Record<string, string> = Object.fromEntries(Object.keys(LINKED).map((k) => [k, k === "almActive" ? "arming" : ""]));
+function setExt(values: Record<string, string> | null) {
+  for (const name of Object.keys(LINKED)) {
+    registry.unregisterMacro?.(name);
+    if (values) registry.registerMacro({ name, category: "extension:almanac_ledger", description: name, handler: () => values[name] ?? "" });
   }
 }
 
@@ -58,8 +63,11 @@ function defaults() {
 interface Scenario {
   name: string;
   gen: string;
-  linked?: boolean;
+  /** The Ledger's macros; null = the extension isn't installed. Default: a managed chat. */
+  ext?: Record<string, string> | null;
   lastUser?: string;
+  /** The chat's last message, when it isn't the player's (an empty send). */
+  lastMessage?: string;
   lastChar?: string;
   rejected?: string;
   count?: number;
@@ -69,36 +77,46 @@ interface Scenario {
 }
 
 const SCENARIOS: Scenario[] = [
-  { name: "standalone · scene", gen: "normal" },
-  { name: "linked · scene", gen: "normal", linked: true },
-  { name: "linked · sidecar + visible off", gen: "normal", linked: true, vars: { cot_channel: "sidecar" } },
-  { name: "standalone · swipe", gen: "swipe", rejected: "🗓️ Day 3 · Tuesday 🕰️ 21:40 🌧️ rain\n📍 Lowmarket › Flagon\n# Salt\n\nMara set the glass down so hard the stem cracked, and the room went quiet around her." },
-  { name: "standalone · continue", gen: "continue" },
-  { name: "standalone · OOC", gen: "normal", lastUser: "((quick question: is Kael armed?))" },
-  { name: "standalone · /recap", gen: "normal", lastUser: "/recap" },
-  { name: "standalone · /skip", gen: "normal", lastUser: "/skip until morning" },
-  { name: "standalone · /session0", gen: "normal", lastUser: "/session0" },
-  { name: "full cast · explicit · visible · deep", gen: "normal", model: "deepseek-r1", vars: { persona_mode: "full_cast", nsfw: "explicit", cot_channel: "visible", cot: "deep", outcomes: "fair_roll", inner_voice: "register", persona_thoughts: "1", ledger: "snapshot" } },
-  { name: "intimacy · explicit · extended", gen: "normal", vars: { nsfw: "explicit", vocab: "crude", intimacy_length: "extended" }, chatVars: { alm_mode: "intimacy" } },
-  { name: "intimacy · fade", gen: "normal", vars: { nsfw: "fade", intimacy_length: "extended" }, chatVars: { alm_mode: "intimacy" } },
-  { name: "intimacy · sensual · brief", gen: "normal", vars: { nsfw: "sensual", vocab: "tasteful", intimacy_length: "brief" }, chatVars: { alm_mode: "intimacy" } },
-  { name: "session-zero overrides", gen: "normal", chatVars: { alm_cfg_genres: "horror, mystery", alm_cfg_persona: "director", alm_cfg_nsfw: "off", alm_cfg_romance: "off", alm_cfg_limits: "gore > 3", alm_mode: "investigation" } },
+  { name: "scene", gen: "normal" },
+  { name: "first turn · Ledger arming", gen: "normal", ext: ARMING, count: 2 },
+  { name: "sidecar planner", gen: "normal", vars: { cot_channel: "sidecar" } },
+  { name: "swipe", gen: "swipe", rejected: "🗓️ Day 3 · Tuesday 🕰️ 21:40 🌧️ rain\n📍 Lowmarket › Flagon\n# Salt\n\nMara set the glass down so hard the stem cracked, and the room went quiet around her." },
+  { name: "continue", gen: "continue" },
+  { name: "OOC", gen: "normal", lastUser: "((quick question: is Kael armed?))" },
+  { name: "OOC · single parentheses", gen: "normal", lastUser: "(OOC: it's Day 26, not Day 3)" },
+  { name: "/recap", gen: "normal", lastUser: "/recap" },
+  { name: "/skip", gen: "normal", lastUser: "/skip until morning" },
+  { name: "/session0", gen: "normal", lastUser: "/session0" },
+  { name: "unknown command", gen: "normal", lastUser: "/recpa" },
+  { name: "empty send after a command", gen: "normal", lastUser: "/recap", lastMessage: "<folio title=\"Previously on…\">Mara kept the locket.</folio>" },
+  { name: "swipe of a command reply", gen: "swipe", lastUser: "/recap" },
+  { name: "full cast · explicit · visible · deep", gen: "normal", model: "deepseek-r1", vars: { persona_mode: "full_cast", nsfw: "explicit", cot_channel: "visible", cot: "deep", outcomes: "fair_roll", inner_voice: "register", persona_thoughts: "1" } },
+  { name: "native · deepseek (reasoning prefill)", gen: "normal", model: "deepseek-reasoner", vars: { cot: "lean" } },
+  { name: "intimacy · explicit · extended", gen: "normal", vars: { nsfw: "explicit", vocab: "crude", intimacy_length: "extended" }, ext: { ...LINKED, almMode: "intimacy" } },
+  { name: "intimacy · fade", gen: "normal", vars: { nsfw: "fade", intimacy_length: "extended" }, ext: { ...LINKED, almMode: "intimacy" } },
+  { name: "intimacy · sensual · brief", gen: "normal", vars: { nsfw: "sensual", vocab: "tasteful", intimacy_length: "brief" }, ext: { ...LINKED, almMode: "intimacy" } },
+  { name: "session-zero overrides", gen: "normal", chatVars: { alm_cfg_genres: "horror, mystery", alm_cfg_persona: "director", alm_cfg_nsfw: "off", alm_cfg_romance: "off", alm_cfg_limits: "gore > 3" }, ext: { ...LINKED, almMode: "investigation" } },
+  { name: "unknown setting values fall back", gen: "normal", chatVars: { alm_cfg_persona: "full cast", alm_cfg_nsfw: "none", alm_cfg_romance: "slow burn" } },
+  { name: "lite ledger · header every reply", gen: "normal", vars: { ledger: "lite", header: "every" } },
   { name: "impersonate", gen: "impersonate" },
   { name: "auto planning · non-reasoning model", gen: "normal", model: "mistral-large-latest" },
+  { name: "gate · Ledger not installed", gen: "normal", ext: null },
+  { name: "gate · Ledger switched off here", gen: "normal", ext: { almActive: "no" } },
+  { name: "gate · no interceptor permission", gen: "normal", ext: { almActive: "off" } },
 ];
 
 const LEFTOVER = /\{\{[^}]*\}\}|\{\{|\}\}/;
 let failures = 0;
 
 async function renderScenario(sc: Scenario) {
-  setLinked(!!sc.linked);
+  setExt(sc.ext === undefined ? LINKED : sc.ext);
   const { values, selections } = defaults();
   Object.assign(values, sc.vars ?? {});
   const env: any = {
     commit: true,
     names: { user: "Wren", char: "Mara", isGroupChat: "no", charGroupFocused: "", group: "", groupNotMuted: "", notChar: "Wren", groupOthers: "" },
     character: { name: "Mara" },
-    chat: { id: "c1", messageCount: sc.count ?? 24, lastUserMessage: sc.lastUser ?? SAMPLE_USER, lastCharMessage: sc.lastChar ?? SAMPLE_REPLY, lastMessage: sc.lastUser ?? SAMPLE_USER, rejectedSwipe: sc.rejected ?? "", lastMessageName: "Wren" },
+    chat: { id: "c1", messageCount: sc.count ?? 24, lastUserMessage: sc.lastUser ?? SAMPLE_USER, lastCharMessage: sc.lastChar ?? SAMPLE_REPLY, lastMessage: sc.lastMessage ?? sc.lastUser ?? SAMPLE_USER, rejectedSwipe: sc.rejected ?? "", lastMessageName: "Wren" },
     system: { model: sc.model ?? "claude-opus", lastGenerationType: sc.gen },
     variables: { local: new Map(Object.entries(values)), global: new Map(), chat: new Map(Object.entries(sc.chatVars ?? {})) },
     dynamicMacros: {},
@@ -117,18 +135,53 @@ async function renderScenario(sc: Scenario) {
     }
     if (text.trim()) out.push({ id: b.id, text });
   }
-  return { out, chatVars: Object.fromEntries(env.variables.chat), local: env.variables.local };
+  // The reasoning prefill (DeepSeek and Kimi connections) is evaluated after the blocks, in the same environment.
+  const prefill = String((await evaluate(preset.completionSettings.reasoningPrefill, env, registry)).text);
+  return { out, prefill, chatVars: Object.fromEntries(env.variables.chat), local: env.variables.local };
 }
 
 const tokens = (s: string) => Math.round(s.length / 4);
 const verbose = process.argv.includes("--verbose");
+const expect = (ok: boolean, what: string) => {
+  if (ok) return;
+  failures++;
+  console.log(`  ✗ ${what}`);
+};
 for (const sc of SCENARIOS) {
-  const { out, chatVars, local } = await renderScenario(sc);
+  const { out, prefill, chatVars, local } = await renderScenario(sc);
   const total = out.reduce((n, o) => n + tokens(o.text), 0);
-  console.log(`\n■ ${sc.name} — ${out.length} blocks, ≈${total} tokens · route=${local.get("alm_route")} linked=${local.get("alm_linked")} mode=${local.get("alm_mode")} genres=${local.get("alm_genres")}`);
+  const get = (k: string) => String(local.get(k) ?? "");
+  console.log(`\n■ ${sc.name} — ${out.length} blocks, ≈${total} tokens · route=${get("alm_route")} linked=${get("alm_linked")} mode=${get("alm_mode")} genres=${get("alm_genres")} persona=${get("alm_persona")} nsfw=${get("alm_nsfw")}`);
   if (verbose) for (const o of out) console.log(`--- ${o.id} (≈${tokens(o.text)})\n${o.text}`);
   else console.log("  " + out.map((o) => `${o.id.replace(/^alm-/, "")}:${tokens(o.text)}`).join(" · "));
-  if (sc.name === "standalone · scene") console.log("  ui chat vars:", JSON.stringify(chatVars));
+  if (prefill.trim()) console.log(`  reasoning prefill: ${prefill}`);
+  if (sc.name === "scene") console.log("  ui chat vars:", JSON.stringify(chatVars));
+  const all = out.map((o) => o.text).join("\n");
+  const ids = out.map((o) => o.id);
+  // What each scenario must (and must not) send.
+  if (sc.name.startsWith("gate")) {
+    expect(ids.join() === "alm-floor,alm-gate", `${sc.name}: only the boundaries and the gate go out (got ${ids.join(", ")})`);
+    expect(/<ooc>/.test(all) && !/<ledger>/.test(all), `${sc.name}: the gate asks for one OOC line`);
+  } else expect(!ids.includes("alm-gate") && ids.includes("alm-charter"), `${sc.name}: a managed chat gets the preset, not the gate`);
+  if (sc.name === "first turn · Ledger arming") expect(/If it says the clock hasn't started/.test(all) && !/Season: \./.test(all) && !/roster: \./.test(all), "arming: no empty verified state, no empty roster");
+  if (sc.name === "OOC · single parentheses") expect(get("alm_route") === "ooc", "(OOC: …) routes as out of character");
+  if (sc.name === "unknown command") expect(/isn't a command/.test(all), "an unknown /command answers with the list");
+  if (sc.name === "empty send after a command") expect(get("alm_route") === "scene", "an empty send doesn't re-run the last /command");
+  if (sc.name === "swipe of a command reply") expect(get("alm_route") === "command", "a new take on a command reply is the command again");
+  if (sc.name === "unknown setting values fall back") expect(get("alm_persona") === "sealed" && get("alm_nsfw") === "fade" && get("alm_romance") === "slow" && /\[AGENCY\]\nWren belongs to the player/.test(all), "unknown setting values fall back to the defaults");
+  if (sc.name === "intimacy · fade") expect(!/Baseline vocabulary/.test(all), "fade sends no explicit vocabulary");
+  if (sc.name === "impersonate") expect(!ids.includes("alm-agency") && !ids.includes("alm-prose") && /This one message, you write Wren's next line/.test(all), "impersonation drops the agency and POV rules");
+  if (sc.name === "native · deepseek (reasoning prefill)") expect(/^Director's Pass — ROUTE, ANCHOR, SEAL, MINDS, MOVE, VOICE, LEDGER\./.test(prefill), "native planning on DeepSeek gets a lean prefill");
+  const wantPrefill = get("alm_linked") === "1" && get("alm_cotch") === "native" && ["scene", "variant"].includes(get("alm_route"));
+  expect(!!prefill.trim() === wantPrefill, `${sc.name}: the reasoning prefill goes out on native story turns only`);
+  if (sc.name === "lite ledger · header every reply") expect(!/reveal #key/.test(all) && /Lite ledger/.test(all) && /open every reply with it/.test(all), "lite ledger sends only its lines; header every reply");
+  if (sc.name === "scene") {
+    expect(/open the first reply of every scene with it, without exception/.test(all), "the header opens every scene");
+    // The ledger example must be one the Ledger reads cleanly.
+    const example = /<ledger>[\s\S]*?<\/ledger>/.exec(out.find((o) => o.id === "alm-ledger")!.text)![0];
+    const parsed = parseMessage(example);
+    expect(!parsed.unknown.length && parsed.ops.length >= 12 && parsed.ops.at(-1)?.op === "mode", `the ledger example parses (unknown: ${parsed.unknown.join(" | ")})`);
+  }
 }
 
 // ── Display regex over a sample reply ───────────────────────────────────────
@@ -144,7 +197,7 @@ function expand(tpl: string, m: RegExpMatchArray): string {
   });
 }
 
-/** The reply as the Ledger's render processor hands it to display regex: plate suffix + compiled drawer. */
+/** The reply as the Ledger's render processor hands it to display regex: the plate drawn, the ledger compiled into its drawer. */
 function linkedReply(): { html: string; css: string } {
   const rt = new LedgerRuntime();
   const raw = [OPENING, SAMPLE_USER, SAMPLE_REPLY].map((content, i) => ({ id: `m${i}`, index_in_chat: i, is_user: i === 1, content, swipes: [content], swipe_id: 0 }));
@@ -153,6 +206,7 @@ function linkedReply(): { html: string; css: string } {
   const drawer = renderDrawer({ state, delta: state.lastDelta, almanac: al, colors: {}, userName: "Wren", sealed: true, nsfw: false, view: "drawer", latest: true });
   let html = SAMPLE_REPLY;
   if (al) html = html.replace(/^([ \t]*🗓[^\n]*?)[ \t]*$/mu, (_m, line) => `${line}${plateSuffix(al)}`);
+  html = drawPlates(html, "mystery");
   html = html.replace(/<ledger\b[^>]*>[\s\S]*?<\/ledger>/i, `\n\n${drawer}\n`);
   return { html, css: speakerCss(state, {}) };
 }
@@ -192,13 +246,18 @@ async function display(content: string, isUser: boolean, depth: number, chatVars
 }
 
 const htmlArg = process.argv.indexOf("--html");
-const uiVars = { alm_ui_style: "blocks", alm_ui_color: "1", alm_ui_align: "stage", alm_ui_view: "drawer", alm_ui_panels: "scene, cast, bonds, thoughts, inventory, threads, knowledge", alm_ui_lead: "mystery", alm_place: "The Rusty Flagon › back room", alm_wx: "heavy rain" };
+const uiVars = { alm_ui_style: "blocks", alm_ui_color: "1", alm_ui_align: "stage", alm_ui_lead: "mystery" };
 const sections: string[] = [];
+const rendered = linkedReply();
 for (const style of ["blocks", "chips", "tint", "script"]) {
-  const html = await display(SAMPLE_REPLY, false, 0, { ...uiVars, alm_ui_style: style });
-  if (/\[spk=|\[\/spk\]|<ledger>|<unspoken>|<plan>|\[vtk=|🕰️?\s*\d{1,2}:\d\d|\[txt|\[thk|\[\[alm-desk/.test(html)) {
+  const html = await display(rendered.html, false, 0, { ...uiVars, alm_ui_style: style });
+  // A header line left raw (the Ledger draws it as the plate), or any mark the display regex should have drawn.
+  const RAW = /\[spk=|\[\/spk\]|<ledger>|<unspoken>|<plan>|\[vtk=|(?:^|\n)[ \t]*🗓|\[txt|\[thk|\[\[alm-desk/u;
+  const bare = html.replace(/<style>[\s\S]*?<\/style>/g, "");
+  const raw = RAW.exec(bare);
+  if (raw) {
     failures++;
-    console.log(`  ✗ display (${style}): raw marks survived`);
+    console.log(`  ✗ display (${style}): raw marks survived: ${JSON.stringify(bare.slice(Math.max(0, raw.index - 80), raw.index + 80))}`);
   }
   if (LEFTOVER.test(html.replace(/<style>[\s\S]*?<\/style>/g, ""))) {
     failures++;
@@ -206,7 +265,7 @@ for (const style of ["blocks", "chips", "tint", "script"]) {
   }
   sections.push(`<section data-style="${style}"><h2>${style}</h2><div class="msg">${html}</div></section>`);
 }
-sections.push(`<section><h2>older reply (depth 3)</h2><div class="msg">${await display(SAMPLE_REPLY.split("\n\n").slice(0, 3).join("\n\n"), false, 3, { ...uiVars, alm_ui_lead: "romance" })}</div></section>`);
+sections.push(`<section><h2>older reply (depth 3)</h2><div class="msg">${await display(drawPlates(SAMPLE_REPLY.split("\n\n").slice(0, 3).join("\n\n"), "romance"), false, 3, { ...uiVars, alm_ui_lead: "romance" })}</div></section>`);
 const linked = linkedReply();
 sections.push(`<section class="linked"><h2>linked (extension rendered the drawer)</h2><div class="msg">${await display(linked.html, false, 0, { ...uiVars, alm_ui_lead: "fantasy" })}</div></section>`);
 sections.push(`<section><h2>player</h2><div class="msg user">${await display(SAMPLE_USER, true, 1, uiVars)}</div></section>`);

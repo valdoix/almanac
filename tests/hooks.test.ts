@@ -117,7 +117,8 @@ describe("extension hooks with the preset", () => {
     // The header said "Day 3 · Tuesday, 14 October 1923": the almanac agrees on Day 3.
     expect(macro("almClock")).toContain("Tuesday 14 October 1923");
     // Per chat: another chat (or another user's) never reads this one's values, and nothing goes in the host's global cache.
-    expect(macro("almActive", "some-other-chat")).toBe("no");
+    // A chat nothing was pushed for yet reads "arming": the interceptor decides on that prompt.
+    expect(macro("almActive", "some-other-chat")).toBe("arming");
     expect(macro("almPlace", "some-other-chat")).toBe("");
     expect(macros.size).toBe(0);
   });
@@ -358,10 +359,61 @@ describe("release fixes against the host (1.13)", () => {
     expect((await loadChat(AC, USER)).meta.enabled).toBe(true); // and arms again when the preset returns
   });
 
-  test("the handshake's language and preset version are read", async () => {
+  test("the handshake's preset version is read; the story is English, so a language is ignored", async () => {
     const { loadChat } = await import("../src/backend/store");
     await hooks.prompt([{ role: "system", content: `${CHARTER}\n${HANDSHAKE.replace("/>", ' lang="Español" v="1.0.11"/>')}` }, { role: "user", content: "Hola." }], { chatId: CHAT, userId: USER, generationType: "normal" });
-    expect((await loadChat(CHAT, USER)).meta.detected).toMatchObject({ lang: "Español", presetVersion: "1.0.11" });
+    const detected = (await loadChat(CHAT, USER)).meta.detected as Record<string, unknown>;
+    expect(detected.presetVersion).toBe("1.0.11");
+    expect(detected.lang).toBeUndefined();
+  });
+
+  test("almActive tells the preset whether it may run: arming in automatic mode, no when switched off here", async () => {
+    const base = JSON.parse(meta(false));
+    files.set("chats/auto-chat/meta.json", JSON.stringify(base));
+    files.set("chats/off-chat/meta.json", JSON.stringify({ ...base, config: { ...base.config, enabledOverride: false } }));
+    await hooks.context({ chatId: "auto-chat", userId: USER, generationType: "normal" });
+    await hooks.context({ chatId: "off-chat", userId: USER, generationType: "normal" });
+    expect(macro("almActive", "auto-chat")).toBe("arming");
+    expect(macro("almActive", "off-chat")).toBe("no");
+  });
+
+  test("the fair die belongs to the player's turn: a swipe gets the same roll", async () => {
+    await hooks.context({ chatId: CHAT, userId: USER, generationType: "normal" });
+    const first = macro("almDie");
+    expect(Number(first)).toBeGreaterThanOrEqual(1);
+    expect(Number(first)).toBeLessThanOrEqual(20);
+    await hooks.context({ chatId: CHAT, userId: USER, generationType: "swipe" });
+    expect(macro("almDie")).toBe(first);
+    const { turnDie } = await import("../src/backend/macros");
+    const rolls = new Set(Array.from({ length: 200 }, (_, i) => turnDie(CHAT, `u${i}`)));
+    expect(rolls.size).toBe(20);
+  });
+
+  test("/session0 opens the Session Zero window", async () => {
+    sent.length = 0;
+    await hooks.prompt([{ role: "system", content: `${CHARTER}\n${HANDSHAKE}` }, { role: "user", content: "/session0" }], { chatId: CHAT, userId: USER, generationType: "normal" });
+    expect(sent.some((m) => m?.type === "sessionZero" && m.chatId === CHAT)).toBe(true);
+    sent.length = 0;
+    await hooks.prompt([{ role: "system", content: `${CHARTER}\n${HANDSHAKE}` }, { role: "user", content: "/session0" }], { chatId: CHAT, userId: USER, generationType: "normal", isDryRun: true });
+    expect(sent.some((m) => m?.type === "sessionZero")).toBe(false);
+  });
+
+  test("a sidecar planner that doesn't answer is reported, not left as a missing plan", async () => {
+    const SC = "sidecar-chat";
+    files.set(`chats/${SC}/meta.json`, meta(true));
+    const res = await hooks.prompt([{ role: "system", content: `${CHARTER}\n${HANDSHAKE.replace('cot="native"', 'cot="sidecar"')}` }, { role: "user", content: "I wait." }], { chatId: SC, userId: USER, generationType: "normal" });
+    const out = (Array.isArray(res) ? res : res.messages).map((m: any) => m.content).join("\n");
+    expect(out).toContain("The planner didn't answer this turn");
+    expect(out).not.toContain("<director-plan>\n");
+  });
+
+  test("a reply that opens a scene without a header gets one drawn; a mid-scene reply doesn't", async () => {
+    const bare = (s: string) => s.replace(/^🗓[^\n]*\n📍[^\n]*\n/u, "");
+    // m0 opens the story's first scene; m2 is twelve minutes later in the same room.
+    const opening = await hooks.render({ chatId: CHAT, userId: USER, messageId: "m0", content: bare(OPENING), isUser: false, origin: "render" });
+    expect(opening.content).toMatch(/<div class="p" data-k="/);
+    const mid = await hooks.render({ chatId: CHAT, userId: USER, messageId: "m2", content: bare(SAMPLE_REPLY), isUser: false, origin: "render" });
+    expect(mid.content).not.toMatch(/<div class="p" data-k="/);
   });
 
   test("a plan goes out once: the next prompt never reuses it", async () => {

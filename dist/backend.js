@@ -2487,7 +2487,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.17.4";
+var VERSION = "1.18.0";
 
 // src/core/facts.ts
 function stem(w) {
@@ -7906,13 +7906,6 @@ var init_plate = __esm(() => {
 });
 
 // src/core/prompts.ts
-function langRule(lang, keep = "the section labels") {
-  const l = (lang ?? "").trim();
-  if (!l || /^english$/i.test(l))
-    return "";
-  return `
-- Write in ${l}, the story's language. Keep ${keep} exactly as shown, in English.`;
-}
 function summaryWords(level, detail = "detailed") {
   const d = DETAIL[detail] ?? DETAIL.detailed;
   return level === "chapter" ? d.chapter : d.rollup;
@@ -7937,7 +7930,7 @@ Rules:
 - Record only what the story shows. A scene that was planned, imagined, dreamed or hinted at is not an event.${opts.offPage?.length ? `
 - These secrets have not come out yet. The summary must not state them; say only that the keeper holds something back: ${opts.offPage.map((o) => `"${o.statement}"${o.words.length ? ` (never write ${o.words.map((w) => `"${w}"`).join(" or ")})` : ""}${o.wording ? ` \u2014 allude as "${o.wording}"` : ""}`).join("; ")}.` : ""}${opts.focus?.trim() ? `
 - The player asked you to always keep: ${opts.focus.trim()}` : ""}
-- ${words[0]}\u2013${words[1]} words. Every sentence must carry a fact${detail === "brief" ? "; cut everything a later scene would not need" : ""}.${langRule(opts.lang)}`;
+- ${words[0]}\u2013${words[1]} words. Every sentence must carry a fact${detail === "brief" ? "; cut everything a later scene would not need" : ""}.`;
   const user = `${opts.prior ? `Earlier context (already summarised, do not repeat):
 ${opts.prior}
 
@@ -7957,19 +7950,19 @@ ${opts.transcript}
 </story>`;
   return { system, user };
 }
-function rollupPrompt(level, parts, userName, detail, focus, offPage, lang) {
+function rollupPrompt(level, parts, userName, detail, focus, offPage) {
   return summaryPrompt(level, { userName, transcript: parts.join(`
 
 ---
 
-`), detail, focus, offPage, lang });
+`), detail, focus, offPage });
 }
 function repairPrompt(opts) {
   return {
     system: `You extract a story ledger from one roleplay reply. ${SAFETY_DATA}
 Write ONLY a <ledger>\u2026</ledger> block using this language:
 ${DSL_SPEC}
-Record only what the reply makes true. Every bond, item and thread line needs a cause.${opts.sealed ? ` Never record ${opts.userName}'s mood, thoughts or journal.` : ""}${langRule(opts.lang, "the op names and line shapes")}`,
+Record only what the reply makes true. Every bond, item and thread line needs a cause.${opts.sealed ? ` Never record ${opts.userName}'s mood, thoughts or journal.` : ""}`,
     user: `Verified state before the reply:
 ${opts.verified}
 
@@ -7983,7 +7976,7 @@ function archivistPrompt(opts) {
     system: `You maintain the Codex (story bible) of a roleplay. ${SAFETY_DATA}
 Work in three passes: UPDATE records the new chapter changes; SWEEP removes facts it made false ("was X, now Y" residue included); COMPRESS rewrites each touched record as a tight present-tense description.
 Rules: one fact in one place. Describe what lasts: who they are, their role, traits, wants, fears, voice and looks (eyes, hair, build, scars, age). Never where someone is, what they wear or hold, what they're doing or feeling right now: the live state tracks those, and a note of them goes stale by the next scene. A routine is a daily schedule, or leave it out. Keys: 4\u201312 per record, 1\u20132 words, concrete, never the record's own name, never other characters' names. Never touch locked records: ${opts.locked.join(", ") || "(none)"}.
-Output JSON only: {"set":[{"id":"char:mara","summary":"\u2026","keys":["\u2026"],"body":{"role":"\u2026","traits":"\u2026","want":"\u2026","fear":"\u2026","voice":"\u2026","appearance":"\u2026","routine":"06:00\u201309:00 docks; \u2026"}}],"drop":["id"]}${langRule(opts.lang, "the JSON field names and record ids")}`,
+Output JSON only: {"set":[{"id":"char:mara","summary":"\u2026","keys":["\u2026"],"body":{"role":"\u2026","traits":"\u2026","want":"\u2026","fear":"\u2026","voice":"\u2026","appearance":"\u2026","routine":"06:00\u201309:00 docks; \u2026"}}],"drop":["id"]}`,
     user: `<codex>
 ${opts.records}
 </codex>
@@ -11214,8 +11207,7 @@ function clerkWanted(mode, st, msgIndex, content) {
   return !hasLines && parseThoughts(content).length > 0;
 }
 function clerkPrompt(opts) {
-  const p = clerkPromptBase(opts);
-  return { ...p, system: p.system + langRule(opts.lang, "the line shapes, #keys and stance words (knows, believes, suspects, doubts, wrong, true, false)") };
+  return clerkPromptBase(opts);
 }
 function clerkPromptBase(opts) {
   const st = opts.state;
@@ -11306,7 +11298,6 @@ function parseClerk(text) {
   return ops.slice(0, 8);
 }
 var init_clerk = __esm(() => {
-  init_prompts();
   init_types();
   init_dsl();
   init_facts();
@@ -11408,7 +11399,7 @@ async function clerkOne(chatId, msgId, userId, force = false) {
   const player = L.path.slice(prevReply + 1, i).filter((m) => m.isUser).map((m) => m.content).join(`
 
 `);
-  const p = clerkPrompt({ state: before, here: after, userName: L.names.user, sealed: fo.sealed, player, reply: msg.content, query: `${player} ${msg.content}`.slice(-3000), lang: files.meta.detected.lang });
+  const p = clerkPrompt({ state: before, here: after, userName: L.names.user, sealed: fo.sealed, player, reply: msg.content, query: `${player} ${msg.content}`.slice(-3000) });
   let text = "";
   try {
     text = await quiet([sys(p.system), usr(p.user)], {
@@ -13801,8 +13792,7 @@ For a card with REACHES THE SCENE, also write "arrival": the moment it reaches t
 You may add up to two ledger "lines" per card for the LEAD and CAST only: "know Name: #key fact | how they learned it \xB7 knows/believes", "bond A>B: trust +1 \u2014 cause", "journal Name: their own words".
 Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only. The premise is one or two plain, specific sentences: who, what they've learned or what has happened to them (naming the actual news, people and places in the grounds), and what they mean to do about it (at most 45 words, no labels or lists). The want is "to \u2026" and the fear a plain clause, both specific and in natural words.${cards.some((c) => c.kind === "world") ? `
 A "world" card is the setting's own agenda, an actor too: tell it through consequences in the world (a move, a cost, a changed place), never by announcing it. Lines under HOLDS never break; pressure may strain them, nothing breaks them.${ctx.holds?.length ? ` HOLDS: ${ctx.holds.join(" / ")}` : ""}` : ""}${prof}
-Output JSON only: {"beats":[{"card":"b3","result":"cost","text":"\u2026","arrival":"\u2026","lines":["\u2026"]}],"seeds":[{"card":"b2","premise":"\u2026","want":"to \u2026","fear":"\u2026"}]${ctx.profile?.length ? `,"profiles":[{"key":"\u2026","standing":"\u2026","where":"\u2026","reach":"\u2026","want":"\u2026","fear":"\u2026","nocturnal":false}]` : ""}}${ctx.lang && !/^en/i.test(ctx.lang) ? `
-Write the text in ${ctx.lang}; keep the JSON field names, op names and card ids in English.` : ""}`,
+Output JSON only: {"beats":[{"card":"b3","result":"cost","text":"\u2026","arrival":"\u2026","lines":["\u2026"]}],"seeds":[{"card":"b2","premise":"\u2026","want":"to \u2026","fear":"\u2026"}]${ctx.profile?.length ? `,"profiles":[{"key":"\u2026","standing":"\u2026","where":"\u2026","reach":"\u2026","want":"\u2026","fear":"\u2026","nocturnal":false}]` : ""}}`,
     user: `${ctx.truths.length ? `[TRUTHS] (the player's rules; they bind off the page too) ${ctx.truths.join(" \xB7 ")}
 
 ` : ""}${cards.map((c) => cardText({ ...c, result: c.result }, ctx) + (c.ending && c.fateOk ? `
@@ -13942,8 +13932,7 @@ Read the premise for what the LEAD does and is after. Use only the premise and w
 - "cast": the people and groups from the lists below who take part (not ${o.userName}).
 - "secrecy": "public" (anyone could hear of it), "private" (those close to it), or "secret" (hidden on purpose).
 - "place": where it happens, if the premise says; else "".
-Output JSON only: {"kind":"\u2026","want":"to \u2026","fear":"\u2026","cast":["\u2026"],"secrecy":"\u2026","place":"\u2026"}${o.lang && !/^en/i.test(o.lang) ? `
-Write want and fear in ${o.lang}; keep the JSON keys and the kind in English.` : ""}`,
+Output JSON only: {"kind":"\u2026","want":"to \u2026","fear":"\u2026","cast":["\u2026"],"secrecy":"\u2026","place":"\u2026"}`,
     user: `LEAD ${o.lead}: ${o.leadText.slice(0, 240) || "\u2014"}
 PREMISE ${o.premise}
 PEOPLE ${o.people.join(", ") || "\u2014"}
@@ -15103,7 +15092,12 @@ function macroValue(chatId, name) {
   if (name === "almActive" && !has("interceptor"))
     return "off";
   const v = chatId ? values.get(chatId)?.[name] : undefined;
-  return v ?? (name === "almActive" ? "no" : "");
+  return v ?? (name === "almActive" ? "arming" : "");
+}
+function turnDie(chatId, lastUserMessageId) {
+  if (!lastUserMessageId)
+    return "";
+  return String(parseInt(hash(`${chatId}:${lastUserMessageId}:d20`), 16) % 20 + 1);
 }
 function registerMacros() {
   if (registered)
@@ -15181,7 +15175,8 @@ async function pushMacros(chatId, userId) {
     const files = await loadChat(chatId, userId);
     const settings = await loadSettings(userId);
     if (!isEnabled(files.meta, settings)) {
-      values.set(chatId, { almActive: "no" });
+      const arming = settings.enabled === "auto" && files.meta.config.enabledOverride !== false;
+      values.set(chatId, { almActive: arming ? "arming" : "no" });
       return;
     }
     const L = ledgerFor(chatId, userId);
@@ -15213,6 +15208,7 @@ async function pushMacros(chatId, userId) {
     ];
     push("almDue", due.join("; "));
     push("almReturning", lastPlan(chatId)?.returning ? "yes" : "no");
+    push("almDie", turnDie(chatId, [...L.path].reverse().find((m) => m.isUser)?.id));
     values.set(chatId, cur);
     if (values.size > 64)
       values.delete(values.keys().next().value);
@@ -15220,32 +15216,7 @@ async function pushMacros(chatId, userId) {
     warn(`push macros: ${describe(err)}`);
   }
 }
-async function mirrorChatVars(chatId, userId) {
-  try {
-    const L = ledgerFor(chatId, userId);
-    const st = L.state;
-    if (!st)
-      return;
-    const vars = {
-      alm_day: st.time ? String(st.time.day) : "",
-      alm_clock: st.time ? `Day ${st.time.day} ${hhmm(st.time.minute)}` : "",
-      alm_place: st.place.join(" \u203A "),
-      alm_wx: st.weather?.condition ?? "",
-      alm_present: Object.values(st.chars).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.isUser && !c.dead).map((c) => c.name).join(", "),
-      alm_mode: st.mode
-    };
-    for (const [k, v] of Object.entries(vars)) {
-      const key = `${chatId}:${k}`;
-      if (lastVars.get(key) === v)
-        continue;
-      lastVars.set(key, v);
-      await host.variables.chat.set(chatId, k, v);
-    }
-  } catch (err) {
-    warn(`chat vars: ${describe(err)}`);
-  }
-}
-var PUSH, values, registered = false, lastVars;
+var PUSH, values, registered = false;
 var init_macros = __esm(() => {
   init_util();
   init_state();
@@ -15255,7 +15226,7 @@ var init_macros = __esm(() => {
   init_store();
   init_turn();
   PUSH = [
-    { name: "almActive", description: "yes when the ALMANAC Ledger manages this chat" },
+    { name: "almActive", description: "yes when the ALMANAC Ledger manages this chat; arming when this prompt will switch it on (automatic mode); no when it's off here" },
     { name: "almDay", description: "Story day number" },
     { name: "almClock", description: "Weekday, date and time" },
     { name: "almTime", description: "24 h time" },
@@ -15270,10 +15241,10 @@ var init_macros = __esm(() => {
     { name: "almCast", description: "Present characters, one line each" },
     { name: "almMode", description: "Current scene mode" },
     { name: "almDue", description: "Consequences and deadlines due now" },
-    { name: "almReturning", description: "yes if the player returns after a long absence" }
+    { name: "almReturning", description: "yes if the player returns after a long absence" },
+    { name: "almDie", description: "A d20 for this player turn: the same on every swipe and regeneration of the reply" }
   ];
   values = new Map;
-  lastVars = new Map;
 });
 
 // src/backend/mirror.ts
@@ -15953,7 +15924,6 @@ function onMutation(chatId, userId) {
 function afterChange(chatId, userId, opts) {
   clearRenderCache();
   pushMacros(chatId, userId);
-  mirrorChatVars(chatId, userId);
   pushState(chatId, userId);
   debounce(`mirror:${chatId}`, 2000, () => syncMirror(chatId, userId));
   if (opts.background) {
@@ -16034,7 +16004,7 @@ async function repair(chatId, msgId, swipe, content, userId) {
   let ops = [];
   let source = "repair";
   try {
-    const p = repairPrompt({ prose: plainProse(content), verified, userName: L.names.user, sealed: L.foldOptions(files.meta, settings).sealed, lang: files.meta.detected.lang });
+    const p = repairPrompt({ prose: plainProse(content), verified, userName: L.names.user, sealed: L.foldOptions(files.meta, settings).sealed });
     let text = await quiet([sys(p.system), usr(p.user)], { userId, reasoningOff: true, timeoutMs: 60000, connectionId: settings.summarizerConnection || undefined, label: "ledger repair" });
     if (!/<ledger/i.test(text))
       text = await quiet([sys(p.system), usr(p.user)], { userId, timeoutMs: 90000, connectionId: settings.summarizerConnection || undefined, label: "ledger repair (thinking)" });
@@ -16076,18 +16046,17 @@ async function runChronicle(chatId, userId, force = false) {
         const detail = settings.summaryDetail;
         const focus = settings.summaryFocus;
         const offPage = offPageFacts(L.state, settings.secretsOffPage !== false);
-        const lang = files.meta.detected.lang;
-        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, lang, prior: prev ? `${prev.title}: ${prev.text.slice(0, summaryPriorChars(detail))}` : undefined });
+        const p = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, prior: prev ? `${prev.title}: ${prev.text.slice(0, summaryPriorChars(detail))}` : undefined });
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180000, label: "chapter summary" });
         const gaps = coverageGaps(text, L.events, L.state, job.startIdx, job.endIdx);
         if (gaps.length) {
           const [lo, hi] = summaryWords("chapter", detail);
-          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, lang, words: [lo, hi + 30 + gaps.length * 15], mustInclude: gaps });
+          const p2 = summaryPrompt("chapter", { userName: L.names.user, transcript, detail, focus, offPage, words: [lo, hi + 30 + gaps.length * 15], mustInclude: gaps });
           text = await quiet([sys(p2.system), usr(p2.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180000, label: "chapter summary (coverage)" }).catch(() => text);
         }
       } else {
         const p = rollupPrompt(job.level, job.children.map((c) => `${c.title}
-${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus, offPageFacts(L.state, settings.secretsOffPage !== false), files.meta.detected.lang);
+${c.text}`), L.names.user, settings.summaryDetail, settings.summaryFocus, offPageFacts(L.state, settings.secretsOffPage !== false));
         text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, timeoutMs: 180000, label: `${job.level} summary` });
       }
       if (!text || text.length < 40)
@@ -16134,7 +16103,7 @@ async function runArchivist(chatId, chapterText, startIdx, endIdx, userId) {
     return;
   const locked = touched.filter((r) => r.locked).map((r) => r.id);
   const p = archivistPrompt({ chapter: chapterText, records: touched.map((r) => `${r.id} | ${r.kind} | ${r.name} | ${r.summary} | keys: ${r.keys.join(", ")}${r.body.archivist ? ` | notes: ${r.body.archivist}` : ""}`).join(`
-`), locked, lang: files.meta.detected.lang });
+`), locked });
   const text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.summarizerConnection || undefined, reasoningOff: true, timeoutMs: 120000, label: "archivist" });
   const res = extractJson(text);
   if (!res)
@@ -16905,7 +16874,6 @@ function tellingCtx(L, meta, settings, E, tickId, skip, profile) {
     offPage: offPageFacts(st, settings.secretsOffPage !== false),
     truths: [...meta.config.truths ?? [], ...st.canon.filter((c) => c.pinned).map((c) => c.text)],
     holds: world?.holds,
-    lang: meta.detected.lang,
     recent: Object.values(st.arcs ?? {}).flatMap((a) => a.beats.filter((b) => b.tick !== tickId && !skip.includes(b.text)).map((b) => b.text)).slice(-10),
     places: [...Object.values(st.places).flatMap((p) => [p.name, ...p.path]), ...L.records.filter((r) => r.kind === "place" || r.kind === "group").map((r) => r.name)],
     objects: Object.values(st.items).map((i) => i.name),
@@ -17197,7 +17165,7 @@ async function elsewhereAction(chatId, m, userId) {
       if (!lead)
         return { warn: `No one called \u201C${m.name}\u201D is in the roster.` };
       const settings = await loadSettings(userId);
-      const shape = settings.elsewhereTelling !== "engine" ? await shapeStory(lead, premise, roster, L.names.user, files.meta.detected.lang, settings, userId) : null;
+      const shape = settings.elsewhereTelling !== "engine" ? await shapeStory(lead, premise, roster, L.names.user, settings, userId) : null;
       line = authorArc({ roster, name: m.name, premise, now, arcs: Object.values(st.arcs ?? {}), shape });
       if (!line)
         return { warn: `No one called \u201C${m.name}\u201D is in the roster.` };
@@ -17227,13 +17195,12 @@ async function elsewhereAction(chatId, m, userId) {
   }
   return null;
 }
-async function shapeStory(lead, premise, roster, userName, lang, settings, userId) {
+async function shapeStory(lead, premise, roster, userName, settings, userId) {
   const p = shapePrompt({
     userName,
     lead: lead.name,
     leadText: lead.text,
     premise,
-    lang,
     people: roster.actors.filter((a) => a !== lead && a.standing !== "dead").map((a) => a.name).slice(0, 60),
     groups: roster.groups.map((g) => g.name).slice(0, 20)
   });
@@ -17837,7 +17804,6 @@ function parseConfig(attrs) {
     trackerView: get("view"),
     header: get("header")?.toLowerCase() || undefined,
     theme: get("theme"),
-    lang: get("lang") || undefined,
     presetVersion: get("v") || undefined,
     at: Date.now()
   };
@@ -17976,11 +17942,18 @@ function registerPromptInterceptor() {
       }
       if (meta.detected.cot === "sidecar" && (genType === "normal" || genType === "regenerate" || genType === "swipe") && !context.isDryRun) {
         const planText = await runSidecar(msgs, plan.tier, L.names.user, settings, userId);
-        if (planText)
-          inserts.push({ at: lastUserIdx, msg: { role: "system", content: `<director-plan>
+        const content = planText ? `<director-plan>
 ${planText}
 </director-plan>
-Follow this plan. Do not repeat it; write the reply.` }, name: "ALMANAC \xB7 Director plan" });
+Follow this plan. Do not repeat it; write the reply.` : "The planner didn't answer this turn, so there is no <director-plan>: check silently instead, then write the reply.";
+        inserts.push({ at: lastUserIdx, msg: { role: "system", content }, name: "ALMANAC \xB7 Director plan" });
+      }
+      if (genType === "normal" && !context.isDryRun && SESSION_ZERO_CMD.test(textOf(msgs[lastUserIdx] ?? { role: "user", content: "" }))) {
+        try {
+          host.sendToFrontend({ type: "sessionZero", chatId }, userId);
+        } catch (err) {
+          warn(`session zero: ${describe(err)}`);
+        }
       }
       const noteText = [plan.note, plan.speechFix, plan.formatExample].filter(Boolean).join(`
 `);
@@ -18063,7 +18036,9 @@ function registerRenderProcessor() {
       let content = fixed;
       if (al)
         content = content.replace(/^([ \t]*\uD83D\uDDD3[^\n]*?)(\s*\u27EA[^\u27EB]*\u27EB)?[ \t]*$/mu, (_m, line) => `${line}${plateSuffix(al)}`);
-      if (al && files.meta.detected.header === "every")
+      const header = files.meta.detected.header ?? "change";
+      const opensScene = state.sceneStartMsg === L.path[L.path.findIndex((m) => m.id === ctx.messageId)]?.index;
+      if (al && (header === "every" || header !== "off" && opensScene))
         content = fillHeader(content, al, state.place);
       content = drawPlates(content, genre);
       const block = extractLedgerBlock(content);
@@ -18102,7 +18077,7 @@ ${html}
 function clearRenderCache() {
   renderCache.clear();
 }
-var CONFIG_RE, PLANNING_BLOCK, renderCache;
+var CONFIG_RE, SESSION_ZERO_CMD, PLANNING_BLOCK, renderCache;
 var init_hooks = __esm(() => {
   init_chronicle();
   init_dsl();
@@ -18119,6 +18094,7 @@ var init_hooks = __esm(() => {
   init_check();
   init_ingest();
   CONFIG_RE = /<almanac-config\b([^>]*)\/?>(?:\s*<\/almanac-config>)?\s*/i;
+  SESSION_ZERO_CMD = /^\s*\/(?:session0|setup)\b/i;
   PLANNING_BLOCK = /<(weaver_[a-z_]+|deliberation|scratchpad)\b[^>]*>[\s\S]*?<\/\1>\s*/gi;
   renderCache = new Map;
 });

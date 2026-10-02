@@ -56,18 +56,37 @@ describe("golden scenario checkers", () => {
 });
 
 describe("preset build", () => {
-  test("the preset validates: ids, bindings, router targets, regexes, macro balance", () => {
+  test("the preset validates: ids, bindings, regexes, macro balance", () => {
     const p = buildPreset();
     expect(validate(p)).toEqual([]);
     expect(p.schemaVersion).toBe(2);
-    const router = p.extensions.regex_scripts.find((s: any) => s.script_id === "alm-router")!;
-    expect(router.metadata.prompt_activation.mappings.length).toBe(8);
+    // No router: every scene module is on and speaks only while the Almanac's scene mode is its own.
+    expect(p.extensions.regex_scripts.some((s: any) => s.script_id === "alm-router" || s.metadata.prompt_activation)).toBe(false);
     const scenes = p.blocks.filter((b: any) => b.id.startsWith("alm-scene-"));
-    expect(scenes.every((b: any) => b.enabled === false && b.position === "in_history")).toBe(true);
+    expect(scenes.length).toBe(7);
+    expect(scenes.every((b: any) => b.enabled === true && b.position === "in_history" && b.content.includes("{{eq::{{getvar::alm_mode}}::"))).toBe(true);
     expect(p.blocks.find((b: any) => b.id === "alm-director")!.placementBinding.variableId).toBe("alm-var-cot_placement");
   });
+  test("only the router, the boundaries and the gate go out without the Ledger", () => {
+    const p = buildPreset();
+    for (const b of p.blocks.filter((b: any) => !b.marker && b.content)) {
+      const gated = b.content.startsWith("{{if::{{getvar::alm_linked}}}}") && b.content.endsWith("{{/if}}");
+      expect([b.id, gated]).toEqual([b.id, !["alm-boot", "alm-floor", "alm-gate"].includes(b.id)]);
+    }
+    // No standalone pieces: no Session Zero tag, no persisted scene state, no fallback plate, no Language setting.
+    const ids = p.extensions.regex_scripts.map((s: any) => s.script_id);
+    for (const gone of ["alm-session-zero", "alm-persist", "alm-show-plate", "alm-show-session-zero"]) expect(ids).not.toContain(gone);
+    expect(p.blocks.flatMap((b: any) => b.variables ?? []).some((v: any) => ["language", "climate", "calendar", "start_point"].includes(v.name))).toBe(false);
+    expect(JSON.stringify(p.blocks)).not.toContain(" lang=");
+  });
+  test("a stray brace in a block is caught", async () => {
+    const { strayBrace } = await import("../preset/build");
+    expect(strayBrace("{{if::{{ne::{{getvar::alm_header}}::off}}}}}header")).toContain('stray "}"');
+    expect(strayBrace("{{if::{{ne::{{getvar::alm_header}}::off}}}}header")).toBeNull();
+    expect(strayBrace("{{regex::^((?:\\S+\\s+){0,18}\\S+)$::$1::x::}}")).toBeNull();
+  });
   test("the plate regex reads a header, with and without the Ledger's sun/moon suffix", async () => {
-    const { PLATE_FIND } = await import("../preset/src/plate");
+    const { PLATE_FIND } = await import("../src/core/plate/style");
     const re = new RegExp(PLATE_FIND);
     const plain = re.exec("🗓️ Day 3 · Tuesday, 14 October 1923 🕰️ 21:40 🌧️ rain, heavy · 9°C · wind SW\n📍 Lowmarket › Flagon\n# Salt in the Wound\n");
     expect(plain?.slice(1, 6)).toEqual(["Day 3 · Tuesday, 14 October 1923", "21", "40", "🌧", "rain, heavy · 9°C · wind SW"]);
@@ -78,7 +97,7 @@ describe("preset build", () => {
     expect(linked?.slice(6, 11)).toEqual(["06", "42", "18", "10", "🌖 waning gibbous"]);
   });
   test("the plate regex reads a header whose clock is a clock face, not 🕰", async () => {
-    const { PLATE_FIND } = await import("../preset/src/plate");
+    const { PLATE_FIND } = await import("../src/core/plate/style");
     const re = new RegExp(PLATE_FIND);
     const m = re.exec("🗓️ Day 2 · Wednesday 10 October 2001 🕛 11:48 🌤️ fair, 13°C · wind N ⟪06:26|17:34|🌕 full moon⟫\n📍 Sunnydale › Winters Residence › guest bedroom\n\n# Logistics");
     expect(m?.slice(1, 6)).toEqual(["Day 2 · Wednesday 10 October 2001", "11", "48", "🌤", "fair, 13°C · wind N"]);

@@ -28,6 +28,7 @@ export const GENRES: Opt[] = [
 
 export const TRIG_ALL_BUT_QUIET = ["normal", "continue", "regenerate", "swipe", "impersonate"];
 export const TRIG_STORY = ["normal", "regenerate", "swipe"];
+/** Story turns and continues: everything the narrator writes (impersonation writes for the player instead). */
 export const TRIG_STORY_CONT = ["normal", "continue", "regenerate", "swipe"];
 
 /**

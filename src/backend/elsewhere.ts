@@ -255,7 +255,7 @@ function tellingCtx(L: ReturnType<typeof ledgerFor>, meta: ChatMeta, settings: S
   return {
     userName: L.names.user, roster, offPage: offPageFacts(st, settings.secretsOffPage !== false),
     truths: [...(meta.config.truths ?? []), ...st.canon.filter((c) => c.pinned).map((c) => c.text)], holds: world?.holds,
-    lang: meta.detected.lang, // Novelty against other steps: a step's own engine words (with any twist) don't count.
+    // Novelty against other steps: a step's own engine words (with any twist) don't count.
     recent: Object.values(st.arcs ?? {}).flatMap((a) => a.beats.filter((b) => b.tick !== tickId && !skip.includes(b.text)).map((b) => b.text)).slice(-10),
     places: [...Object.values(st.places).flatMap((p) => [p.name, ...p.path]), ...L.records.filter((r) => r.kind === "place" || r.kind === "group").map((r) => r.name)],
     objects: Object.values(st.items).map((i) => i.name), profile,
@@ -519,7 +519,7 @@ export async function elsewhereAction(chatId: string, m: { action: string; id?: 
       if (!lead) return { warn: `No one called “${m.name}” is in the roster.` };
       const settings = await loadSettings(userId);
       // With the model telling, it reads the player's words once: what kind of story, what the lead is after.
-      const shape = settings.elsewhereTelling !== "engine" ? await shapeStory(lead, premise, roster, L.names.user, files.meta.detected.lang, settings, userId) : null;
+      const shape = settings.elsewhereTelling !== "engine" ? await shapeStory(lead, premise, roster, L.names.user, settings, userId) : null;
       line = authorArc({ roster, name: m.name, premise, now, arcs: Object.values(st.arcs ?? {}), shape });
       if (!line) return { warn: `No one called “${m.name}” is in the roster.` };
       break;
@@ -547,9 +547,9 @@ export async function elsewhereAction(chatId: string, m: { action: string; id?: 
 }
 
 /** The shaping call for a player's story; null when the model can't be asked or answers nothing usable. */
-async function shapeStory(lead: Actor, premise: string, roster: Roster, userName: string, lang: string | undefined, settings: Settings, userId?: string) {
+async function shapeStory(lead: Actor, premise: string, roster: Roster, userName: string, settings: Settings, userId?: string) {
   const p = shapePrompt({
-    userName, lead: lead.name, leadText: lead.text, premise, lang,
+    userName, lead: lead.name, leadText: lead.text, premise,
     people: roster.actors.filter((a) => a !== lead && a.standing !== "dead").map((a) => a.name).slice(0, 60), groups: roster.groups.map((g) => g.name).slice(0, 20),
   });
   try {

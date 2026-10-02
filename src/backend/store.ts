@@ -38,8 +38,6 @@ export interface Detected {
   dialogueStyle?: string;
   /** The preset's Dialogue blocks switch: false when speech is written without [spk] marks. */
   dialogueMarks?: boolean;
-  /** The story's language (the preset's Language setting). */
-  lang?: string;
   /** The preset version that sent the handshake. */
   presetVersion?: string;
   at?: number;

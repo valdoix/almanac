@@ -1,10 +1,9 @@
 import { R } from "./vars";
-// The ALMANAC regex suite: response repair, prompt thinning, persistence,
-// the scene-mode router, and every display renderer. Display regex emits the
-// alm-* class names the Ledger's stylesheet paints (with !important), plus a
-// "Lite" inline style so the preset still looks good on its own.
-import { PLATE_FIND, PLATE_REPLACE } from "./plate";
-import { SCENE_MODES } from "./blocks-turn";
+// The ALMANAC regex suite: response repair, prompt thinning, and the display
+// renderers for speech, thoughts, artifacts, notes and folios. Display regex
+// emits the alm-* class names the Ledger's stylesheet paints (with !important),
+// plus an inline base style. The Ledger draws the scene plate and the tracker
+// drawer itself, before display regex runs.
 import vtkTessera from "./vtk-tessera.json";
 
 type Target = "prompt" | "response" | "display";
@@ -101,8 +100,6 @@ const SPK = R`\[spk=([^\]#|\n]{1,60}?)\s*(?:#(\d{1,2}))?\s*(?:\|\s*([a-z]+)[^\]\
 const SPK_BODY = R`([\s\S]*?)(?:\[\/spk\]|(?=\[(?:spk|thk)=)|(?=\n[ \t]*\n)|$)`;
 const SPK_BODY_LINE = R`([^\n]*?)(?:\[\/spk\]|(?=\[(?:spk|thk)=)|(?=\n)|$)`;
 
-const LEDGER_ICON = `{{switch::$1::clock::🕰::wx::🌦::at::📍::cast::👥::mood::🎭::body::🩹::look::👗::bond::🕸::ladder::💞::know::👁::reveal::🗣::secret::🤫::unaware::👁::item::🎒::thread::🧵::owe::⚖::cons::⚖::clockf::⏳::rumor::🗣::rep::🏛::journal::📓::keys::🔑::canon::📜::artifact::✉::gauge::📈::clue::🔎::plant::🌱::deadline::⌛::season::🍂::status::🪪::mode::🎬::•}}`;
-const LEDGER_PANEL = `{{switch::$1::clock::scene::wx::scene::at::scene::cast::scene::mode::scene::season::scene::mood::cast::body::cast::look::cast::status::cast::bond::bonds::ladder::bonds::item::inventory::thread::threads::clockf::threads::deadline::threads::gauge::threads::know::knowledge::reveal::knowledge::secret::knowledge::unaware::knowledge::rumor::knowledge::clue::knowledge::owe::consequences::cons::consequences::rep::consequences::world}}`;
 
 const DESK_BTN = (id: string, label: string, primary = false) =>
   `<span class="alm-btn${primary ? " alm-btn--primary" : ""}" data-regex-action="${id}" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;border:1px solid rgba(127,127,127,.35);border-bottom-width:3px;background:${primary ? "#b5602a;color:#fff" : "rgba(127,127,127,.08)"};font:500 12.5px/1 ui-monospace,Menlo,monospace;cursor:pointer">${label}</span>`;
@@ -126,11 +123,17 @@ export const REGEX: RegexDef[] = [
   {
     id: "alm-ledger-unfence", name: "Ledger · unwrap a fenced ledger", layer: "response", target: ["response"], order: 5, flags: "gi",
     find: R`\x60{3,}[a-z]*[ \t]*\n?\s*(<ledger>[\s\S]*?<\/ledger>)\s*\n?\x60{3,}`, rep: "$1",
-    description: "Some models put the ledger in a code fence; the Ledger and the router need it bare.",
+    description: "Some models put the ledger in a code fence; the Ledger needs it bare.",
   },
   {
     id: "alm-ledger-unescape", name: "Ledger · unescape an HTML-escaped ledger", layer: "response", target: ["response"], order: 6, flags: "gi",
     find: R`&lt;(\/?)(ledger|unspoken|plan)&gt;`, rep: "<$1$2>",
+  },
+  {
+    id: "alm-plan-leak", name: "Director's notes · a pass written into the reply", layer: "response", target: ["response"], order: 9, flags: "i",
+    find: R`^\s*(?:[^\n]*director'?s pass[^\n]*\n+)?([-*•]?[ \t]*\**(?:ROUTE|TIER)\**[ \t]*(?:[—:–]|-{1,2})[\s\S]*?\n[-*•]?[ \t]*\**LEDGER\**[ \t]*(?:[—:–]|-{1,2})[^\n]*(?:\n(?![ \t]*(?:\n|🗓|📍|#|<|\[))[^\n]*)*)\s*`,
+    rep: "<plan>\n$1\n</plan>\n\n",
+    description: "A model told to plan in its reasoning that has none writes the Director's Pass into the reply (ROUTE … LEDGER). It becomes Director's notes: drawn in the drawer, never sent back to the model.",
   },
   {
     id: "alm-plan-last", name: "Director's notes move after the prose", layer: "response", target: ["response"], order: 10, flags: "",
@@ -140,7 +143,7 @@ export const REGEX: RegexDef[] = [
   {
     id: "alm-ledger-last", name: "Ledger moves to the very end", layer: "response", target: ["response"], order: 12, flags: "",
     find: R`(<ledger>[\s\S]*?<\/ledger>)\s*(?=\S)([\s\S]+?)\s*$`, rep: "$2\n\n$1",
-    description: "The router reads the mode line at the end of the message, so anything written after the ledger moves above it.",
+    description: "The Ledger reads the ledger at the end of the message, with mode: last, so anything written after it moves above it.",
   },
   // Speech written as a script label — Buffy#1|flat: "Words." — instead of the mark.
   // Runs on new replies, on how older ones display, and on the history the model
@@ -166,18 +169,6 @@ export const REGEX: RegexDef[] = [
   // Prompt: what never returns, and what thins out with depth
   { id: "alm-prompt-plan", name: "Director's notes never return", layer: "prompt", target: ["prompt"], placement: ["ai_output", "memory"], order: 10, find: R`\s*<plan>[\s\S]*?<\/plan>\s*`, rep: "\n" },
   { id: "alm-prompt-unspoken", name: "Unspoken register never returns", layer: "prompt", target: ["prompt"], placement: ["ai_output", "memory"], order: 11, find: R`\s*<unspoken>[\s\S]*?<\/unspoken>\s*`, rep: "\n" },
-  {
-    id: "alm-session-zero", name: "Session Zero (without the Ledger) · save the answers", layer: "persistence", target: ["prompt"], placement: ["ai_output"], order: 15, macros: "after", flags: "gi",
-    find: R`<session-zero\b(?=[^>]*\bgenres="([^"]*)")?(?=[^>]*\btone="([^"]*)")?(?=[^>]*\bpersona="([^"]*)")?(?=[^>]*\bromance="([^"]*)")?(?=[^>]*\bdifficulty="([^"]*)")?(?=[^>]*\bnsfw="([^"]*)")?(?=[^>]*\blimits="([^"]*)")?(?=[^>]*\bclimate="([^"]*)")?(?=[^>]*\bcalendar="([^"]*)")?(?=[^>]*\bstart="([^"]*)")?[^>]*>`,
-    rep: "(Session Zero settings saved.){{if::{{len::$1}}}}{{setchatvar::alm_cfg_genres::{{lower::$1}}}}{{/if}}{{if::{{len::$2}}}}{{setchatvar::alm_cfg_tone::{{lower::$2}}}}{{/if}}{{if::{{len::$3}}}}{{setchatvar::alm_cfg_persona::{{lower::$3}}}}{{/if}}{{if::{{len::$4}}}}{{setchatvar::alm_cfg_romance::{{lower::$4}}}}{{/if}}{{if::{{len::$5}}}}{{setchatvar::alm_cfg_difficulty::{{lower::$5}}}}{{/if}}{{if::{{len::$6}}}}{{setchatvar::alm_cfg_nsfw::{{lower::$6}}}}{{/if}}{{if::{{len::$7}}}}{{setchatvar::alm_cfg_limits::$7}}{{/if}}{{if::{{len::$8}}}}{{setchatvar::alm_cfg_climate::$8}}{{/if}}{{if::{{len::$9}}}}{{setchatvar::alm_cfg_calendar::$9}}{{/if}}{{if::{{len::$10}}}}{{setchatvar::alm_cfg_start::$10}}{{/if}}{{setchatvar::alm_sz_done::1}}",
-    description: "When the model finishes an OOC Session Zero (/session0) it writes a <session-zero …/> tag; this stores the answers as this chat's settings. With the Ledger installed, its Session Zero window writes the same settings.",
-  },
-  {
-    id: "alm-persist", name: "Scene state · remember place, weather and mode (standalone)", layer: "persistence", target: ["prompt"], placement: ["ai_output"], order: 20, macros: "after", max: 2, flags: "",
-    find: R`<ledger>(?=(?:(?!<\/ledger>)[\s\S])*?\n[ \t]*at:[ \t]*([^\n]+))?(?=(?:(?!<\/ledger>)[\s\S])*?\n[ \t]*wx:[ \t]*(?:[^\n→]*→[ \t]*)?([^\n]+))?(?=(?:(?!<\/ledger>)[\s\S])*?\n[ \t]*cast:[ \t]*([^\n]+))?(?=(?:(?!<\/ledger>)[\s\S])*?\n[ \t]*mode:[ \t]*([a-z]+))?`,
-    rep: "<ledger>{{if::{{len::$1}}}}{{setchatvar::alm_place::$1}}{{/if}}{{if::{{len::$2}}}}{{setchatvar::alm_wx::$2}}{{/if}}{{if::{{len::$3}}}}{{setchatvar::alm_present::$3}}{{/if}}{{if::{{len::$4}}}}{{setchatvar::alm_mode::$4}}{{/if}}",
-    description: "Copies the latest ledger's place, weather, cast and scene mode into chat variables, so the preset keeps its bearings without the Ledger extension.",
-  },
   { id: "alm-prompt-ledger", name: "Older ledgers drop (the latest stays as an example)", layer: "prompt", target: ["prompt"], placement: ["ai_output", "memory"], order: 30, min: 2, find: R`\s*<ledger>[\s\S]*?<\/ledger>\s*`, rep: "\n" },
   { id: "alm-prompt-folio", name: "Older folios and OOC answers drop", layer: "prompt", target: ["prompt"], placement: ["ai_output", "memory"], order: 31, min: 4, find: R`\s*<(folio|ooc)\b[^>]*>[\s\S]*?<\/\1>\s*`, rep: "\n" },
   { id: "alm-prompt-marks", name: "Older speaker and thought marks thin out", layer: "prompt", target: ["prompt"], placement: ["ai_output", "memory"], order: 32, min: 4, find: R`\[(?:spk|thk|txt)=[^\]\n]*\]|\[\/(?:spk|thk|txt)\]`, rep: "" },
@@ -187,28 +178,10 @@ export const REGEX: RegexDef[] = [
   { id: "alm-prompt-headers", name: "Older headers drop", layer: "prompt", target: ["prompt"], placement: ["ai_output", "memory"], order: 36, min: 6, flags: "gm", find: R`^[ \t]*(?:\*\*)?🗓[^\n]*\n(?:[ \t]*(?:\*\*)?📍[^\n]*\n)?`, rep: "" },
   {
     id: "alm-memory-strip", name: "Keep bookkeeping out of memory", layer: "memory", target: ["prompt"], placement: ["memory"], order: 40, flags: "gm",
-    find: R`<(ledger|plan|unspoken|folio|ooc)\b[^>]*>[\s\S]*?<\/\1>|<session-zero\b[^>]*>|^[ \t]*(?:\*\*)?(?:🗓|📍)[^\n]*$|\[(?:spk|thk|txt)=[^\]\n]*\]|\[\/(?:spk|thk|txt)\]`, rep: "",
+    find: R`<(ledger|plan|unspoken|folio|ooc)\b[^>]*>[\s\S]*?<\/\1>|^[ \t]*(?:\*\*)?(?:🗓|📍)[^\n]*$|\[(?:spk|thk|txt)=[^\]\n]*\]|\[\/(?:spk|thk|txt)\]`, rep: "",
   },
 
-  // The scene-mode router: the last ledger line enables one Scene Module
-  {
-    id: "alm-router", name: "Scene-mode router", layer: "activation", target: ["prompt"], placement: ["ai_output"], order: 50, flags: "i",
-    find: R`\n[ \t]*mode:[ \t]*(?<mode>[a-z]+)[ \t]*\n?[ \t]*<\/ledger>\s*$`, rep: "$&",
-    activation: {
-      source: "ai_output", lifetime: "chat",
-      mappings: [
-        ...SCENE_MODES.filter((m) => m !== "social").map((m) => ({ capture: "mode", value: [m], block_ids: [`alm-scene-${m}`], enabled: true })),
-        { capture: "mode", value: ["social"], block_ids: SCENE_MODES.filter((m) => m !== "social").map((m) => `alm-scene-${m}`), enabled: false },
-      ],
-    },
-    description: "Reads `mode:` from the end of the latest reply and turns on exactly one Scene Module until the mode changes. Each module also checks the mode itself, so a stale activation stays silent.",
-  },
-
-  // Display: session zero, director's notes, register
-  {
-    id: "alm-show-session-zero", name: "Session Zero · saved chip", layer: "display", target: ["display"], order: 5, flags: "gi",
-    find: R`<session-zero\b[^>]*>`, rep: `<span class="alm-pill" style="display:inline-flex;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid rgba(127,127,127,.3);font:500 12px/1 ui-monospace,Menlo,monospace">✓ Session Zero saved to this chat</span>`,
-  },
+  // Display: director's notes, register
   {
     id: "alm-show-plan-split", name: "Director's notes · one step per line", layer: "display", target: ["display"], order: 8, flags: "g",
     find: R`([.!?;)"”'’*])[ \t]+(?=\**(?:${PLAN_KEYS})(?:[ \t]*\/[ \t]*(?:${PLAN_KEYS}))*\**[ \t]*(?:[—:–]|-{1,2}|as above\b))` + inside("<plan>", "<\\/plan>"),
@@ -267,12 +240,7 @@ export const REGEX: RegexDef[] = [
     find: R`^[ \t]*♪[ \t]*([^\n]+)$` + inside("\\[vtk=", "\\[\\/vtk\\]"), rep: `<span style="display:block;margin:.15em 0"><span style="opacity:.55">♪ </span>$1</span>`,
   },
 
-  // Display: the scene plate and the title card
-  {
-    id: "alm-show-plate", name: "Scene header · living plate", layer: "display", target: ["display"], order: 50, flags: "", macros: "raw",
-    find: PLATE_FIND, rep: PLATE_REPLACE,
-    description: "Draws the header as a sky that follows the hour, weather and season, over a town or a room. With the Ledger installed the extension draws the full plate instead (every place drawn, exact sunrise, sunset and moon), so this only runs without it.",
-  },
+  // Display: the title card (the Ledger draws the scene plate itself)
   {
     id: "alm-show-title", name: "Scene header · title card", layer: "display", target: ["display"], order: 51, flags: "", macros: "raw",
     find: R`(^|\n)[ \t]*#{1,3}[ \t]+([^\n]+)`,
@@ -336,23 +304,12 @@ export const REGEX: RegexDef[] = [
     rep: `<div class="alm-folio" style="margin:14px 0;border:1px solid rgba(127,127,127,.3);border-radius:12px;overflow:hidden"><div class="alm-folio__hd" style="padding:9px 14px;background:linear-gradient(90deg,#b5602a,#35587e);color:#fff;font:600 12px/1.2 ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase">📜 $1</div><div class="alm-folio__bd" style="padding:12px 16px">$2</div></div>`,
   },
 
-  // Display: the standalone Ledger drawer (with the Ledger installed, the extension renders it instead)
-  { id: "alm-show-ledger-off", name: "Ledger · hidden (tracker view: off)", layer: "display", target: ["display"], order: 78, macros: "find", find: gate(`{{eq::{{getchatvar::alm_ui_view}}::off}}`) + R`\s*<ledger>[\s\S]*?(?:<\/ledger>|$)`, rep: "" },
+  // Display: a ledger the Ledger didn't draw (the chat switched off, or a drawing error) shows as plain lines
   {
-    id: "alm-show-ledger-bond", name: "Ledger · bond deltas", layer: "display", target: ["display"], order: 79, flags: "gm",
-    find: R`^([ \t]*(?:bond|ladder|rep)\b[^\n]*?)([+−-]\d)\b` + inside("<ledger>", "<\\/ledger>"),
-    rep: `$1<span style="display:inline-block;padding:0 6px;border-radius:999px;font:600 11px/1.5 ui-monospace,Menlo,monospace;background:rgba(127,127,127,.15)">$2</span>`,
-  },
-  {
-    id: "alm-show-ledger-rows", name: "Ledger · rows", layer: "display", target: ["display"], order: 80, flags: "gm", macros: "raw",
-    find: R`^[ \t]*([a-z]+)(?:[ \t]+([^:\n]{1,60}?))?[ \t]*:[ \t]*([^\n]*)\n?` + inside("<ledger>", "<\\/ledger>"),
-    rep: `{{if::{{or::{{empty::{{getchatvar::alm_ui_panels}}}}::{{includes::{{getchatvar::alm_ui_panels}}::${LEDGER_PANEL}}}}}}}<div class="alm-lr" data-op="$1" style="display:flex;gap:8px;align-items:baseline;padding:5px 2px;border-bottom:1px dashed rgba(127,127,127,.2);font-size:.92em"><span style="flex:none;width:1.4em;text-align:center">${LEDGER_ICON}</span><span style="flex:none;min-width:5.5em;font:500 10.5px/1.6 ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;opacity:.7">$1</span><span><b>$2</b>{{if::{{len::$2}}}} · {{/if}}$3</span></div>{{/if}}`,
-  },
-  {
-    id: "alm-show-ledger", name: "Ledger · tracker drawer", layer: "display", target: ["display"], order: 81, macros: "raw",
-    find: R`<ledger>\s*([\s\S]*?)\s*<\/ledger>`,
-    rep: `<details class="alm-drawer alm-ledger"{{if::{{eq::{{getchatvar::alm_ui_view}}::inline}}}} open{{/if}} style="margin:16px 0 0;border:1px solid rgba(127,127,127,.3);border-radius:12px;overflow:hidden"><summary style="cursor:pointer;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:9px 12px;font:500 12.5px/1.2 ui-monospace,Menlo,monospace;opacity:.9">{{if::{{len::{{getchatvar::alm_place}}}}}}<span class="alm-pill">📍 {{getchatvar::alm_place}}</span>{{/if}}{{if::{{len::{{getchatvar::alm_wx}}}}}}<span class="alm-pill">🌦 {{getchatvar::alm_wx}}</span>{{/if}}<span class="alm-pill">📒 Ledger</span><span class="alm-caret"></span></summary>{{if::{{ne::{{getchatvar::alm_ui_view}}::hud}}}}<div class="alm-drawer__body" style="padding:10px 14px">$1[[alm-desk]]</div>{{/if}}</details>`,
-    description: "Draws the ledger as a tracker drawer. With the Ledger extension the ledger is replaced by a full state snapshot before this runs, so this stays out of the way.",
+    id: "alm-show-ledger", name: "Ledger · plain lines (when the Ledger didn't draw it)", layer: "display", target: ["display"], order: 81,
+    find: R`<ledger>\s*([\s\S]*?)\s*(?:<\/ledger>|$)`,
+    rep: `<details class="alm-drawer alm-ledger" style="margin:16px 0 0;border:1px solid rgba(127,127,127,.3);border-radius:12px;overflow:hidden"><summary style="cursor:pointer;padding:9px 12px;font:500 12.5px/1.2 ui-monospace,Menlo,monospace;opacity:.85">📒 Ledger<span class="alm-caret"></span></summary><div class="alm-drawer__body" style="padding:10px 14px;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,monospace">$1</div></details>`,
+    description: "The Ledger replaces each ledger with its tracker drawer before display regex runs, so this only fires for one it didn't draw.",
   },
 
   // Display: the Director's Desk (latest reply only)

@@ -120,6 +120,7 @@ export function registerWorldInfoInterceptor() {
 // ---------------------------------------------------------------------------
 
 const CONFIG_RE = /<almanac-config\b([^>]*)\/?>(?:\s*<\/almanac-config>)?\s*/i;
+const SESSION_ZERO_CMD = /^\s*\/(?:session0|setup)\b/i;
 const PLANNING_BLOCK = /<(weaver_[a-z_]+|deliberation|scratchpad)\b[^>]*>[\s\S]*?<\/\1>\s*/gi;
 
 function parseConfig(attrs: string): Detected {
@@ -143,7 +144,6 @@ function parseConfig(attrs: string): Detected {
     trackerView: get("view"),
     header: get("header")?.toLowerCase() || undefined,
     theme: get("theme"),
-    lang: get("lang") || undefined,
     presetVersion: get("v") || undefined,
     at: Date.now(),
   };
@@ -280,10 +280,22 @@ export function registerPromptInterceptor() {
         if (at < 0) at = lastUserIdx;
         inserts.push({ at, msg: { role: "system", content: plan.recallText }, name: "ALMANAC · Recall" });
       }
-      // Sidecar director (planner connection), only for fresh turns.
+      // Sidecar director (planner connection), only for fresh turns. When it doesn't answer, the model is told
+      // so (the preset points it at a silent check instead of a plan that never came).
       if (meta.detected.cot === "sidecar" && (genType === "normal" || genType === "regenerate" || genType === "swipe") && !context.isDryRun) {
         const planText = await runSidecar(msgs, plan.tier, L.names.user, settings, userId);
-        if (planText) inserts.push({ at: lastUserIdx, msg: { role: "system", content: `<director-plan>\n${planText}\n</director-plan>\nFollow this plan. Do not repeat it; write the reply.` }, name: "ALMANAC · Director plan" });
+        const content = planText
+          ? `<director-plan>\n${planText}\n</director-plan>\nFollow this plan. Do not repeat it; write the reply.`
+          : "The planner didn't answer this turn, so there is no <director-plan>: check silently instead, then write the reply.";
+        inserts.push({ at: lastUserIdx, msg: { role: "system", content }, name: "ALMANAC · Director plan" });
+      }
+      // /session0 and /setup open the Session Zero window; the preset has the model answer with one OOC line.
+      if (genType === "normal" && !context.isDryRun && SESSION_ZERO_CMD.test(textOf(msgs[lastUserIdx] ?? { role: "user", content: "" }))) {
+        try {
+          host.sendToFrontend({ type: "sessionZero", chatId }, userId);
+        } catch (err) {
+          warn(`session zero: ${describe(err)}`);
+        }
       }
       const noteText = [plan.note, plan.speechFix, plan.formatExample].filter(Boolean).join("\n");
       inserts.push({ at: lastUserIdx, msg: { role: "system", content: noteText }, name: "ALMANAC · Now" });
@@ -367,8 +379,11 @@ export function registerRenderProcessor() {
       let content = fixed;
       // Plate enrichment: exact sun times and moon phase on the header line.
       if (al) content = content.replace(/^([ \t]*🗓[^\n]*?)(\s*⟪[^⟫]*⟫)?[ \t]*$/mu, (_m, line) => `${line}${plateSuffix(al)}`);
-      // "Every reply" in the preset, but the model left the header out: draw it from the ledger.
-      if (al && files.meta.detected.header === "every") content = fillHeader(content, al, state.place);
+      // The model left the header out where the preset asks for one: every reply ("every"), or a reply that opens a
+      // scene ("change", the default, and older presets that don't say) — drawn from the verified clock and place.
+      const header = files.meta.detected.header ?? "change";
+      const opensScene = state.sceneStartMsg === L.path[L.path.findIndex((m) => m.id === ctx.messageId)]?.index;
+      if (al && (header === "every" || (header !== "off" && opensScene))) content = fillHeader(content, al, state.place);
       content = drawPlates(content, genre);
       const block = extractLedgerBlock(content);
       if (block) {
