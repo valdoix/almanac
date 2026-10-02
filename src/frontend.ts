@@ -7,7 +7,7 @@ import { AlmanacApp } from "./frontend/app";
 import { MESSAGE_CSS, PANEL_CSS, TOKENS } from "./frontend/styles";
 import { SKIN_CSS, customCss, fontsFor } from "./frontend/skins";
 import { openSessionZero } from "./frontend/sessionzero";
-import { HUD_SIZE, hudCard, hudPill, measure, type HudUi } from "./frontend/hud";
+import { HUD_SIZE, hasThoughtsTab, hudCard, hudPill, hudTab, measure, type HudUi } from "./frontend/hud";
 import { HUD_CSS } from "./frontend/hudstyles";
 import { attentionNote, engineNew } from "./frontend/orrery";
 import { VERSION } from "./core/version";
@@ -158,7 +158,6 @@ export function setup(ctx: SpindleFrontendContext) {
   let hudOpen = false;
   const hudUi: HudUi = { tab: "changed", narr: false, unseen: 0, opened: new Set() };
   let seen: Record<string, number> = {};
-  let thoughtsMsg = -1;
   const load = (k: string) => {
     try {
       return localStorage.getItem(k);
@@ -173,26 +172,39 @@ export function setup(ctx: SpindleFrontendContext) {
       /* ignore */
     }
   };
+  const loadJson = (k: string) => {
+    try {
+      return JSON.parse(load(k) || "null");
+    } catch {
+      return null;
+    }
+  };
   hudOpen = load("alm-hud-open") === "1";
   hudUi.tab = load("alm-hud-tab") || "changed";
-  try {
-    const sz = JSON.parse(load("alm-hud-size") || "null");
-    if (sz && Number.isFinite(sz.w) && Number.isFinite(sz.h)) hudUi.size = { w: sz.w, h: sz.h };
-  } catch {
-    /* default size */
-  }
-  // The window never outgrows the screen, whatever size was saved on a bigger one.
+  const sz = loadJson("alm-hud-size");
+  if (sz && Number.isFinite(sz.w) && Number.isFinite(sz.h)) hudUi.size = { w: sz.w, h: sz.h };
+  // Lumiverse lays widgets out in its zoom layer: screen pixels divided by the UI scale.
+  const uiScale = () => {
+    try {
+      const s = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--lumiverse-ui-scale"));
+      return Number.isFinite(s) && s > 0 ? s : 1;
+    } catch {
+      return 1;
+    }
+  };
+  const viewport = () => {
+    const s = uiScale();
+    return { w: (typeof innerWidth === "number" && innerWidth > 0 ? innerWidth : 1440) / s, h: (typeof innerHeight === "number" && innerHeight > 0 ? innerHeight : 900) / s };
+  };
+  // The window never outgrows the screen (the host keeps 12px clear on each side), whatever size was saved on a bigger one.
   const fitSize = (w: number, h: number) => {
-    const vw = typeof innerWidth === "number" && innerWidth > 0 ? innerWidth - 16 : HUD_SIZE.maxW;
-    const vh = typeof innerHeight === "number" && innerHeight > 0 ? innerHeight - 16 : HUD_SIZE.maxH;
+    const vp = viewport();
+    const vw = vp.w - 24;
+    const vh = vp.h - 24;
     const clamp = (x: number, lo: number, hi: number) => Math.round(Math.max(lo, Math.min(hi, x)));
     return { w: clamp(w, Math.min(HUD_SIZE.minW, vw), Math.min(HUD_SIZE.maxW, vw)), h: clamp(h, Math.min(HUD_SIZE.minH, vh), Math.min(HUD_SIZE.maxH, vh)) };
   };
-  try {
-    seen = JSON.parse(load("alm-hud-seen") || "{}") ?? {};
-  } catch {
-    seen = {};
-  }
+  seen = loadJson("alm-hud-seen") ?? {};
   const markSeen = (v: any) => {
     const msg = v?.changes?.msg ?? -1;
     if (!v?.chatId || msg < 0 || seen[v.chatId] === msg) return;
@@ -201,6 +213,78 @@ export function setup(ctx: SpindleFrontendContext) {
     if (keys.length > 60) for (const k of keys.slice(0, keys.length - 60)) delete seen[k];
     save("alm-hud-seen", JSON.stringify(seen));
   };
+  // Which reply's thoughts the player has looked at, and which seals they broke, per chat:
+  // a reload or a chat switch doesn't reseal them or bring the Unspoken dot back.
+  const thoughtsRead: Record<string, { m: number; v?: 1; o?: number[] }> = loadJson("alm-hud-thoughts") ?? {};
+  let thoughtsKey = "";
+  const syncThoughts = (chatId: string, v: any) => {
+    const m = v.thoughts?.msg ?? -1;
+    const rec = thoughtsRead[chatId]?.m === m ? thoughtsRead[chatId] : null;
+    if (`${chatId}|${m}` !== thoughtsKey) {
+      thoughtsKey = `${chatId}|${m}`;
+      hudUi.opened = new Set((rec?.o ?? []).map((i) => `${m}:${i}`));
+    }
+    hudUi.thoughtsSeen = !!rec?.v;
+  };
+  const saveThoughts = (chatId: string, v: any, viewed: boolean) => {
+    const m = v?.thoughts?.msg ?? -1;
+    if (!chatId || m < 0) return;
+    const was = thoughtsRead[chatId]?.m === m ? thoughtsRead[chatId] : null;
+    const o = [...hudUi.opened].filter((k) => k.startsWith(`${m}:`)).map((k) => +k.slice(k.indexOf(":") + 1));
+    const next = { m, ...(viewed || was?.v ? { v: 1 as const } : {}), ...(o.length ? { o } : {}) };
+    if (JSON.stringify(next) === JSON.stringify(was)) return;
+    delete thoughtsRead[chatId];
+    thoughtsRead[chatId] = next;
+    const keys = Object.keys(thoughtsRead);
+    if (keys.length > 60) for (const k of keys.slice(0, keys.length - 60)) delete thoughtsRead[k];
+    save("alm-hud-thoughts", JSON.stringify(thoughtsRead));
+    hudUi.thoughtsSeen = !!next.v;
+  };
+
+  // Docking: the widget can sit against the left or right edge of the screen. Closed,
+  // it is a slim tab there; drag the tab along the edge to move it, across the
+  // screen to the other edge, or away from the edges to float the widget again.
+  // Opened, the window opens against that edge. Remembered in this browser.
+  type Dock = { edge: "left" | "right"; y: number; from?: { x: number; y: number } };
+  let dock: Dock | null = null;
+  const d0 = loadJson("alm-hud-dock");
+  if (d0 && (d0.edge === "left" || d0.edge === "right") && Number.isFinite(d0.y)) {
+    dock = { edge: d0.edge, y: d0.y, ...(d0.from && Number.isFinite(d0.from.x) && Number.isFinite(d0.from.y) ? { from: { x: d0.from.x, y: d0.from.y } } : {}) };
+  }
+  const saveDock = () => save("alm-hud-dock", JSON.stringify(dock));
+  const DOCK_ZONE = 96;
+  let hudBox = { w: 260, h: 40 };
+  let hudMode = "";
+  const sizeHud = (w: number, h: number) => {
+    hudBox = { w, h };
+    hud?.setSize(w, h);
+  };
+  // Against its edge, at the tab's height (the host clamps it onto the screen).
+  const placeDock = () => {
+    if (!hud || !dock) return;
+    const vp = viewport();
+    const x = dock.edge === "left" ? 0 : Math.max(0, Math.round(vp.w - hudBox.w));
+    const y = Math.max(0, Math.round(Math.min(dock.y, vp.h - hudBox.h - 12)));
+    const p = hud.getPosition?.();
+    if (!p || p.x !== x || p.y !== y) hud.moveTo(x, y);
+  };
+  const toggleDock = () => {
+    if (!hud) return;
+    const p = hud.getPosition?.() ?? { x: 24, y: 88 };
+    if (dock) {
+      const back = dock.from ?? { x: dock.edge === "left" ? 24 : Math.max(12, viewport().w - hudBox.w - 36), y: dock.y };
+      dock = null;
+      saveDock();
+      hud.moveTo(back.x, back.y);
+      lastHud = "";
+      renderHud(app.view);
+      return;
+    }
+    const vp = viewport();
+    dock = { edge: p.x + hudBox.w / 2 < vp.w / 2 ? "left" : "right", y: p.y, from: { x: p.x, y: p.y } };
+    saveDock();
+    setHudOpen(false);
+  };
   const setHudOpen = (open: boolean) => {
     // Opening after a reply changed things starts on what changed.
     if (open && hudUi.unseen) hudUi.tab = "changed";
@@ -208,12 +292,19 @@ export function setup(ctx: SpindleFrontendContext) {
     save("alm-hud-open", open ? "1" : "0");
     renderHud(app.view);
   };
+  let swallowClick = false;
   const onHudAction = (target: EventTarget | null) => {
+    if (swallowClick) {
+      swallowClick = false;
+      return;
+    }
     const el = (target as HTMLElement | null)?.closest?.("[data-hud]") as HTMLElement | null;
     if (!el) return;
     const v = app.view;
     const live = v && v.chatId === ctx.getActiveChat().chatId && v.enabled;
     const act = el.dataset.hud;
+    if (act === "dock") return toggleDock();
+    if (act === "toggle" && el.dataset.hudTab != null) return setHudOpen(true);
     if (act === "open" || !live) {
       tab.activate();
       return;
@@ -225,35 +316,106 @@ export function setup(ctx: SpindleFrontendContext) {
     else if (act === "env" && el.dataset.key) {
       if (hudUi.opened.has(el.dataset.key)) hudUi.opened.delete(el.dataset.key);
       else hudUi.opened.add(el.dataset.key);
+      saveThoughts(v.chatId, v, true);
     } else if (act === "toggle") return setHudOpen(!hudOpen);
     renderHud(v);
   };
+  // The docked tab moves itself: along the edge, across to the other edge, or (let go
+  // away from the edges) floating again. Lumiverse leaves a defaultPrevented press alone.
+  const dragTab = (pe: PointerEvent, el: HTMLElement) => {
+    if (!hud || !dock) return;
+    pe.preventDefault();
+    pe.stopPropagation();
+    const s = uiScale();
+    const start = { x: pe.clientX, y: pe.clientY, top: Math.max(0, Math.min(dock.y, viewport().h - hudBox.h - 12)) };
+    let moved = false;
+    let frame = 0;
+    let at = { free: false, edge: dock.edge, x: 0, y: start.top };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerId !== pe.pointerId) return;
+      if (!moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 4) return;
+      if (!moved) {
+        moved = true;
+        el.classList.add("is-dragging");
+      }
+      const vp = viewport();
+      const px = e.clientX / s;
+      const y = Math.max(0, Math.min(vp.h - hudBox.h - 12, start.top + (e.clientY - start.y) / s));
+      const free = px > DOCK_ZONE && px < vp.w - DOCK_ZONE;
+      at = { free, edge: px < vp.w / 2 ? "left" : "right", x: Math.round(px - hudBox.w / 2), y: Math.round(y) };
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        el.classList.toggle("is-free", at.free);
+        el.classList.toggle("alm-hudt--left", at.edge === "left");
+        el.classList.toggle("alm-hudt--right", at.edge === "right");
+        hud?.moveTo(at.free ? at.x : at.edge === "left" ? 0 : Math.round(viewport().w - hudBox.w), at.y);
+      });
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId !== pe.pointerId) return;
+      removeEventListener("pointermove", onMove);
+      removeEventListener("pointerup", onUp);
+      removeEventListener("pointercancel", onUp);
+      if (frame) cancelAnimationFrame(frame);
+      el.classList.remove("is-dragging");
+      if (!moved) return;
+      // The click that ends a drag doesn't open the window.
+      swallowClick = true;
+      setTimeout(() => (swallowClick = false), 0);
+      if (at.free) {
+        dock = null;
+        hud?.moveTo(Math.max(0, at.x), at.y);
+      } else dock = { ...dock!, edge: at.edge, y: at.y };
+      saveDock();
+      lastHud = "";
+      hudMode = "";
+      renderHud(app.view);
+    };
+    addEventListener("pointermove", onMove);
+    addEventListener("pointerup", onUp);
+    addEventListener("pointercancel", onUp);
+  };
+  const onResize = () => {
+    if (!hud) return;
+    lastHud = "";
+    hudMode = "";
+    renderHud(app.view);
+  };
+  addEventListener("resize", onResize);
+  removers.push(() => removeEventListener("resize", onResize));
   const ensureHud = (on: boolean) => {
     hudOn = on;
     try {
       if (on && !hud) {
         hud = ctx.ui.createFloatWidget({ width: 260, height: 40, initialPosition: { x: 24, y: 88 }, snapToEdge: true, chromeless: true });
+        hudMode = "";
+        lastHud = "";
         hud.root.addEventListener("click", (ev) => onHudAction(ev.target));
         // The corner grip resizes the window. Lumiverse leaves a press alone when it's
         // defaultPrevented, so the grip doesn't also drag the widget.
         hud.root.addEventListener("pointerdown", (ev) => {
           const pe = ev as PointerEvent;
+          if (pe.button !== 0) return;
+          const tabEl = (pe.target as HTMLElement | null)?.closest?.("[data-hud-tab]") as HTMLElement | null;
+          if (tabEl && dock) return dragTab(pe, tabEl);
           const grip = (pe.target as HTMLElement | null)?.closest?.("[data-hud-grip]");
           const card = hud?.root.querySelector(".alm-hudc") as HTMLElement | null;
-          if (!grip || !card || pe.button !== 0) return;
+          if (!grip || !card) return;
           pe.preventDefault();
           pe.stopPropagation();
+          const s = uiScale();
           const start = { x: pe.clientX, y: pe.clientY, ...fitSize(hudUi.size?.w ?? HUD_SIZE.w, hudUi.size?.h ?? HUD_SIZE.h) };
           let next = { w: start.w, h: start.h };
           let frame = 0;
           const onMove = (e: PointerEvent) => {
-            next = fitSize(start.w + e.clientX - start.x, start.h + e.clientY - start.y);
+            next = fitSize(start.w + (e.clientX - start.x) / s, start.h + (e.clientY - start.y) / s);
             if (frame) return;
             frame = requestAnimationFrame(() => {
               frame = 0;
               card.style.width = `${next.w}px`;
               card.style.height = `${next.h}px`;
-              hud?.setSize(next.w, next.h);
+              sizeHud(next.w, next.h);
             });
           };
           const onUp = () => {
@@ -277,8 +439,15 @@ export function setup(ctx: SpindleFrontendContext) {
         });
         hud.root.addEventListener("keydown", (ev) => {
           const k = (ev as KeyboardEvent).key;
+          const target = ev.target as HTMLElement;
           if (k === "Escape" && hudOpen) setHudOpen(false);
-          else if ((k === "Enter" || k === " ") && (ev.target as HTMLElement).matches?.('[role="button"]')) {
+          else if ((k === "ArrowUp" || k === "ArrowDown") && dock && target.matches?.("[data-hud-tab]")) {
+            // The docked tab moves along its edge from the keyboard too.
+            ev.preventDefault();
+            dock = { ...dock, y: Math.max(0, Math.min(viewport().h - hudBox.h - 12, dock.y + (k === "ArrowUp" ? -24 : 24))) };
+            saveDock();
+            placeDock();
+          } else if ((k === "Enter" || k === " ") && target.matches?.('[role="button"]')) {
             ev.preventDefault();
             onHudAction(ev.target);
           }
@@ -310,29 +479,40 @@ export function setup(ctx: SpindleFrontendContext) {
     if (live) {
       const msg = v.changes?.msg ?? -1;
       hudUi.unseen = msg >= 0 && msg !== seen[chatId] ? (v.changes?.rows?.length ?? 0) : 0;
-      // A new reply's thoughts arrive sealed.
-      if ((v.thoughts?.msg ?? -1) !== thoughtsMsg) {
-        thoughtsMsg = v.thoughts?.msg ?? -1;
-        hudUi.opened.clear();
-      }
+      // A new reply's thoughts arrive sealed; ones already read stay read.
+      syncThoughts(chatId, v);
     }
-    if (!live) html = hudPill(null, app.status === "stalled" ? "no answer yet" : "connecting…");
-    else if (!v.enabled) html = hudPill(null, "off in this chat");
-    else if (hudOpen) {
-      const fit = fitSize(hudUi.size?.w ?? HUD_SIZE.w, hudUi.size?.h ?? HUD_SIZE.h);
-      html = hudCard(v, { ...hudUi, size: fit });
+    hudUi.dock = dock?.edge ?? null;
+    const note = !live ? (app.status === "stalled" ? "no answer yet" : "connecting…") : !v.enabled ? "off in this chat" : "";
+    let mode: string;
+    let size: { w: number; h: number };
+    if (!note && hudOpen) {
+      size = fitSize(hudUi.size?.w ?? HUD_SIZE.w, hudUi.size?.h ?? HUD_SIZE.h);
+      if (hudUi.tab === "unspoken" && hasThoughtsTab(v)) saveThoughts(chatId, v, true);
+      html = hudCard(v, { ...hudUi, size });
       markSeen(v);
-      if (html === lastHud) return;
-      lastHud = html;
-      hud.root.innerHTML = html;
-      hud.setSize(fit.w, fit.h);
-      return;
-    } else html = hudPill(v, undefined, hudUi);
+      mode = "card";
+    } else if (dock) {
+      html = note ? hudTab(null, dock.edge, note) : hudTab(v, dock.edge, undefined, hudUi);
+      mode = "tab";
+    } else {
+      html = note ? hudPill(null, note) : hudPill(v, undefined, hudUi);
+      mode = "pill";
+    }
     if (html === lastHud) return;
     lastHud = html;
     hud.root.innerHTML = html;
-    const size = measure(html);
-    hud.setSize(Math.min(480, Math.max(120, size.w || 260)), Math.max(44, Math.min(640, size.h || 44)));
+    if (mode !== "card") {
+      const m = measure(html);
+      const maxW = Math.max(120, viewport().w - 24);
+      size = mode === "tab" ? { w: 46, h: Math.max(80, Math.min(400, m.h || 160)) } : { w: Math.min(480, maxW, Math.max(120, m.w || 260)), h: Math.max(44, Math.min(640, m.h || 44)) };
+    }
+    sizeHud(size!.w, size!.h);
+    // Docked, the tab and the window sit against the edge; placed again only when
+    // that changes, so a window the player drags aside stays where they put it.
+    const placeKey = dock ? `${mode}|${dock.edge}|${dock.y}|${mode === "card" ? "" : `${size!.w}x${size!.h}`}` : "";
+    if (dock && placeKey !== hudMode) placeDock();
+    hudMode = placeKey;
   };
 
   // The drawer tab's badge counts only Engine findings not yet looked at, and its

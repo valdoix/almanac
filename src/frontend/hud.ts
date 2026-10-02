@@ -21,9 +21,13 @@ export interface HudUi {
   opened: Set<string>;
   /** The window's size, as the player last dragged it. */
   size?: { w: number; h: number };
+  /** The player has looked at the Unspoken tab since these thoughts arrived. */
+  thoughtsSeen?: boolean;
+  /** The edge the widget is docked to: closed, it is a slim tab there. */
+  dock?: "left" | "right" | null;
 }
 
-export const HUD_SIZE = { w: 360, h: 540, minW: 300, minH: 380, maxW: 720, maxH: 960 };
+export const HUD_SIZE = { w: 360, h: 540, minW: 250, minH: 320, maxW: 720, maxH: 960 };
 
 export const HUD_TABS = ["changed", "stakes", "cast", "threads", "unspoken", "backstage"] as const;
 
@@ -36,6 +40,8 @@ const ICON: Record<string, string> = {
   unspoken: `<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6.5L20.5 7"/><circle cx="12" cy="13.5" r="2.2" fill="currentColor"/>`,
   backstage: `<path d="M4 5h16v10H4z"/><path d="M8 19h8M12 15v4"/><path d="M8 9h5M8 12h8"/>`,
   book: `<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/>`,
+  dock: `<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16"/><path d="M15.5 9.5 13 12l2.5 2.5"/>`,
+  undock: `<rect x="3" y="8" width="13" height="13" rx="2.5"/><path d="M13 3h8v8M21 3l-9 9"/>`,
   eye: `<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/>`,
 };
 const TAB_LABEL: Record<string, string> = { changed: "What changed", stakes: "Stakes", cast: "Who is here", threads: "Threads", unspoken: "Unspoken", backstage: "Backstage" };
@@ -117,6 +123,21 @@ export function hudPill(v: any, note?: string, ui?: HudUi): string {
   const unseen = ui?.unseen ?? 0;
   return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" aria-expanded="false" title="Open the Now window">
 <span class="alm-hudw__dial" style="background:${skyOf(v)}"><b class="${night ? "moon" : "sun"}"></b></span><b class="alm-hudw__t">${e(n.time ?? "--:--")}</b>${n.weather ? `<span class="alm-hudw__wx">${e(n.weather.glyph)}${n.weather.tempC != null ? ` ${Math.round(n.weather.tempC)}°` : ` ${e(n.weather.condition)}`}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${e(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-hudw__who">${present.map((c: any) => med(c)).join("")}</span>` : ""}${chips.length ? `<span class="alm-hudw__chip"><span class="alm-hudw__rot" data-n="${chips.length}">${chips.map((c) => `<span>${e(c)}</span>`).join("")}</span></span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}${unseen ? `<span class="alm-hudw__badge" title="${unseen} change${unseen === 1 ? "" : "s"} since you last looked">${unseen > 9 ? "9+" : unseen}</span>` : ""}</div>`;
+}
+
+/** The docked tab: a slim bookmark against the screen edge. Drag it along the edge to move it, away from the edge to float the widget again. */
+export function hudTab(v: any, edge: "left" | "right", note?: string, ui?: HudUi): string {
+  const tip = "drag along the edge to move it, or away from the edge to float it";
+  if (note || !v) {
+    return `<div class="alm-hudt alm-hudt--${edge}" role="button" tabindex="0" data-hud="toggle" data-hud-tab title="ALMANAC · ${e(note ?? "connecting…")} · ${tip}"><span class="alm-hudw__dial" style="background:${BAND_SKY.evening}"><b class="moon"></b></span><b class="alm-hudt__t">…</b><i class="alm-hudt__grab"></i></div>`;
+  }
+  const n = v.now ?? {};
+  const place = (n.place ?? []) as string[];
+  const present = presentOf(v).slice(0, 3);
+  const night = NIGHT.test(n.band ?? "evening");
+  const unseen = ui?.unseen ?? 0;
+  const where = [n.time, place[place.length - 1]].filter(Boolean).join(" · ");
+  return `<div class="alm-hudt alm-hudt--${edge}" role="button" tabindex="0" data-hud="toggle" data-hud-tab aria-expanded="false" title="Open the Now window${where ? ` (${e(where)})` : ""} · ${tip}"><span class="alm-hudw__dial" style="background:${skyOf(v)}"><b class="${night ? "moon" : "sun"}"></b></span><b class="alm-hudt__t">${e(n.time ?? "--:--")}</b>${n.weather ? `<span class="alm-hudt__wx">${e(n.weather.glyph)}${n.weather.tempC != null ? `<small>${Math.round(n.weather.tempC)}°</small>` : ""}</span>` : ""}${present.length ? `<span class="alm-hudt__who">${present.map((c: any) => med(c)).join("")}</span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}<i class="alm-hudt__grab"></i>${unseen ? `<span class="alm-hudw__badge" title="${unseen} change${unseen === 1 ? "" : "s"} since you last looked">${unseen > 9 ? "9+" : unseen}</span>` : ""}</div>`;
 }
 
 /** Sun and moon on their arcs, from the rise and set times. */
@@ -297,7 +318,7 @@ export function hudCard(v: any, ui: HudUi = { tab: "changed", narr: false, unsee
   const tab = tabs.includes(ui.tab as any) ? ui.tab : "changed";
   const rows = v.changes?.rows?.length ?? 0;
   const due = (v.world?.cons ?? []).some((c: any) => c.status === "due") || (v.world?.deadlines ?? []).some((d: any) => !d.done && !d.passed && d.leftMin != null && d.leftMin < 180);
-  const badge = (t: string) => t === "changed" && ui.unseen ? `<sup>${ui.unseen > 9 ? "9+" : ui.unseen}</sup>` : t === "stakes" && due ? `<sup class="dot"></sup>` : t === "unspoken" && (v.thoughts?.list ?? []).length && v.thoughts.msg === v.changes?.msg ? `<sup class="dot soft"></sup>` : "";
+  const badge = (t: string) => t === "changed" && ui.unseen ? `<sup>${ui.unseen > 9 ? "9+" : ui.unseen}</sup>` : t === "stakes" && due ? `<sup class="dot"></sup>` : t === "unspoken" && (v.thoughts?.list ?? []).length && !ui.thoughtsSeen && tab !== "unspoken" ? `<sup class="dot soft" title="Unread"></sup>` : "";
   const set = hm(n.sun?.set);
   const rise = hm(n.sun?.rise);
   let sunChip = "";
@@ -306,15 +327,15 @@ export function hudCard(v: any, ui: HudUi = { tab: "changed", narr: false, unsee
     const toRise = (rise - n.minute + 1440) % 1440;
     sunChip = n.sun?.daylight ? (toSet > 0 ? `☀ sets ${span(toSet)}` : "") : `☀ rises ${span(toRise)}`;
   }
+  const astro = `${sunChip ? `<span>${e(sunChip)}</span>` : ""}${n.moon ? `<span title="${e(n.moon.name)}">${e(n.moon.glyph)}<i> ${e(n.moon.name)}</i></span>` : ""}`;
   const fc = (n.forecastHours ?? []).filter((_: any, i: number) => i % 2 === 0).slice(0, 6);
   const pane = tab === "stakes" ? paneStakes(v) : tab === "cast" ? paneCast(v, ui) : tab === "threads" ? paneThreads(v) : tab === "unspoken" ? paneUnspoken(v, ui) : tab === "backstage" ? paneBackstage(v) : paneChanged(v);
   return `<div class="alm-hudc" role="dialog" aria-label="ALMANAC · Now" style="width:${size.w}px;height:${size.h}px">
 <header class="alm-hudc__sky${night ? " is-night" : ""}" style="background:${skyOf(v)}">
   ${night ? `<span class="alm-hudc__stars"></span>` : ""}${skyArc(v)}${precip(v)}${HILLS}
   <div class="alm-hudc__ttl"><b>${e(n.time ?? "--:--")}</b><span title="${e(date + dayNo)}">${e(date)}${e(dayNo)}</span>${n.title ? `<em title="${e(n.title)}">${e(n.title)}</em>` : ""}</div>
-  <div class="alm-hudc__astro">${sunChip ? `<span>${e(sunChip)}</span>` : ""}${n.moon ? `<span title="${e(n.moon.name)}">${e(n.moon.glyph)}<i> ${e(n.moon.name)}</i></span>` : ""}</div>
-  <button class="alm-hudc__x" data-hud="toggle" aria-label="Close the Now window">✕</button>
-  <div class="alm-hudc__chips">${n.weather ? `<span>${e(n.weather.glyph)} ${e(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span>${PIN} ${e(place.slice(-3).join(" › "))}</span>` : ""}</div>
+  <div class="alm-hudc__side"><div class="alm-hudc__btns"><button class="alm-hudc__b" data-hud="dock" aria-label="${ui.dock ? "Float the widget again" : "Dock to the screen edge"}" title="${ui.dock ? "Float the widget again" : "Dock to the screen edge"}">${svg(ui.dock ? "undock" : "dock", 15)}</button><button class="alm-hudc__b alm-hudc__x" data-hud="toggle" aria-label="Close the Now window" title="Close">✕</button></div>${astro ? `<div class="alm-hudc__astro">${astro}</div>` : ""}</div>
+  <div class="alm-hudc__chips">${astro ? `<span class="alm-hudc__astro2">${astro}</span>` : ""}${n.weather ? `<span>${e(n.weather.glyph)} ${e(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudc__plc" title="${e(place.join(" › "))}">${PIN}${place.map((p, i, a) => `<b class="${i === a.length - 1 ? "last" : ""}">${e(p)}</b>${i < a.length - 1 ? "<s>›</s>" : ""}`).join("")}</span>` : ""}</div>
 </header>
 ${fc.length ? `<div class="alm-hudc__fc">${fc.map((h: any, i: number) => `<div class="${i === 0 ? "now" : ""}"><span>${i === 0 ? "now" : e(h.t)}</span><b>${e(h.glyph)}</b><i>${e(h.temp)}°</i></div>`).join("")}</div>` : ""}
 ${v.planError ? `<p class="alm-hudc__err alm-hudc__err--top" data-hud="tab" data-tab="backstage"><b>The last turn went out without the Almanac.</b> ${e(v.planError.message)}</p>` : ""}

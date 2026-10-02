@@ -21,7 +21,7 @@ test("frontend keeps asking for state and shows the widget meanwhile", async () 
   const { setup } = await import("../src/frontend");
   const sent: any[] = [];
   const onBackend: ((m: unknown) => void)[] = [];
-  const hud = { root: new El(), visible: false, size: [0, 0], setVisible(v: boolean) { this.visible = v; }, setSize(w: number, h: number) { this.size = [w, h]; }, destroy() {} };
+  const hud = { root: new El(), visible: false, size: [0, 0], pos: { x: 24, y: 88 }, setVisible(v: boolean) { this.visible = v; }, setSize(w: number, h: number) { this.size = [w, h]; }, moveTo(x: number, y: number) { this.pos = { x, y }; }, getPosition() { return this.pos; }, destroy() {} };
   const tabRoot = new El();
   let opened = 0;
   const ctx: any = {
@@ -71,6 +71,20 @@ test("frontend keeps asking for state and shows the widget meanwhile", async () 
   expect(opened).toBe(2);
   hud.root.fire("click", hit("toggle"));
   expect(hud.root.innerHTML).toContain("alm-hudw");
+
+  // Docked: closed, it is a tab flush with the nearer edge; it opens against that
+  // edge, and floats again where it was.
+  hud.root.fire("click", hit("toggle"));
+  hud.root.fire("click", hit("dock"));
+  expect(hud.root.innerHTML).toContain("alm-hudt--left");
+  expect(hud.pos.x).toBe(0);
+  expect(hud.size[0]).toBe(46);
+  hud.root.fire("click", { closest: (q: string) => (q === "[data-hud]" ? { dataset: { hud: "toggle", hudTab: "" } } : null) });
+  expect(hud.root.innerHTML).toContain("alm-hudc");
+  expect(hud.root.innerHTML).toContain("Float the widget again");
+  hud.root.fire("click", hit("dock"));
+  expect(hud.pos).toEqual({ x: 24, y: 88 });
+  expect(hud.root.innerHTML).toContain("Dock to the screen edge");
   stop();
 }, 10000);
 

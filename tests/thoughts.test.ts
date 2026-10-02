@@ -4,7 +4,7 @@ import { LedgerRuntime, toPath, type RawChatMessage } from "../src/core/branch";
 import { parseInlineThoughts, parseMessage } from "../src/core/dsl";
 import type { FoldOptions } from "../src/core/state";
 import { replyChanges } from "../src/core/changes";
-import { hasThoughtsTab, hudCard, hudPill } from "../src/frontend/hud";
+import { hasThoughtsTab, hudCard, hudPill, hudTab } from "../src/frontend/hud";
 
 const OPTS: FoldOptions = { userName: "Wren", strictness: "strict", sealed: true, romance: "slow" };
 const msg = (i: number, content: string, isUser = false): RawChatMessage => ({ id: `m${i}`, index_in_chat: i, is_user: isUser, content, swipes: [content], swipe_id: 0 });
@@ -85,6 +85,26 @@ test("the widget: a change badge, the Unspoken tab only when inner voice isn't o
   expect(hasThoughtsTab({ ...v, thoughts: { msg: -1, innerVoice: "", list: [] } })).toBe(false);
   // Off: the tab is gone and the window falls back to what changed.
   expect(hudCard({ ...v, thoughts: { ...v.thoughts, innerVoice: "off" } }, ui)).toContain('data-tab="changed"');
+  // The Unspoken dot means unread: gone once the player has looked at the tab, earlier reply or not.
+  const dot = (u: any) => hudCard(v, { narr: false, unseen: 0, opened: new Set(), ...u }).includes('class="dot soft"');
+  expect(dot({ tab: "changed" })).toBe(true);
+  expect(dot({ tab: "changed", thoughtsSeen: true })).toBe(false);
+  expect(dot({ tab: "unspoken" })).toBe(false);
+  expect(hudCard({ ...v, changes: { msg: 4, rows: [] } }, { tab: "changed", narr: false, unseen: 0, opened: new Set() })).toContain('class="dot soft"');
+});
+
+test("the widget docks: a tab against its edge, and the window offers to float again", () => {
+  const v: any = { now: { time: "15:37", band: "afternoon", place: ["Sunnydale", "living room"], weather: { glyph: "⛅", tempC: 12, condition: "fair" } }, cast: [{ name: "Buffy Summers", tier: "spot", color: "#c33" }], world: {}, changes: { msg: 1, rows: [] } };
+  const tab = hudTab(v, "right", undefined, { tab: "changed", narr: false, unseen: 3, opened: new Set() });
+  expect(tab).toContain("alm-hudt--right");
+  expect(tab).toContain("data-hud-tab");
+  expect(tab).toContain("15:37");
+  expect(tab).toContain("alm-hudw__badge");
+  expect(hudTab(null, "left", "connecting…")).toContain("connecting");
+  expect(hudCard(v, { tab: "changed", narr: false, unseen: 0, opened: new Set(), dock: "left" })).toContain("Float the widget again");
+  expect(hudCard(v)).toContain("Dock to the screen edge");
+  // The place chip keeps every part, so the last one can stay readable when it narrows.
+  expect(hudCard(v)).toContain('<b class="last">living room</b>');
 });
 
 test("what the real chat wrote: restated weather, a line about two people, a mood with its reason", () => {

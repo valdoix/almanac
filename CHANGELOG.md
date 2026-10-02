@@ -4,6 +4,13 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.17.1 (2026-10-02)
+
+**The Now widget docks.** The window's new dock button tucks it against the nearer screen edge as a slim tab (time, weather, who is here, the change count). Drag the tab along the edge to move it, across to the other edge, or away from the edges to float it again (arrow keys move it too). Opened, the window sits against that edge; the button floats it back where it was. Remembered in this browser.
+- **Narrow windows** lay themselves out by their own size: sun and moon join the chips under the sky, the clock scales, the rail scrolls when the window is short, and the window now goes down to 250 px.
+- **Nothing is cut off:** the whole place path, the date, the title and the cast's tags wrap instead of ending in "…"; every forecast hour stays. The pill's place and chip no longer have a length cap.
+- **The Unspoken dot means unread:** it goes once you have looked at the tab, and which thoughts you read and which seals you broke are remembered per chat, so a reload or a chat switch no longer reseals them or brings the dot back.
+
 ## 1.17.0 (2026-10-02)
 
 **The Lorebook Creator is a conversation.** Library › Creator is now a chat with the model. The Almanac asks what you'd like to make (a new lorebook, an update to one you have, an existing book made Almanac-compatible, this story saved as a lorebook, or a check of how a book reads), proposes a plan, revises it with you until you accept, then writes the entries and saves them where you say.
