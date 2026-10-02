@@ -4,6 +4,12 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.17.3 (2026-10-02)
+
+**Elsewhere: nothing reads as delivered until a reply shows it.** A subplot's card listed waiting calls and messages under "reaches you", so a call the model never rendered (and the "missed call" it turned into) looked like it had happened. Waiting items now sit under **on its way** ("Not in the story yet"), and a separate **reached you** row lists only what a reply took up. One subplot also leaves one message waiting: a later call or message from the same person replaces an older one that hasn't reached the page yet, so they no longer stack.
+
+**Calls and messages reach the story.** A waiting call or a missed call's message used to wait out every charged scene (and the scene's room for news), so it never came. Now one comes in per reply, charged scenes included (not pivotal ones), with a plain ask to show it arriving: the phone buzzing, the name on the screen, the voicemail, and what it says. A missed call's message gets four replies to land instead of two and two days of story time instead of twelve hours. It counts as delivered when the reply names the sender in the same paragraph as the call, voicemail or letter and gives some of what it says, so someone texting in the scene doesn't count as their call.
+
 ## 1.17.2 — preset 1.0.14 (2026-10-02)
 
 **Director's notes written as one paragraph** ("SEAL: … GNOSIS: … MINDS: …") are split into their steps, one labelled row each, instead of pouring into the call sheet's two columns, where a quoted phrase became a separate cell squeezed into a narrow column one letter per line. Combined steps ("ROUTE/ANCHOR as above") get one row; any text that isn't a step (a preface like "Routine beat: …") reads as an ordinary line above the rows. Re-import `preset/ALMANAC.json`; existing messages redraw with it.

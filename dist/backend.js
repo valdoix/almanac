@@ -2487,7 +2487,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.17.2";
+var VERSION = "1.17.3";
 
 // src/core/facts.ts
 function stem(w) {
@@ -12505,12 +12505,30 @@ function expireArrivals(arrivals, now) {
       continue;
     if (a.kind === "signal") {
       const missed = a.medium === "phone" ? `A missed call and a message from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
-      Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, untilAbs: now + 2880, why: "the call went unanswered" });
+      Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, untilAbs: now + 2880, why: UNANSWERED });
       continue;
     }
     a.why = a.status === "offered" ? "not taken up" : "went stale";
     a.status = "expired";
     out.push({ id: a.id, why: a.why });
+  }
+  return out;
+}
+function collapseMessages(arrivals) {
+  const out = [];
+  const newest = new Map;
+  for (const a of arrivals) {
+    if (a.status !== "pending" && a.status !== "offered" || !a.arc || !isMessage(a))
+      continue;
+    const key = `${a.arc}|${(a.to ?? "").toLowerCase()}`;
+    const prev = newest.get(key);
+    const [old, keep] = !prev ? [null, a] : (a.atAbs ?? 0) >= (prev.atAbs ?? 0) ? [prev, a] : [a, prev];
+    newest.set(key, keep);
+    if (!old)
+      continue;
+    old.status = "expired";
+    old.why = `a later message from ${old.lead ?? "the same person"} replaced it`;
+    out.push({ id: old.id, why: old.why });
   }
   return out;
 }
@@ -12522,7 +12540,7 @@ function elsewhereLane(inp) {
   const present = (name) => !!name && onstage.some((a) => a.names.some((n) => n.toLowerCase() === name.toLowerCase()) || a.name.toLowerCase() === name.toLowerCase());
   for (const a of inp.arrivals)
     Object.assign(a, upgradeArrival(a));
-  const expired = expireArrivals(inp.arrivals, inp.now);
+  const expired = [...expireArrivals(inp.arrivals, inp.now), ...collapseMessages(inp.arrivals)];
   const forHere = (a) => {
     if (!callFits(a, st, r)) {
       a.status = "expired";
@@ -12546,7 +12564,9 @@ function elsewhereLane(inp) {
       return false;
     if (a.atAbs != null && inp.now != null && a.atAbs > inp.now)
       return false;
-    if (inp.tier !== "routine" && !a.urgent)
+    if (inp.tier === "pivotal" && !a.urgent)
+      return false;
+    if (inp.tier === "charged" && !a.urgent && !isMessage(a))
       return false;
     switch (a.kind) {
       case "carrier":
@@ -12565,9 +12585,12 @@ function elsewhereLane(inp) {
   ready.sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent) || (order[a.kind ?? "ambient"] ?? 5) - (order[b.kind ?? "ambient"] ?? 5) || (a.atAbs ?? 0) - (b.atAbs ?? 0));
   const already = ready.filter((a) => (a.offered ?? []).some((i) => i >= sceneStart));
   const fresh = ready.filter((a) => !already.includes(a));
-  const pick = [...already, ...fresh.filter((a) => a.urgent), ...fresh.filter((a) => !a.urgent).slice(0, Math.max(0, room))];
-  const chosen = [...new Set(pick)].slice(0, 3);
+  const message = fresh.find((a) => !a.urgent && isMessage(a) && !already.some(isMessage));
+  const pick = [...already, ...fresh.filter((a) => a.urgent), ...message ? [message] : [], ...fresh.filter((a) => !a.urgent && a !== message).slice(0, Math.max(0, room))];
+  const firstMessage = pick.find(isMessage);
+  const chosen = [...new Set(pick)].filter((a) => !isMessage(a) || a === firstMessage).slice(0, 3);
   const now = [];
+  const messages = [];
   const mayCome = [];
   const could = [];
   for (const a of chosen) {
@@ -12575,8 +12598,10 @@ function elsewhereLane(inp) {
       mayCome.push(a.text);
     else if (a.kind === "entrance")
       could.push(entranceCapsule(a, inp));
+    else if (isMessage(a))
+      messages.push(`for ${a.to ?? inp.userName ?? "the player"}: ${a.kind === "signal" && a.atAbs != null && inp.now != null && inp.now - a.atAbs > 60 ? `${a.text} (a message left at ${fmtTime(fromAbs(a.atAbs)).replace(/^Day \d+ /, "")})` : a.text}`);
     else
-      now.push(a.kind === "signal" && a.atAbs != null ? inp.now != null && inp.now - a.atAbs > 60 ? `${a.text} (a message left at ${fmtTime(fromAbs(a.atAbs)).replace(/^Day \d+ /, "")})` : a.text : a.text);
+      now.push(a.text);
   }
   const seen = { ...inp.seen };
   const back = [];
@@ -12607,6 +12632,8 @@ function elsewhereLane(inp) {
     }
   }
   const parts = [];
+  if (messages.length)
+    parts.push(`Comes in this reply, ${messages.join(" \xB7 ")} \u2014 show it arriving (the phone buzzes, the screen lights with the name, a voicemail plays, a letter on the mat), who it's from and what it says, then let the scene go on.`);
   if (now.length)
     parts.push(`Reaches the scene now: ${now.join(" \xB7 ")} \u2014 render it; invent no other news from off the page.`);
   if (mayCome.length)
@@ -12640,6 +12667,15 @@ function entranceCapsule(a, inp) {
   const who = lead.text ? lead.text.split(/(?<=[.!?])\s/)[0].slice(0, 160) : lead.name;
   return [`${a.text}. ${who}`, arc ? `Wants now: ${arc.want.replace(/^to\s+/i, "")}.` : "", knows.length ? `Knows ${knows.join(", ")}.` : "", inPlay.length ? `No route to ${inPlay.join(", ")}: can't act on it until told on the page.` : "", last ? `Latest: ${last}` : ""].filter(Boolean).join(" ");
 }
+function messageShown(a, prose, roster) {
+  if (coverage(a.text.replace(/^[^:]*:\s*/, ""), prose) < 0.2)
+    return false;
+  const names = [...new Set([...roster.find(a.lead ?? "")?.names ?? [], a.lead ?? ""].flatMap((n) => [n, n.split(/\s+/)[0]]).filter((n) => n.length >= 3))];
+  if (!names.length)
+    return false;
+  const named = new RegExp(`\\b(?:${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "i");
+  return prose.split(/\n+/).some((p) => named.test(p) && SENT.test(p));
+}
 function confirmArrivals(arrivals, o) {
   const used = [];
   const dropped = [];
@@ -12648,14 +12684,14 @@ function confirmArrivals(arrivals, o) {
     if (a.status !== "offered")
       continue;
     const cov = coverage(a.kind === "entrance" ? a.lead ?? a.text : a.text, o.prose);
-    const ok = a.kind === "entrance" ? present(a.lead) : a.kind === "carrier" ? present(a.carrier) && cov >= 0.3 : cov >= 0.4;
+    const ok = a.kind === "entrance" ? present(a.lead) : a.kind === "carrier" ? present(a.carrier) && cov >= 0.3 : cov >= 0.4 || isMessage(a) && messageShown(a, o.prose, o.roster);
     if (ok) {
       a.status = "used";
       used.push(a.id);
-    } else if ((a.offered?.length ?? 0) >= OFFERS[a.kind ?? "ambient"]) {
+    } else if ((a.offered?.length ?? 0) >= (a.kind === "trace" && isMessage(a) ? MESSAGE_OFFERS : OFFERS[a.kind ?? "ambient"])) {
       if (a.kind === "signal") {
         const missed = a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}, and a message: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
-        Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, status: "pending", offered: [], why: "the call went unanswered" });
+        Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, status: "pending", offered: [], untilAbs: Math.max(a.untilAbs ?? 0, (a.atAbs ?? 0) + 2880), why: UNANSWERED });
         continue;
       }
       a.status = "expired";
@@ -12666,7 +12702,7 @@ function confirmArrivals(arrivals, o) {
   }
   return { used, dropped };
 }
-var STOPW, words2 = (s) => normFact(s).split(" ").filter((w) => w.length >= 4 && !STOPW.has(w)), UNTIL, MEDIUM_WORD, segs = (p) => (Array.isArray(p) ? p : p ? p.split(/\s*\u203A\s*/) : []).map((x) => x.toLowerCase().trim()).filter(Boolean), SEEK = "find|finds|finding|locate|locating|track(?:s|ing)? down|search(?:es|ing)? for|look(?:s|ing)? for|hunt(?:s|ing)? for|rescue|rescuing|get back|bring back|where", SCENE_CAP, OFFERS;
+var STOPW, words2 = (s) => normFact(s).split(" ").filter((w) => w.length >= 4 && !STOPW.has(w)), UNTIL, MEDIUM_WORD, segs = (p) => (Array.isArray(p) ? p : p ? p.split(/\s*\u203A\s*/) : []).map((x) => x.toLowerCase().trim()).filter(Boolean), SEEK = "find|finds|finding|locate|locating|track(?:s|ing)? down|search(?:es|ing)? for|look(?:s|ing)? for|hunt(?:s|ing)? for|rescue|rescuing|get back|bring back|where", SCENE_CAP, UNANSWERED = "the call went unanswered", isMessage = (a) => a.kind === "signal" || a.kind === "trace" && a.why === UNANSWERED, OFFERS, MESSAGE_OFFERS = 4, SENT;
 var init_crossings = __esm(() => {
   init_state();
   init_util();
@@ -12678,6 +12714,7 @@ var init_crossings = __esm(() => {
   MEDIUM_WORD = { phone: "a call", letter: "a letter", raven: "a raven" };
   SCENE_CAP = { off: 0, quiet: 1, living: 1, restless: 2 };
   OFFERS = { carrier: 3, signal: 1, ambient: 1, trace: 2, entrance: 2 };
+  SENT = /\b(?:call(?:s|ed|ing)?|voicemail|message|missed|rang|ringing|letter|raven)\b/i;
 });
 
 // src/core/elsewhere/arcs.ts
@@ -16768,6 +16805,7 @@ async function runElsewhere(chatId, userId, opts = {}) {
       const list = arrivalsOf(meta);
       for (const a of res.arrivals)
         list.push({ ...a, msgId: target.id, swipe: target.swipe });
+      collapseMessages(list);
       meta.arrivals = pruneArrivals(list);
       const telling = settings.elsewhereTelling !== "engine" && res.cards.length > 0;
       for (const p of res.proposals)
@@ -17261,6 +17299,7 @@ function elsewhereView(o) {
     next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "",
     wait: a.status === "running" ? a.wait ?? "" : "",
     pushed: !!a.push,
+    reached: list.filter((x) => x.arc === a.id && x.status === "used").slice(-3).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "" })),
     reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered") && callFits(x, st, roster)).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" }))
   }));
   const ticks = E.order.map((id) => E.ticks[id]).filter(Boolean).reverse().map((t) => ({ id: t.id, at: t.at, from: o.fmt(t.from), to: o.fmt(t.to), hours: t.hours, beats: t.beats, seeds: t.seeds, proposed: t.proposed ?? 0, hops: t.hops, arrivals: t.arrivals, status: t.status, tokens: t.tokens ?? 0, log: t.log, rejected: t.rejected ?? [], awake: t.awake }));

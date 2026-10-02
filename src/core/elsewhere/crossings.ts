@@ -226,12 +226,38 @@ export function expireArrivals(arrivals: Arrival[], now: number | null): { id: s
     if (a.kind === "signal") {
       // An unanswered call is a missed call; a letter waits.
       const missed = a.medium === "phone" ? `A missed call and a message from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
-      Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, untilAbs: now + 2880, why: "the call went unanswered" });
+      Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, untilAbs: now + 2880, why: UNANSWERED });
       continue;
     }
     a.why = a.status === "offered" ? "not taken up" : "went stale";
     a.status = "expired";
     out.push({ id: a.id, why: a.why! });
+  }
+  return out;
+}
+
+const UNANSWERED = "the call went unanswered";
+
+/** A call, or the message an unanswered call left: what a person sends to someone, not news found about them. */
+const isMessage = (a: Arrival) => a.kind === "signal" || (a.kind === "trace" && a.why === UNANSWERED);
+
+/**
+ * One person's story leaves one message waiting, not a stack: when a later call or message from the
+ * same subplot waits too, the older ones go (the newer one carries where things stand now).
+ */
+export function collapseMessages(arrivals: Arrival[]): { id: string; why: string }[] {
+  const out: { id: string; why: string }[] = [];
+  const newest = new Map<string, Arrival>();
+  for (const a of arrivals) {
+    if ((a.status !== "pending" && a.status !== "offered") || !a.arc || !isMessage(a)) continue;
+    const key = `${a.arc}|${(a.to ?? "").toLowerCase()}`;
+    const prev = newest.get(key);
+    const [old, keep] = !prev ? [null, a] : (a.atAbs ?? 0) >= (prev.atAbs ?? 0) ? [prev, a] : [a, prev];
+    newest.set(key, keep);
+    if (!old) continue;
+    old.status = "expired";
+    old.why = `a later message from ${old.lead ?? "the same person"} replaced it`;
+    out.push({ id: old.id, why: old.why });
   }
   return out;
 }
@@ -243,7 +269,7 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
   const onstage = r.actors.filter((a) => a.ring === "onstage");
   const present = (name?: string) => !!name && onstage.some((a) => a.names.some((n) => n.toLowerCase() === name.toLowerCase()) || a.name.toLowerCase() === name.toLowerCase());
   for (const a of inp.arrivals) Object.assign(a, upgradeArrival(a));
-  const expired = expireArrivals(inp.arrivals, inp.now);
+  const expired = [...expireArrivals(inp.arrivals, inp.now), ...collapseMessages(inp.arrivals)];
   // A call or a letter is for someone. One for the player from a lead who doesn't know them (made
   // before the engine checked) is gone; one for someone else waits until they're in the scene.
   const forHere = (a: Arrival): boolean => {
@@ -265,7 +291,9 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
     if (!inp.onPath(a.msgId)) return false;
     if (!forHere(a)) return false;
     if (a.atAbs != null && inp.now != null && a.atAbs > inp.now) return false;
-    if (inp.tier !== "routine" && !a.urgent) return false;
+    // A call or a message is quiet enough for a charged scene (a buzz, a glance at the screen); news isn't.
+    if (inp.tier === "pivotal" && !a.urgent) return false;
+    if (inp.tier === "charged" && !a.urgent && !isMessage(a)) return false;
     switch (a.kind) {
       case "carrier": return present(a.carrier);
       case "entrance": return !present(a.lead);
@@ -278,16 +306,22 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
   ready.sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent) || (order[a.kind ?? "ambient"] ?? 5) - (order[b.kind ?? "ambient"] ?? 5) || (a.atAbs ?? 0) - (b.atAbs ?? 0));
   const already = ready.filter((a) => (a.offered ?? []).some((i) => i >= sceneStart));
   const fresh = ready.filter((a) => !already.includes(a));
-  const pick = [...already, ...fresh.filter((a) => a.urgent), ...fresh.filter((a) => !a.urgent).slice(0, Math.max(0, room))];
-  const chosen = [...new Set(pick)].slice(0, 3);
+  // One waiting call or message comes in even when the scene's room is spent: it's for the player, and it waits on nothing.
+  const message = fresh.find((a) => !a.urgent && isMessage(a) && !already.some(isMessage));
+  const pick = [...already, ...fresh.filter((a) => a.urgent), ...(message ? [message] : []), ...fresh.filter((a) => !a.urgent && a !== message).slice(0, Math.max(0, room))];
+  // One call or message per reply: two phones ringing at once reads as a switchboard.
+  const firstMessage = pick.find(isMessage);
+  const chosen = [...new Set(pick)].filter((a) => !isMessage(a) || a === firstMessage).slice(0, 3);
 
   const now: string[] = [];
+  const messages: string[] = [];
   const mayCome: string[] = [];
   const could: string[] = [];
   for (const a of chosen) {
     if (a.kind === "carrier") mayCome.push(a.text);
     else if (a.kind === "entrance") could.push(entranceCapsule(a, inp));
-    else now.push(a.kind === "signal" && a.atAbs != null ? (inp.now != null && inp.now - a.atAbs > 60 ? `${a.text} (a message left at ${fmtTime(fromAbs(a.atAbs)).replace(/^Day \d+ /, "")})` : a.text) : a.text);
+    else if (isMessage(a)) messages.push(`for ${a.to ?? inp.userName ?? "the player"}: ${a.kind === "signal" && a.atAbs != null && inp.now != null && inp.now - a.atAbs > 60 ? `${a.text} (a message left at ${fmtTime(fromAbs(a.atAbs)).replace(/^Day \d+ /, "")})` : a.text}`);
+    else now.push(a.text);
   }
 
   // Since you last saw them: people back on the page carry what they did off it.
@@ -320,6 +354,7 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
   }
 
   const parts: string[] = [];
+  if (messages.length) parts.push(`Comes in this reply, ${messages.join(" · ")} — show it arriving (the phone buzzes, the screen lights with the name, a voicemail plays, a letter on the mat), who it's from and what it says, then let the scene go on.`);
   if (now.length) parts.push(`Reaches the scene now: ${now.join(" · ")} — render it; invent no other news from off the page.`);
   if (mayCome.length) parts.push(`May come up, if it fits: ${mayCome.join(" · ")}`);
   if (could.length) parts.push(`Could come in, if the scene opens (optional): ${could.join(" · ")}`);
@@ -350,6 +385,22 @@ function entranceCapsule(a: Arrival, inp: LaneInput): string {
 
 /** How many replies may pass over an arrival before it's gone (a sound passes; a carrier waits). */
 const OFFERS: Record<RouteKind, number> = { carrier: 3, signal: 1, ambient: 1, trace: 2, entrance: 2 };
+/** A missed call's message waits for the player to look: it gets more replies than news does. */
+const MESSAGE_OFFERS = 4;
+// Not "phone" or "text": a scene full of someone's texting would read as their missed call.
+const SENT = /\b(?:call(?:s|ed|ing)?|voicemail|message|missed|rang|ringing|letter|raven)\b/i;
+
+/**
+ * A call or message shown in the prose: its sender named in the same paragraph as a call, voicemail
+ * or letter, and something of what it says.
+ */
+function messageShown(a: Arrival, prose: string, roster: Roster): boolean {
+  if (coverage(a.text.replace(/^[^:]*:\s*/, ""), prose) < 0.2) return false;
+  const names = [...new Set([...(roster.find(a.lead ?? "")?.names ?? []), a.lead ?? ""].flatMap((n) => [n, n.split(/\s+/)[0]]).filter((n) => n.length >= 3))];
+  if (!names.length) return false;
+  const named = new RegExp(`\\b(?:${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "i");
+  return prose.split(/\n+/).some((p) => named.test(p) && SENT.test(p));
+}
 
 /** After a reply: which offered arrivals it took up. */
 export function confirmArrivals(arrivals: Arrival[], o: { prose: string; roster: Roster; at: number }): { used: string[]; dropped: string[] } {
@@ -359,15 +410,15 @@ export function confirmArrivals(arrivals: Arrival[], o: { prose: string; roster:
   for (const a of arrivals) {
     if (a.status !== "offered") continue;
     const cov = coverage(a.kind === "entrance" ? a.lead ?? a.text : a.text, o.prose);
-    const ok = a.kind === "entrance" ? present(a.lead) : a.kind === "carrier" ? present(a.carrier) && cov >= 0.3 : cov >= 0.4;
+    const ok = a.kind === "entrance" ? present(a.lead) : a.kind === "carrier" ? present(a.carrier) && cov >= 0.3 : cov >= 0.4 || (isMessage(a) && messageShown(a, o.prose, o.roster));
     if (ok) {
       a.status = "used";
       used.push(a.id);
-    } else if ((a.offered?.length ?? 0) >= OFFERS[a.kind ?? "ambient"]) {
+    } else if ((a.offered?.length ?? 0) >= (a.kind === "trace" && isMessage(a) ? MESSAGE_OFFERS : OFFERS[a.kind ?? "ambient"])) {
       if (a.kind === "signal") {
         // An unanswered call becomes a message waiting.
         const missed = a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}, and a message: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
-        Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, status: "pending", offered: [], why: "the call went unanswered" });
+        Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, status: "pending", offered: [], untilAbs: Math.max(a.untilAbs ?? 0, (a.atAbs ?? 0) + 2880), why: UNANSWERED });
         continue;
       }
       a.status = "expired";

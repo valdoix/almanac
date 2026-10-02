@@ -11,7 +11,7 @@ import { extractJson } from "../core/prompts";
 import { NOT_A_PERSON } from "../core/state";
 import type { ArcState, ParsedOp, Settings, WorldState } from "../core/types";
 import { absMinutes, estTokens, hash, plainProse } from "../core/util";
-import { callFits, confirmArrivals, elsewhereLane, upgradeArrival, type Arrival } from "../core/elsewhere/crossings";
+import { callFits, collapseMessages, confirmArrivals, elsewhereLane, upgradeArrival, type Arrival } from "../core/elsewhere/crossings";
 import { buildRoster, type Actor, type Profile, type Roster } from "../core/elsewhere/roster";
 import { isLight } from "../core/elsewhere/arcs";
 import { authorArc, cardForBeat, tick, type BeatCard, type Mode, type Proposal } from "../core/elsewhere/storyteller";
@@ -194,6 +194,7 @@ export async function runElsewhere(chatId: string, userId?: string, opts: { forc
       putLines(files, target.index, id, res.lines);
       const list = arrivalsOf(meta);
       for (const a of res.arrivals) list.push({ ...a, msgId: target.id, swipe: target.swipe } as Arrival);
+      collapseMessages(list);
       meta.arrivals = pruneArrivals(list);
       const telling = settings.elsewhereTelling !== "engine" && res.cards.length > 0;
       for (const p of res.proposals) E.proposals!.push({ ...p, status: "pending", tick: tickId, ...(telling ? { telling: true } : {}) });
@@ -606,6 +607,7 @@ export function elsewhereView(o: { state: WorldState; records: ReturnType<typeof
         tick: b.tick ?? "", atAbs: b.atAbs, retell: !!b.tick && !telling.has(b.tick) })),
       // When its next step can come, and why it waits.
       next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "", wait: a.status === "running" ? a.wait ?? "" : "", pushed: !!a.push,
+      reached: list.filter((x) => x.arc === a.id && x.status === "used").slice(-3).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "" })),
       reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered") && callFits(x, st, roster)).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" })),
     }));
   const ticks = E.order.map((id) => E.ticks[id]).filter(Boolean).reverse().map((t) => ({ id: t.id, at: t.at, from: o.fmt(t.from), to: o.fmt(t.to), hours: t.hours, beats: t.beats, seeds: t.seeds, proposed: t.proposed ?? 0, hops: t.hops, arrivals: t.arrivals, status: t.status, tokens: t.tokens ?? 0, log: t.log, rejected: t.rejected ?? [], awake: t.awake }));

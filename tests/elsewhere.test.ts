@@ -8,7 +8,7 @@ import { buildRoster, readStanding, storyTown } from "../src/core/elsewhere/rost
 import { spreadNews } from "../src/core/elsewhere/news";
 import { asWant, gate, seedCandidates, threadLatest } from "../src/core/elsewhere/arcs";
 import { authorArc, tick } from "../src/core/elsewhere/storyteller";
-import { confirmArrivals, coverage, elsewhereLane, expireArrivals, routeFor, soughtOf, upgradeArrival, type Arrival } from "../src/core/elsewhere/crossings";
+import { collapseMessages, confirmArrivals, coverage, elsewhereLane, expireArrivals, routeFor, soughtOf, upgradeArrival, type Arrival } from "../src/core/elsewhere/crossings";
 import { validateProfile, validateTold } from "../src/core/elsewhere/telling";
 import { beatTemplate, endTemplate, kindForStory, kindFromText, stageOf, wantFromStory } from "../src/core/elsewhere/grammar";
 import { rng } from "../src/core/util";
@@ -290,6 +290,29 @@ describe("crossings", () => {
     expect(out.map((x) => x.id)).toEqual(["o"]);
     expect(call.kind).toBe("trace");
     expect(call.text).toContain("missed call");
+  });
+  test("a subplot leaves one message waiting: a later call replaces an unseen missed call", () => {
+    const first = base({ id: "a", arc: "jon", kind: "trace", place: [], lead: "Jonathan", why: "the call went unanswered", text: "A missed call from Jonathan, and a message: a dangerous contact", atAbs: 5245 });
+    const second = base({ id: "b", arc: "jon", kind: "signal", medium: "phone", lead: "Jonathan", text: "A call from Jonathan: the archive owed him a favour", atAbs: 5252 });
+    const news = base({ id: "n", arc: "jon", kind: "trace", place: ["Magic Box"], text: "At Magic Box, there are signs of it" });
+    expect(collapseMessages([first, second, news]).map((x) => x.id)).toEqual(["a"]);
+    expect(first.status).toBe("expired");
+    expect([second.status, news.status]).toEqual(["pending", "pending"]);
+  });
+  test("a waiting message reaches a charged scene with no room left, and counts once the reply shows it", () => {
+    const { st, records } = world();
+    const r = buildRoster({ state: st, records, userName: "Gabriel" });
+    const news = base({ id: "n", kind: "ambient", text: "Sirens two streets over", place: [], offered: [12], status: "offered" });
+    const msg = base({ id: "m", arc: "jon", kind: "trace", place: [], lead: "Willow", why: "the call went unanswered", text: "A missed call from Willow, and a message: she found the archive ledger for the audit" });
+    const l = elsewhereLane({ state: st, arrivals: [news, msg], roster: r, now: 3 * DAY + 700, at: 13, tier: "charged", mode: "quiet", onPath: () => true, seen: {}, userName: "Gabriel" });
+    expect(l.offered).toContain("m");
+    expect(l.text).toContain("Comes in this reply, for Gabriel: A missed call from Willow");
+    // Texting someone else isn't the call; the call shown is.
+    confirmArrivals([msg], { prose: "Dawn's phone buzzes with Willow's texts again.", roster: r, at: 14 });
+    expect(msg.status).toBe("pending");
+    msg.status = "offered";
+    confirmArrivals([msg], { prose: "Gabriel's phone shows a missed call. Willow's voicemail: she found the ledger in the archive.", roster: r, at: 15 });
+    expect(msg.status as string).toBe("used");
   });
   test("charged scenes wait; a carrier needs to be in the scene", () => {
     const { st, records } = world();
