@@ -9,7 +9,7 @@ import { spreadNews } from "../src/core/elsewhere/news";
 import { asWant, gate, seedCandidates, threadLatest } from "../src/core/elsewhere/arcs";
 import { authorArc, tick } from "../src/core/elsewhere/storyteller";
 import { confirmArrivals, coverage, elsewhereLane, expireArrivals, routeFor, soughtOf, upgradeArrival, type Arrival } from "../src/core/elsewhere/crossings";
-import { validateTold } from "../src/core/elsewhere/telling";
+import { validateProfile, validateTold } from "../src/core/elsewhere/telling";
 import { beatTemplate, endTemplate, kindForStory, kindFromText, stageOf, wantFromStory } from "../src/core/elsewhere/grammar";
 import { rng } from "../src/core/util";
 
@@ -114,6 +114,17 @@ describe("the roster", () => {
     expect(readStanding("Seasmoke is Laenor Velaryon's young pale silver-grey dragon.")).toMatchObject({ standing: "companion", owner: "Laenor Velaryon" });
     expect(readStanding("Clem is a loose-skinned, floppy-eared demon in Sunnydale who plays kitten poker with Spike.").standing).toBeUndefined();
     expect(readStanding("Amy Madison is a witch who has been trapped as a rat since 1998.").standing).toBe("changed");
+  });
+
+  test("a model profile is a companion only when the lore is an animal, and wants no placeholder", () => {
+    const spike = "Spike is a vampire, over a century old, formerly William the Bloody.";
+    const p = validateProfile({ key: "spike", standing: "companion", reach: "town", want: "…", fear: "…", nocturnal: true }, "h", spike)!;
+    expect(p.standing).toBeUndefined();
+    expect(p.want).toBeUndefined();
+    expect(p.fear).toBeUndefined();
+    expect(p.nocturnal).toBe(true);
+    expect(validateProfile({ standing: "companion" }, "h", "Ruth is a fat, orange tabby cat who belongs to Gabriel Winters.")!.standing).toBe("companion");
+    expect(validateProfile({ standing: "away", want: "to find Dawn" }, "h", spike)).toMatchObject({ standing: "away", want: "find Dawn" });
   });
 
   test("rings, reach, ties and the town", () => {
@@ -330,6 +341,11 @@ describe("the telling's validator", () => {
     expect(validateTold(card, { result: "win", text: "Giles booked a flight." }, ctx).rejected).toBeUndefined();
     expect(validateTold({ ...card, result: "win" }, { result: "loss", text: "Giles couldn't get a flight." }, ctx).rejected).toContain("decided win");
     expect(validateTold(card, { result: "cost", text: "Giles booked a flight, and Willow died that night." }, ctx).rejected).toContain("irreversible");
+  });
+  test("what the lead's own lore names is no new name; the people it names still need the card", () => {
+    const lead = { ...card, leadText: "Rupert Giles, a Watcher — Oxford man, ex-Ripper, friend of Ethan Rayne." };
+    expect(validateTold(lead, { result: "cost", text: "Giles called in a favour from an Oxford archive." }, ctx).rejected).toBeUndefined();
+    expect(validateTold(lead, { result: "cost", text: "Giles called in a favour from a Harvard archive." }, ctx).rejected).toContain("Harvard");
   });
 });
 

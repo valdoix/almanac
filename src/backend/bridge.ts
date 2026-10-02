@@ -6,7 +6,7 @@ import { ledgerFor } from "./ledger";
 import { loadChat, loadSettings, save, saveSettings } from "./store";
 import { buildView, pushState } from "./view";
 import { addUserOps, onMutation, rebuild, removeUserOps, repair, runChronicle, scheduleWeather, syncHidden } from "./ingest";
-import { elsewhereAction, runElsewhere, tickSummary } from "./elsewhere";
+import { elsewhereAction, retellBeat, runElsewhere, tickSummary } from "./elsewhere";
 import { classifyReview, scanLore } from "./lorebridge";
 import { syncMirror } from "./mirror";
 import { bookHealth, creatorExport, creatorGenerate, creatorPlan, creatorReport, creatorSimulate, creatorWrite, listBooks } from "./creator";
@@ -370,7 +370,9 @@ export function registerBridge() {
             pushState(m.chatId, userId);
             return;
           }
-          const res = await elsewhereAction(m.chatId, { action: m.action, id: m.id, name: m.name, premise: m.premise, want: m.want, fear: m.fear, kind: m.kind, secrecy: m.secrecy, decision: m.decision }, userId);
+          const res = m.action === "retell"
+            ? await retellBeat(m.chatId, String(m.id ?? ""), Number(m.at), String(m.tick ?? ""), userId)
+            : await elsewhereAction(m.chatId, { action: m.action, id: m.id, name: m.name, premise: m.premise, want: m.want, fear: m.fear, kind: m.kind, secrecy: m.secrecy, decision: m.decision }, userId);
           if (res?.warn) toast(userId, "warning", res.warn);
           if (res?.info) toast(userId, "info", res.info);
           onMutation(m.chatId, userId);

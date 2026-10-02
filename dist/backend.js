@@ -2479,7 +2479,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.16.1";
+var VERSION = "1.16.2";
 
 // src/core/facts.ts
 function stem(w) {
@@ -11828,6 +11828,18 @@ var init_grammar = __esm(() => {
 });
 
 // src/core/elsewhere/roster.ts
+function cleanProfile(p, loreStanding) {
+  if (!p)
+    return p;
+  const out = { ...p };
+  if ((out.standing === "companion" || out.standing === "construct") && loreStanding !== out.standing)
+    delete out.standing;
+  if (out.want && !/\p{L}/u.test(out.want))
+    delete out.want;
+  if (out.fear && !/\p{L}/u.test(out.fear))
+    delete out.fear;
+  return out;
+}
 function readStanding(text) {
   const first = firstSentence(text);
   const out = {};
@@ -11910,8 +11922,8 @@ function buildRoster(input) {
     const ring = c && (c.tier === "spot" || c.tier === "peri") ? "onstage" : c && ((c.castSeen ?? 0) > 0 || c.arrivedMsg != null || c.voiced && c.lastSeen > c.firstSeen) ? "offstage" : "unmet";
     const key = charId ?? slug(r.id.replace(/^char:/, "")) ?? slug(r.name);
     const pref = people[low(r.name)] ?? names.map((n) => people[low(n)]).find(Boolean) ?? {};
-    const prof = input.profiles?.[key];
     const read = readStanding(loreText);
+    const prof = cleanProfile(input.profiles?.[key], read.standing);
     const loreDead = r.status === "dead" && !c && !/\b(when|after|since|before|until)\b[^.]{0,40}\b(died|was killed|perished)\b/i.test(loreText);
     let standing = pref.standing ?? prof?.standing ?? (c?.dead || c && r.status === "dead" || loreDead ? "dead" : c && ring !== "unmet" && read.standing === "dead" ? "here" : read.standing ?? "here");
     if (c && ring === "onstage" && standing !== "companion" && standing !== "construct")
@@ -13622,7 +13634,7 @@ function cardText(c, ctx) {
 function tellingPrompt(cards, ctx) {
   const never = [...new Set(ctx.offPage.flatMap((o) => o.words))];
   const prof = ctx.profile?.length ? `
-Also PROFILE each person listed under PROFILES from their text only: {"key","standing":"here|away|captive|changed|dead|companion|construct","where":"the place they are now, or empty","reach":"town|region|far","want":"to \u2026","fear":"\u2026","nocturnal":true|false}.` : "";
+Also PROFILE each person listed under PROFILES from their text only: {"key","standing","where","reach","want","fear","nocturnal"}. standing is one of: "here" (about town, free to act), "away" (gone somewhere far), "captive" (imprisoned or held), "changed" (transformed or cursed out of their own shape), "dead", "companion" (only an animal, pet or mount that belongs to someone, never a person who is someone's ally or friend), "construct" (a robot, golem or the like). where is the place they are now, or empty; reach is "town", "region" or "far"; want is what they want now, starting "to", and fear what they fear, both in their own specific words (never empty or "\u2026"); nocturnal is true or false.` : "";
   return {
     system: `You tell what happened off the page in a roleplay, between two story times. ${SAFETY_DATA}
 Each CARD is already decided: who, where, when, and how it turned out. Tell it in two short, plain sentences (at most 50 words), like news of someone the reader knows. First, what happened, in the past tense: the next concrete step of the SUBPLOT, continuing SO FAR, and specific, naming the actual people, news, places and things from the card (SUBPLOT, GROUNDS, KNOWS, ESTABLISHED). Then where that leaves things now, in the present tense: what the lead is about to do, or what is now set to happen. Write "heard that Buffy is back", never "received news"; "voted to strip her magic", never "reached a decision". The register, from other stories: "Marta heard that the mill had burned down. She's thinking of writing to her brother and going home." / "The guild finished its inquiry into the forged seals. Tomas is set to lose his licence." No scenery for its own sake, no semicolon chains, no vague summary ("made progress", "at a price", "it went well", "things moved along"); a price or a setback is said as the concrete thing it was. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, people named in its ESTABLISHED facts, and places it names. The lead acts only on what they KNOW; ESTABLISHED is for getting the names and facts right. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
@@ -13637,7 +13649,9 @@ Write the text in ${ctx.lang}; keep the JSON field names, op names and card ids 
 ` : ""}${cards.map((c) => cardText({ ...c, result: c.result }, ctx) + (c.ending && c.fateOk ? `
   (may be told: the player allowed this ending)` : "")).join(`
 
-`)}${ctx.profile?.length ? `
+`)}${ctx.retry ? `
+
+TELL AGAIN: the player asked for this step to be told again. It reads now: \u201C${ctx.retry}\u201D Tell the same card afresh, plainly and true to it, in new words.` : ""}${ctx.profile?.length ? `
 
 PROFILES
 ${ctx.profile.map((p) => `[${p.key}] ${p.name}: ${p.text.slice(0, 400)}`).join(`
@@ -13682,9 +13696,10 @@ function validateTold(c, raw, ctx) {
   for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...c.established ?? [], ...c.groundText ?? []])
     addNames(p);
   const others = new Set(ctx.roster.actors.flatMap((a) => a.names.flatMap((n) => n.split(/\s+/))).map((w) => w.toLowerCase()));
+  const lore = new Set([c.leadText, ...c.cast.map((n) => ctx.roster.find(n)?.text ?? "")].join(" ").match(/\p{Lu}[\p{L}'\u2019-]+/gu)?.map((w) => w.toLowerCase().replace(/['\u2019]s$/, "")) ?? []);
   for (const w of capNames(`${text} ${arrival ?? ""}`)) {
     const l = w.toLowerCase();
-    if (allowed.has(l))
+    if (allowed.has(l) || lore.has(l) && !others.has(l))
       continue;
     return fail(others.has(l) ? `names ${w}, who isn't on the card` : `a new name: ${w}`);
   }
@@ -13739,7 +13754,7 @@ function validateSeed(c, raw, ctx) {
     return probe;
   return { lines: [], seed: { premise, want: /^to\s/i.test(want) ? want : `to ${want}`, fear } };
 }
-function validateProfile(raw, hash) {
+function validateProfile(raw, hash, lore = "") {
   if (!raw || typeof raw !== "object")
     return null;
   const p = { hash };
@@ -13755,7 +13770,7 @@ function validateProfile(raw, hash) {
     p.fear = raw.fear.trim();
   if (typeof raw.nocturnal === "boolean")
     p.nocturnal = raw.nocturnal;
-  return p;
+  return cleanProfile(p, readStanding(lore).standing);
 }
 function shapePrompt(o) {
   return {
@@ -13808,6 +13823,7 @@ var init_telling = __esm(() => {
   init_state();
   init_prompts();
   init_util();
+  init_roster();
   RESULT_WORD = {
     win: "WIN (this step went the lead's way: real headway toward the want, not the whole of it)",
     cost: "COST (this step got somewhere, and the lead paid the price named)",
@@ -16159,7 +16175,8 @@ async function runElsewhere(chatId, userId, opts = {}) {
         status: telling ? "telling" : "engine",
         log: res.log.slice(0, 40),
         awake: res.awake,
-        ...telling ? { cards: res.cards, lines: res.lines } : {}
+        cards: res.cards,
+        lines: res.lines
       };
       E.ticks[tickId] = record;
       E.order = [...E.order.filter((x) => x !== tickId), tickId];
@@ -16193,6 +16210,32 @@ function setField(line, key, value) {
     parts.push(`${key}: ${v}`);
   return parts.join(" | ");
 }
+function dropField(line, key) {
+  return line.split(" | ").filter((p, j) => j === 0 || !p.startsWith(`${key}: `)).join(" | ");
+}
+function withExtra(lines, extra = {}) {
+  const out = [...lines];
+  for (const i of Object.keys(extra).map(Number).sort((a, b) => b - a))
+    out.splice(i + 1, 0, ...extra[i]);
+  return out;
+}
+function tellingCtx(L, meta, settings, E, tickId, skip, profile) {
+  const st = L.state;
+  const roster = buildRoster({ state: st, records: L.records, userName: L.names.user, notPeople: notPeople(meta), people: meta.config.elsewhere?.people, profiles: E.profiles });
+  const world = meta.lore.world;
+  return {
+    userName: L.names.user,
+    roster,
+    offPage: offPageFacts(st, settings.secretsOffPage !== false),
+    truths: [...meta.config.truths ?? [], ...st.canon.filter((c) => c.pinned).map((c) => c.text)],
+    holds: world?.holds,
+    lang: meta.detected.lang,
+    recent: Object.values(st.arcs ?? {}).flatMap((a) => a.beats.filter((b) => b.tick !== tickId && !skip.includes(b.text)).map((b) => b.text)).slice(-10),
+    places: [...Object.values(st.places).flatMap((p) => [p.name, ...p.path]), ...L.records.filter((r) => r.kind === "place" || r.kind === "group").map((r) => r.name)],
+    objects: Object.values(st.items).map((i) => i.name),
+    profile
+  };
+}
 async function tell(chatId, tickId, userId) {
   const settings = await loadSettings(userId);
   const files = await loadChat(chatId, userId);
@@ -16205,21 +16248,8 @@ async function tell(chatId, tickId, userId) {
   await L.refresh();
   const st = L.state;
   const roster = buildRoster({ state: st, records: L.records, userName: L.names.user, notPeople: notPeople(meta), people: meta.config.elsewhere?.people, profiles: E.profiles });
-  const off = offPageFacts(st, settings.secretsOffPage !== false);
   const profile = roster.actors.filter((a) => rec.awake.includes(a.name) && a.ring === "unmet" && a.lore && E.profiles[a.key]?.hash !== hash(a.lore)).slice(0, 4).map((a) => ({ key: a.key, name: a.name, text: a.lore }));
-  const world = meta.lore.world;
-  const ctx = {
-    userName: L.names.user,
-    roster,
-    offPage: off,
-    truths: [...meta.config.truths ?? [], ...st.canon.filter((c) => c.pinned).map((c) => c.text)],
-    holds: world?.holds,
-    lang: meta.detected.lang,
-    recent: Object.values(st.arcs ?? {}).flatMap((a) => a.beats.map((b) => b.text)).filter((t) => !rec.cards.some((c) => c.template === t)).slice(-10),
-    places: [...Object.values(st.places).flatMap((p) => [p.name, ...p.path]), ...L.records.filter((r) => r.kind === "place" || r.kind === "group").map((r) => r.name)],
-    objects: Object.values(st.items).map((i) => i.name),
-    profile
-  };
+  const ctx = tellingCtx(L, meta, settings, E, tickId, rec.cards.map((c) => c.template), profile);
   const p = tellingPrompt(rec.cards, ctx);
   let text = "";
   try {
@@ -16229,8 +16259,6 @@ async function tell(chatId, tickId, userId) {
     for (const p of E.proposals ?? [])
       if (p.tick === tickId)
         delete p.telling;
-    delete rec.cards;
-    delete rec.lines;
     save(chatId, "meta", userId);
     throw err;
   }
@@ -16244,7 +16272,7 @@ async function tell(chatId, tickId, userId) {
       return;
     const lines = [...r2.lines];
     const rejected = [];
-    const extra = new Map;
+    const extra = {};
     const list = arrivalsOf(m);
     for (const card of r2.cards) {
       if (card.seed) {
@@ -16278,7 +16306,7 @@ async function tell(chatId, tickId, userId) {
       }
       lines[card.line] = setField(setField(lines[card.line], "told", "model"), "text", v.text);
       if (v.lines.length)
-        extra.set(card.line, v.lines);
+        extra[card.line] = v.lines;
       if (v.arrival) {
         for (const a of list)
           if (a.tick === tickId && a.arc === card.arcId && a.status !== "used")
@@ -16290,29 +16318,93 @@ async function tell(chatId, tickId, userId) {
             a.text = a.template.replace(card.template, v.text);
       }
     }
-    for (const i of [...extra.keys()].sort((a, b) => b - a))
-      lines.splice(i + 1, 0, ...extra.get(i));
     for (const pr of res?.profiles ?? []) {
       const who = ctx.profile?.find((x) => x.key === pr?.key);
-      const v = who ? validateProfile(pr, hash(who.text)) : null;
+      const v = who ? validateProfile(pr, hash(who.text), who.text) : null;
       if (who && v)
         E2.profiles[who.key] = v;
     }
-    putLines(fresh, r2.anchor, `${SIM_ID}${tickId}`, lines);
+    putLines(fresh, r2.anchor, `${SIM_ID}${tickId}`, withExtra(lines, extra));
+    r2.lines = lines;
+    r2.extra = extra;
     for (const p of E2.proposals ?? [])
       if (p.tick === tickId)
         delete p.telling;
     r2.status = res ? "told" : "failed";
     r2.tokens = estTokens(p.system + p.user) + estTokens(text);
     r2.rejected = res ? rejected : ["the reply wasn't JSON"];
-    delete r2.cards;
-    delete r2.lines;
     save(chatId, "side", userId);
     save(chatId, "meta", userId);
     await ledgerFor(chatId, userId).refresh();
   });
   await Promise.resolve().then(() => init_view());
   pushState(chatId, userId);
+}
+async function retellBeat(chatId, arcId, atAbs, tickId, userId) {
+  const settings = await loadSettings(userId);
+  const L = ledgerFor(chatId, userId);
+  await L.refresh();
+  const beat = L.state.arcs?.[arcId]?.beats.find((b) => b.tick === tickId && b.atAbs === atAbs);
+  if (!beat?.tick)
+    return { warn: "That step can't be told again." };
+  const files = await loadChat(chatId, userId);
+  const E = elsewhereOf(files.meta);
+  const rec = E.ticks[beat.tick];
+  if (rec?.status === "telling")
+    return { warn: "The model is still telling that step." };
+  const mine = (rec?.cards ?? []).filter((c) => !c.seed && !c.ending && c.arcId === arcId);
+  const card = mine.find((c) => c.atAbs === beat.atAbs) ?? mine[mine.length - 1];
+  if (!rec?.lines || !card)
+    return { warn: "That step is too old to tell again: only the last twelve steps keep what they were made of." };
+  const ctx = { ...tellingCtx(L, files.meta, settings, E, beat.tick, [], []), retry: beat.text };
+  const p = tellingPrompt([card], ctx);
+  let text = "";
+  try {
+    text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 120000, label: "Elsewhere" });
+  } catch (err) {
+    return { warn: `The model couldn't be asked: ${describe(err)}` };
+  }
+  const res = extractJson(text);
+  const raw = res?.beats?.find((b) => b?.card === card.id) ?? res?.beats?.[0];
+  if (!raw)
+    return { warn: "The model gave nothing usable; the step stands as it was." };
+  const v = validateTold(card, raw, ctx);
+  if (v.rejected || !v.text)
+    return { warn: `The new telling was set aside too (${v.rejected}); the step stands as it was.` };
+  const told = v.text;
+  const ok = await serial(`chat:${chatId}`, async () => {
+    const fresh = await loadChat(chatId, userId);
+    const r2 = elsewhereOf(fresh.meta).ticks[beat.tick];
+    if (!r2?.lines?.[card.line])
+      return false;
+    const lines = [...r2.lines];
+    lines[card.line] = dropField(setField(setField(lines[card.line], "told", "model"), "text", told), "note");
+    const extra = { ...r2.extra ?? {} };
+    if (v.lines.length)
+      extra[card.line] = v.lines;
+    else
+      delete extra[card.line];
+    for (const a of arrivalsOf(fresh.meta)) {
+      if (a.tick !== beat.tick || a.arc !== arcId || a.status === "used")
+        continue;
+      if (v.arrival)
+        a.text = v.arrival;
+      else if (a.template && (a.kind === "trace" || a.kind === "ambient"))
+        a.text = a.template.replace(card.template, told);
+    }
+    r2.lines = lines;
+    r2.extra = extra;
+    putLines(fresh, r2.anchor, `${SIM_ID}${beat.tick}`, withExtra(lines, extra));
+    save(chatId, "side", userId);
+    save(chatId, "meta", userId);
+    await ledgerFor(chatId, userId).refresh();
+    return true;
+  });
+  if (!ok)
+    return { warn: "That step changed meanwhile; nothing was told again." };
+  await Promise.resolve().then(() => init_view());
+  pushState(chatId, userId);
+  return { info: "Told again by the model." };
 }
 function elsewhereNote(o) {
   const mode = modeOf(o.meta, o.settings);
@@ -16524,7 +16616,20 @@ function elsewhereView(o) {
     fate: a.fate ?? null,
     grounds: a.grounds.map((g) => ({ id: g, name: groundName(g) })),
     earlier: a.earlier ?? "",
-    beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "", note: b.note ?? "", telling: b.told === "template" && !!b.tick && telling.has(b.tick) })),
+    beats: a.beats.slice(-6).map((b) => ({
+      at: o.fmt(b.atAbs),
+      result: b.result,
+      roll: b.roll,
+      mod: b.mod,
+      text: b.text,
+      told: b.told,
+      twist: b.twist ?? "",
+      note: b.note ?? "",
+      telling: b.told === "template" && !!b.tick && telling.has(b.tick),
+      tick: b.tick ?? "",
+      atAbs: b.atAbs,
+      retell: !!b.tick && !telling.has(b.tick) && !!E.ticks[b.tick]?.cards?.some((c) => c.arcId === a.id && !c.seed && !c.ending)
+    })),
     next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "",
     wait: a.status === "running" ? a.wait ?? "" : "",
     pushed: !!a.push,
@@ -18689,7 +18794,7 @@ function registerBridge() {
             pushState(m.chatId, userId);
             return;
           }
-          const res = await elsewhereAction(m.chatId, { action: m.action, id: m.id, name: m.name, premise: m.premise, want: m.want, fear: m.fear, kind: m.kind, secrecy: m.secrecy, decision: m.decision }, userId);
+          const res = m.action === "retell" ? await retellBeat(m.chatId, String(m.id ?? ""), Number(m.at), String(m.tick ?? ""), userId) : await elsewhereAction(m.chatId, { action: m.action, id: m.id, name: m.name, premise: m.premise, want: m.want, fear: m.fear, kind: m.kind, secrecy: m.secrecy, decision: m.decision }, userId);
           if (res?.warn)
             toast(userId, "warning", res.warn);
           if (res?.info)

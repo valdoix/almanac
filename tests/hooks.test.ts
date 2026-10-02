@@ -524,4 +524,38 @@ describe("Elsewhere against the host (1.14)", () => {
     expect(ops.some((l) => /^arc new #p_one: .*push: yes/.test(l))).toBe(true);
     expect((await elsewhereAction(EC, { action: "accept", id: "p_two" }, USER))?.warn).toContain("no longer waiting");
   });
+
+  test("a step told in the engine's words can be told again by the model", async () => {
+    const EC = "elsewhere-chat";
+    const { retellBeat, runElsewhere } = await import("../src/backend/elsewhere");
+    const { ledgerFor } = await import("../src/backend/ledger");
+    const { buildView } = await import("../src/backend/view");
+    const { AlmanacApp } = await import("../src/frontend/app");
+    let beat: { arc: string; tick: string; atAbs: number; lead: string } | undefined;
+    for (let i = 0; i < 6 && !beat; i++) {
+      await runElsewhere(EC, USER, { force: true });
+      await new Promise((r) => setTimeout(r, 20));
+      const st = (await ledgerFor(EC, USER).refresh()).state;
+      const a = Object.values(st.arcs ?? {}).find((x) => x.beats.some((b) => b.tick && b.told === "template"));
+      const b = a?.beats.find((x) => x.tick && x.told === "template");
+      if (a && b) beat = { arc: a.id, tick: b.tick!, atAbs: b.atAbs, lead: a.lead.split(/\s+/)[0] };
+    }
+    expect(beat).toBeDefined();
+    const page = (AlmanacApp.prototype as any).tab_elsewhere.call({ editing: null }, await buildView(EC, USER));
+    expect(page).toContain(`data-act="ewRetell" data-id="${beat!.arc}" data-tick="${beat!.tick}"`);
+    const saved = spindle.generate;
+    let asked = "";
+    spindle.generate = { quiet: async (req: any) => ((asked = JSON.stringify(req)), { content: JSON.stringify({ beats: [{ card: "x", result: "cost", text: `${beat!.lead} kept at it through the afternoon. It isn't settled yet.` }] }) }) };
+    try {
+      const res = await retellBeat(EC, beat!.arc, beat!.atAbs, beat!.tick, USER);
+      expect(res.warn).toBeUndefined();
+      expect(asked).toContain("TELL AGAIN");
+    } finally {
+      spindle.generate = saved;
+    }
+    const after = (await ledgerFor(EC, USER).refresh()).state.arcs![beat!.arc].beats.find((b) => b.tick === beat!.tick && b.atAbs === beat!.atAbs)!;
+    expect(after).toMatchObject({ told: "model", text: `${beat!.lead} kept at it through the afternoon. It isn't settled yet.` });
+    expect(after.note).toBeUndefined();
+    expect((await retellBeat(EC, beat!.arc, beat!.atAbs, "w0", USER)).warn).toBeDefined();
+  });
 });

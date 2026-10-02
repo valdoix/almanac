@@ -4,6 +4,12 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.16.2 (2026-10-02)
+
+**Retell a step.** Each beat on the Elsewhere page has a **retell** button: the model tells that step again, same outcome, new words, through the same checks (if it fails, the step stands and you're told why). It also rewrites the step's unused "reaches you" text. Works for the last twelve steps; steps made before 1.16.2 didn't keep what they were made of.
+- **Spike was a "companion".** The model's profile read "companion" as an ally; it now means only an animal, pet or mount, and the model's "companion" or "construct" counts only when the lore agrees. A "…" want or fear is no want. Profiles already saved are read the same way.
+- **Tellings set aside for nothing.** A name from the lead's or cast's own lore ("Harvard Law") is no new name. A beat with a twist no longer "repeats" its own engine draft.
+
 ## 1.16.1 (2026-10-02)
 
 **The clock follows a time you state.** "When they're finally done, it's 15:15" in your message left the clock at 14:05: only a stated day ("it's day 12") or a calendar date was read, and the reply's `clock: +5m` outranks its own header. Now "it's 15:15", "it's now 3:15 pm" and "the clock reads 15:15" set the clock (not Dawn's "It's 1111").

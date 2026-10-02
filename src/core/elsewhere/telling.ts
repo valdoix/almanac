@@ -9,7 +9,7 @@ import { normFact, overlap } from "../state";
 import { SAFETY_DATA } from "../prompts";
 import { fmtTime, fromAbs } from "../util";
 import type { BeatCard } from "./storyteller";
-import type { Profile, Roster, Reach } from "./roster";
+import { cleanProfile, readStanding, type Profile, type Roster, type Reach } from "./roster";
 import type { ArcKind, Standing } from "../types";
 
 export interface TellingCtx {
@@ -27,6 +27,8 @@ export interface TellingCtx {
   holds?: string[];
   /** People to profile (standing, whereabouts) while we're asking anyway. */
   profile?: { key: string; name: string; text: string }[];
+  /** Telling one step again: the words it has now, which the player found wanting. */
+  retry?: string;
 }
 
 const RESULT_WORD: Record<string, string> = {
@@ -54,7 +56,7 @@ function cardText(c: BeatCard, ctx: TellingCtx): string {
 export function tellingPrompt(cards: BeatCard[], ctx: TellingCtx): { system: string; user: string } {
   const never = [...new Set(ctx.offPage.flatMap((o) => o.words))];
   const prof = ctx.profile?.length
-    ? `\nAlso PROFILE each person listed under PROFILES from their text only: {"key","standing":"here|away|captive|changed|dead|companion|construct","where":"the place they are now, or empty","reach":"town|region|far","want":"to …","fear":"…","nocturnal":true|false}.`
+    ? `\nAlso PROFILE each person listed under PROFILES from their text only: {"key","standing","where","reach","want","fear","nocturnal"}. standing is one of: "here" (about town, free to act), "away" (gone somewhere far), "captive" (imprisoned or held), "changed" (transformed or cursed out of their own shape), "dead", "companion" (only an animal, pet or mount that belongs to someone, never a person who is someone's ally or friend), "construct" (a robot, golem or the like). where is the place they are now, or empty; reach is "town", "region" or "far"; want is what they want now, starting "to", and fear what they fear, both in their own specific words (never empty or "…"); nocturnal is true or false.`
     : "";
   return {
     system: `You tell what happened off the page in a roleplay, between two story times. ${SAFETY_DATA}
@@ -63,7 +65,7 @@ For a card with REACHES THE SCENE, also write "arrival": the moment it reaches t
 You may add up to two ledger "lines" per card for the LEAD and CAST only: "know Name: #key fact | how they learned it · knows/believes", "bond A>B: trust +1 — cause", "journal Name: their own words".
 Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only. The premise is one or two plain, specific sentences: who, what they've learned or what has happened to them (naming the actual news, people and places in the grounds), and what they mean to do about it (at most 45 words, no labels or lists). The want is "to …" and the fear a plain clause, both specific and in natural words.${cards.some((c) => c.kind === "world") ? `\nA "world" card is the setting's own agenda, an actor too: tell it through consequences in the world (a move, a cost, a changed place), never by announcing it. Lines under HOLDS never break; pressure may strain them, nothing breaks them.${ctx.holds?.length ? ` HOLDS: ${ctx.holds.join(" / ")}` : ""}` : ""}${prof}
 Output JSON only: {"beats":[{"card":"b3","result":"cost","text":"…","arrival":"…","lines":["…"]}],"seeds":[{"card":"b2","premise":"…","want":"to …","fear":"…"}]${ctx.profile?.length ? `,"profiles":[{"key":"…","standing":"…","where":"…","reach":"…","want":"…","fear":"…","nocturnal":false}]` : ""}}${ctx.lang && !/^en/i.test(ctx.lang) ? `\nWrite the text in ${ctx.lang}; keep the JSON field names, op names and card ids in English.` : ""}`,
-    user: `${ctx.truths.length ? `[TRUTHS] (the player's rules; they bind off the page too) ${ctx.truths.join(" · ")}\n\n` : ""}${cards.map((c) => cardText({ ...c, result: c.result }, ctx) + (c.ending && c.fateOk ? "\n  (may be told: the player allowed this ending)" : "")).join("\n\n")}${ctx.profile?.length ? `\n\nPROFILES\n${ctx.profile.map((p) => `[${p.key}] ${p.name}: ${p.text.slice(0, 400)}`).join("\n")}` : ""}`,
+    user: `${ctx.truths.length ? `[TRUTHS] (the player's rules; they bind off the page too) ${ctx.truths.join(" · ")}\n\n` : ""}${cards.map((c) => cardText({ ...c, result: c.result }, ctx) + (c.ending && c.fateOk ? "\n  (may be told: the player allowed this ending)" : "")).join("\n\n")}${ctx.retry ? `\n\nTELL AGAIN: the player asked for this step to be told again. It reads now: “${ctx.retry}” Tell the same card afresh, plainly and true to it, in new words.` : ""}${ctx.profile?.length ? `\n\nPROFILES\n${ctx.profile.map((p) => `[${p.key}] ${p.name}: ${p.text.slice(0, 400)}`).join("\n")}` : ""}`,
   };
 }
 
@@ -121,9 +123,11 @@ export function validateTold(c: BeatCard, raw: { text?: string; result?: string;
   addNames(ctx.userName);
   for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...(c.established ?? []), ...(c.groundText ?? [])]) addNames(p);
   const others = new Set(ctx.roster.actors.flatMap((a) => a.names.flatMap((n) => n.split(/\s+/))).map((w) => w.toLowerCase()));
+  // What the lead's and cast's own lore names ("Harvard Law") is theirs to use; the people it names still need the card.
+  const lore = new Set([c.leadText, ...c.cast.map((n) => ctx.roster.find(n)?.text ?? "")].join(" ").match(/\p{Lu}[\p{L}'’-]+/gu)?.map((w) => w.toLowerCase().replace(/['’]s$/, "")) ?? []);
   for (const w of capNames(`${text} ${arrival ?? ""}`)) {
     const l = w.toLowerCase();
-    if (allowed.has(l)) continue;
+    if (allowed.has(l) || (lore.has(l) && !others.has(l))) continue;
     return fail(others.has(l) ? `names ${w}, who isn't on the card` : `a new name: ${w}`);
   }
   // The player's character only receives.
@@ -172,7 +176,7 @@ export function validateSeed(c: BeatCard, raw: { premise?: string; want?: string
 const STANDINGS: Standing[] = ["here", "away", "captive", "changed", "dead", "companion", "construct"];
 const REACHES: Reach[] = ["house", "town", "region", "far"];
 
-export function validateProfile(raw: any, hash: string): Profile | null {
+export function validateProfile(raw: any, hash: string, lore = ""): Profile | null {
   if (!raw || typeof raw !== "object") return null;
   const p: Profile = { hash };
   if (STANDINGS.includes(raw.standing)) p.standing = raw.standing;
@@ -181,7 +185,7 @@ export function validateProfile(raw: any, hash: string): Profile | null {
   if (typeof raw.want === "string" && raw.want.trim() && raw.want.length < 120) p.want = raw.want.trim().replace(/^to\s+/i, "");
   if (typeof raw.fear === "string" && raw.fear.trim() && raw.fear.length < 120) p.fear = raw.fear.trim();
   if (typeof raw.nocturnal === "boolean") p.nocturnal = raw.nocturnal;
-  return p;
+  return cleanProfile(p, readStanding(lore).standing)!;
 }
 
 // ---------------------------------------------------------------------------

@@ -108,6 +108,18 @@ const NOCTURNAL = /\b(vampire|nocturnal|creature of the night|undead)\b/i;
 /** Hunting vampires doesn't make you keep their hours: "a Vampire Slayer" is up by day. */
 const SLAYS_THEM = /\b(?:vampire|undead)[- ](?:slayers?|hunters?|killers?)\b|\b(?:slayers?|hunters?|killers?) of (?:vampires|the undead)\b/gi;
 
+/** A model profile as far as the lore bears it out: "companion" (an animal) and
+ *  "construct" (a robot) only when the lore itself says so, since the model reads
+ *  "companion" as an ally; a want or fear with no words in it ("…") is no want. */
+export function cleanProfile(p: Profile | undefined, loreStanding: Standing | undefined): Profile | undefined {
+  if (!p) return p;
+  const out = { ...p };
+  if ((out.standing === "companion" || out.standing === "construct") && loreStanding !== out.standing) delete out.standing;
+  if (out.want && !/\p{L}/u.test(out.want)) delete out.want;
+  if (out.fear && !/\p{L}/u.test(out.fear)) delete out.fear;
+  return out;
+}
+
 /** The standing and whereabouts the lore text gives, if any. */
 export function readStanding(text: string): { standing?: Standing; where?: string; owner?: string } {
   const first = firstSentence(text);
@@ -180,8 +192,8 @@ export function buildRoster(input: RosterInput): Roster {
     const ring: Ring = c && (c.tier === "spot" || c.tier === "peri") ? "onstage" : c && ((c.castSeen ?? 0) > 0 || c.arrivedMsg != null || c.voiced && c.lastSeen > c.firstSeen) ? "offstage" : "unmet";
     const key = charId ?? slug(r.id.replace(/^char:/, "")) ?? slug(r.name);
     const pref = people[low(r.name)] ?? names.map((n) => people[low(n)]).find(Boolean) ?? {};
-    const prof = input.profiles?.[key];
     const read = readStanding(loreText);
+    const prof = cleanProfile(input.profiles?.[key], read.standing);
     const loreDead = r.status === "dead" && !c && !/\b(when|after|since|before|until)\b[^.]{0,40}\b(died|was killed|perished)\b/i.test(loreText);
     let standing: Standing = pref.standing ?? prof?.standing ?? (c?.dead || (c && r.status === "dead") || loreDead ? "dead" : c && ring !== "unmet" && read.standing === "dead" ? "here" : read.standing ?? "here");
     if (c && ring === "onstage" && standing !== "companion" && standing !== "construct") standing = c.dead ? "dead" : "here";

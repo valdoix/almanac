@@ -533,7 +533,7 @@ ${x.ticks[0] ? `<p class="muted"><small>Last step: ${e(x.ticks[0].from)} → ${e
       return `<div class="rec"><div class="hd">${ring(a.clock.cur, a.clock.max, a.kind === "threat" ? "var(--alm-danger)" : "var(--alm-accent)")}<b class="grow">${e(a.lead)} · ${KIND[a.kind] ?? e(a.kind)}</b><span class="pill">${e(a.status === "running" ? a.stage : a.status)}</span><span class="pill" title="Who could learn of it">${e(a.secrecy)}</span>${a.crossed ? `<span class="pill" title="It has reached the story">crossed</span>` : ""}${a.by === "player" ? `<span class="pill">yours</span>` : ""}</div>
 <div class="muted">${e(a.premise)}</div>
 <div class="alm-cc__row"><b>wants</b>${e(a.want)}</div><div class="alm-cc__row"><b>fears</b>${e(a.fear)}</div>${a.cast.length ? `<div class="alm-cc__row"><b>with</b>${e(a.cast.join(", "))}</div>` : ""}
-${a.beats.length ? `<ul class="alm-list">${a.beats.map((b: any) => `<li><small class="muted">${e(b.at)} · ${b.roll[0]}+${b.roll[1]}${b.mod ? (b.mod > 0 ? "+" : "") + b.mod : ""} ${RES[b.result] ?? e(b.result)}${b.twist ? ` · twist` : ""}${b.telling ? " · the model is telling it…" : b.told === "template" ? `<span${b.note ? ` title="${e(b.note)}"` : ""}> · engine's words${b.note && x.telling !== "engine" ? " (the model's version was set aside)" : ""}</span>` : ""}</small><br>${e(b.text)}</li>`).join("")}</ul>` : ""}
+${a.beats.length ? `<ul class="alm-list">${a.beats.map((b: any) => `<li><small class="muted">${e(b.at)} · ${b.roll[0]}+${b.roll[1]}${b.mod ? (b.mod > 0 ? "+" : "") + b.mod : ""} ${RES[b.result] ?? e(b.result)}${b.twist ? ` · twist` : ""}${b.telling ? " · the model is telling it…" : b.told === "template" ? `<span${b.note ? ` title="${e(b.note)}"` : ""}> · engine's words${b.note && x.telling !== "engine" ? " (the model's version was set aside)" : ""}</span>` : ""}${b.retell ? ` <button class="btn" data-act="ewRetell" data-id="${e(a.id)}" data-tick="${e(b.tick)}" data-at="${b.atAbs}" title="Ask the model to tell this step again (same outcome, new words)">retell</button>` : ""}</small><br>${e(b.text)}</li>`).join("")}</ul>` : ""}
 ${live && a.status === "running" && (a.wait || a.next) ? `<div class="alm-cc__row"><b>next</b><span>${a.wait ? `${e(a.wait)}; ` : ""}${a.next ? `not before ${e(a.next)}` : "any time now"}${a.wait ? `. <small class="muted">Nudge to make it happen now.</small>` : ""}</span></div>` : ""}
 ${a.reaches.length ? `<div class="alm-cc__row"><b>reaches you</b><span>${a.reaches.map((r: any) => `${ROUTE[r.kind] ?? ""} ${e(r.text)}${r.at ? ` <small class="muted">(${e(r.at)})</small>` : ""}`).join("<br>")}</span></div>` : ""}
 ${a.ending ? `<div class="alm-cc__row"><b>ended</b>${e(a.ending.text)} <small class="muted">${e(a.ending.at)}</small></div>` : ""}${a.note ? `<div class="alm-cc__row"><b>note</b>${e(a.note)}</div>` : ""}
@@ -922,6 +922,11 @@ ${chk("secretsOffPage", "Keep secrets off the page when the model names words to
       case "ewView": this.send({ type: "settings", patch: { elsewhereView: id === "surprise" ? "surprise" : "director" } }); if (this.view?.elsewhere) this.view.elsewhere.view = id; this.render(); break;
       case "ewMode": this.send({ type: "elsewhere", action: "mode", value: id || null }); break;
       case "ewArc": this.send({ type: "elsewhere", action: (t.closest("[data-what]") as HTMLElement | null)?.dataset.what, id }); break;
+      case "ewRetell": {
+        const d = (t.closest("[data-tick]") as HTMLElement | null)?.dataset;
+        if (d) this.send({ type: "elsewhere", action: "retell", id, tick: d.tick, at: Number(d.at) });
+        break;
+      }
       case "ewPropose": this.send({ type: "elsewhere", action: (t.closest("[data-what]") as HTMLElement | null)?.dataset.what === "accept" ? "accept" : "decline", id }); break;
       case "ewFate": this.send({ type: "elsewhere", action: "fate", id, decision: (t.closest("[data-what]") as HTMLElement | null)?.dataset.what }); break;
       case "ewSave": this.send({ type: "elsewhere", action: "edit", id, premise: val("#almEwPremise"), want: val("#almEwWant"), fear: val("#almEwFear"), kind: val("#almEwKind"), secrecy: val("#almEwSecrecy") }); this.editing = null; break;

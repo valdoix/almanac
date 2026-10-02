@@ -38,9 +38,11 @@ export interface TickRecord {
   tokens?: number;
   log: string[];
   awake: string[];
-  /** Kept until the telling is done. */
+  /** What the step was made of, and its lines as told (before the know/bond lines), so a step can be told again. */
   cards?: BeatCard[];
   lines?: string[];
+  /** The telling's extra lines, by the index of the line they follow. */
+  extra?: Record<number, string[]>;
   rejected?: string[];
 }
 
@@ -199,7 +201,7 @@ export async function runElsewhere(chatId: string, userId?: string, opts: { forc
       const record: TickRecord = {
         id: tickId, at: Date.now(), anchor: target.index, from, to: now, hours: Math.round(res.hours * 10) / 10,
         beats: res.cards.filter((c) => !c.seed && !c.ending).length, seeds: res.seeded.length, proposed: res.proposals.length, hops: res.hops.length, arrivals: res.arrivals.length,
-        status: telling ? "telling" : "engine", log: res.log.slice(0, 40), awake: res.awake, ...(telling ? { cards: res.cards, lines: res.lines } : {}),
+        status: telling ? "telling" : "engine", log: res.log.slice(0, 40), awake: res.awake, cards: res.cards, lines: res.lines,
       };
       E.ticks[tickId] = record;
       E.order = [...E.order.filter((x) => x !== tickId), tickId];
@@ -232,6 +234,33 @@ export function setField(line: string, key: string, value: string): string {
   return parts.join(" | ");
 }
 
+/** Drop one `key: value` field of an Elsewhere line. */
+export function dropField(line: string, key: string): string {
+  return line.split(" | ").filter((p, j) => j === 0 || !p.startsWith(`${key}: `)).join(" | ");
+}
+
+/** A tick's lines with the telling's extra lines after the lines they follow. */
+function withExtra(lines: string[], extra: Record<number, string[]> = {}): string[] {
+  const out = [...lines];
+  for (const i of Object.keys(extra).map(Number).sort((a, b) => b - a)) out.splice(i + 1, 0, ...extra[i]);
+  return out;
+}
+
+/** What the telling call reads besides the cards: the roster, what's off the page, the story's truths and names. */
+function tellingCtx(L: ReturnType<typeof ledgerFor>, meta: ChatMeta, settings: Settings, E: ElsewhereMeta, tickId: string, skip: string[], profile: TellingCtx["profile"]): TellingCtx {
+  const st = L.state;
+  const roster = buildRoster({ state: st, records: L.records, userName: L.names.user, notPeople: notPeople(meta), people: meta.config.elsewhere?.people, profiles: E.profiles });
+  const world = meta.lore.world;
+  return {
+    userName: L.names.user, roster, offPage: offPageFacts(st, settings.secretsOffPage !== false),
+    truths: [...(meta.config.truths ?? []), ...st.canon.filter((c) => c.pinned).map((c) => c.text)], holds: world?.holds,
+    lang: meta.detected.lang, // Novelty against other steps: a step's own engine words (with any twist) don't count.
+    recent: Object.values(st.arcs ?? {}).flatMap((a) => a.beats.filter((b) => b.tick !== tickId && !skip.includes(b.text)).map((b) => b.text)).slice(-10),
+    places: [...Object.values(st.places).flatMap((p) => [p.name, ...p.path]), ...L.records.filter((r) => r.kind === "place" || r.kind === "group").map((r) => r.name)],
+    objects: Object.values(st.items).map((i) => i.name), profile,
+  };
+}
+
 /** The telling call for one tick: the model dresses the cards; the validator keeps it honest. */
 export async function tell(chatId: string, tickId: string, userId?: string): Promise<void> {
   const settings = await loadSettings(userId);
@@ -244,20 +273,12 @@ export async function tell(chatId: string, tickId: string, userId?: string): Pro
   await L.refresh();
   const st = L.state;
   const roster = buildRoster({ state: st, records: L.records, userName: L.names.user, notPeople: notPeople(meta), people: meta.config.elsewhere?.people, profiles: E.profiles });
-  const off = offPageFacts(st, settings.secretsOffPage !== false);
   // People awake this tick whose standing and whereabouts only the lore text knows.
   const profile = roster.actors
     .filter((a) => rec.awake.includes(a.name) && a.ring === "unmet" && a.lore && E.profiles[a.key]?.hash !== hash(a.lore))
     .slice(0, 4)
     .map((a) => ({ key: a.key, name: a.name, text: a.lore }));
-  const world = meta.lore.world;
-  const ctx: TellingCtx = {
-    userName: L.names.user, roster, offPage: off,
-    truths: [...(meta.config.truths ?? []), ...st.canon.filter((c) => c.pinned).map((c) => c.text)], holds: world?.holds,
-    lang: meta.detected.lang, recent: Object.values(st.arcs ?? {}).flatMap((a) => a.beats.map((b) => b.text)).filter((t) => !rec.cards!.some((c) => c.template === t)).slice(-10),
-    places: [...Object.values(st.places).flatMap((p) => [p.name, ...p.path]), ...L.records.filter((r) => r.kind === "place" || r.kind === "group").map((r) => r.name)],
-    objects: Object.values(st.items).map((i) => i.name), profile,
-  };
+  const ctx = tellingCtx(L, meta, settings, E, tickId, rec.cards.map((c) => c.template), profile);
   const p = tellingPrompt(rec.cards, ctx);
   let text = "";
   try {
@@ -265,8 +286,6 @@ export async function tell(chatId: string, tickId: string, userId?: string): Pro
   } catch (err) {
     rec.status = "failed";
     for (const p of E.proposals ?? []) if (p.tick === tickId) delete p.telling;
-    delete rec.cards;
-    delete rec.lines;
     save(chatId, "meta", userId);
     throw err;
   }
@@ -279,7 +298,7 @@ export async function tell(chatId: string, tickId: string, userId?: string): Pro
     if (!r2?.lines || !r2.cards) return;
     const lines = [...r2.lines];
     const rejected: string[] = [];
-    const extra = new Map<number, string[]>();
+    const extra: Record<number, string[]> = {};
     const list = arrivalsOf(m);
     for (const card of r2.cards) {
       if (card.seed) {
@@ -311,31 +330,89 @@ export async function tell(chatId: string, tickId: string, userId?: string): Pro
         continue;
       }
       lines[card.line] = setField(setField(lines[card.line], "told", "model"), "text", v.text);
-      if (v.lines.length) extra.set(card.line, v.lines);
+      if (v.lines.length) extra[card.line] = v.lines;
       if (v.arrival) for (const a of list) if (a.tick === tickId && a.arc === card.arcId && a.status !== "used") a.text = v.arrival;
       // The beat's own wording rides the carrier and the trace when the model gave no arrival.
       if (!v.arrival) for (const a of list) if (a.tick === tickId && a.arc === card.arcId && a.template && (a.kind === "trace" || a.kind === "ambient")) a.text = a.template.replace(card.template, v.text);
     }
-    // Extra lines go right after their card's line (from the end, so the indexes hold).
-    for (const i of [...extra.keys()].sort((a, b) => b - a)) lines.splice(i + 1, 0, ...extra.get(i)!);
     for (const pr of res?.profiles ?? []) {
       const who = ctx.profile?.find((x) => x.key === pr?.key);
-      const v = who ? validateProfile(pr, hash(who.text)) : null;
+      const v = who ? validateProfile(pr, hash(who.text), who.text) : null;
       if (who && v) E2.profiles[who.key] = v;
     }
-    putLines(fresh, r2.anchor, `${SIM_ID}${tickId}`, lines);
+    // Extra lines go right after their card's line; the told lines are kept without them, so the indexes hold.
+    putLines(fresh, r2.anchor, `${SIM_ID}${tickId}`, withExtra(lines, extra));
+    r2.lines = lines;
+    r2.extra = extra;
     for (const p of E2.proposals ?? []) if (p.tick === tickId) delete p.telling;
     r2.status = res ? "told" : "failed";
     r2.tokens = estTokens(p.system + p.user) + estTokens(text);
     r2.rejected = res ? rejected : ["the reply wasn't JSON"];
-    delete r2.cards;
-    delete r2.lines;
     save(chatId, "side", userId);
     save(chatId, "meta", userId);
     await ledgerFor(chatId, userId).refresh();
   });
   const { pushState } = await import("./view");
   pushState(chatId, userId);
+}
+
+/**
+ * Tell one step again with the model, when its words read oddly or the engine's stood. Only the
+ * last twelve ticks keep their cards. The step's outcome stays; only its telling changes.
+ */
+export async function retellBeat(chatId: string, arcId: string, atAbs: number, tickId: string, userId?: string): Promise<{ warn?: string; info?: string }> {
+  const settings = await loadSettings(userId);
+  const L = ledgerFor(chatId, userId);
+  await L.refresh();
+  const beat = L.state.arcs?.[arcId]?.beats.find((b) => b.tick === tickId && b.atAbs === atAbs);
+  if (!beat?.tick) return { warn: "That step can't be told again." };
+  const files = await loadChat(chatId, userId);
+  const E = elsewhereOf(files.meta);
+  const rec = E.ticks[beat.tick];
+  if (rec?.status === "telling") return { warn: "The model is still telling that step." };
+  const mine = (rec?.cards ?? []).filter((c) => !c.seed && !c.ending && c.arcId === arcId);
+  const card = mine.find((c) => c.atAbs === beat.atAbs) ?? mine[mine.length - 1];
+  if (!rec?.lines || !card) return { warn: "That step is too old to tell again: only the last twelve steps keep what they were made of." };
+  const ctx = { ...tellingCtx(L, files.meta, settings, E, beat.tick, [], []), retry: beat.text };
+  const p = tellingPrompt([card], ctx);
+  let text = "";
+  try {
+    text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 120_000, label: "Elsewhere" });
+  } catch (err) {
+    return { warn: `The model couldn't be asked: ${describe(err)}` };
+  }
+  const res = extractJson<{ beats?: any[] }>(text);
+  const raw = res?.beats?.find((b) => b?.card === card.id) ?? res?.beats?.[0];
+  if (!raw) return { warn: "The model gave nothing usable; the step stands as it was." };
+  const v = validateTold(card, raw, ctx);
+  if (v.rejected || !v.text) return { warn: `The new telling was set aside too (${v.rejected}); the step stands as it was.` };
+  const told = v.text;
+  const ok = await serial(`chat:${chatId}`, async () => {
+    const fresh = await loadChat(chatId, userId);
+    const r2 = elsewhereOf(fresh.meta).ticks[beat.tick!];
+    if (!r2?.lines?.[card.line]) return false;
+    const lines = [...r2.lines];
+    lines[card.line] = dropField(setField(setField(lines[card.line], "told", "model"), "text", told), "note");
+    const extra = { ...(r2.extra ?? {}) };
+    if (v.lines.length) extra[card.line] = v.lines;
+    else delete extra[card.line];
+    for (const a of arrivalsOf(fresh.meta)) {
+      if (a.tick !== beat.tick || a.arc !== arcId || a.status === "used") continue;
+      if (v.arrival) a.text = v.arrival;
+      else if (a.template && (a.kind === "trace" || a.kind === "ambient")) a.text = a.template.replace(card.template, told);
+    }
+    r2.lines = lines;
+    r2.extra = extra;
+    putLines(fresh, r2.anchor, `${SIM_ID}${beat.tick}`, withExtra(lines, extra));
+    save(chatId, "side", userId);
+    save(chatId, "meta", userId);
+    await ledgerFor(chatId, userId).refresh();
+    return true;
+  });
+  if (!ok) return { warn: "That step changed meanwhile; nothing was told again." };
+  const { pushState } = await import("./view");
+  pushState(chatId, userId);
+  return { info: "Told again by the model." };
 }
 
 /**
@@ -505,7 +582,9 @@ export function elsewhereView(o: { state: WorldState; records: ReturnType<typeof
       id: a.id, kind: a.kind, lead: a.lead, cast: a.cast, premise: a.premise, want: a.want, fear: a.fear, secrecy: a.secrecy, clock: a.clock, tally: a.tally, stage: a.stage,
       status: a.status, crossed: !!a.crossed, by: a.by, locked: !!a.locked, heat: a.heat, note: a.note, ending: a.ending ? { ...a.ending, at: o.fmt(a.ending.atAbs) } : null, fate: a.fate ?? null,
       grounds: a.grounds.map((g) => ({ id: g, name: groundName(g) })), earlier: a.earlier ?? "",
-      beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "", note: b.note ?? "", telling: b.told === "template" && !!b.tick && telling.has(b.tick) })),
+      beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "", note: b.note ?? "", telling: b.told === "template" && !!b.tick && telling.has(b.tick),
+        // Only the last twelve ticks keep the cards a step can be told again from.
+        tick: b.tick ?? "", atAbs: b.atAbs, retell: !!b.tick && !telling.has(b.tick) && !!E.ticks[b.tick]?.cards?.some((c) => c.arcId === a.id && !c.seed && !c.ending) })),
       // When its next step can come, and why it waits.
       next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "", wait: a.status === "running" ? a.wait ?? "" : "", pushed: !!a.push,
       reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered") && callFits(x, st, roster)).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" })),
