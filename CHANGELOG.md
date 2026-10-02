@@ -4,6 +4,22 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.19.0 (2026-10-02)
+
+**The drawer, redesigned ("Night Almanac").** Every page of the Almanac drawer has a new look that is easier to read at a glance:
+- **The sky** carries the story day beside the clock ("DAY 26"), a skyline along its foot, and icons on the place and scene chips. The group's pages switch with bigger buttons in the group's colour.
+- **Each page opens with a heading**: the group, a large title, a one-line count, and a badge in the group's colour. Section headings are larger, with a count beside them.
+- **Status is a sticker**, a word on a colour: secret, belief, true, off the page, due, in prompt, spotlight, crossed, diverged.
+- **Now**: tiles for where, the day, sun, moon and scene; the forecast as bars; the people in the room as cards with Mood, Energy and Control (in place of V, A and D); what is owed with who owes it; the note with its size in tokens; three large buttons.
+- **Cast**: the people in the scene as trading cards (voice-colour band, large medal, quote, hidden pressure, actions at the foot); everyone else in a list that opens a card on a tap.
+- **Bonds**: the axes to colour by as buttons; every bond with both medals and a bar per axis, around zero, with its last changes.
+- **Knowledge, Chronicle, Codex, Recall**: filters as toggles; who knows a fact as a grid of people; the tokens the chronicle saves set large; Codex kinds as buttons; Recall scores as tiles, with the prompt's size against its ceiling.
+- **Timeline** groups milestones by day with an icon for each kind; **World** shows clocks as rings, things as cards, rumours as speech bubbles and running bits as stickers; **Elsewhere** shows the dice of each beat, wants and fears side by side, and what reached you and what is on its way.
+- **Lore**: each book as a card with its size, what its entries were read as, and how they fire as a three-way toggle. **Creator**: chat bubbles in the Library's colour.
+- **Settings**: this chat's switch as a toggle; story truths as a note; each section folds to one line that says how it's set; skins as swatches; checkboxes as switches.
+
+**A new skin, Night Almanac** (Settings › Look), with its own light and dark palettes: deep indigo, Bricolage Grotesque headings and Atkinson Hyperlegible text, made for reading. Every other skin draws the new drawer in its own colours and fonts.
+
 ## 1.18.0 — preset 1.1.0 (2026-10-02)
 
 **ALMANAC runs only with the Ledger, in English.** The preset no longer has a standalone mode: every block goes out only while the ALMANAC Ledger manages the chat, so the model always works from the verified `<ledger-note>` instead of guessing the clock from old headers (which the history thinning had already dropped) and renumbering voices whose marks were gone. A chat's first ALMANAC prompt runs in full: the Ledger reports *arming* and switches itself on as that prompt goes out. Without the extension, with the Ledger switched off in a chat, or without its Prompt interceptor permission, the model answers with one out-of-character line saying what to fix. Gone with the standalone mode: the preset's own Session Zero interview and its tag, the place/weather/mode chat variables, the scene-mode router regex (the scene modules now read the Almanac's scene mode directly), the fallback scene plate and tracker drawer (the Ledger draws both), and the Climate, Calendar and Start point dials (Session Zero sets them). The **Language** setting is gone too: the story, summaries, Codex cards, knowledge lines and Elsewhere's telling are all English. Re-import `preset/ALMANAC.json`.

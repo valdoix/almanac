@@ -592,7 +592,7 @@ export interface Settings {
   mirror: "off" | "summaries" | "full";
   mirrorVectorize: boolean;
   hud: boolean;
-  theme: "preset" | "almanac" | "solar" | "nocturne" | "botanical" | "prism" | "candy" | "dossier" | "scriptorium" | "arcana" | "orbital" | "posy" | "lumiverse";
+  theme: "preset" | "almanac" | "night" | "solar" | "nocturne" | "botanical" | "prism" | "candy" | "dossier" | "scriptorium" | "arcana" | "orbital" | "posy" | "lumiverse";
   /** Light or dark palette for the skin; auto follows Lumiverse. */
   skinMode: "auto" | "light" | "dark";
   /** The player's own colours, laid over a skin's palette. */

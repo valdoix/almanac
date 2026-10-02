@@ -9,6 +9,7 @@ import { SKIN_CSS, customCss, fontsFor } from "./frontend/skins";
 import { openSessionZero } from "./frontend/sessionzero";
 import { HUD_SIZE, hasThoughtsTab, hudCard, hudPill, hudTab, measure, type HudUi } from "./frontend/hud";
 import { HUD_CSS } from "./frontend/hudstyles";
+import { DRAWER_CSS } from "./frontend/drawerstyles";
 import { attentionNote, engineNew } from "./frontend/orrery";
 import { VERSION } from "./core/version";
 
@@ -38,7 +39,7 @@ export function setup(ctx: SpindleFrontendContext) {
     fontsOn = on;
   };
   setFonts(true);
-  removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS + HUD_CSS));
+  removers.push(ctx.dom.addStyle(TOKENS + SKIN_CSS + MESSAGE_CSS + PANEL_CSS + DRAWER_CSS + HUD_CSS));
   // The player's own colours, laid over the skins' (added later, so it wins).
   let customStyle: (() => void) | null = null;
   let lastCustom = "";

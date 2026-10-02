@@ -150,6 +150,11 @@ export function attentionNote(g: Group["id"], v: any, seen?: ReadonlySet<string>
   return "";
 }
 
+// Rooftops along the bottom of the sky, and the chips' small icons.
+const TOWN = "M0 44V32H20V22L32 12L44 22V32H58V26H80V18H88V26H100V34H118V20L134 8L150 20V34H170V28H182V20H190V28H206V36H224V22L238 12L252 22V36H270V30H296V24L306 16L316 24V32H336V26H352V36H368V22L382 12L396 22V30H420V44Z";
+const PIN = '<svg class="almo-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>';
+const FILM = '<svg class="almo-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9h17M8 5l-2 4M13 5l-2 4M18 5l-2 4"/></svg>';
+
 function moon(m: any): string {
   if (!m) return "";
   const lit = Math.max(0, Math.min(1, Number(m.illumination ?? 0.5)));
@@ -170,13 +175,14 @@ export function skyHeader(v: any, page: Page): string {
   const g = groupOf(page);
   const chips = [
     now.weather ? `${e(now.weather.glyph)} ${e(now.weather.text ?? now.weather.condition)}` : "",
-    place.length ? `📍 ${e(place.slice(-2).join(" › "))}` : "",
-    now.mode ? e(now.mode) : "",
+    place.length ? `${PIN}${e(place.slice(-2).join(" › "))}` : "",
+    now.mode ? `${FILM}${e(now.mode)}` : "",
   ].filter(Boolean);
   const rain = /rain|storm|drizzle|shower|sleet/i.test(now.weather?.condition ?? "") ? " almo-rain" : /snow/i.test(now.weather?.condition ?? "") ? " almo-snow" : "";
   const night = /night|hours|pre-dawn|evening|dusk/.test(now.band ?? "evening") ? " almo-night" : "";
   return `<header class="almo-sky${rain}${night}" style="background:${sky}">
-  <div class="almo-sky__row"><div class="almo-clock">${e(now.time ?? "--:--")}</div><div class="almo-date">${rest.length ? `${e(weekday)}<br>${e(rest.join(" "))}` : e(date)}</div>${moon(now.moon)}</div>
+  <svg class="almo-town" viewBox="0 0 420 44" preserveAspectRatio="none" aria-hidden="true"><path d="${TOWN}"/></svg>
+  <div class="almo-sky__row"><div class="almo-clock">${e(now.time ?? "--:--")}</div><div class="almo-date">${rest.length ? `<b>${e(weekday)}</b>${e(rest.join(" "))}` : e(date)}</div>${now.day != null && now.time ? `<span class="almo-day">Day ${e(String(now.day))}</span>` : ""}${moon(now.moon)}</div>
   ${page === "now" && now.title ? `<div class="almo-title">${e(now.title)}</div>` : ""}
   ${chips.length ? `<div class="almo-chips">${chips.map((c) => `<span>${c}</span>`).join("")}</div>` : ""}
   ${g ? `<div class="almo-seg" role="tablist" aria-label="${e(g.label)}" style="--pc:${g.color}">${g.pages.map((p) => `<button role="tab" data-page="${p}" aria-selected="${p === page}">${icon(p)}<span>${LABEL[p]}</span></button>`).join("")}</div>` : ""}
@@ -186,7 +192,7 @@ export function skyHeader(v: any, page: Page): string {
 export function pageTitle(v: any, page: Page): string {
   if (page === "now") return "";
   const g = groupOf(page);
-  return `<div class="almo-head"><span class="almo-eyebrow" style="color:${g?.color}">${e(g?.label ?? "")}</span><h3>${LABEL[page]}</h3><small>${e(summary(page, v))}</small></div>`;
+  return `<div class="almo-head"><div><span class="almo-eyebrow">${e(g?.label ?? "")}</span><h3>${LABEL[page]}</h3><small>${e(summary(page, v))}</small></div><span class="almo-badge" aria-hidden="true">${icon(page)}</span></div>`;
 }
 
 /** The dock, and the orbit of the open planet above it. */
@@ -199,7 +205,7 @@ export function dock(v: any, page: Page, orbit: string, seen?: ReadonlySet<strin
   };
   const og = GROUPS.find((g) => g.id === orbit);
   // Three moons on an arc, or four (Story has Elsewhere too).
-  const pos = og && og.pages.length > 3 ? [[0, 56], [70, 4], [140, 4], [210, 56]] : [[0, 50], [96, 0], [192, 50]];
+  const pos = og && og.pages.length > 3 ? [[0, 60], [78, 0], [156, 0], [234, 60]] : [[0, 54], [106, 0], [212, 54]];
   const ring = og
     ? `<div class="almo-orbit${og.pages.length > 3 ? " four" : ""}" style="--pc:${og.color}" role="menu" aria-label="${e(og.label)}">${og.pages.map((p, i) => `<button class="almo-moonb" role="menuitem" style="left:${pos[i][0]}px;top:${pos[i][1]}px;animation-delay:${i * 40}ms" data-page="${p}"><span class="almo-m">${icon(p)}</span><b>${LABEL[p]}</b><small>${e(v ? summary(p, v) : "")}</small></button>`).join("")}<div class="almo-orbit__t">${e(og.label)}</div></div>`
     : "";

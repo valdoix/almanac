@@ -7,7 +7,7 @@
 import type { SkinColors } from "../core/types";
 
 export const SKIN_LIST: [string, string][] = [
-  ["almanac", "Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"],
+  ["almanac", "Almanac"], ["night", "Night Almanac"], ["solar", "Solar Editorial"], ["nocturne", "Nocturne"], ["botanical", "Botanical"], ["prism", "Prism"], ["candy", "Candy"],
   ["dossier", "Dossier"], ["scriptorium", "Scriptorium"], ["arcana", "Arcana"], ["orbital", "Orbital"], ["posy", "Posy"],
   ["lumiverse", "Follow Lumiverse"],
 ];
@@ -33,6 +33,14 @@ const SKINS: Record<string, Skin> = {
     dark: { panel: "#241c14", "panel-2": "#19130d", ink: "#f1e6d3", muted: "#b3a189", line: "#3e3226", accent: "#ee8a55", "accent-2": "#86b6d8", gold: "#e2b456", good: "#86cf98", warn: "#e9bd60", danger: "#f28072", "on-accent": "#19130d",
       shadow: "0 20px 40px -26px rgba(0,0,0,.85)", lift: "0 10px 24px -18px rgba(0,0,0,.9)", texture: "radial-gradient(rgba(241,230,211,.06) 1px,transparent 1.3px) 0 0/15px 15px" },
     fonts: [],
+  },
+  night: {
+    shared: { "font-display": `"Bricolage Grotesque","Segoe UI",system-ui,sans-serif`, "font-body": `"Atkinson Hyperlegible Next","Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif`, "font-mono": `"JetBrains Mono",ui-monospace,monospace`, "font-hand": `"Caveat",cursive`, radius: "16px", "r-sm": "12px" },
+    light: { panel: "#ffffff", "panel-2": "#f1effb", ink: "#17163a", muted: "#5b5884", line: "#dcd8f0", accent: "#6a48d8", "accent-2": "#2f6fd0", gold: "#c88a12", good: "#1f8a4c", warn: "#b06d00", danger: "#d1344a", "on-accent": "#fff",
+      shadow: "0 18px 36px -26px rgba(40,30,110,.45)", lift: "0 10px 22px -18px rgba(40,30,110,.4)", texture: "none" },
+    dark: { panel: "#17183a", "panel-2": "#0e0f22", ink: "#f4f1ff", muted: "#b9b7dd", line: "#30336a", accent: "#ffc46b", "accent-2": "#8fb8ff", gold: "#ffc46b", good: "#86e3a6", warn: "#ffc46b", danger: "#ff7a7a", "on-accent": "#17132e",
+      shadow: "0 20px 40px -26px rgba(0,0,0,.85)", lift: "0 10px 24px -18px rgba(0,0,0,.9)", texture: "radial-gradient(rgba(244,241,255,.05) 1px,transparent 1.4px) 0 0/22px 22px" },
+    fonts: ["Bricolage+Grotesque:opsz,wght@12..96,500..800", "Atkinson+Hyperlegible+Next:wght@400;700", "Atkinson+Hyperlegible:wght@400;700", "JetBrains+Mono:wght@400;500"],
   },
   solar: {
     shared: { "font-display": `"Playfair Display",Georgia,serif`, "font-body": `"Libre Franklin","Segoe UI",system-ui,sans-serif`, "font-mono": `"Libre Franklin",system-ui,sans-serif`, "font-hand": `"Playfair Display",Georgia,serif`, radius: "0px", "r-sm": "0px", shadow: "none", lift: "none", texture: "none" },
