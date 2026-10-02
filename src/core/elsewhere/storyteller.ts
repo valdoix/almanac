@@ -8,11 +8,11 @@ import type { WeaverWorld } from "../lore";
 import type { OffPage } from "../offpage";
 import type { ArcKind, ArcStage, ArcState, BeatResult, ElsewhereConfig, WorldState } from "../types";
 import { rng, slug } from "../util";
-import { arcNewLine, awakeAt, beatLine, cleanVal, gate, isLight, namesIn, seedCandidates, type GateResult, type SeedCand } from "./arcs";
-import { routeFor, type Arrival } from "./crossings";
-import { beatTemplate, endTemplate, kindForStory, SPECS, stageOf, wantFromStory, type RouteKind } from "./grammar";
+import { arcNewLine, awakeAt, beatLine, cleanVal, gate, isLight, namesIn, seedCandidates, sentence, threadLatest, type GateResult, type SeedCand } from "./arcs";
+import { routeFor, soughtOf, type Arrival } from "./crossings";
+import { beatTemplate, endTemplate, groupName, kindForStory, SPECS, stageOf, wantFromStory, type RouteKind } from "./grammar";
 import { spreadNews, type Hop } from "./news";
-import { awakeSet, buildRoster, canAct, type Actor, type Profile, type Roster } from "./roster";
+import { awakeSet, buildRoster, canAct, hasFact, type Actor, type Profile, type Roster } from "./roster";
 
 export type Mode = "quiet" | "living" | "restless";
 
@@ -51,7 +51,37 @@ export interface TickInput {
   prevTick?: string;
   /** The player moved the world a step: the whole step counts, and something moves if anything can. */
   forced?: boolean;
+  /** New subplots the world grounds itself: start them (auto), propose them to the player (ask), or none (off). */
+  seeding?: "auto" | "ask" | "off";
+  /** Declined proposals by `proposalKey` (never proposed again), and `lead:name` for a lead with one waiting. */
+  proposalKeys?: string[];
+  /** How many proposals are waiting (they take room, like running subplots). */
+  pendingProposals?: number;
 }
+
+/** A subplot the world grounded, waiting for the player to accept or decline it. */
+export interface Proposal {
+  id: string;
+  /** Lead, kind and grounds: a declined proposal isn't made again. */
+  key: string;
+  /** The `arc new` line written when it's accepted. */
+  line: string;
+  kind: ArcKind;
+  lead: string;
+  cast: string[];
+  premise: string;
+  want: string;
+  fear: string;
+  secrecy: "public" | "private" | "secret";
+  grounds: string[];
+  why: string;
+  /** Story time it was proposed at. */
+  atAbs: number;
+  /** A light subplot of the same lead that gives way if it's accepted. */
+  replaces?: string;
+}
+
+export const proposalKey = (lead: string, kind: string, grounds: string[]) => `${lead.toLowerCase()}|${kind}|${[...grounds].sort().join(",")}`;
 
 export interface BeatCard {
   id: string;
@@ -81,6 +111,10 @@ export interface BeatCard {
   offHours?: string;
   knows: string[];
   noRoute: string[];
+  /** Whom the subplot is looking for: the lead doesn't know where they are until it ends. */
+  sought?: string[];
+  /** Facts the story has established about the lead and cast (names and specifics for the telling; not what the lead knows). */
+  established?: string[];
   grounds: string[];
   template: string;
   /** Index of the line the telling rewrites (the beat, or the arc's opening for a seed). */
@@ -91,6 +125,8 @@ export interface BeatCard {
   seed?: boolean;
   /** Irreversible outcomes may be told (the player accepted the fate). */
   fateOk?: boolean;
+  /** A seed card for a proposal (its `id`): the telling rewrites the proposal, not a line. */
+  proposal?: string;
 }
 
 export interface TickResult {
@@ -102,6 +138,7 @@ export interface TickResult {
   awake: string[];
   hops: Hop[];
   seeded: string[];
+  proposals: Proposal[];
   log: string[];
   roster: Roster;
 }
@@ -129,6 +166,9 @@ export function tick(inp: TickInput): TickResult {
   const recentKinds = inp.recentArrivals.filter((a) => a.kind).slice(-6).map((a) => a.kind!) as RouteKind[];
   const lastRouteOf = (arcId: string) => [...inp.recentArrivals].reverse().find((a) => a.arc === arcId)?.kind;
   const id = (s: string) => `${inp.tickId}-${s}`;
+  const offKeys = new Set(inp.offPage.map((x) => x.key));
+  // The first other person in a subplot, by name (whom the lead courts, owes, fights).
+  const otherOf = (arc: ArcState) => arc.cast.find((n) => { const a = roster.find(n); return !!a && !a.group; });
   // Places open threads will take the player: where a trace can wait to be found.
   const inScene = (n: string) => st.place.some((x) => x.toLowerCase() === n || x.toLowerCase().includes(n));
   const tracePlaces: string[][] = [];
@@ -184,7 +224,7 @@ export function tick(inp: TickInput): TickResult {
       continue;
     }
     const result = d === "accept" ? "lost" : "softened";
-    const text = endTemplate({ lead: arc.lead, want: arc.want, fear: arc.fear, result });
+    const text = endTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, fear: arc.fear, result, group: !!lead?.group, cast: otherOf(arc), town });
     lines.push(`arc end #${arc.id}: ${result} | text: ${cleanVal(text)}`);
     cards.push(cardFor(arc, lead, roster, st, { result, roll: [0, 0], mod: 0, stage: "aftermath", atAbs: inp.now, template: text, line: lines.length - 1, ending: true, fateOk: d === "accept", offPage: inp.offPage, records: inp.records }));
   }
@@ -217,16 +257,21 @@ export function tick(inp: TickInput): TickResult {
     if (rand() < p) cands.push({ arc, lead, prio: 1 + Math.min(1, (inp.now - (arc.lastBeatAbs ?? arc.startedAbs)) / 1440) });
   }
 
-  // 6. New subplots, while there is room.
+  // 6. New subplots, while there is room: started, or proposed to the player.
   const seeded: string[] = [];
+  const proposals: Proposal[] = [];
+  const seeding = inp.seeding ?? "auto";
+  const pending = seeding === "ask" ? inp.pendingProposals ?? 0 : 0;
   const liveArcs = [...running, ...arcs.filter((a) => a.status === "held" || a.status === "fate")];
-  const live = liveArcs.length;
+  const live = liveArcs.length + pending;
   const room = M.arcs - live;
   // The player's own stories don't make the world busy: with none of its own yet, the world seeds at once.
-  const own = liveArcs.filter((a) => a.by !== "player").length;
+  const own = liveArcs.filter((a) => a.by !== "player").length + pending;
   const seedP = own === 0 ? 1 : 1 - Math.exp(-0.06 * M.factor * (1 + (2 * room) / M.arcs) * Math.max(hours, 1));
-  if (room > 0 && (hours > 0 || inp.forced || inp.tickId.includes("f")) && rand() < seedP) {
-    const pool = seedCandidates({ state: st, roster, records: inp.records, awake, arcs, canonGravity: inp.canonGravity, genres: inp.genres, world: inp.world, pressures: inp.pressures, now: inp.now });
+  if (seeding !== "off" && room > 0 && (hours > 0 || inp.forced || inp.tickId.includes("f")) && rand() < seedP) {
+    const skip = new Set(inp.proposalKeys ?? []);
+    const pool = seedCandidates({ state: st, roster, records: inp.records, awake, arcs, canonGravity: inp.canonGravity, genres: inp.genres, world: inp.world, pressures: inp.pressures, now: inp.now })
+      .filter((c) => !skip.has(proposalKey(c.lead.name, c.kind, c.grounds)) && !skip.has(`lead:${c.lead.name.toLowerCase()}`));
     const n = Math.min(room, M.seeds);
     for (let i = 0; i < n && pool.length; i++) {
       // A faction's clock or the world's agenda goes first; the rest by weight.
@@ -241,6 +286,23 @@ export function tick(inp: TickInput): TickResult {
       // Variety: one new subplot of a kind per step (three people's "ordinary life" at once is filler).
       for (let j = pool.length - 1; j >= 0; j--) if (pool[j].kind === c.kind && !pool[j].faction) pool.splice(j, 1);
       const light = arcs.find((a) => isLight(a) && a.lead.toLowerCase() === c.lead.name.toLowerCase());
+      if (seeding === "ask") {
+        // Proposed: it waits for the player, who sees what it rests on.
+        const line = arcNewLine({ id: c.id, kind: c.kind, lead: c.lead.name, cast: c.cast.map((a) => a.name), secrecy: c.secrecy, clock: c.clock, cur: c.cur, heat: c.heat, at: inp.now, premise: c.premise, want: c.want, fear: c.fear, grounds: c.grounds, place: c.place, by: c.by, faction: c.faction });
+        const pr: Proposal = {
+          id: c.id, key: proposalKey(c.lead.name, c.kind, c.grounds), line, kind: c.kind, lead: c.lead.name, cast: c.cast.map((a) => a.name), premise: c.premise, want: c.want, fear: c.fear,
+          secrecy: c.secrecy, grounds: c.grounds, why: c.why, atAbs: inp.now, ...(light ? { replaces: light.id } : {}),
+        };
+        proposals.push(pr);
+        log.push(`proposed ${c.id} (${c.kind}, ${c.lead.name}) from ${c.why}`);
+        const arc: ArcState = {
+          id: c.id, kind: c.kind, lead: c.lead.name, cast: pr.cast, premise: c.premise, want: c.want, fear: c.fear, grounds: c.grounds, secrecy: c.secrecy,
+          clock: { cur: c.cur ?? 0, max: c.clock }, tally: { win: 0, cost: 0, loss: 0 }, heat: c.heat, stage: "setup", beats: [], nextAbs: inp.now, status: "running", by: c.by, place: c.place,
+          startedAbs: inp.now, startedMsg: inp.anchorIndex, faction: c.faction,
+        };
+        cards.push({ ...cardFor(arc, c.lead, roster, st, { result: "cost", roll: [0, 0], mod: 0, stage: "setup", atAbs: inp.now, template: c.premise, line: -1, seed: true, offPage: inp.offPage, records: inp.records }), id: `p${proposals.length}`, proposal: c.id });
+        continue;
+      }
       if (light) {
         lines.push(`arc drop #${light.id}: reason: ${cleanVal(`gave way to a better grounded story (${c.kind})`)}`);
         log.push(`${light.id} gave way to ${c.id}`);
@@ -331,9 +393,16 @@ export function tick(inp: TickInput): TickResult {
     const cur = Math.min(arc.clock.max, arc.clock.cur + 1);
     const stage = stageOf(cur, arc.clock.max);
     const shownPlace = place && place.toLowerCase() !== (town ?? "").toLowerCase() && !arc.want.toLowerCase().includes(place.toLowerCase()) ? place : undefined;
-    const text = beatTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, stage: stage === "aftermath" ? "crisis" : stage, result, price, worse, place: shownPlace, premise: arc.premise });
+    // The news a subplot rests on, when the lead holds it (what a return begins with).
+    const newsKey = arc.grounds.find((x) => x.startsWith("#"))?.slice(1);
+    const newsFact = newsKey && !offKeys.has(newsKey) && lead && hasFact(lead, newsKey) ? st.facts?.[newsKey] : undefined;
+    const text = beatTemplate({
+      kind: arc.kind, lead: arc.lead, want: arc.want, stage: stage === "aftermath" ? "crisis" : stage, result, price, worse, place: shownPlace, premise: arc.premise, group: !!lead?.group,
+      cast: otherOf(arc), town, news: newsFact?.statement,
+    });
     const next = atAbs + Math.round(120 + rand() * 240 / M.factor);
-    lines.push(beatLine(arc.id, { result, roll, mod: g.mod, at: atAbs, text: twistText ? `${text} (${twistText})` : text, told: "template", twist: twistText, place, tick: inp.tickId, next }));
+    const twistLine = twistText ? sentence(/^ran into\b/.test(twistText) ? `${lead?.group ? groupName(arc.lead) : arc.lead} ${twistText}` : twistText) : "";
+    lines.push(beatLine(arc.id, { result, roll, mod: g.mod, at: atAbs, text: twistLine ? `${text} ${twistLine}` : text, told: "template", twist: twistText, place, tick: inp.tickId, next }));
     const beatIdx = lines.length - 1;
     if (stage !== arc.stage && stage !== "aftermath") lines.push(`arc stage #${arc.id}: ${stage}`);
     log.push(`${arc.id}: ${roll[0]}+${roll[1]}${g.mod ? (g.mod > 0 ? "+" : "") + g.mod : ""} = ${total} → ${result}${twistText ? ` (twist: ${twistText})` : ""}`);
@@ -348,13 +417,15 @@ export function tick(inp: TickInput): TickResult {
     const card = cardFor(arc, lead, roster, st, { result, roll, mod: g.mod, stage, atAbs, template: text, line: beatIdx, twist: twistText, price, worse, place, offPage: inp.offPage, records: inp.records, offHours: g.offHours });
     // The ending, when the clock fills.
     let ending = false;
+    let endResult: "met" | "price" | "lost" | undefined;
     if (cur >= arc.clock.max) {
       ending = true;
       const tally = { ...arc.tally, [result]: arc.tally[result] + 1 };
       const final = d6(rand) + d6(rand) + tally.win - tally.loss;
       const end: "met" | "price" | "lost" = final >= 10 ? "met" : final >= 7 ? "price" : "lost";
+      endResult = end;
       const irreversible = end === "lost" && spec.irreversible && !!lead?.protected;
-      const endText = endTemplate({ lead: arc.lead, want: arc.want, fear: arc.fear, result: end, price: pickOf(rand, spec.prices) });
+      const endText = endTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, fear: arc.fear, result: end, price: pickOf(rand, spec.prices), group: !!lead?.group, cast: otherOf(arc), town });
       if (irreversible && inp.fates !== "allow") {
         lines.push(`arc set #${arc.id}: status: ${inp.fates === "ask" ? "fate" : "running"} | pending: ${cleanVal(endText)}${inp.fates === "page" ? " | fate: page" : ""}`);
         log.push(`${arc.id}: an irreversible ending waits on the player (${inp.fates})`);
@@ -368,10 +439,7 @@ export function tick(inp: TickInput): TickResult {
     cards.push(card);
     // How it could reach the scene.
     if (ending || slip || arc.bring || rand() < M.arrivalChance * (arc.kind === "life" ? (result === "cost" ? 0.2 : 0.5) : 1)) {
-      const gist = arc.kind === "life"
-        ? (result === "loss" ? `a bad stretch (${worse})` : "nothing urgent; keeping in touch")
-        : result === "win" ? `good news (${arc.want.replace(/^to\s+/i, "").slice(0, 60)})` : result === "cost" ? `news, with a catch: ${price}` : `bad news: ${worse}`;
-      const r = routeFor({ arc, lead, roster, routes: SPECS[arc.kind].routes, text, atAbs, place, result, slip, ending, lastRoute: lastRouteOf(arc.id) as RouteKind | undefined, recentKinds, town, onstage, gist: ending ? undefined : gist, tracePlaces });
+      const r = routeFor({ arc, lead, roster, routes: SPECS[arc.kind].routes, text, atAbs, place, result: endResult ?? result, slip, ending, lastRoute: lastRouteOf(arc.id) as RouteKind | undefined, recentKinds, town, onstage, tracePlaces });
       if (r) {
         const aid = id(arc.id);
         if (!arrivals.some((a) => a.arc && collided.has(a.arc) && a.kind === "trace" && r.kind === "trace" && a.place?.toString() === r.place?.toString())) {
@@ -409,7 +477,7 @@ export function tick(inp: TickInput): TickResult {
     log.push(`incident: ${inc}`);
   }
 
-  return { tickId: inp.tickId, hours, lines, cards, arrivals, awake: awake.map((a) => a.name), hops, seeded, log, roster };
+  return { tickId: inp.tickId, hours, lines, cards, arrivals, awake: awake.map((a) => a.name), hops, seeded, proposals, log, roster };
 }
 
 function cardFor(arc: ArcState, lead: Actor | undefined, r: Roster, st: WorldState, o: { result: BeatCard["result"]; roll: [number, number]; mod: number; stage: ArcStage; atAbs: number; template: string; line: number; twist?: string; price?: string; worse?: string; place?: string; ending?: boolean; seed?: boolean; fateOk?: boolean; offPage: OffPage[]; records: CodexRecord[]; offHours?: string }): BeatCard {
@@ -425,7 +493,7 @@ function cardFor(arc: ArcState, lead: Actor | undefined, r: Roster, st: WorldSta
         return f && !off.has(f.key) && !f.hidden ? `${g}: ${f.statement}` : "";
       }
       const t = st.threads[g];
-      if (t) return `${t.title}${t.latest ? `: ${t.latest}` : ""}`;
+      if (t) return `${t.title}${threadLatest(t.latest) ? `: ${threadLatest(t.latest)}` : ""}`;
       const rec = o.records.find((x) => x.id === g);
       return rec ? `${rec.name}: ${rec.summary}` : "";
     })
@@ -435,10 +503,22 @@ function cardFor(arc: ArcState, lead: Actor | undefined, r: Roster, st: WorldSta
   const sofar = arc.beats.slice(-2).map((b) => b.text);
   const knows = (lead?.knows ?? []).filter((k) => !off.has(k.key)).slice(-4).map((k) => `#${k.key} (${k.statement.slice(0, 80)})`);
   const noRoute = Object.values(st.facts ?? {}).filter((f) => !f.hidden && f.keepers?.length && lead && !(lead.charId && f.stances[lead.charId])).slice(0, 2).map((f) => `#${f.key}`);
+  // What the story has settled about the people in it, so a telling can be specific: never a secret
+  // kept from the lead, nothing off the page, nothing the lead already KNOWS.
+  const who = [arc.lead, ...arc.cast].flatMap((n) => [n, ...(r.find(n)?.names ?? [])]).map((n) => n.split(/\s+/)[0]).filter((n) => n.length >= 3);
+  const whoRe = who.length ? new RegExp(`\\b(?:${[...new Set(who)].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`) : null;
+  const known = new Set((lead?.knows ?? []).map((k) => k.key));
+  // About the lead (with whoever else it names); never the player's character.
+  const leadRe = new RegExp(`\\b(?:${[arc.lead, ...(lead?.names ?? [])].map((n) => n.split(/\s+/)[0]).filter((n) => n.length >= 3).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") || "\\u0000"})\\b`);
+  const userRe = new RegExp(`\\b${r.userName.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const established = whoRe ? Object.values(st.facts ?? {})
+    .filter((f) => !f.hidden && !off.has(f.key) && !known.has(f.key) && f.truth !== "false" && (!f.keepers?.length || (lead?.charId && f.stances[lead.charId])) && whoRe.test(f.statement))
+    .filter((f) => !userRe.test(f.statement) && leadRe.test(f.statement))
+    .sort((a, b) => (b.lastMsg ?? 0) - (a.lastMsg ?? 0)).slice(0, 3).map((f) => clean(f.statement.slice(0, 140))).filter(Boolean) : [];
   return {
     id: `b${o.line}`, arcId: arc.id, kind: arc.kind, lead: arc.lead, cast: arc.cast, result: o.result, roll: o.roll, mod: o.mod, twist: o.twist, price: o.price, worse: o.worse, stage: o.stage,
     clock: `${Math.min(arc.clock.max, arc.clock.cur + (o.seed || o.ending ? 0 : 1))}/${arc.clock.max}`, atAbs: o.atAbs, where: o.place ?? lead?.where, premise: arc.premise, want: arc.want, fear: arc.fear,
-    leadText: lead?.text ?? "", groundText, sofar, offHours: o.offHours, knows, noRoute, grounds: arc.grounds, template: o.template, line: o.line, ending: o.ending, seed: o.seed, fateOk: o.fateOk,
+    leadText: lead?.text ?? "", groundText, sofar, offHours: o.offHours, knows, noRoute, sought: soughtOf(arc, r).map((a) => a.name), established, grounds: arc.grounds, template: o.template, line: o.line, ending: o.ending, seed: o.seed, fateOk: o.fateOk,
   };
 }
 

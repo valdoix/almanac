@@ -94,6 +94,7 @@ Everyone the story knows has a life off the page. That means the people from the
   - Leave someone out of it, or wake them.
   - An ending that can't be undone (a death, say) waits for your word: accept it, soften it, or keep it for a scene on the page.
 - **Cost.** After each reply the engine works without any model call. *Telling: model* makes one quiet call per step, on the Elsewhere connection, to put the step into the story's own words; a validator rejects new names, decisions for your character and spoilers. *Telling: engine* makes no calls at all.
+- **New subplots.** The world finds subplots in the story and the lorebooks. By default it proposes them on the Elsewhere page for you to accept or decline; Settings can let them start on their own, or turn them off so only the stories you write run.
 
 ### Prompt size and cost
 

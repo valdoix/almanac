@@ -40,13 +40,14 @@ function cardText(c: BeatCard, ctx: TellingCtx): string {
   WHO ${c.lead}: ${c.leadText.slice(0, 220) || "—"}
   GROUNDS ${c.grounds.join(" · ")}
   DRAFT premise: ${c.premise} | want: ${c.want} | fear: ${c.fear}
-  WRITE a premise (≤ 30 words) from the grounds only, a want ("to …", ≤ 12 words) and a fear (≤ 12 words).`;
+  WRITE a premise (one or two plain, specific sentences, ≤ 45 words) from the grounds only, a want ("to …", ≤ 12 words) and a fear (≤ 12 words).`;
   }
   return `CARD ${c.id} · ${c.kind} · ${c.ending ? "ending" : `beat ${c.clock} · ${c.stage}`} · roll ${c.roll[0]}+${c.roll[1]}${c.mod ? ` ${c.mod > 0 ? "+" : "-"}${Math.abs(c.mod)}` : ""} → ${RESULT_WORD[c.result]}${c.price ? ` (price: ${c.price})` : ""}${c.worse ? ` (worse: ${c.worse})` : ""}${c.twist ? ` · twist: ${c.twist}` : ""}
   LEAD ${c.lead}: ${c.leadText.slice(0, 200) || "—"}
   SUBPLOT ${c.premise} · wants ${c.want} · fears ${c.fear}${c.groundText?.length ? `\n  GROUNDS ${c.groundText.join(" · ")}` : ""}${c.sofar?.length ? `\n  SO FAR ${c.sofar.join(" → ")}` : "\n  SO FAR (this is its first step: begin what the SUBPLOT describes)"}
   CAST ${c.cast.join(", ") || "—"} · WHERE ${c.where ?? "—"} · WHEN ${fmtTime(fromAbs(c.atAbs))}${c.offHours ? ` (${c.offHours}: tell it so that fits)` : ""}
-  KNOWS ${c.knows.join("; ") || "—"}${c.noRoute.length ? ` · NO ROUTE TO ${c.noRoute.join(", ")} (can't act on it)` : ""}
+  KNOWS ${c.knows.join("; ") || "—"}${c.noRoute.length ? ` · NO ROUTE TO ${c.noRoute.join(", ")} (can't act on it)` : ""}${c.established?.length ? `\n  ESTABLISHED ${c.established.join(" · ")}` : ""}${c.sought?.length ? `
+  SOUGHT ${c.sought.join(", ")}: ${c.lead} doesn't know where they are and doesn't find them${c.ending ? " unless the ending is met" : " in this step (only an ending can)"}; no call, letter or visit reaches them` : ""}
   ENGINE DRAFT ${c.template}${c.arrival ? `\n  REACHES THE SCENE AS (${c.arrivalKind}) ${c.arrival}` : ""}`;
 }
 
@@ -57,10 +58,10 @@ export function tellingPrompt(cards: BeatCard[], ctx: TellingCtx): { system: str
     : "";
   return {
     system: `You tell what happened off the page in a roleplay, between two story times. ${SAFETY_DATA}
-Each CARD is already decided: who, where, when, and how it turned out. Tell it as ONE plain past-tense sentence (at most 40 words) of what happened, in the story's language: the next concrete step of the SUBPLOT, continuing SO FAR, doing what the lead would do toward what they want. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, and places it names. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
-For a card with REACHES THE SCENE, also write "arrival": how it reaches the scene, at most 30 words, in-world.
+Each CARD is already decided: who, where, when, and how it turned out. Tell it in two short, plain sentences (at most 50 words), like news of someone the reader knows. First, what happened, in the past tense: the next concrete step of the SUBPLOT, continuing SO FAR, and specific, naming the actual people, news, places and things from the card (SUBPLOT, GROUNDS, KNOWS, ESTABLISHED). Then where that leaves things now, in the present tense: what the lead is about to do, or what is now set to happen. Write "heard that Buffy is back", never "received news"; "voted to strip her magic", never "reached a decision". The register, from other stories: "Marta heard that the mill had burned down. She's thinking of writing to her brother and going home." / "The guild finished its inquiry into the forged seals. Tomas is set to lose his licence." No scenery for its own sake, no semicolon chains, no vague summary ("made progress", "at a price", "it went well", "things moved along"); a price or a setback is said as the concrete thing it was. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, people named in its ESTABLISHED facts, and places it names. The lead acts only on what they KNOW; ESTABLISHED is for getting the names and facts right. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
+For a card with REACHES THE SCENE, also write "arrival": the moment it reaches the scene as the scene would meet it (what is heard, seen, read or said, and by whom), specific about the news it carries, at most 40 words, in-world.
 You may add up to two ledger "lines" per card for the LEAD and CAST only: "know Name: #key fact | how they learned it · knows/believes", "bond A>B: trust +1 — cause", "journal Name: their own words".
-Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only.${cards.some((c) => c.kind === "world") ? `\nA "world" card is the setting's own agenda, an actor too: tell it through consequences in the world (a move, a cost, a changed place), never by announcing it. Lines under HOLDS never break; pressure may strain them, nothing breaks them.${ctx.holds?.length ? ` HOLDS: ${ctx.holds.join(" / ")}` : ""}` : ""}${prof}
+Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only. The premise is one or two plain, specific sentences: who, what they've learned or what has happened to them (naming the actual news, people and places in the grounds), and what they mean to do about it (at most 45 words, no labels or lists). The want is "to …" and the fear a plain clause, both specific and in natural words.${cards.some((c) => c.kind === "world") ? `\nA "world" card is the setting's own agenda, an actor too: tell it through consequences in the world (a move, a cost, a changed place), never by announcing it. Lines under HOLDS never break; pressure may strain them, nothing breaks them.${ctx.holds?.length ? ` HOLDS: ${ctx.holds.join(" / ")}` : ""}` : ""}${prof}
 Output JSON only: {"beats":[{"card":"b3","result":"cost","text":"…","arrival":"…","lines":["…"]}],"seeds":[{"card":"b2","premise":"…","want":"to …","fear":"…"}]${ctx.profile?.length ? `,"profiles":[{"key":"…","standing":"…","where":"…","reach":"…","want":"…","fear":"…","nocturnal":false}]` : ""}}${ctx.lang && !/^en/i.test(ctx.lang) ? `\nWrite the text in ${ctx.lang}; keep the JSON field names, op names and card ids in English.` : ""}`,
     user: `${ctx.truths.length ? `[TRUTHS] (the player's rules; they bind off the page too) ${ctx.truths.join(" · ")}\n\n` : ""}${cards.map((c) => cardText({ ...c, result: c.result }, ctx) + (c.ending && c.fateOk ? "\n  (may be told: the player allowed this ending)" : "")).join("\n\n")}${ctx.profile?.length ? `\n\nPROFILES\n${ctx.profile.map((p) => `[${p.key}] ${p.name}: ${p.text.slice(0, 400)}`).join("\n")}` : ""}`,
   };
@@ -106,9 +107,9 @@ export function validateTold(c: BeatCard, raw: { text?: string; result?: string;
   const told = raw.result ? String(raw.result).toLowerCase().trim() : "";
   if (told && told !== String(c.result) && OPPOSITE[String(c.result)]?.includes(told)) return fail(`told as ${told}, decided ${c.result}`);
   const wc = (s: string) => s.split(/\s+/).filter(Boolean).length;
-  if (wc(text) > 55) return fail("too long");
+  if (wc(text) > 95) return fail("too long");
   const arrival = raw.arrival ? String(raw.arrival).trim() : undefined;
-  if (arrival && wc(arrival) > 45) return fail("arrival too long");
+  if (arrival && wc(arrival) > 60) return fail("arrival too long");
   // People: only the card's lead and cast; places and objects the story knows.
   const allowed = new Set<string>();
   const addNames = (n: string) => n.split(/\s+/).forEach((w) => allowed.add(w.toLowerCase().replace(/['’]s$/, "")));
@@ -118,7 +119,7 @@ export function validateTold(c: BeatCard, raw: { text?: string; result?: string;
     if (a) a.names.forEach(addNames);
   }
   addNames(ctx.userName);
-  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? ""]) addNames(p);
+  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...(c.established ?? []), ...(c.groundText ?? [])]) addNames(p);
   const others = new Set(ctx.roster.actors.flatMap((a) => a.names.flatMap((n) => n.split(/\s+/))).map((w) => w.toLowerCase()));
   for (const w of capNames(`${text} ${arrival ?? ""}`)) {
     const l = w.toLowerCase();
@@ -132,6 +133,12 @@ export function validateTold(c: BeatCard, raw: { text?: string; result?: string;
     if (m && VERBISH.test(m[1])) return fail(`decides for ${ctx.userName}`);
   }
   if (!c.fateOk && IRREVERSIBLE.test(`${text} ${arrival ?? ""}`)) return fail("an irreversible outcome");
+  // A search doesn't find its quarry before it ends (or at all, if it ends badly).
+  const finds = c.result !== "met" && c.result !== "price" && (c.sought ?? []).find((n) => {
+    const names = [n, ...(ctx.roster.find(n)?.names ?? [])].map((x) => x.split(/\s+/)[0]).filter((x) => x.length >= 3).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    return new RegExp(`\\b(?:(?:found|finds)(?! no\\b| nothing\\b| neither\\b| only\\b)|located|locates|tracked (?:\\w+ )?down|caught up with|learned where|found out where|knows where|knew where)\\b[^.;]{0,40}?\\b(?:${names.join("|")})\\b|\\btracked (?:${names.join("|")}) down\\b`, "i").test(`${text} ${arrival ?? ""}`);
+  });
+  if (finds) return fail(`finds ${finds} before the search ends`);
   const hits = offPageHits(`${text} ${arrival ?? ""}`, ctx.offPage);
   if (hits.length) return fail(`names an off-page secret (${hits[0].word})`);
   const n = normFact(text);
@@ -156,7 +163,7 @@ export function validateSeed(c: BeatCard, raw: { premise?: string; want?: string
   const want = String(raw.want ?? "").trim();
   const fear = String(raw.fear ?? "").trim();
   if (!premise || !want || !fear) return { lines: [], rejected: "incomplete" };
-  if (premise.split(/\s+/).length > 45 || want.split(/\s+/).length > 18 || fear.split(/\s+/).length > 18) return { lines: [], rejected: "too long" };
+  if (premise.split(/\s+/).length > 60 || want.split(/\s+/).length > 18 || fear.split(/\s+/).length > 18) return { lines: [], rejected: "too long" };
   const probe = validateTold({ ...c, result: "cost" }, { text: `${premise} ${want}. ${fear}.`, result: "cost" }, { ...ctx, recent: [] });
   if (probe.rejected) return probe;
   return { lines: [], seed: { premise, want: /^to\s/i.test(want) ? want : `to ${want}`, fear } };
@@ -204,8 +211,8 @@ export function shapePrompt(o: { userName: string; lead: string; leadText: strin
     system: `A player wrote a subplot for someone off the page in their roleplay. File it for the engine that will play it out. ${SAFETY_DATA}
 Read the premise for what the LEAD does and is after. Use only the premise and who the lead is; add nothing.
 - "kind": one of ${Object.entries(KIND_MEANING).map(([k, v]) => `${k} (${v})`).join("; ")}.
-- "want": what the LEAD is after, "to …", at most 12 words.
-- "fear": what the LEAD fears if it goes badly, at most 12 words.
+- "want": what the LEAD is after, "to …", at most 12 words, in natural English ("to find Dawn before anyone else does").
+- "fear": what the LEAD fears if it goes badly, a plain clause of at most 12 words, in natural English ("that he let Dawn down when it mattered").
 - "cast": the people and groups from the lists below who take part (not ${o.userName}).
 - "secrecy": "public" (anyone could hear of it), "private" (those close to it), or "secret" (hidden on purpose).
 - "place": where it happens, if the premise says; else "".

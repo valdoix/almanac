@@ -6,11 +6,11 @@ import type { CodexRecord } from "../src/core/codex";
 import type { CharacterState, FactState, WorldState } from "../src/core/types";
 import { buildRoster, readStanding, storyTown } from "../src/core/elsewhere/roster";
 import { spreadNews } from "../src/core/elsewhere/news";
-import { gate, seedCandidates } from "../src/core/elsewhere/arcs";
+import { asWant, gate, seedCandidates, threadLatest } from "../src/core/elsewhere/arcs";
 import { authorArc, tick } from "../src/core/elsewhere/storyteller";
-import { confirmArrivals, coverage, elsewhereLane, expireArrivals, routeFor, upgradeArrival, type Arrival } from "../src/core/elsewhere/crossings";
+import { confirmArrivals, coverage, elsewhereLane, expireArrivals, routeFor, soughtOf, upgradeArrival, type Arrival } from "../src/core/elsewhere/crossings";
 import { validateTold } from "../src/core/elsewhere/telling";
-import { beatTemplate, kindForStory, kindFromText, stageOf, wantFromStory } from "../src/core/elsewhere/grammar";
+import { beatTemplate, endTemplate, kindForStory, kindFromText, stageOf, wantFromStory } from "../src/core/elsewhere/grammar";
 import { rng } from "../src/core/util";
 
 const DAY = 1440;
@@ -199,6 +199,59 @@ describe("seeding and the tick", () => {
     expect(tick({ ...inp, tickId: "w31" }).lines).not.toEqual(a.lines);
   });
 
+  test("new subplots can be proposed to the player instead, or not made at all", () => {
+    const { st, records } = world();
+    st.factions = { "fac:hellions": { id: "fac:hellions", name: "Hellions", clocks: { raid: { name: "raid Sunnydale", cur: 2, max: 6, history: [] } } } };
+    const inp = { chatId: "c", tickId: "w30", state: st, records, userName: "Gabriel", mode: "living" as const, canonGravity: "light" as const, fates: "ask" as const, genres: [], from: 2 * DAY + 600, now: 3 * DAY + 300, anchorIndex: 11, offPage: [], recentArrivals: [] };
+    const ask = tick({ ...inp, seeding: "ask" });
+    // Nothing starts: the seeds wait as proposals, each with its grounds and the line acceptance writes.
+    expect(ask.lines.some((l) => l.startsWith("arc new"))).toBe(false);
+    expect(ask.seeded).toEqual([]);
+    const hell = ask.proposals.find((p) => p.lead === "Hellions")!;
+    expect(hell).toMatchObject({ kind: "threat", grounds: ["fac:hellions"], why: "Hellions's clock" });
+    expect(parseLine(hell.line)!.op).toBe("arc");
+    // The telling still polishes them: a seed card for each, pointing at its proposal.
+    expect(ask.cards.filter((c) => c.seed).map((c) => c.proposal)).toEqual(ask.proposals.map((p) => p.id));
+    // Declined, it isn't proposed again; a lead with one waiting gets no second.
+    const again = tick({ ...inp, seeding: "ask", proposalKeys: [hell.key] });
+    expect(again.proposals.some((p) => p.key === hell.key)).toBe(false);
+    const waiting = tick({ ...inp, seeding: "ask", proposalKeys: ["lead:hellions"], pendingProposals: 1 });
+    expect(waiting.proposals.some((p) => p.lead === "Hellions")).toBe(false);
+    // What a proposal shows reads cleanly.
+    expect(asWant("shoes for Saturday; to understand her legal options", "")).toBe("to get shoes for Saturday");
+    expect(asWant("guide Buffy from afar", "")).toBe("to guide Buffy from afar");
+    expect(threadLatest("; latest: unblock; Dawn asleep through the night; stalls: 0")).toBe("unblock; Dawn asleep through the night");
+    expect(tick({ ...inp, seeding: "off" }).proposals).toEqual([]);
+    expect(tick({ ...inp, seeding: "off" }).lines.some((l) => l.startsWith("arc new"))).toBe(false);
+  });
+
+  test("the engine's words name what happened, then where it leaves things", () => {
+    expect(beatTemplate({ kind: "return", lead: "Giles", want: "to see Buffy with his own eyes", stage: "setup", result: "win", news: "Buffy is alive again", town: "Sunnydale" }))
+      .toBe("Giles heard that Buffy is alive again. Giles is thinking of coming back to Sunnydale.");
+    expect(beatTemplate({ kind: "rivalry", lead: "Cordelia", want: "to come out on top", stage: "rising", result: "loss", worse: "the other side struck back", cast: "Harmony" }))
+      .toBe("Cordelia raised the stakes with Harmony. The other side struck back.");
+    expect(beatTemplate({ kind: "threat", lead: "Hellions", group: true, want: "to raid Sunnydale", stage: "rising", result: "cost", price: "one of theirs was hurt", town: "Sunnydale" }))
+      .toBe("The Hellions struck at Sunnydale. One of theirs was hurt.");
+    expect(endTemplate({ kind: "investigation", lead: "Witches' Circle", group: true, want: "to judge what Willow did", fear: "", result: "met" }))
+      .toBe("The Witches' Circle concluded the investigation. In the end, the Witches' Circle managed to judge what Willow did.");
+    expect(endTemplate({ kind: "return", lead: "Giles", want: "to come back", fear: "they come back too late", result: "lost" })).toBe("It went badly for Giles. Giles came back too late.");
+    // An archivist's blank is no want.
+    expect(asWant("Unknown — last seen at the wall by the window", "to stay in control")).toBe("to stay in control");
+  });
+
+  test("a lawsuit isn't a romance, and no romance is seeded with a child or within a family", () => {
+    expect(kindFromText("court option (civil/criminal/recovery) to be decided by Buffy and Dawn")).not.toBe("courtship");
+    expect(kindFromText("Jonathan supervising audit personally")).toBe("investigation");
+    const { st, records } = world();
+    st.bonds = { "x": { from: "willow", to: "dawn", axes: { attraction: 3 } } as any };
+    records.find((x) => x.id === "char:dawn")!.summary = "Dawn is Buffy's fifteen-year-old sister.";
+    const r = buildRoster({ state: st, records, userName: "Gabriel" });
+    const dawn = r.find("Dawn")!;
+    dawn.ring = "offstage";
+    const kinds = seedCandidates({ state: st, roster: r, records, awake: r.actors.filter((a) => a.ring !== "onstage"), arcs: [], canonGravity: "light", genres: [], now: 3 * DAY });
+    expect(kinds.some((c) => c.kind === "courtship")).toBe(false);
+  });
+
   test("a stage follows the clock", () => {
     expect([0, 1, 2, 4, 5, 6].map((c) => stageOf(c, 6))).toEqual(["setup", "setup", "rising", "rising", "crisis", "aftermath"]);
     expect(kindFromText("Willow may be drawn deeper into dark magic")).toBe("decline");
@@ -335,7 +388,53 @@ describe("the player's own stories", () => {
     expect(forced.lines.some((l) => l.startsWith("arc beat #willow_x:"))).toBe(true);
   });
 
+  test("a search doesn't call into the scene where its quarry is, from someone who doesn't know the player", () => {
+    const { st, records } = spikeWorld();
+    const r = buildRoster({ state: st, records, userName: "Gabriel" });
+    const spike = r.find("Spike")!;
+    const dawn = r.find("Dawn")!;
+    spike.ties.push({ to: dawn.key, strength: 2, kind: "situation" });
+    dawn.ring = "onstage";
+    const a = arc({ clock: { cur: 1, max: 6 } });
+    expect(soughtOf(a, r).map((x) => x.name)).toEqual(["Dawn"]);
+    const o = { arc: a, lead: spike, roster: r, routes: ["carrier", "entrance", "signal"] as any, text: "Spike worked the phones for word of Dawn", atAbs: 3 * DAY + 720, result: "cost", recentKinds: [], onstage: [dawn] };
+    // Before: Dawn on the page made a call from Spike "about the stage"; she can't carry it either.
+    expect(routeFor(o)).toBeNull();
+    // An ending that finds her may walk in; one that doesn't, can't.
+    const end = { ...o, arc: arc({ clock: { cur: 5, max: 6 } }), ending: true };
+    expect(routeFor({ ...end, result: "met" })?.kind).toBe("entrance");
+    expect(routeFor({ ...end, result: "lost" })).toBeNull();
+    // Someone in the scene Spike does know takes the call, and it says so.
+    const buffy = r.find("Buffy")!;
+    spike.ties.push({ to: buffy.key, strength: 2, kind: "bond" });
+    const call = routeFor({ ...o, onstage: [dawn, buffy], routes: ["signal"] as any });
+    expect(call).toMatchObject({ kind: "signal", to: "Buffy" });
+    expect(call!.text).toBe("a letter from Spike in Sunnydale, for Buffy: Spike worked the phones for word of Dawn");
+  });
+
+  test("a call left for the player by someone who doesn't know them is dropped; the quarry isn't credited with the search", () => {
+    const { st, records } = spikeWorld();
+    st.arcs = { spike_pursuit: arc({ beats: [{ msgIndex: 11, atAbs: 3 * DAY + 700, result: "cost", text: "Spike worked the phones for word of Dawn" }] }) };
+    const r = buildRoster({ state: st, records, userName: "Gabriel" });
+    const missed: Arrival = { id: "m", msgId: "m1", swipe: 0, kind: "trace", medium: "phone", arc: "spike_pursuit", lead: "Spike", text: "A missed call from Spike, and a message: he had news of Dawn", place: [], status: "pending", offered: [], atAbs: 3 * DAY + 700, untilAbs: 3 * DAY + 3000 };
+    const l = elsewhereLane({ state: st, arrivals: [missed], roster: r, now: 3 * DAY + 720, at: 12, tier: "routine", mode: "living", onPath: () => true, seen: {}, userName: "Gabriel" });
+    expect(l.offered).toEqual([]);
+    expect(missed.status).toBe("expired");
+    expect(l.expired[0].why).toBe("Spike doesn't know Gabriel");
+    expect(l.text).not.toContain("word of Dawn");
+  });
+
+  test("the telling can't find the quarry before the search ends", () => {
+    const { st, records } = spikeWorld();
+    const r = buildRoster({ state: st, records, userName: "Gabriel Winters" });
+    const ctx = { userName: "Gabriel Winters", roster: r, offPage: [], truths: [], recent: [], places: ["Sunnydale"], objects: [] };
+    const c = { id: "b1", arcId: "spike_pursuit", kind: "pursuit" as const, lead: "Spike", cast: ["Dawn"], sought: ["Dawn"], result: "win" as const, roll: [5, 5] as [number, number], mod: 0, stage: "rising" as const, clock: "2/6", atAbs: 0, premise: "Spike is searching for Dawn.", want: "to find Dawn", fear: "", leadText: "", knows: [], noRoute: [], grounds: [], template: "t", line: 0 };
+    expect(validateTold(c, { result: "win", text: "Spike tracked Dawn down to a big house across town." }, ctx).rejected).toContain("finds Dawn");
+    expect(validateTold(c, { result: "win", text: "Spike found no sign of Dawn at the mall, but a snitch swore she'd been seen on the bus." }, ctx).rejected).toBeUndefined();
+    expect(validateTold({ ...c, result: "met", ending: true }, { result: "met", text: "Spike found Dawn at last." }, ctx).rejected).toBeUndefined();
+  });
+
   test("a decline's engine words name what is leaned on; a win is headway", () => {
-    expect(beatTemplate({ kind: "decline", lead: "Willow", want: "to stay in control", stage: "setup", result: "win", premise: "Willow is drawn deeper into dark magic" })).toBe("Willow leaned on dark magic a little, and it went well.");
+    expect(beatTemplate({ kind: "decline", lead: "Willow", want: "to stay in control", stage: "setup", result: "win", premise: "Willow is drawn deeper into dark magic" })).toBe("Willow leaned on dark magic a little. Nobody has noticed yet.");
   });
 });

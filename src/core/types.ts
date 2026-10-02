@@ -569,6 +569,8 @@ export interface Settings {
   elsewhere: "off" | "quiet" | "living" | "restless";
   /** Elsewhere: the model tells the beats, or the engine's own sentences do (no model calls). */
   elsewhereTelling: "model" | "engine";
+  /** Elsewhere: new subplots grounded in the story and lorebooks are proposed to the player (ask), start on their own (auto), or aren't made (off). */
+  elsewhereSeeding: "ask" | "auto" | "off";
   /** How much the source canon may pull: forecasts as grounds (light) or as a course (strong). */
   canonGravity: "off" | "light" | "strong";
   /** Irreversible outcomes off the page: only on the page, ask first, or allow. */
@@ -636,6 +638,7 @@ export const DEFAULT_SETTINGS: Settings = {
   simulator: false,
   elsewhere: "off",
   elsewhereTelling: "model",
+  elsewhereSeeding: "ask",
   canonGravity: "light",
   fates: "ask",
   elsewhereView: "director",

@@ -643,6 +643,7 @@ var init_types = __esm(() => {
     simulator: false,
     elsewhere: "off",
     elsewhereTelling: "model",
+    elsewhereSeeding: "ask",
     canonGravity: "light",
     fates: "ask",
     elsewhereView: "director",
@@ -2478,7 +2479,7 @@ var init_dsl = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.15.1";
+var VERSION = "1.16.0";
 
 // src/core/facts.ts
 function stem(w) {
@@ -11411,6 +11412,417 @@ var init_clerk2 = __esm(() => {
   stopping = new Set;
 });
 
+// src/core/elsewhere/grammar.ts
+function kindFromText(text) {
+  for (const k of ORDER)
+    if (k !== "pursuit" && SPECS[k].words.test(text))
+      return k;
+  return SPECS.pursuit.words.test(text) ? "pursuit" : null;
+}
+function kindForStory(premise, lead, others) {
+  const scores = new Map;
+  const names = [...lead.map((n) => ({ n, me: true })), ...others.map((n) => ({ n, me: false }))].filter((x) => x.n.length >= 3);
+  for (const k of ORDER) {
+    const re = new RegExp(SPECS[k].words.source, "gi");
+    for (const m of premise.matchAll(re)) {
+      const clause = premise.slice(0, m.index).split(/[.;!?]/).at(-1) ?? "";
+      let w = k === "pursuit" ? 0.6 : 1;
+      if (/\b(about|regarding|concerning|of how|how)\b/i.test(clause))
+        w *= 0.4;
+      if (ATTRIBUTE.includes(k)) {
+        let best = -1;
+        let mine = true;
+        for (const x of names) {
+          const hits = [...clause.matchAll(new RegExp(`\\b${esc4(x.n)}\\b`, "gi"))];
+          const j = hits.length ? hits[hits.length - 1].index : -1;
+          if (j > best) {
+            best = j;
+            mine = x.me;
+          }
+        }
+        if (!mine)
+          w *= 0.2;
+      }
+      scores.set(k, (scores.get(k) ?? 0) + w);
+    }
+  }
+  let kind = "pursuit";
+  let top = 0;
+  for (const k of ORDER)
+    if ((scores.get(k) ?? 0) > top)
+      [kind, top] = [k, scores.get(k)];
+  return kind;
+}
+function wantFromStory(premise) {
+  const cut = (s) => s.trim().split(/\s+/).slice(0, 12).join(" ").replace(/[,;:]+$/, "");
+  const m = /\b(?:wants?|hopes?|needs?|tries|trying|plans?|means|intends?|is determined|sets? out|vows?|swears?|is going)\s+to\s+([^.;,!?]+)/i.exec(premise);
+  if (m)
+    return `to ${cut(m[1])}`;
+  const f = /\b(?:search(?:es|ing)? for|look(?:s|ing)? for|hunt(?:s|ing)? for|track(?:s|ing)? down)\s+([^.;,!?]+)/i.exec(premise);
+  if (f)
+    return `to find ${cut(f[1])}`;
+  return null;
+}
+function viceOf(text) {
+  const m = /\b(dark magic|black magic|magic|drink(?:ing)?|alcohol|the bottle|drugs?|pills|power|gambling|blood)\b/i.exec(text);
+  if (!m)
+    return "it";
+  const w = m[1].toLowerCase();
+  return /^(drink|drinking|alcohol)$/.test(w) ? "the bottle" : /^drug$/.test(w) ? "drugs" : w;
+}
+function stageOf(cur, max) {
+  if (cur >= max)
+    return "aftermath";
+  if (cur >= max - 1)
+    return "crisis";
+  if (cur < Math.max(1, Math.ceil(max / 4)))
+    return "setup";
+  return "rising";
+}
+function atPlace(place) {
+  const last = place.split(/\s*\u203A\s*/).at(-1).trim();
+  return `${ROOMISH.test(last) ? "at" : "in"} ${last}`;
+}
+function groupName(name) {
+  if (/^the\s/i.test(name))
+    return `the ${name.slice(4)}`;
+  return isPluralName(name) || GROUPISH.test(name) ? `the ${name}` : name;
+}
+function beatTemplate(o) {
+  const spec = SPECS[o.kind];
+  const i = o.stage === "setup" ? 0 : o.stage === "crisis" ? 2 : 1;
+  const want = bare(o.want) || spec.want;
+  const lead = o.group ? groupName(o.lead) : o.lead;
+  const plural = !!o.group && isPluralName(o.lead);
+  const town = o.town || "town";
+  const cast = o.cast || spec.other || "someone";
+  const fill = (t) => t.replace(/\{want\}/g, want).replace(/\{vice\}/g, viceOf(`${o.premise ?? ""} ${o.want}`)).replace(/\{cast\}/g, cast).replace(/\{Cast\}/g, cap3(cast)).replace(/\{town\}/g, town).replace(/\{Town\}/g, cap3(town)).replace(/\{lead\}/g, lead).replace(/\{Lead\}/g, cap3(lead)).replace(/\{is\}/g, plural ? "are" : "is").replace(/\{has\}/g, plural ? "have" : "has");
+  const placeWord = o.place ? o.place.split(/\s*\u203A\s*/).at(-1).toLowerCase() : "";
+  const where = o.place && !want.toLowerCase().includes(placeWord) && placeWord !== town.toLowerCase() ? `${cap3(atPlace(o.place))}, ` : "";
+  let first = `${where}${where ? lead : cap3(lead)} ${fill(spec.moves[i])}.`;
+  let state = fill(spec.state);
+  if (o.kind === "return") {
+    if (i === 0) {
+      first = o.news ? `${cap3(lead)} heard that ${o.news.replace(/[.!]+$/, "")}.` : first;
+      state = `${cap3(lead)} ${plural ? "are" : "is"} thinking of coming back to ${town}.`;
+    } else if (i === 2)
+      first = `${cap3(lead)} ${plural ? "are" : "is"} nearly back in ${town}.`;
+  }
+  const then = o.result === "win" ? state : o.result === "cost" ? sentence(o.price ?? spec.prices[0]) : sentence(o.worse ?? spec.worse[0]);
+  return then ? `${first} ${then}` : first;
+}
+function cameTrue(fear, lead, group) {
+  let t = fear.replace(/[\w']+/g, (w) => PAST[w.toLowerCase()] ? w[0] === w[0].toUpperCase() ? cap3(PAST[w.toLowerCase()]) : PAST[w.toLowerCase()] : w);
+  if (!group)
+    t = t.replace(/^they were\b/i, `${lead} was`).replace(/^they\b/i, lead);
+  return sentence(t);
+}
+function endTemplate(o) {
+  const want = bare(o.want);
+  const fear = bare(o.fear).replace(/^(?:that|the fear that)\s+/i, "");
+  const lead = o.group ? groupName(o.lead) : o.lead;
+  const firstLine = o.kind && END_FIRST[o.kind] && !(o.kind === "return" && o.result === "lost") ? `${END_FIRST[o.kind]({ lead, cast: o.cast || SPECS[o.kind].other || "the other side", town: o.town || "town" })} ` : "";
+  if (o.result === "met")
+    return `${firstLine}In the end, ${lead} managed ${want}.`;
+  if (o.result === "price")
+    return `${firstLine}In the end, ${lead} managed ${want}. ${sentence(o.price ?? "it cost more than anyone expected")}`;
+  if (o.result === "softened")
+    return `${firstLine}${cap3(lead)} came close to the worst, but it didn't come to that.`;
+  return `${firstLine}It went badly for ${lead}. ${cameTrue(fear, lead, !!o.group)}`;
+}
+var SPECS, ORDER, ATTRIBUTE, esc4 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), bare = (want) => want.replace(/[.!]+$/, "").trim(), ROOMISH, GROUPISH, isPluralName = (name) => /^[A-Z][\w'\u2019-]*s$/.test(name.split(/\s+/).at(-1)) && !/&/.test(name), cap3 = (s) => s.charAt(0).toUpperCase() + s.slice(1), sentence = (s) => {
+  const t = s.trim().replace(/[;,:\s]+$/, "");
+  return t ? `${cap3(t)}${/[.!?\u2026\u201D"]$/.test(t) ? "" : "."}` : "";
+}, END_FIRST, PAST, GENRE_LEAN;
+var init_grammar = __esm(() => {
+  SPECS = {
+    pursuit: {
+      kind: "pursuit",
+      words: /\b(wants?|seeks?|search|looking for|find|get|win|earn|protect|guard|track|hunt for|recover)\b/i,
+      clock: 6,
+      base: 0.08,
+      secrecy: "private",
+      routes: ["carrier", "entrance", "signal"],
+      prices: ["it ate the whole day", "it cost money that was hard to spare", "it left a favour owed", "someone took notice", "it strained a friendship"],
+      worse: ["the trail went cold", "someone else got there first", "it drew the wrong kind of attention", "a promise had to be broken"],
+      want: "to get what they're after",
+      fear: "it slips away for good",
+      moves: ["set out {want}", "kept at it, still trying {want}", "made one last push {want}"],
+      state: "The trail is warm."
+    },
+    scheme: {
+      kind: "scheme",
+      words: /\b(scheme|plot|conspir\w*|usurp|seize|ambition|ambitious|alliance|marry\b.*\bto|influence|power|succession|whisper|spymaster|hand of the king|leverage)\b/i,
+      clock: 8,
+      base: 0.07,
+      secrecy: "secret",
+      routes: ["carrier", "signal", "entrance"],
+      prices: ["an ally began to have doubts", "it meant owing a dangerous friend", "someone saw more than they should have", "it cost good coin"],
+      worse: ["a confidant talked", "the rival moved first", "a letter went astray", "the plan had to change"],
+      want: "to gain the upper hand",
+      fear: "the plot comes to light",
+      moves: ["quietly laid the groundwork {want}", "moved another piece into place, still working {want}", "made the decisive move {want}"],
+      state: "Nobody suspects a thing."
+    },
+    rivalry: {
+      kind: "rivalry",
+      words: /\b(rival|rivalry|grudge|resent|feud|compet\w*|enemy|enemies|score to settle)\b/i,
+      clock: 6,
+      base: 0.07,
+      secrecy: "private",
+      routes: ["carrier", "ambient", "entrance"],
+      prices: ["it ended in a public scene", "a friend's patience wore thin", "pride took a bruising"],
+      worse: ["the other side struck back", "it turned ugly in public", "someone got hurt"],
+      want: "to come out on top",
+      fear: "the other side wins",
+      moves: ["took a swipe at {cast}", "raised the stakes with {cast}", "forced a showdown with {cast}"],
+      other: "the other side",
+      state: "{Lead} {has} the upper hand, for now."
+    },
+    courtship: {
+      kind: "courtship",
+      words: /\b(courting|courtship|woo(?:s|ing|ed)?|flirt\w*|on a date|dating|crush on|attracted to|attraction|romance|romantic|in love|sweetheart|smitten)\b/i,
+      clock: 6,
+      base: 0.07,
+      secrecy: "private",
+      routes: ["carrier", "ambient", "entrance"],
+      prices: ["people started talking", "a friend made their disapproval plain", "there was a misunderstanding to untangle"],
+      worse: ["it went awkwardly wrong", "a rival turned up", "one of them pulled back"],
+      want: "to be with the one they want",
+      fear: "it falls apart before it starts",
+      moves: ["found an excuse to be near {cast}", "risked something real with {cast}", "finally told {cast} the truth"],
+      other: "the one who'd caught their eye",
+      state: "{Cast} didn't seem to mind."
+    },
+    rift: {
+      kind: "rift",
+      words: /\b(confront|argument|argue|fight with|falling[- ]out|estranged|betray|broke up|rift|quarrel|not speaking|trust)\b/i,
+      clock: 4,
+      base: 0.08,
+      secrecy: "private",
+      routes: ["carrier", "entrance", "signal"],
+      prices: ["hard words were said", "it ended with a night apart", "now an apology is owed"],
+      worse: ["it only got worse", "someone took sides", "a door was slammed"],
+      want: "to set things right",
+      fear: "the bond breaks",
+      moves: ["tried to talk things through with {cast}", "had it out with {cast} at last", "made a choice about {cast}"],
+      other: "the other one",
+      state: "Things are a little easier between them."
+    },
+    debt: {
+      kind: "debt",
+      words: /\b(owe|owes|owed|debt|pay|payment|back[- ]pay|bills?|mortgage|loan|rent|collector|favou?r)\b/i,
+      clock: 4,
+      base: 0.06,
+      secrecy: "private",
+      routes: ["signal", "carrier", "entrance"],
+      prices: ["the interest kept climbing", "the deadline moved up", "pride had to be swallowed"],
+      worse: ["the creditor lost patience", "the sum grew", "a threat was made"],
+      want: "to settle what's owed",
+      fear: "the debt comes due all at once",
+      moves: ["chipped away at the debt to {cast}", "scrambled to pay {cast}", "faced {cast} over the debt"],
+      other: "a creditor",
+      state: "The debt is smaller than it was."
+    },
+    secret: {
+      kind: "secret",
+      words: /\b(secret|hid(?:e|es|ing|den)|conceal|lie|lying|cover[- ]up|nobody knows|tell no one)\b/i,
+      clock: 6,
+      base: 0.06,
+      secrecy: "secret",
+      routes: ["carrier", "entrance"],
+      prices: ["it took another lie", "there was one more lie to keep straight", "someone half-guessed"],
+      worse: ["someone saw something", "a lie didn't hold", "a clue was left behind"],
+      want: "to keep it hidden",
+      fear: "it comes out",
+      moves: ["covered the tracks, keeping {cast} in the dark", "had a close call with {cast}", "was nearly caught out by {cast}"],
+      other: "everyone",
+      state: "The secret is safe, for now."
+    },
+    decline: {
+      kind: "decline",
+      words: /\b(addict|spiral|drawn deeper|dark magic|drinking|drunk|illness|sick|dying|overdose|withdraw|craving|hooked|obsess\w*)\b/i,
+      clock: 6,
+      base: 0.07,
+      secrecy: "secret",
+      routes: ["carrier", "signal", "entrance"],
+      prices: ["it took a lie to someone close", "it cost money", "it cost a night's sleep", "a little more of them went with it"],
+      worse: ["it went further than meant", "someone close was hurt by it", "the cost began to show"],
+      want: "to stay in control",
+      fear: "they hit bottom",
+      moves: ["leaned on {vice} a little", "leaned on {vice} harder than before", "leaned on {vice} with everything at stake"],
+      state: "Nobody has noticed yet.",
+      irreversible: true
+    },
+    investigation: {
+      kind: "investigation",
+      words: /\b(research|investigat\w*|inquiry|audit\w*|study|studies|cross[- ]referenc\w*|case file|find out|scry|trace|evidence|clue|theory|diagnos\w*|analy\w*)\b/i,
+      clock: 6,
+      base: 0.08,
+      secrecy: "private",
+      routes: ["carrier", "entrance", "signal"],
+      prices: ["it cost a sleepless night", "it meant calling in a favour from an archive", "it meant talking to a dangerous contact"],
+      worse: ["it ran into a dead end", "the lead turned out to be false", "someone noticed the questions"],
+      want: "to find the answer",
+      fear: "the answer comes too late",
+      moves: ["followed up a lead, trying {want}", "dug deeper, still trying {want}", "closed in on the answer"],
+      state: "The answer is coming into focus."
+    },
+    threat: {
+      kind: "threat",
+      words: /\b(raid|attack|hunt|gang|army|war|invade|invasion|monster|demon|loot|siege|threat|danger|predator|killer|bandits?)\b/i,
+      clock: 6,
+      base: 0.09,
+      secrecy: "public",
+      routes: ["ambient", "trace", "carrier"],
+      prices: ["they were seen", "one of theirs was hurt", "it took longer than planned"],
+      worse: ["someone fought back", "they lost ground", "they were beaten back"],
+      want: "to take what they came for",
+      fear: "they're driven off",
+      moves: ["scouted the ground, getting ready {want}", "struck at {town}", "threw everything at {town}"],
+      state: "{Town} is feeling it."
+    },
+    return: {
+      kind: "return",
+      words: /\b(return|come back|coming back|fly back|back to|homecoming|coming home|on (?:the|his|her|their) way)\b/i,
+      clock: 6,
+      base: 0.09,
+      secrecy: "private",
+      routes: ["signal", "carrier", "entrance"],
+      prices: ["it took longer than hoped", "a connection was missed", "it cost more than planned"],
+      worse: ["the journey was delayed", "something held them back", "second thoughts crept in"],
+      want: "to come back",
+      fear: "they come back too late",
+      moves: ["decided {want}", "set off for {town}", "is nearly back in {town}"],
+      state: "{Lead} {is} on the way."
+    },
+    duty: {
+      kind: "duty",
+      words: /\b(council|summons|summoned|orders?|duty|office|court|king|queen|lord|command|watcher|guild|church|police|army|crown)\b/i,
+      clock: 6,
+      base: 0.06,
+      secrecy: "private",
+      routes: ["signal", "carrier", "entrance"],
+      prices: ["a superior was displeased", "a rule had to bend", "a favour was called in"],
+      worse: ["the order came down harder", "a broken rule was noted", "a superior stepped in"],
+      want: "to do what the post demands",
+      fear: "the institution turns on them",
+      moves: ["answered a summons, still trying {want}", "carried out an order", "was called to account by the higher-ups"],
+      state: "The higher-ups are satisfied, for now."
+    },
+    life: {
+      kind: "life",
+      words: /\b(recital|work|job|shift|school|class|birthday|family|wedding|holiday|festival|dinner|rehears\w*|practice|hospital|restaurant|studio)\b/i,
+      clock: 6,
+      base: 0.035,
+      secrecy: "private",
+      routes: ["signal", "carrier"],
+      prices: ["it made for a long day", "an errand was forgotten", "there was a small disappointment"],
+      worse: ["the day went badly", "plans fell through", "a small worry grew"],
+      want: "to get on with an ordinary life",
+      fear: "the ordinary life comes apart",
+      moves: ["went about the ordinary business of life", "had a busy stretch", "reached a small milestone"],
+      state: ""
+    },
+    loss: {
+      kind: "loss",
+      words: /\b(death|died|grief|grieving|funeral|mourn|bereave|widow|orphan|buried)\b/i,
+      clock: 4,
+      base: 0.05,
+      secrecy: "private",
+      routes: ["carrier", "signal"],
+      prices: ["it made for a hard night", "an old wound opened again"],
+      worse: ["grief turned to anger", "they shut everyone out", "there was an argument at the graveside"],
+      want: "to bear it",
+      fear: "they don't come back from it",
+      moves: ["got through the first days", "went through the rituals of grief", "began to find a new shape for life"],
+      state: "The worst days are behind {lead}."
+    },
+    world: {
+      kind: "world",
+      words: /^$/,
+      clock: 8,
+      base: 0.06,
+      secrecy: "public",
+      routes: ["ambient", "trace", "signal"],
+      prices: ["somewhere, a price was paid", "a road was closed", "a law tightened"],
+      worse: ["the pressure met resistance", "a hold strained but held"],
+      want: "to move its agenda",
+      fear: "the agenda stalls",
+      moves: ["shifted", "pressed harder", "came to a head"],
+      state: ""
+    }
+  };
+  ORDER = ["return", "decline", "threat", "scheme", "investigation", "debt", "rift", "rivalry", "courtship", "loss", "secret", "duty", "life", "pursuit"];
+  ATTRIBUTE = ["decline", "loss"];
+  ROOMISH = /\b(house|home|crypt|shop|store|library|school|hall|church|chapel|temple|bar|pub|club|office|station|hospital|room|kitchen|caf[e\u00E9]|inn|tavern|residence|manor|castle|keep|camp|warehouse|factory|park|cemetery|graveyard|mansion|apartment|flat|motel|hotel|diner|lab|garage|docks?|market)\b/i;
+  GROUPISH = /\b(council|circle|guild|order|court|coven|brotherhood|sisterhood|army|church|company|society|clan|cult|gang|family|police|crown)\b/i;
+  END_FIRST = {
+    investigation: (x) => `${cap3(x.lead)} concluded the investigation.`,
+    return: (x) => `${cap3(x.lead)} came back to ${x.town}.`,
+    rivalry: (x) => `It came to a head between ${x.lead} and ${x.cast}.`,
+    rift: (x) => `${cap3(x.lead)} and ${x.cast} had it out for the last time.`,
+    debt: (x) => `The debt to ${x.cast} came due.`,
+    scheme: (x) => `${cap3(x.lead)} made the final move.`,
+    threat: (x) => `${cap3(x.lead)} made ${x.lead.startsWith("the ") ? "their" : "a"} last push on ${x.town}.`
+  };
+  PAST = {
+    slips: "slipped",
+    comes: "came",
+    come: "came",
+    wins: "won",
+    win: "won",
+    falls: "fell",
+    fall: "fell",
+    breaks: "broke",
+    turns: "turned",
+    stalls: "stalled",
+    fails: "failed",
+    fail: "failed",
+    dies: "died",
+    die: "died",
+    loses: "lost",
+    lose: "lost",
+    gets: "got",
+    goes: "went",
+    go: "went",
+    has: "had",
+    have: "had",
+    is: "was",
+    are: "were",
+    "don't": "didn't",
+    "doesn't": "didn't",
+    "they're": "they were",
+    "it's": "it was",
+    "he's": "he was",
+    "she's": "she was",
+    ends: "ended",
+    starts: "started",
+    catches: "caught",
+    finds: "found",
+    wears: "wore",
+    grows: "grew"
+  };
+  GENRE_LEAN = {
+    horror: ["threat", "decline"],
+    romance: ["courtship", "rift"],
+    intrigue: ["scheme", "secret", "duty"],
+    cozy: ["life"],
+    "slice of life": ["life"],
+    mystery: ["investigation", "secret"],
+    noir: ["debt", "secret", "scheme"],
+    thriller: ["threat", "scheme"],
+    drama: ["rift", "loss", "decline"],
+    fantasy: ["duty", "threat", "return"],
+    "dark fantasy": ["threat", "decline", "scheme"],
+    tragedy: ["loss", "decline"],
+    comedy: ["courtship", "life", "rivalry"],
+    adventure: ["pursuit", "threat"],
+    action: ["threat", "rivalry"],
+    survival: ["threat", "loss"]
+  };
+});
+
 // src/core/elsewhere/roster.ts
 function readStanding(text) {
   const first = firstSentence(text);
@@ -11504,7 +11916,7 @@ function buildRoster(input) {
     let base;
     for (const p of placeRecs) {
       const s = `${p.summary} ${p.body?.lore ?? ""}`;
-      if (names.some((n) => n.length >= 3 && new RegExp(`\\b${esc4(n)}(?:'s|\u2019s)?\\b[^.]*\\b(lives|home|sleeps|works|keeps)\\b|\\bwhere ${esc4(n)} (lives|sleeps|works)`, "i").test(s)))
+      if (names.some((n) => n.length >= 3 && new RegExp(`\\b${esc5(n)}(?:'s|\u2019s)?\\b[^.]*\\b(lives|home|sleeps|works|keeps)\\b|\\bwhere ${esc5(n)} (lives|sleeps|works)`, "i").test(s)))
         base = p.name;
     }
     const lastPlace = c && ring === "offstage" && c.place && /^\p{Lu}/u.test(c.place) && isLocal(c.place) ? c.place : undefined;
@@ -11614,7 +12026,7 @@ function buildRoster(input) {
   }
   const userNames = [userName, userName.split(/\s+/)[0]].filter((n) => n && n.length >= 3);
   const named = (a) => a.names.length ? [...a.names, ...a.names.flatMap((n) => n.split(/\s+/).filter((w) => w.length >= 3 && part.get(low(w)) === a))] : [];
-  const strongRe = (n) => new RegExp(`\\b${esc4(n)}(?:'s|\u2019s|'|\u2019)\\s+(?:[\\w-]+\\s+){0,3}?(${FAMILY}|${WORK})\\b|\\b(${FAMILY}|${WORK})\\s+(?:of|to)\\s+(?:[\\w-]+\\s+){0,2}?${esc4(n)}\\b`, "i");
+  const strongRe = (n) => new RegExp(`\\b${esc5(n)}(?:'s|\u2019s|'|\u2019)\\s+(?:[\\w-]+\\s+){0,3}?(${FAMILY}|${WORK})\\b|\\b(${FAMILY}|${WORK})\\s+(?:of|to)\\s+(?:[\\w-]+\\s+){0,2}?${esc5(n)}\\b`, "i");
   for (const a of actors) {
     if (!a.lore)
       continue;
@@ -11622,7 +12034,7 @@ function buildRoster(input) {
     for (const o of others) {
       const ns = o === "user" ? userNames : named(o);
       for (const n of ns) {
-        if (!new RegExp(`\\b${esc4(n)}\\b`).test(a.lore))
+        if (!new RegExp(`\\b${esc5(n)}\\b`).test(a.lore))
           continue;
         const m = strongRe(n).exec(a.lore);
         const word = (m?.[1] ?? m?.[2] ?? "").toLowerCase();
@@ -11653,7 +12065,7 @@ function buildRoster(input) {
       both(a, find(a.owner) ?? (userNames.some((u) => low(u) === low(a.owner)) ? "user" : undefined), 3, "owner");
   for (const g of groups)
     for (const a of actors) {
-      if (new RegExp(`\\b(leads?|heads?|runs?|member of|serves?|works for)\\b[^.]*\\b${esc4(g.name)}`, "i").test(a.lore))
+      if (new RegExp(`\\b(leads?|heads?|runs?|member of|serves?|works for)\\b[^.]*\\b${esc5(g.name)}`, "i").test(a.lore))
         both(a, g, /\b(leads?|heads?|runs?)\b/i.test(a.lore) ? 3 : 2, "member");
     }
   for (const f of Object.values(st.facts ?? {})) {
@@ -11753,7 +12165,7 @@ function awakeSet(r, opts) {
       out.push(a);
   return out;
 }
-var REACH_WEIGHT, low = (s) => s.toLowerCase().replace(/[\u2019]/g, "'").trim(), esc4 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), firstSentence = (t) => /^[\s\S]*?[.!?](?:\s|$)/.exec(t)?.[0] ?? t, CLOSE = "mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|fianc[e\xE9]e?|lover|partner|mentor|best friend|closest friend|twin|sire|ward|guardian|betrothed|consort|parent|child|children|sibling", EXTENDED = "uncle|aunt|cousin|nephew|niece|grandmother|grandfather|grandson|granddaughter|ex-girlfriend|ex-boyfriend|ex|heir|patriarch|matriarch", FAMILY, WORK = "watcher|doctor|physician|bodyguard|servant|employer|boss|maid|squire|liege|knight|master|apprentice|assistant|friend|ally|confidante?|handler|teacher|student|lawyer|attorney|captain|rider", FAR, ANIMAL, MEANS_UP, MEANS_DOWN, NOCTURNAL, SLAYS_THEM;
+var REACH_WEIGHT, low = (s) => s.toLowerCase().replace(/[\u2019]/g, "'").trim(), esc5 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), firstSentence = (t) => /^[\s\S]*?[.!?](?:\s|$)/.exec(t)?.[0] ?? t, CLOSE = "mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|fianc[e\xE9]e?|lover|partner|mentor|best friend|closest friend|twin|sire|ward|guardian|betrothed|consort|parent|child|children|sibling", EXTENDED = "uncle|aunt|cousin|nephew|niece|grandmother|grandfather|grandson|granddaughter|ex-girlfriend|ex-boyfriend|ex|heir|patriarch|matriarch", FAMILY, WORK = "watcher|doctor|physician|bodyguard|servant|employer|boss|maid|squire|liege|knight|master|apprentice|assistant|friend|ally|confidante?|handler|teacher|student|lawyer|attorney|captain|rider", FAR, ANIMAL, MEANS_UP, MEANS_DOWN, NOCTURNAL, SLAYS_THEM;
 var init_roster = __esm(() => {
   init_util();
   REACH_WEIGHT = { house: 1, town: 0.8, region: 0.5, far: 0.3, none: 0 };
@@ -11890,16 +12302,38 @@ function placeMatch(arrival, scene) {
   const deep = arrival[arrival.length - 1];
   return scene.some((s) => s === deep || deep.length >= 5 && s.includes(deep) || s.length >= 5 && deep.includes(s));
 }
+function soughtOf(arc, r) {
+  const text = `${arc.want}. ${arc.premise}`;
+  return arc.cast.map((n) => r.find(n)).filter((a) => !!a && a.names.some((n) => n.length >= 3 && new RegExp(`\\b(?:${SEEK})\\b[^.;]{0,30}?\\b${n.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)));
+}
+function callee(arc, lead, r, onstage) {
+  if (!lead || lead.group)
+    return null;
+  if (lead.ties.some((t) => t.to === "user" && t.strength >= 2))
+    return {};
+  const sought = soughtOf(arc, r);
+  const known = onstage.find((a) => !sought.includes(a) && lead.ties.some((t) => t.to === a.key && t.strength >= 2));
+  return known ? { to: known.name } : null;
+}
+function callFits(a, st, r) {
+  if (!a.medium || !a.arc || a.to || a.status !== "pending" && a.status !== "offered")
+    return true;
+  const arc = st.arcs?.[a.arc];
+  const lead = r.find(a.lead);
+  return !arc || !lead || !!lead.group || lead.ties.some((t) => t.to === "user" && t.strength >= 2);
+}
 function routeFor(o) {
   const { arc, lead, roster: r } = o;
   if (arc.secrecy === "secret" && !o.slip && !o.ending)
     return null;
   const castActors = arc.cast.map((n) => r.find(n)).filter(Boolean);
-  const aboutStage = castActors.some((c) => o.onstage.includes(c)) || o.onstage.some((c) => c.names.some((n) => arc.want.includes(n.split(" ")[0])));
-  const toUser = !!lead?.ties.some((t) => t.to === "user" && t.strength >= 2);
+  const call = callee(arc, lead, r, o.onstage);
+  const sought = soughtOf(arc, r);
+  const soughtHere = sought.some((a) => o.onstage.includes(a));
+  const found = !!arc.bring || (o.ending ? o.result === "met" || o.result === "price" : o.result === "win" && arc.clock.cur + 1 >= arc.clock.max - 1);
   const near = (a) => !!a && (a.reach === "town" || a.reach === "house");
   const close = (a) => a === lead || !!lead?.ties.some((t) => t.to === a.key && t.strength >= 2);
-  const carriers = [lead, ...castActors, ...(lead?.ties ?? []).filter((t) => t.strength >= 2).map((t) => r.byKey(t.to))].filter((a) => !!a && !a.group && near(a) && canAct(a) && a.ring === "offstage" && close(a));
+  const carriers = [lead, ...castActors, ...(lead?.ties ?? []).filter((t) => t.strength >= 2).map((t) => r.byKey(t.to))].filter((a) => !!a && !a.group && near(a) && canAct(a) && a.ring === "offstage" && close(a) && !sought.includes(a));
   const isTown = (p) => !p || !!o.town && p.toLowerCase() === o.town.toLowerCase();
   const spot = !isTown(o.place) && r.local.some((x) => x.length >= 4 && (o.place.toLowerCase().includes(x) || x.includes(o.place.toLowerCase()))) ? o.place.split(/\s*\u203A\s*/) : o.tracePlaces?.[0];
   const local = !!spot;
@@ -11908,13 +12342,13 @@ function routeFor(o) {
       case "carrier":
         return carriers.length > 0;
       case "signal":
-        return (toUser || aboutStage) && !!lead && !lead.group && lead.reach !== "house";
+        return !!call && !!lead && lead.reach !== "house";
       case "ambient":
         return arc.secrecy === "public" && (near(lead) || !!lead?.group);
       case "trace":
         return !!local && arc.secrecy !== "secret";
       case "entrance":
-        return !!lead && !lead.group && (toUser || aboutStage) && (near(lead) || arc.kind === "return") && (o.ending || arc.clock.cur >= arc.clock.max - 1 || !!arc.bring);
+        return !!lead && !lead.group && (soughtHere ? found : !!call) && (near(lead) || arc.kind === "return") && (o.ending || arc.clock.cur >= arc.clock.max - 1 || !!arc.bring);
     }
   };
   let options = o.routes.filter(feasible);
@@ -11932,25 +12366,26 @@ function routeFor(o) {
   switch (kind) {
     case "carrier": {
       const c = carriers.find((a) => a !== lead) ?? carriers[0];
-      const t = c === lead ? `${c.name} can tell of it: ${o.text}` : `${c.name} has news of ${leadName}: ${o.gist ?? o.text}`;
+      const t = c === lead ? `${c.name} could bring it up: ${o.text}` : `${c.name} has heard from ${leadName}: ${o.gist ?? o.text}`;
       return { ...base, carrier: c.name, text: t, template: t };
     }
     case "signal": {
       const at = decentHour(o.atAbs);
-      const t = `${MEDIUM_WORD[r.medium]} from ${leadName}${lead?.where ? ` (${lead.where})` : ""}: ${o.gist ?? o.text}`;
-      return { ...base, atAbs: at, untilAbs: at + UNTIL.signal, medium: r.medium, text: t, template: t };
+      const said = (o.gist ?? o.text).replace(/^(?:At|In) [^,]{1,60}, (\S)/, (_, c) => c.toUpperCase());
+      const t = `${MEDIUM_WORD[r.medium]} from ${leadName}${lead?.where ? ` ${atPlace(lead.where)}` : ""}${call?.to ? `, for ${call.to}` : ""}: ${said}`;
+      return { ...base, atAbs: at, untilAbs: at + UNTIL.signal, medium: r.medium, text: t, template: t, ...call?.to ? { to: call.to } : {} };
     }
     case "ambient": {
       const t = o.text;
       return { ...base, place: o.town ? [o.town] : [], text: t, template: t };
     }
     case "trace": {
-      const t = `At ${spot.at(-1)}, signs of what happened: ${o.text}`;
+      const t = `At ${spot.at(-1)}, there are signs of it: ${o.text}`;
       return { ...base, place: spot, text: t, template: t };
     }
     case "entrance": {
       const travel = lead && (lead.reach === "far" || lead.reach === "region") ? lead.reach === "far" ? 960 : 240 : 0;
-      const t = `${leadName} could turn up (${arc.want.replace(/^to\s+/i, "wanting to ")})`;
+      const t = `${leadName} might turn up, still wanting ${arc.want.replace(/^to\s+/i, "to ")}`;
       return { ...base, atAbs: o.atAbs + travel, untilAbs: o.atAbs + travel + UNTIL.entrance, text: t, template: t, urgent: !!arc.fate };
     }
   }
@@ -11971,7 +12406,7 @@ function expireArrivals(arrivals, now) {
     if (a.untilAbs == null || now <= a.untilAbs)
       continue;
     if (a.kind === "signal") {
-      const missed = a.medium === "phone" ? `A missed call and a message from ${a.lead ?? "someone"}: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
+      const missed = a.medium === "phone" ? `A missed call and a message from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
       Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, untilAbs: now + 2880, why: "the call went unanswered" });
       continue;
     }
@@ -11990,6 +12425,15 @@ function elsewhereLane(inp) {
   for (const a of inp.arrivals)
     Object.assign(a, upgradeArrival(a));
   const expired = expireArrivals(inp.arrivals, inp.now);
+  const forHere = (a) => {
+    if (!callFits(a, st, r)) {
+      a.status = "expired";
+      a.why = `${a.lead} doesn't know ${inp.userName ?? "the player"}`;
+      expired.push({ id: a.id, why: a.why });
+      return false;
+    }
+    return !a.to || present(a.to);
+  };
   const sceneStart = st.sceneStartMsg ?? 0;
   const thisScene = inp.arrivals.filter((a) => (a.offered ?? []).some((i) => i >= sceneStart)).length;
   const cap = SCENE_CAP[inp.mode] ?? 1;
@@ -11999,6 +12443,8 @@ function elsewhereLane(inp) {
     if (a.status !== "pending" && a.status !== "offered")
       return false;
     if (!inp.onPath(a.msgId))
+      return false;
+    if (!forHere(a))
       return false;
     if (a.atAbs != null && inp.now != null && a.atAbs > inp.now)
       return false;
@@ -12038,7 +12484,7 @@ function elsewhereLane(inp) {
   const back = [];
   for (const a of onstage) {
     const isMe = (n) => a.names.some((m) => m.toLowerCase() === n.toLowerCase()) || r.find(n) === a;
-    const mine = Object.values(st.arcs ?? {}).filter((x) => isMe(x.lead) || x.secrecy !== "secret" && x.cast.some(isMe));
+    const mine = Object.values(st.arcs ?? {}).filter((x) => isMe(x.lead) || x.secrecy !== "secret" && x.cast.some(isMe) && !soughtOf(x, r).includes(a));
     const since = seen[a.key] ?? -1;
     const beats = mine.flatMap((x) => x.beats.filter((b) => b.msgIndex > since && (inp.now == null || b.atAbs <= inp.now) && (inp.now == null || inp.now - b.atAbs <= 4320)).map((b) => ({ b, x }))).sort((p, q) => p.b.atAbs - q.b.atAbs);
     if (beats.length) {
@@ -12110,7 +12556,7 @@ function confirmArrivals(arrivals, o) {
       used.push(a.id);
     } else if ((a.offered?.length ?? 0) >= OFFERS[a.kind ?? "ambient"]) {
       if (a.kind === "signal") {
-        const missed = a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}, and a message: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
+        const missed = a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}, and a message: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
         Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, status: "pending", offered: [], why: "the call went unanswered" });
         continue;
       }
@@ -12122,10 +12568,11 @@ function confirmArrivals(arrivals, o) {
   }
   return { used, dropped };
 }
-var STOPW, words2 = (s) => normFact(s).split(" ").filter((w) => w.length >= 4 && !STOPW.has(w)), UNTIL, MEDIUM_WORD, segs = (p) => (Array.isArray(p) ? p : p ? p.split(/\s*\u203A\s*/) : []).map((x) => x.toLowerCase().trim()).filter(Boolean), SCENE_CAP, OFFERS;
+var STOPW, words2 = (s) => normFact(s).split(" ").filter((w) => w.length >= 4 && !STOPW.has(w)), UNTIL, MEDIUM_WORD, segs = (p) => (Array.isArray(p) ? p : p ? p.split(/\s*\u203A\s*/) : []).map((x) => x.toLowerCase().trim()).filter(Boolean), SEEK = "find|finds|finding|locate|locating|track(?:s|ing)? down|search(?:es|ing)? for|look(?:s|ing)? for|hunt(?:s|ing)? for|rescue|rescuing|get back|bring back|where", SCENE_CAP, OFFERS;
 var init_crossings = __esm(() => {
   init_state();
   init_util();
+  init_grammar();
   init_roster();
   init_news();
   STOPW = new Set("the a an and or but of to in on at for with from by as is was were be been it its that this these those he she they them his her their there here then than so not no into onto over under about after before while when what who whom which".split(" "));
@@ -12133,316 +12580,6 @@ var init_crossings = __esm(() => {
   MEDIUM_WORD = { phone: "a call", letter: "a letter", raven: "a raven" };
   SCENE_CAP = { off: 0, quiet: 1, living: 1, restless: 2 };
   OFFERS = { carrier: 3, signal: 1, ambient: 1, trace: 2, entrance: 2 };
-});
-
-// src/core/elsewhere/grammar.ts
-function kindFromText(text) {
-  for (const k of ORDER)
-    if (k !== "pursuit" && SPECS[k].words.test(text))
-      return k;
-  return SPECS.pursuit.words.test(text) ? "pursuit" : null;
-}
-function kindForStory(premise, lead, others) {
-  const scores = new Map;
-  const names = [...lead.map((n) => ({ n, me: true })), ...others.map((n) => ({ n, me: false }))].filter((x) => x.n.length >= 3);
-  for (const k of ORDER) {
-    const re = new RegExp(SPECS[k].words.source, "gi");
-    for (const m of premise.matchAll(re)) {
-      const clause = premise.slice(0, m.index).split(/[.;!?]/).at(-1) ?? "";
-      let w = k === "pursuit" ? 0.6 : 1;
-      if (/\b(about|regarding|concerning|of how|how)\b/i.test(clause))
-        w *= 0.4;
-      if (ATTRIBUTE.includes(k)) {
-        let best = -1;
-        let mine = true;
-        for (const x of names) {
-          const hits = [...clause.matchAll(new RegExp(`\\b${esc5(x.n)}\\b`, "gi"))];
-          const j = hits.length ? hits[hits.length - 1].index : -1;
-          if (j > best) {
-            best = j;
-            mine = x.me;
-          }
-        }
-        if (!mine)
-          w *= 0.2;
-      }
-      scores.set(k, (scores.get(k) ?? 0) + w);
-    }
-  }
-  let kind = "pursuit";
-  let top = 0;
-  for (const k of ORDER)
-    if ((scores.get(k) ?? 0) > top)
-      [kind, top] = [k, scores.get(k)];
-  return kind;
-}
-function wantFromStory(premise) {
-  const cut = (s) => s.trim().split(/\s+/).slice(0, 12).join(" ").replace(/[,;:]+$/, "");
-  const m = /\b(?:wants?|hopes?|needs?|tries|trying|plans?|means|intends?|is determined|sets? out|vows?|swears?|is going)\s+to\s+([^.;,!?]+)/i.exec(premise);
-  if (m)
-    return `to ${cut(m[1])}`;
-  const f = /\b(?:search(?:es|ing)? for|look(?:s|ing)? for|hunt(?:s|ing)? for|track(?:s|ing)? down)\s+([^.;,!?]+)/i.exec(premise);
-  if (f)
-    return `to find ${cut(f[1])}`;
-  return null;
-}
-function viceOf(text) {
-  const m = /\b(dark magic|black magic|magic|drink(?:ing)?|alcohol|the bottle|drugs?|pills|power|gambling|blood)\b/i.exec(text);
-  if (!m)
-    return "it";
-  const w = m[1].toLowerCase();
-  return /^(drink|drinking|alcohol)$/.test(w) ? "the bottle" : /^drug$/.test(w) ? "drugs" : w;
-}
-function stageOf(cur, max) {
-  if (cur >= max)
-    return "aftermath";
-  if (cur >= max - 1)
-    return "crisis";
-  if (cur < Math.max(1, Math.ceil(max / 4)))
-    return "setup";
-  return "rising";
-}
-function beatTemplate(opts) {
-  const spec = SPECS[opts.kind];
-  const i = opts.stage === "setup" ? 0 : opts.stage === "crisis" ? 2 : 1;
-  const move = spec.moves[i].replace("{want}", bare(opts.want) || spec.want).replace("{vice}", viceOf(`${opts.premise ?? ""} ${opts.want}`));
-  const at = opts.place ? ` (${opts.place})` : "";
-  if (opts.result === "win")
-    return `${opts.lead} ${move}${at}, and it went well.`;
-  if (opts.result === "cost")
-    return `${opts.lead} ${move}${at}; it got somewhere, at a price: ${opts.price ?? spec.prices[0]}.`;
-  return `${opts.lead} ${move}${at}, but it went wrong: ${opts.worse ?? spec.worse[0]}.`;
-}
-function endTemplate(opts) {
-  const want = bare(opts.want).replace(/^to\s+/i, "");
-  if (opts.result === "met")
-    return `In the end ${opts.lead} managed it: ${want}.`;
-  if (opts.result === "price")
-    return `${opts.lead} got there (${want}), but it cost: ${opts.price ?? "more than expected"}.`;
-  if (opts.result === "softened")
-    return `It nearly went badly for ${opts.lead} (${bare(opts.fear)}), but not quite.`;
-  return `It went badly for ${opts.lead}: ${bare(opts.fear)}.`;
-}
-var SPECS, ORDER, ATTRIBUTE, esc5 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), bare = (want) => want.replace(/[.!]+$/, "").trim(), GENRE_LEAN;
-var init_grammar = __esm(() => {
-  SPECS = {
-    pursuit: {
-      kind: "pursuit",
-      words: /\b(wants?|seeks?|search|looking for|find|get|win|earn|protect|guard|track|hunt for|recover)\b/i,
-      clock: 6,
-      base: 0.08,
-      secrecy: "private",
-      routes: ["carrier", "entrance", "signal"],
-      prices: ["time", "money", "a favour owed", "someone noticed", "a tie strained"],
-      worse: ["the trail went cold", "someone else got there first", "it drew the wrong attention", "a promise had to be broken"],
-      want: "to get what they're after",
-      fear: "it slips away for good",
-      moves: ["set out {want}", "pressed on, still trying {want}", "made a last push {want}"]
-    },
-    scheme: {
-      kind: "scheme",
-      words: /\b(scheme|plot|conspir\w*|usurp|seize|ambition|ambitious|alliance|marry\b.*\bto|influence|power|succession|whisper|spymaster|hand of the king|leverage)\b/i,
-      clock: 8,
-      base: 0.07,
-      secrecy: "secret",
-      routes: ["carrier", "signal", "entrance"],
-      prices: ["an ally's doubt", "a debt to a dangerous friend", "a witness", "coin"],
-      worse: ["a confidant talked", "the rival moved first", "a letter went astray", "the plan had to change"],
-      want: "to gain the upper hand",
-      fear: "the plot comes to light",
-      moves: ["laid the groundwork {want}", "moved a piece {want}", "made the decisive move {want}"]
-    },
-    rivalry: {
-      kind: "rivalry",
-      words: /\b(rival|rivalry|grudge|resent|feud|compet\w*|enemy|enemies|score to settle)\b/i,
-      clock: 6,
-      base: 0.07,
-      secrecy: "private",
-      routes: ["carrier", "ambient", "entrance"],
-      prices: ["a public scene", "a friend's patience", "pride"],
-      worse: ["the other side struck back", "it turned ugly in public", "someone got hurt"],
-      want: "to come out on top",
-      fear: "the other side wins",
-      moves: ["took a swipe, trying {want}", "escalated, trying {want}", "forced a showdown, trying {want}"]
-    },
-    courtship: {
-      kind: "courtship",
-      words: /\b(court|courting|flirt|date|dating|crush|attract\w*|romance|in love|sweetheart|smitten)\b/i,
-      clock: 6,
-      base: 0.07,
-      secrecy: "private",
-      routes: ["carrier", "ambient", "entrance"],
-      prices: ["gossip", "a friend's disapproval", "a misunderstanding"],
-      worse: ["it went awkwardly wrong", "a rival appeared", "one of them pulled back"],
-      want: "to be with the one they want",
-      fear: "it falls apart before it starts",
-      moves: ["found an excuse to be near them, hoping {want}", "risked something real, hoping {want}", "said it plainly, hoping {want}"]
-    },
-    rift: {
-      kind: "rift",
-      words: /\b(confront|argument|argue|fight with|falling[- ]out|estranged|betray|broke up|rift|quarrel|not speaking|trust)\b/i,
-      clock: 4,
-      base: 0.08,
-      secrecy: "private",
-      routes: ["carrier", "entrance", "signal"],
-      prices: ["hard words said", "a night apart", "an apology owed"],
-      worse: ["it got worse", "someone took sides", "a door was slammed"],
-      want: "to mend it, or end it cleanly",
-      fear: "the bond breaks",
-      moves: ["tried to talk, wanting {want}", "had it out, wanting {want}", "made a choice, wanting {want}"]
-    },
-    debt: {
-      kind: "debt",
-      words: /\b(owe|owes|owed|debt|pay|payment|back[- ]pay|bills?|mortgage|loan|rent|collector|favou?r)\b/i,
-      clock: 4,
-      base: 0.06,
-      secrecy: "private",
-      routes: ["signal", "carrier", "entrance"],
-      prices: ["interest", "a deadline moved up", "pride"],
-      worse: ["the creditor lost patience", "the sum grew", "a threat was made"],
-      want: "to settle what's owed",
-      fear: "the debt comes due all at once",
-      moves: ["dealt with the debt, wanting {want}", "scrambled, wanting {want}", "faced the reckoning, wanting {want}"]
-    },
-    secret: {
-      kind: "secret",
-      words: /\b(secret|hid(?:e|es|ing|den)|conceal|lie|lying|cover[- ]up|nobody knows|tell no one)\b/i,
-      clock: 6,
-      base: 0.06,
-      secrecy: "secret",
-      routes: ["carrier", "entrance"],
-      prices: ["another lie", "a close call", "someone half-guessed"],
-      worse: ["someone saw something", "a lie didn't hold", "a clue was left behind"],
-      want: "to keep it hidden",
-      fear: "it comes out",
-      moves: ["covered tracks, trying {want}", "had a close call, trying {want}", "was nearly caught, trying {want}"]
-    },
-    decline: {
-      kind: "decline",
-      words: /\b(addict|spiral|drawn deeper|dark magic|drinking|drunk|illness|sick|dying|overdose|withdraw|craving|hooked|obsess\w*)\b/i,
-      clock: 6,
-      base: 0.07,
-      secrecy: "secret",
-      routes: ["carrier", "signal", "entrance"],
-      prices: ["a lie to someone close", "money", "sleep", "a little more of themselves"],
-      worse: ["it went further than meant", "someone close was hurt by it", "the cost showed"],
-      want: "to stay in control",
-      fear: "they hit bottom",
-      moves: ["leaned on {vice} a little", "leaned on {vice} harder", "leaned on {vice} hard, with everything at stake"],
-      irreversible: true
-    },
-    investigation: {
-      kind: "investigation",
-      words: /\b(research|investigat\w*|study|studies|cross[- ]referenc\w*|case file|find out|scry|trace|evidence|clue|theory|diagnos\w*|analy\w*)\b/i,
-      clock: 6,
-      base: 0.08,
-      secrecy: "private",
-      routes: ["carrier", "entrance", "signal"],
-      prices: ["a sleepless night", "a favour from an archive", "a dangerous contact"],
-      worse: ["a dead end", "the lead was false", "someone noticed the questions"],
-      want: "to find the answer",
-      fear: "the answer comes too late",
-      moves: ["followed a lead, trying {want}", "dug deeper, trying {want}", "closed in, trying {want}"]
-    },
-    threat: {
-      kind: "threat",
-      words: /\b(raid|attack|hunt|gang|army|war|invade|invasion|monster|demon|loot|siege|threat|danger|predator|killer|bandits?)\b/i,
-      clock: 6,
-      base: 0.09,
-      secrecy: "public",
-      routes: ["ambient", "trace", "carrier"],
-      prices: ["they were seen", "one of theirs was hurt", "it took longer"],
-      worse: ["someone fought back", "they lost ground", "they were beaten back"],
-      want: "to take what they came for",
-      fear: "they're driven off",
-      moves: ["scouted, working {want}", "struck, working {want}", "went all in, working {want}"]
-    },
-    return: {
-      kind: "return",
-      words: /\b(return|come back|coming back|fly back|back to|homecoming|coming home|on (?:the|his|her|their) way)\b/i,
-      clock: 6,
-      base: 0.09,
-      secrecy: "private",
-      routes: ["signal", "carrier", "entrance"],
-      prices: ["time", "a missed connection", "money"],
-      worse: ["the journey was delayed", "something held them back", "they had second thoughts"],
-      want: "to come back",
-      fear: "they come back too late",
-      moves: ["decided {want}", "set off, meaning {want}", "was nearly here, meaning {want}"]
-    },
-    duty: {
-      kind: "duty",
-      words: /\b(council|summons|summoned|orders?|duty|office|court|king|queen|lord|command|watcher|guild|church|police|army|crown)\b/i,
-      clock: 6,
-      base: 0.06,
-      secrecy: "private",
-      routes: ["signal", "carrier", "entrance"],
-      prices: ["a superior's displeasure", "a rule bent", "a favour called in"],
-      worse: ["the order came down harder", "a rule was broken and noted", "a superior intervened"],
-      want: "to do what the post demands",
-      fear: "the institution turns on them",
-      moves: ["answered a summons, meaning {want}", "carried out an order, meaning {want}", "faced the institution, meaning {want}"]
-    },
-    life: {
-      kind: "life",
-      words: /\b(recital|work|job|shift|school|class|birthday|family|wedding|holiday|festival|dinner|rehears\w*|practice|hospital|restaurant|studio)\b/i,
-      clock: 6,
-      base: 0.035,
-      secrecy: "private",
-      routes: ["signal", "carrier"],
-      prices: ["a long day", "a forgotten errand", "a small disappointment"],
-      worse: ["the day went badly", "plans fell through", "a small worry grew"],
-      want: "to get on with an ordinary life",
-      fear: "the ordinary life comes apart",
-      moves: ["went about the ordinary business of life", "had a busy stretch", "reached a small milestone"]
-    },
-    loss: {
-      kind: "loss",
-      words: /\b(death|died|grief|grieving|funeral|mourn|bereave|widow|orphan|buried)\b/i,
-      clock: 4,
-      base: 0.05,
-      secrecy: "private",
-      routes: ["carrier", "signal"],
-      prices: ["a hard night", "an old wound reopened"],
-      worse: ["the grief turned to anger", "they shut everyone out", "an argument at the grave"],
-      want: "to bear it",
-      fear: "they don't come back from it",
-      moves: ["took the first days, trying {want}", "went through the rituals, trying {want}", "found a new shape for life, trying {want}"]
-    },
-    world: {
-      kind: "world",
-      words: /^$/,
-      clock: 8,
-      base: 0.06,
-      secrecy: "public",
-      routes: ["ambient", "trace", "signal"],
-      prices: ["a price paid somewhere", "a road closed", "a law tightened"],
-      worse: ["the pressure met resistance", "a hold strained but held"],
-      want: "to move its agenda",
-      fear: "the agenda stalls",
-      moves: ["shifted, pressing {want}", "pressed harder, pressing {want}", "came to a head, pressing {want}"]
-    }
-  };
-  ORDER = ["return", "decline", "threat", "scheme", "investigation", "debt", "rift", "rivalry", "courtship", "loss", "secret", "duty", "life", "pursuit"];
-  ATTRIBUTE = ["decline", "loss"];
-  GENRE_LEAN = {
-    horror: ["threat", "decline"],
-    romance: ["courtship", "rift"],
-    intrigue: ["scheme", "secret", "duty"],
-    cozy: ["life"],
-    "slice of life": ["life"],
-    mystery: ["investigation", "secret"],
-    noir: ["debt", "secret", "scheme"],
-    thriller: ["threat", "scheme"],
-    drama: ["rift", "loss", "decline"],
-    fantasy: ["duty", "threat", "return"],
-    "dark fantasy": ["threat", "decline", "scheme"],
-    tragedy: ["loss", "decline"],
-    comedy: ["courtship", "life", "rivalry"],
-    adventure: ["pursuit", "threat"],
-    action: ["threat", "rivalry"],
-    survival: ["threat", "loss"]
-  };
 });
 
 // src/core/elsewhere/arcs.ts
@@ -12468,7 +12605,7 @@ function isLight(a) {
 }
 function asWant(text, fallback) {
   const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0].replace(/^.*?\b(?:wants?|wishes|longs? for|hopes? for)\s+/i, "");
-  if (!t)
+  if (!t || PLACEHOLDER.test(t))
     return fallback;
   const bare = t.replace(/^to\s+/i, "");
   if (VERB.test(bare))
@@ -12477,10 +12614,29 @@ function asWant(text, fallback) {
     return `to see ${bare}`;
   if (/^\w+(?:ness|tion|sion|ment|ity|ance|ence|dom|ship|cy)\b/i.test(bare))
     return `to find ${bare}`;
+  if (/^\w+[^su\s]s\b/i.test(bare))
+    return `to get ${bare}`;
   return `to ${bare}`;
+}
+function sentence2(t) {
+  const s = t.trim().replace(/[;,:\s]+$/, "");
+  return s ? `${s.charAt(0).toUpperCase()}${s.slice(1)}${/[.!?\u2026\u201D"]$/.test(s) ? "" : "."}` : "";
+}
+function factionPremise(name, project, cur, max) {
+  const g = groupName(name);
+  const who = g.charAt(0).toUpperCase() + g.slice(1);
+  const plural = /s$/.test(name.split(/\s+/).at(-1)) && !/&/.test(name);
+  const aim = project.replace(/^to\s+/i, "");
+  const how = cur <= 0 ? "" : cur >= max - 1 ? `, and ${plural ? "they're" : "it's"} nearly ready` : cur >= max / 2 ? `, and ${plural ? "they're" : "it's"} well on the way` : `, and ${plural ? "they've" : "it's"} made a start`;
+  return `${who} ${plural ? "mean" : "means"} to ${aim}${how}.`;
+}
+function threadLatest(text) {
+  return (text ?? "").replace(/^[;:\s]*latest:\s*/i, "").replace(/;?\s*\bstalls:\s*\d+\s*/gi, "").replace(/[;,\s]+$/, "").trim();
 }
 function asFear(text, fallback) {
   const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0].replace(/^(?:that|the fear that|fears? that)\s+/i, "");
+  if (PLACEHOLDER.test(t))
+    return fallback;
   return t ? `${t.charAt(0).toLowerCase()}${t.slice(1)}` : fallback;
 }
 function reasonToReturn(a, r, st) {
@@ -12510,6 +12666,8 @@ function seedCandidates(ctx) {
   const push = (c) => {
     if (c.grounds.some((g) => usedGrounds.has(g)))
       return;
+    if (c.kind === "courtship" && c.cast.some((o) => isMinor(o) || isMinor(c.lead) || c.lead.ties.some((t) => t.to === o.key && FAMILY_TIE.test(t.kind))))
+      return;
     const id = slug(`${first(c.lead.name)}-${c.kind}`) || `arc-${out.length}`;
     if (recentlyEnded.has(id))
       return;
@@ -12531,7 +12689,7 @@ function seedCandidates(ctx) {
         kind: kind === "pursuit" ? "threat" : kind,
         lead: g,
         cast: leaders.slice(0, 2),
-        premise: `${f.name}: ${clk.name} (${clk.cur}/${clk.max})`,
+        premise: factionPremise(f.name, clk.name, clk.cur, clk.max),
         want: `to ${clk.name.replace(/^to\s+/i, "")}`,
         fear: spec("threat").fear,
         grounds: [`fac:${slug(f.name)}`],
@@ -12569,7 +12727,8 @@ function seedCandidates(ctx) {
   for (const t of Object.values(st.threads)) {
     if (t.status === "resolved")
       continue;
-    const text = `${t.title}. ${t.latest ?? ""}`;
+    const latest = threadLatest(t.latest);
+    const text = `${t.title}. ${latest}`;
     const who = namesIn(text, r).filter((a) => !a.group);
     const lead = who.find(free);
     if (!lead)
@@ -12579,8 +12738,8 @@ function seedCandidates(ctx) {
       kind,
       lead,
       cast: who.filter((a) => a !== lead).slice(0, 3),
-      premise: clip(`${t.title}: ${t.latest ?? ""}`.replace(/:\s*$/, ""), 200),
-      want: lead.drives.want ? asWant(lead.drives.want, "") : `to settle "${t.title}"`,
+      premise: clip(latest ? latest.split(/;\s*/).slice(0, 2).map(sentence2).join(" ") : `${lead.name} is still caught up in \u201C${t.title}\u201D.`, 220),
+      want: asWant(lead.drives.want, "") || `to see \u201C${t.title}\u201D through`,
       fear: asFear(lead.drives.fear, "") || spec(kind).fear,
       grounds: [t.id],
       secrecy: spec(kind).secrecy,
@@ -12602,7 +12761,7 @@ function seedCandidates(ctx) {
       kind: "debt",
       lead,
       cast: whom ? [whom] : [],
-      premise: clip(`${lead.name} ${c.kind === "owe" ? "owes" : "faces"}${whom ? ` ${whom.name}` : ""}: ${c.what}`, 200),
+      premise: clip(c.kind === "owe" ? `${lead.name} still owes${whom ? ` ${whom.name}` : ""} ${c.what.replace(/\.$/, "")}, and it hasn't been settled.` : `${lead.name} has a reckoning coming${whom ? ` with ${whom.name}` : ""}: ${c.what.replace(/\.$/, "")}.`, 200),
       want: "to settle what's owed",
       fear: spec("debt").fear,
       grounds: [c.id],
@@ -12625,7 +12784,7 @@ function seedCandidates(ctx) {
       kind: "secret",
       lead,
       cast: from.slice(0, 2),
-      premise: clip(`${lead.name} keeps something from ${from.map((a) => a.name).join(" and ") || "others"} (#${f.key})`, 200),
+      premise: clip(`${lead.name} is keeping something from ${from.map((a) => a.name).join(" and ") || "the people closest to them"}, and keeping it is getting harder.`, 200),
       want: "to keep it hidden",
       fear: "it comes out",
       grounds: [`#${f.key}`],
@@ -12644,11 +12803,11 @@ function seedCandidates(ctx) {
       continue;
     const ax = b.axes;
     if ((ax.resentment ?? 0) >= 3 || (ax.rivalry ?? 0) >= 3)
-      push({ kind: "rivalry", lead: a, cast: [o], premise: `${a.name} and ${o.name}: ${b.label ?? "bad blood"}`, want: "to come out on top", fear: spec("rivalry").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 2, clock: 6, by: "engine", why: "a bond gone sour" });
+      push({ kind: "rivalry", lead: a, cast: [o], premise: b.label ? `${a.name} and ${o.name}: ${b.label}. It hasn't cooled.` : `There's bad blood between ${a.name} and ${o.name}, and it hasn't cooled.`, want: "to come out on top", fear: spec("rivalry").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 2, clock: 6, by: "engine", why: "a bond gone sour" });
     else if ((ax.attraction ?? 0) >= 3)
-      push({ kind: "courtship", lead: a, cast: [o], premise: `${a.name} is drawn to ${o.name}`, want: `to be with ${o.name}`, fear: spec("courtship").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 1, clock: 6, by: "engine", why: "an attraction" });
+      push({ kind: "courtship", lead: a, cast: [o], premise: `${a.name} is drawn to ${o.name}, more than ${a.name} has said aloud.`, want: `to be with ${o.name}`, fear: spec("courtship").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 1, clock: 6, by: "engine", why: "an attraction" });
     else if ((ax.trust ?? 0) <= -3 || (ax.affection ?? 0) <= -3)
-      push({ kind: "rift", lead: a, cast: [o], premise: `${a.name} and ${o.name} have fallen out`, want: "to mend it, or end it cleanly", fear: spec("rift").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 1, clock: 4, by: "engine", why: "a strained bond" });
+      push({ kind: "rift", lead: a, cast: [o], premise: `${a.name} and ${o.name} have fallen out, and neither has made the first move.`, want: "to mend it, or end it cleanly", fear: spec("rift").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 1, clock: 4, by: "engine", why: "a strained bond" });
   }
   for (const rec of ctx.records) {
     if (rec.kind !== "forecast" && rec.kind !== "situation" || rec.id.startsWith("bond:"))
@@ -12671,7 +12830,7 @@ function seedCandidates(ctx) {
         kind: "pursuit",
         lead,
         cast: [gone, ...cast.filter((a) => a !== gone)].slice(0, 3),
-        premise: clip(`${rec.summary.replace(/\.$/, "")}; the story has since taken ${gone.name} elsewhere`, 220),
+        premise: clip(`${rec.summary.replace(/\.$/, "")}. Since then, ${gone.name} has gone elsewhere, and ${lead.name} doesn't know where.`, 240),
         want: `to find out where ${first(gone.name)} went`,
         fear: `${first(gone.name)} is in danger`,
         grounds: [rec.id],
@@ -12698,7 +12857,7 @@ function seedCandidates(ctx) {
       lead,
       cast: [...reason && !cast.includes(reason.about) ? [reason.about] : [], ...cast].slice(0, 3),
       premise: clip(text, 220),
-      want: kind === "return" && reason ? `to see ${first(reason.about.name)} with their own eyes` : lead.drives.want ? asWant(lead.drives.want, "") : sp.want,
+      want: kind === "return" && reason ? `to see ${first(reason.about.name)} with their own eyes` : asWant(lead.drives.want, "") || sp.want,
       fear: asFear(lead.drives.fear, "") || sp.fear,
       grounds: [rec.id, ...reason ? [`#${reason.key}`] : []],
       secrecy: sp.secrecy,
@@ -12727,7 +12886,7 @@ function seedCandidates(ctx) {
     const sp = spec(kind);
     const grounds = [a.recordId ?? `char:${a.key}`];
     if (kind === "life") {
-      push({ kind, lead: a, cast: [], premise: clip(`${a.name}'s own life${a.where ? ` in ${a.where}` : ""}${a.drives.role ? `, as ${a.drives.role.replace(/^an?\s+/i, "a ")}` : ""}`, 200), want: sp.want, fear: sp.fear, grounds, secrecy: "private", weight: toUser ? 1.1 : 0.7, heat: 0, clock: 6, by: "lore", why: "their own life" });
+      push({ kind, lead: a, cast: [], premise: clip(`${a.name}${a.name.endsWith("s") ? "'" : "'s"} own life goes on${a.where ? ` ${atPlace(a.where)}` : ""}${a.drives.role ? `: ${a.drives.role.replace(/[.;]+$/, "")}` : ""}.`, 200), want: sp.want, fear: sp.fear, grounds, secrecy: "private", weight: toUser ? 1.1 : 0.7, heat: 0, clock: 6, by: "lore", why: "their own life" });
       continue;
     }
     const named = namesIn(a.lore, r).filter((o) => o !== a && !o.group && o.ring !== "onstage").slice(0, 2);
@@ -12735,7 +12894,7 @@ function seedCandidates(ctx) {
       kind,
       lead: a,
       cast: named,
-      premise: clip(`${a.name}: ${a.drives.want ? `wants ${asWant(a.drives.want, "")}` : a.text.replace(new RegExp(`^${a.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(is|was)\\s+`), "")}`, 200),
+      premise: clip(a.drives.want ? `${a.name} wants ${asWant(a.drives.want, "").replace(/^to\s+/i, "to ")}${a.drives.fear ? `, and fears ${asFear(a.drives.fear, "")}` : ""}.` : sentence2(a.text), 200),
       want: asWant(a.drives.want, sp.want),
       fear: asFear(a.drives.fear, sp.fear),
       grounds,
@@ -12752,7 +12911,7 @@ function seedCandidates(ctx) {
     if (!free(a) || out.some((c) => c.lead === a && c.weight >= 1.2))
       continue;
     const kind = kindFromText(text) ?? "secret";
-    push({ kind, lead: a, cast: [], premise: `${a.name} ${text}`, want: spec(kind).want, fear: spec(kind).fear, grounds: [`pressure:${charId}`], secrecy: "secret", weight: 1.2, heat: 1, clock: spec(kind).clock, by: "engine", why: "a hidden pressure" });
+    push({ kind, lead: a, cast: [], premise: sentence2(`${a.name} ${text}`), want: spec(kind).want, fear: spec(kind).fear, grounds: [`pressure:${charId}`], secrecy: "secret", weight: 1.2, heat: 1, clock: spec(kind).clock, by: "engine", why: "a hidden pressure" });
   }
   const best = new Map;
   for (const c of out) {
@@ -12862,7 +13021,7 @@ function beatLine(id, b) {
   const f = [`roll: ${b.roll[0]}+${b.roll[1]}${mod}`, `at: ${b.at}`, b.twist ? `twist: ${cleanVal(b.twist)}` : "", b.place ? `place: ${cleanVal(b.place)}` : "", `tick: ${b.tick}`, `next: ${b.next}`, `told: ${b.told}`, b.note ? `note: ${cleanVal(b.note)}` : "", `text: ${cleanVal(b.text)}`].filter(Boolean);
   return `arc beat #${id}: ${b.result} | ${f.join(" | ")}`;
 }
-var NAME_RE, low2 = (s) => s.toLowerCase(), clip = (s, n) => s.length > n ? `${s.slice(0, n - 1).replace(/\s+\S*$/, "")}\u2026` : s, first = (n) => n.split(/\s+/)[0], VERB, cleanVal = (s) => (s ?? "").replace(/\s*\|\s*/g, " / ").replace(/\s*\n+\s*/g, " ").trim();
+var NAME_RE, low2 = (s) => s.toLowerCase(), clip = (s, n) => s.length > n ? `${s.slice(0, n - 1).replace(/\s+\S*$/, "")}\u2026` : s, first = (n) => n.split(/\s+/)[0], VERB, PLACEHOLDER, MINOR, FAMILY_TIE, isMinor = (a) => MINOR.test(`${a.text} ${a.drives.role ?? ""}`), cleanVal = (s) => (s ?? "").replace(/\s*\|\s*/g, " / ").replace(/\s*\n+\s*/g, " ").trim();
 var init_arcs = __esm(() => {
   init_util();
   init_grammar();
@@ -12870,6 +13029,9 @@ var init_arcs = __esm(() => {
   init_news();
   NAME_RE = /[A-Z][\w'\u2019-]+(?:\s+(?:of\s+)?[A-Z][\w'\u2019-]+)*/g;
   VERB = /^(be|get|find|keep|protect|stay|win|make|help|see|know|learn|stop|save|leave|go|return|prove|earn|marry|take|have|become|avoid|escape|fix|end|mend|settle|reach|reunite|bring|destroy|kill|defeat|hide|claim|seize|rule|serve|free|heal|understand|undo|break|build|finish|catch|expose|warn|confront|reclaim|regain|restore|redeem|repay|survive|live|do|be)\b/i;
+  PLACEHOLDER = /^(?:unknown|unclear|none|n\/a|tbd|not (?:known|stated)|\?+|[\u2014\u2013-]+)(?:\b|\s|$)/i;
+  MINOR = /\b(?:(?:[1-9]|1[0-7]|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen)[- ]year[- ]old|child|kid|little (?:girl|boy)|teenage(?:r|d)?|high[- ]school(?:er)?|minor)\b/i;
+  FAMILY_TIE = /\b(mother|father|mom|mum|dad|parent|son|daughter|sister|brother|sibling|aunt|uncle|niece|nephew|cousin|grand\w*|step\w*|in-law|guardian|ward)\b/i;
 });
 
 // src/core/elsewhere/storyteller.ts
@@ -12890,6 +13052,11 @@ function tick(inp) {
   const recentKinds = inp.recentArrivals.filter((a) => a.kind).slice(-6).map((a) => a.kind);
   const lastRouteOf = (arcId) => [...inp.recentArrivals].reverse().find((a) => a.arc === arcId)?.kind;
   const id = (s) => `${inp.tickId}-${s}`;
+  const offKeys = new Set(inp.offPage.map((x) => x.key));
+  const otherOf = (arc) => arc.cast.find((n) => {
+    const a = roster.find(n);
+    return !!a && !a.group;
+  });
   const inScene = (n) => st.place.some((x) => x.toLowerCase() === n || x.toLowerCase().includes(n));
   const tracePlaces = [];
   for (const t of Object.values(st.threads)) {
@@ -12947,7 +13114,7 @@ function tick(inp) {
       continue;
     }
     const result = d === "accept" ? "lost" : "softened";
-    const text = endTemplate({ lead: arc.lead, want: arc.want, fear: arc.fear, result });
+    const text = endTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, fear: arc.fear, result, group: !!lead?.group, cast: otherOf(arc), town });
     lines.push(`arc end #${arc.id}: ${result} | text: ${cleanVal(text)}`);
     cards.push(cardFor(arc, lead, roster, st, { result, roll: [0, 0], mod: 0, stage: "aftermath", atAbs: inp.now, template: text, line: lines.length - 1, ending: true, fateOk: d === "accept", offPage: inp.offPage, records: inp.records }));
   }
@@ -12979,13 +13146,17 @@ function tick(inp) {
       cands.push({ arc, lead, prio: 1 + Math.min(1, (inp.now - (arc.lastBeatAbs ?? arc.startedAbs)) / 1440) });
   }
   const seeded = [];
+  const proposals = [];
+  const seeding = inp.seeding ?? "auto";
+  const pending = seeding === "ask" ? inp.pendingProposals ?? 0 : 0;
   const liveArcs = [...running, ...arcs.filter((a) => a.status === "held" || a.status === "fate")];
-  const live = liveArcs.length;
+  const live = liveArcs.length + pending;
   const room = M.arcs - live;
-  const own = liveArcs.filter((a) => a.by !== "player").length;
+  const own = liveArcs.filter((a) => a.by !== "player").length + pending;
   const seedP = own === 0 ? 1 : 1 - Math.exp(-0.06 * M.factor * (1 + 2 * room / M.arcs) * Math.max(hours, 1));
-  if (room > 0 && (hours > 0 || inp.forced || inp.tickId.includes("f")) && rand() < seedP) {
-    const pool = seedCandidates({ state: st, roster, records: inp.records, awake, arcs, canonGravity: inp.canonGravity, genres: inp.genres, world: inp.world, pressures: inp.pressures, now: inp.now });
+  if (seeding !== "off" && room > 0 && (hours > 0 || inp.forced || inp.tickId.includes("f")) && rand() < seedP) {
+    const skip = new Set(inp.proposalKeys ?? []);
+    const pool = seedCandidates({ state: st, roster, records: inp.records, awake, arcs, canonGravity: inp.canonGravity, genres: inp.genres, world: inp.world, pressures: inp.pressures, now: inp.now }).filter((c) => !skip.has(proposalKey(c.lead.name, c.kind, c.grounds)) && !skip.has(`lead:${c.lead.name.toLowerCase()}`));
     const n = Math.min(room, M.seeds);
     for (let i = 0;i < n && pool.length; i++) {
       const sure = pool.findIndex((c) => c.faction || c.kind === "world");
@@ -13000,6 +13171,52 @@ function tick(inp) {
         if (pool[j].kind === c.kind && !pool[j].faction)
           pool.splice(j, 1);
       const light = arcs.find((a) => isLight(a) && a.lead.toLowerCase() === c.lead.name.toLowerCase());
+      if (seeding === "ask") {
+        const line = arcNewLine({ id: c.id, kind: c.kind, lead: c.lead.name, cast: c.cast.map((a) => a.name), secrecy: c.secrecy, clock: c.clock, cur: c.cur, heat: c.heat, at: inp.now, premise: c.premise, want: c.want, fear: c.fear, grounds: c.grounds, place: c.place, by: c.by, faction: c.faction });
+        const pr = {
+          id: c.id,
+          key: proposalKey(c.lead.name, c.kind, c.grounds),
+          line,
+          kind: c.kind,
+          lead: c.lead.name,
+          cast: c.cast.map((a) => a.name),
+          premise: c.premise,
+          want: c.want,
+          fear: c.fear,
+          secrecy: c.secrecy,
+          grounds: c.grounds,
+          why: c.why,
+          atAbs: inp.now,
+          ...light ? { replaces: light.id } : {}
+        };
+        proposals.push(pr);
+        log.push(`proposed ${c.id} (${c.kind}, ${c.lead.name}) from ${c.why}`);
+        const arc = {
+          id: c.id,
+          kind: c.kind,
+          lead: c.lead.name,
+          cast: pr.cast,
+          premise: c.premise,
+          want: c.want,
+          fear: c.fear,
+          grounds: c.grounds,
+          secrecy: c.secrecy,
+          clock: { cur: c.cur ?? 0, max: c.clock },
+          tally: { win: 0, cost: 0, loss: 0 },
+          heat: c.heat,
+          stage: "setup",
+          beats: [],
+          nextAbs: inp.now,
+          status: "running",
+          by: c.by,
+          place: c.place,
+          startedAbs: inp.now,
+          startedMsg: inp.anchorIndex,
+          faction: c.faction
+        };
+        cards.push({ ...cardFor(arc, c.lead, roster, st, { result: "cost", roll: [0, 0], mod: 0, stage: "setup", atAbs: inp.now, template: c.premise, line: -1, seed: true, offPage: inp.offPage, records: inp.records }), id: `p${proposals.length}`, proposal: c.id });
+        continue;
+      }
       if (light) {
         lines.push(`arc drop #${light.id}: reason: ${cleanVal(`gave way to a better grounded story (${c.kind})`)}`);
         log.push(`${light.id} gave way to ${c.id}`);
@@ -13114,9 +13331,26 @@ function tick(inp) {
     const cur = Math.min(arc.clock.max, arc.clock.cur + 1);
     const stage = stageOf(cur, arc.clock.max);
     const shownPlace = place && place.toLowerCase() !== (town ?? "").toLowerCase() && !arc.want.toLowerCase().includes(place.toLowerCase()) ? place : undefined;
-    const text = beatTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, stage: stage === "aftermath" ? "crisis" : stage, result, price, worse, place: shownPlace, premise: arc.premise });
+    const newsKey = arc.grounds.find((x) => x.startsWith("#"))?.slice(1);
+    const newsFact = newsKey && !offKeys.has(newsKey) && lead && hasFact(lead, newsKey) ? st.facts?.[newsKey] : undefined;
+    const text = beatTemplate({
+      kind: arc.kind,
+      lead: arc.lead,
+      want: arc.want,
+      stage: stage === "aftermath" ? "crisis" : stage,
+      result,
+      price,
+      worse,
+      place: shownPlace,
+      premise: arc.premise,
+      group: !!lead?.group,
+      cast: otherOf(arc),
+      town,
+      news: newsFact?.statement
+    });
     const next = atAbs + Math.round(120 + rand() * 240 / M.factor);
-    lines.push(beatLine(arc.id, { result, roll, mod: g.mod, at: atAbs, text: twistText ? `${text} (${twistText})` : text, told: "template", twist: twistText, place, tick: inp.tickId, next }));
+    const twistLine = twistText ? sentence2(/^ran into\b/.test(twistText) ? `${lead?.group ? groupName(arc.lead) : arc.lead} ${twistText}` : twistText) : "";
+    lines.push(beatLine(arc.id, { result, roll, mod: g.mod, at: atAbs, text: twistLine ? `${text} ${twistLine}` : text, told: "template", twist: twistText, place, tick: inp.tickId, next }));
     const beatIdx = lines.length - 1;
     if (stage !== arc.stage && stage !== "aftermath")
       lines.push(`arc stage #${arc.id}: ${stage}`);
@@ -13132,13 +13366,15 @@ function tick(inp) {
       lines.push(`whereabouts ${lead.name}: ${cleanVal(place)} | since: ${atAbs}`);
     const card = cardFor(arc, lead, roster, st, { result, roll, mod: g.mod, stage, atAbs, template: text, line: beatIdx, twist: twistText, price, worse, place, offPage: inp.offPage, records: inp.records, offHours: g.offHours });
     let ending = false;
+    let endResult;
     if (cur >= arc.clock.max) {
       ending = true;
       const tally = { ...arc.tally, [result]: arc.tally[result] + 1 };
       const final = d6(rand) + d6(rand) + tally.win - tally.loss;
       const end = final >= 10 ? "met" : final >= 7 ? "price" : "lost";
+      endResult = end;
       const irreversible = end === "lost" && spec.irreversible && !!lead?.protected;
-      const endText = endTemplate({ lead: arc.lead, want: arc.want, fear: arc.fear, result: end, price: pickOf(rand, spec.prices) });
+      const endText = endTemplate({ kind: arc.kind, lead: arc.lead, want: arc.want, fear: arc.fear, result: end, price: pickOf(rand, spec.prices), group: !!lead?.group, cast: otherOf(arc), town });
       if (irreversible && inp.fates !== "allow") {
         lines.push(`arc set #${arc.id}: status: ${inp.fates === "ask" ? "fate" : "running"} | pending: ${cleanVal(endText)}${inp.fates === "page" ? " | fate: page" : ""}`);
         log.push(`${arc.id}: an irreversible ending waits on the player (${inp.fates})`);
@@ -13152,8 +13388,7 @@ function tick(inp) {
     }
     cards.push(card);
     if (ending || slip || arc.bring || rand() < M.arrivalChance * (arc.kind === "life" ? result === "cost" ? 0.2 : 0.5 : 1)) {
-      const gist = arc.kind === "life" ? result === "loss" ? `a bad stretch (${worse})` : "nothing urgent; keeping in touch" : result === "win" ? `good news (${arc.want.replace(/^to\s+/i, "").slice(0, 60)})` : result === "cost" ? `news, with a catch: ${price}` : `bad news: ${worse}`;
-      const r = routeFor({ arc, lead, roster, routes: SPECS[arc.kind].routes, text, atAbs, place, result, slip, ending, lastRoute: lastRouteOf(arc.id), recentKinds, town, onstage, gist: ending ? undefined : gist, tracePlaces });
+      const r = routeFor({ arc, lead, roster, routes: SPECS[arc.kind].routes, text, atAbs, place, result: endResult ?? result, slip, ending, lastRoute: lastRouteOf(arc.id), recentKinds, town, onstage, tracePlaces });
       if (r) {
         const aid = id(arc.id);
         if (!arrivals.some((a) => a.arc && collided.has(a.arc) && a.kind === "trace" && r.kind === "trace" && a.place?.toString() === r.place?.toString())) {
@@ -13188,7 +13423,7 @@ function tick(inp) {
     arrivals.push({ id: id("incident"), kind: "ambient", text: inc, template: inc, place: town ? [town] : [], atAbs: inp.now, untilAbs: inp.now + 480, tick: inp.tickId, status: "pending", offered: [] });
     log.push(`incident: ${inc}`);
   }
-  return { tickId: inp.tickId, hours, lines, cards, arrivals, awake: awake.map((a) => a.name), hops, seeded, log, roster };
+  return { tickId: inp.tickId, hours, lines, cards, arrivals, awake: awake.map((a) => a.name), hops, seeded, proposals, log, roster };
 }
 function cardFor(arc, lead, r, st, o) {
   const off = new Set(o.offPage.map((x) => x.key));
@@ -13201,13 +13436,19 @@ function cardFor(arc, lead, r, st, o) {
     }
     const t = st.threads[g];
     if (t)
-      return `${t.title}${t.latest ? `: ${t.latest}` : ""}`;
+      return `${t.title}${threadLatest(t.latest) ? `: ${threadLatest(t.latest)}` : ""}`;
     const rec = o.records.find((x) => x.id === g);
     return rec ? `${rec.name}: ${rec.summary}` : "";
   }).map((t) => clean(t.slice(0, 200))).filter(Boolean).slice(0, 3);
   const sofar = arc.beats.slice(-2).map((b) => b.text);
   const knows = (lead?.knows ?? []).filter((k) => !off.has(k.key)).slice(-4).map((k) => `#${k.key} (${k.statement.slice(0, 80)})`);
   const noRoute = Object.values(st.facts ?? {}).filter((f) => !f.hidden && f.keepers?.length && lead && !(lead.charId && f.stances[lead.charId])).slice(0, 2).map((f) => `#${f.key}`);
+  const who = [arc.lead, ...arc.cast].flatMap((n) => [n, ...r.find(n)?.names ?? []]).map((n) => n.split(/\s+/)[0]).filter((n) => n.length >= 3);
+  const whoRe = who.length ? new RegExp(`\\b(?:${[...new Set(who)].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`) : null;
+  const known = new Set((lead?.knows ?? []).map((k) => k.key));
+  const leadRe = new RegExp(`\\b(?:${[arc.lead, ...lead?.names ?? []].map((n) => n.split(/\s+/)[0]).filter((n) => n.length >= 3).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") || "\\u0000"})\\b`);
+  const userRe = new RegExp(`\\b${r.userName.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const established = whoRe ? Object.values(st.facts ?? {}).filter((f) => !f.hidden && !off.has(f.key) && !known.has(f.key) && f.truth !== "false" && (!f.keepers?.length || lead?.charId && f.stances[lead.charId]) && whoRe.test(f.statement)).filter((f) => !userRe.test(f.statement) && leadRe.test(f.statement)).sort((a, b) => (b.lastMsg ?? 0) - (a.lastMsg ?? 0)).slice(0, 3).map((f) => clean(f.statement.slice(0, 140))).filter(Boolean) : [];
   return {
     id: `b${o.line}`,
     arcId: arc.id,
@@ -13233,6 +13474,8 @@ function cardFor(arc, lead, r, st, o) {
     offHours: o.offHours,
     knows,
     noRoute,
+    sought: soughtOf(arc, r).map((a) => a.name),
+    established,
     grounds: arc.grounds,
     template: o.template,
     line: o.line,
@@ -13333,7 +13576,7 @@ function authorArc(o) {
   const grounds = [lead.recordId ?? `char:${lead.key}`, ...groups.map((g) => g.recordId ?? g.key), "player"];
   return arcNewLine({ id, kind, lead: lead.name, cast: [...new Set(castNames)], secrecy, clock: spec.clock, heat: 2, at: o.now, premise: o.premise, want, fear, grounds: [...new Set(grounds)], place: sh.place, by: "player", push: true });
 }
-var MODES, d6 = (rand) => 1 + Math.floor(rand() * 6), pickOf = (rand, xs) => xs[Math.floor(rand() * xs.length) % Math.max(1, xs.length)], STAGE_F, TWISTS;
+var MODES, proposalKey = (lead, kind, grounds) => `${lead.toLowerCase()}|${kind}|${[...grounds].sort().join(",")}`, d6 = (rand) => 1 + Math.floor(rand() * 6), pickOf = (rand, xs) => xs[Math.floor(rand() * xs.length) % Math.max(1, xs.length)], STAGE_F, TWISTS;
 var init_storyteller = __esm(() => {
   init_util();
   init_arcs();
@@ -13357,7 +13600,7 @@ function cardText(c, ctx) {
   WHO ${c.lead}: ${c.leadText.slice(0, 220) || "\u2014"}
   GROUNDS ${c.grounds.join(" \xB7 ")}
   DRAFT premise: ${c.premise} | want: ${c.want} | fear: ${c.fear}
-  WRITE a premise (\u2264 30 words) from the grounds only, a want ("to \u2026", \u2264 12 words) and a fear (\u2264 12 words).`;
+  WRITE a premise (one or two plain, specific sentences, \u2264 45 words) from the grounds only, a want ("to \u2026", \u2264 12 words) and a fear (\u2264 12 words).`;
   }
   return `CARD ${c.id} \xB7 ${c.kind} \xB7 ${c.ending ? "ending" : `beat ${c.clock} \xB7 ${c.stage}`} \xB7 roll ${c.roll[0]}+${c.roll[1]}${c.mod ? ` ${c.mod > 0 ? "+" : "-"}${Math.abs(c.mod)}` : ""} \u2192 ${RESULT_WORD[c.result]}${c.price ? ` (price: ${c.price})` : ""}${c.worse ? ` (worse: ${c.worse})` : ""}${c.twist ? ` \xB7 twist: ${c.twist}` : ""}
   LEAD ${c.lead}: ${c.leadText.slice(0, 200) || "\u2014"}
@@ -13366,7 +13609,9 @@ function cardText(c, ctx) {
   SO FAR ${c.sofar.join(" \u2192 ")}` : `
   SO FAR (this is its first step: begin what the SUBPLOT describes)`}
   CAST ${c.cast.join(", ") || "\u2014"} \xB7 WHERE ${c.where ?? "\u2014"} \xB7 WHEN ${fmtTime(fromAbs(c.atAbs))}${c.offHours ? ` (${c.offHours}: tell it so that fits)` : ""}
-  KNOWS ${c.knows.join("; ") || "\u2014"}${c.noRoute.length ? ` \xB7 NO ROUTE TO ${c.noRoute.join(", ")} (can't act on it)` : ""}
+  KNOWS ${c.knows.join("; ") || "\u2014"}${c.noRoute.length ? ` \xB7 NO ROUTE TO ${c.noRoute.join(", ")} (can't act on it)` : ""}${c.established?.length ? `
+  ESTABLISHED ${c.established.join(" \xB7 ")}` : ""}${c.sought?.length ? `
+  SOUGHT ${c.sought.join(", ")}: ${c.lead} doesn't know where they are and doesn't find them${c.ending ? " unless the ending is met" : " in this step (only an ending can)"}; no call, letter or visit reaches them` : ""}
   ENGINE DRAFT ${c.template}${c.arrival ? `
   REACHES THE SCENE AS (${c.arrivalKind}) ${c.arrival}` : ""}`;
 }
@@ -13376,10 +13621,10 @@ function tellingPrompt(cards, ctx) {
 Also PROFILE each person listed under PROFILES from their text only: {"key","standing":"here|away|captive|changed|dead|companion|construct","where":"the place they are now, or empty","reach":"town|region|far","want":"to \u2026","fear":"\u2026","nocturnal":true|false}.` : "";
   return {
     system: `You tell what happened off the page in a roleplay, between two story times. ${SAFETY_DATA}
-Each CARD is already decided: who, where, when, and how it turned out. Tell it as ONE plain past-tense sentence (at most 40 words) of what happened, in the story's language: the next concrete step of the SUBPLOT, continuing SO FAR, doing what the lead would do toward what they want. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, and places it names. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
-For a card with REACHES THE SCENE, also write "arrival": how it reaches the scene, at most 30 words, in-world.
+Each CARD is already decided: who, where, when, and how it turned out. Tell it in two short, plain sentences (at most 50 words), like news of someone the reader knows. First, what happened, in the past tense: the next concrete step of the SUBPLOT, continuing SO FAR, and specific, naming the actual people, news, places and things from the card (SUBPLOT, GROUNDS, KNOWS, ESTABLISHED). Then where that leaves things now, in the present tense: what the lead is about to do, or what is now set to happen. Write "heard that Buffy is back", never "received news"; "voted to strip her magic", never "reached a decision". The register, from other stories: "Marta heard that the mill had burned down. She's thinking of writing to her brother and going home." / "The guild finished its inquiry into the forged seals. Tomas is set to lose his licence." No scenery for its own sake, no semicolon chains, no vague summary ("made progress", "at a price", "it went well", "things moved along"); a price or a setback is said as the concrete thing it was. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, people named in its ESTABLISHED facts, and places it names. The lead acts only on what they KNOW; ESTABLISHED is for getting the names and facts right. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
+For a card with REACHES THE SCENE, also write "arrival": the moment it reaches the scene as the scene would meet it (what is heard, seen, read or said, and by whom), specific about the news it carries, at most 40 words, in-world.
 You may add up to two ledger "lines" per card for the LEAD and CAST only: "know Name: #key fact | how they learned it \xB7 knows/believes", "bond A>B: trust +1 \u2014 cause", "journal Name: their own words".
-Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only.${cards.some((c) => c.kind === "world") ? `
+Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only. The premise is one or two plain, specific sentences: who, what they've learned or what has happened to them (naming the actual news, people and places in the grounds), and what they mean to do about it (at most 45 words, no labels or lists). The want is "to \u2026" and the fear a plain clause, both specific and in natural words.${cards.some((c) => c.kind === "world") ? `
 A "world" card is the setting's own agenda, an actor too: tell it through consequences in the world (a move, a cost, a changed place), never by announcing it. Lines under HOLDS never break; pressure may strain them, nothing breaks them.${ctx.holds?.length ? ` HOLDS: ${ctx.holds.join(" / ")}` : ""}` : ""}${prof}
 Output JSON only: {"beats":[{"card":"b3","result":"cost","text":"\u2026","arrival":"\u2026","lines":["\u2026"]}],"seeds":[{"card":"b2","premise":"\u2026","want":"to \u2026","fear":"\u2026"}]${ctx.profile?.length ? `,"profiles":[{"key":"\u2026","standing":"\u2026","where":"\u2026","reach":"\u2026","want":"\u2026","fear":"\u2026","nocturnal":false}]` : ""}}${ctx.lang && !/^en/i.test(ctx.lang) ? `
 Write the text in ${ctx.lang}; keep the JSON field names, op names and card ids in English.` : ""}`,
@@ -13416,10 +13661,10 @@ function validateTold(c, raw, ctx) {
   if (told && told !== String(c.result) && OPPOSITE[String(c.result)]?.includes(told))
     return fail(`told as ${told}, decided ${c.result}`);
   const wc = (s) => s.split(/\s+/).filter(Boolean).length;
-  if (wc(text) > 55)
+  if (wc(text) > 95)
     return fail("too long");
   const arrival = raw.arrival ? String(raw.arrival).trim() : undefined;
-  if (arrival && wc(arrival) > 45)
+  if (arrival && wc(arrival) > 60)
     return fail("arrival too long");
   const allowed = new Set;
   const addNames = (n) => n.split(/\s+/).forEach((w) => allowed.add(w.toLowerCase().replace(/['\u2019]s$/, "")));
@@ -13430,7 +13675,7 @@ function validateTold(c, raw, ctx) {
       a.names.forEach(addNames);
   }
   addNames(ctx.userName);
-  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? ""])
+  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...c.established ?? [], ...c.groundText ?? []])
     addNames(p);
   const others = new Set(ctx.roster.actors.flatMap((a) => a.names.flatMap((n) => n.split(/\s+/))).map((w) => w.toLowerCase()));
   for (const w of capNames(`${text} ${arrival ?? ""}`)) {
@@ -13447,6 +13692,12 @@ function validateTold(c, raw, ctx) {
   }
   if (!c.fateOk && IRREVERSIBLE.test(`${text} ${arrival ?? ""}`))
     return fail("an irreversible outcome");
+  const finds = c.result !== "met" && c.result !== "price" && (c.sought ?? []).find((n) => {
+    const names = [n, ...ctx.roster.find(n)?.names ?? []].map((x) => x.split(/\s+/)[0]).filter((x) => x.length >= 3).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    return new RegExp(`\\b(?:(?:found|finds)(?! no\\b| nothing\\b| neither\\b| only\\b)|located|locates|tracked (?:\\w+ )?down|caught up with|learned where|found out where|knows where|knew where)\\b[^.;]{0,40}?\\b(?:${names.join("|")})\\b|\\btracked (?:${names.join("|")}) down\\b`, "i").test(`${text} ${arrival ?? ""}`);
+  });
+  if (finds)
+    return fail(`finds ${finds} before the search ends`);
   const hits = offPageHits(`${text} ${arrival ?? ""}`, ctx.offPage);
   if (hits.length)
     return fail(`names an off-page secret (${hits[0].word})`);
@@ -13477,7 +13728,7 @@ function validateSeed(c, raw, ctx) {
   const fear = String(raw.fear ?? "").trim();
   if (!premise || !want || !fear)
     return { lines: [], rejected: "incomplete" };
-  if (premise.split(/\s+/).length > 45 || want.split(/\s+/).length > 18 || fear.split(/\s+/).length > 18)
+  if (premise.split(/\s+/).length > 60 || want.split(/\s+/).length > 18 || fear.split(/\s+/).length > 18)
     return { lines: [], rejected: "too long" };
   const probe = validateTold({ ...c, result: "cost" }, { text: `${premise} ${want}. ${fear}.`, result: "cost" }, { ...ctx, recent: [] });
   if (probe.rejected)
@@ -13507,8 +13758,8 @@ function shapePrompt(o) {
     system: `A player wrote a subplot for someone off the page in their roleplay. File it for the engine that will play it out. ${SAFETY_DATA}
 Read the premise for what the LEAD does and is after. Use only the premise and who the lead is; add nothing.
 - "kind": one of ${Object.entries(KIND_MEANING).map(([k, v]) => `${k} (${v})`).join("; ")}.
-- "want": what the LEAD is after, "to \u2026", at most 12 words.
-- "fear": what the LEAD fears if it goes badly, at most 12 words.
+- "want": what the LEAD is after, "to \u2026", at most 12 words, in natural English ("to find Dawn before anyone else does").
+- "fear": what the LEAD fears if it goes badly, a plain clause of at most 12 words, in natural English ("that he let Dawn down when it mattered").
 - "cast": the people and groups from the lists below who take part (not ${o.userName}).
 - "secrecy": "public" (anyone could hear of it), "private" (those close to it), or "secret" (hidden on purpose).
 - "place": where it happens, if the premise says; else "".
@@ -15754,6 +16005,8 @@ function elsewhereOf(meta) {
   e.order ??= [];
   e.profiles ??= {};
   e.seen ??= {};
+  e.proposals ??= [];
+  e.declined ??= [];
   return e;
 }
 function modeOf(meta, settings) {
@@ -15837,6 +16090,14 @@ async function runElsewhere(chatId, userId, opts = {}) {
       }
       if (E.ticks[tickId] && !opts.force)
         tickId = `${tickId}r${E.order.length}`;
+      for (const p of E.proposals) {
+        if (p.status !== "pending")
+          continue;
+        const busyLead = arcs.some((a) => (a.status === "running" || a.status === "held" || a.status === "fate") && !isLight(a) && a.lead.toLowerCase() === p.lead.toLowerCase());
+        if (busyLead || now - p.atAbs > PROPOSAL_SHELF)
+          Object.assign(p, { status: "stale", staleWhy: busyLead ? `${p.lead} has a story now` : "the story moved on" });
+      }
+      const waiting = E.proposals.filter((p) => p.status === "pending");
       const al = L.almanac(meta, settings);
       const named = al?.calendar?.named?.find((n) => al.date.includes(n.name) || al.clock.includes(n.name))?.name ?? null;
       const res = tick({
@@ -15864,7 +16125,10 @@ async function runElsewhere(chatId, userId, opts = {}) {
         namedDay: named,
         truths: meta.config.truths ?? [],
         prevTick: E.lastTick,
-        forced: !!opts.force && !due
+        forced: !!opts.force && !due,
+        seeding: settings.elsewhereSeeding ?? "ask",
+        pendingProposals: waiting.length,
+        proposalKeys: [...E.declined, ...waiting.map((p) => `lead:${p.lead.toLowerCase()}`)]
       });
       const id = `${SIM_ID}${tickId}`;
       putLines(files, target.index, id, res.lines);
@@ -15873,6 +16137,9 @@ async function runElsewhere(chatId, userId, opts = {}) {
         list.push({ ...a, msgId: target.id, swipe: target.swipe });
       meta.arrivals = pruneArrivals(list);
       const telling = settings.elsewhereTelling !== "engine" && res.cards.length > 0;
+      for (const p of res.proposals)
+        E.proposals.push({ ...p, status: "pending", tick: tickId, ...telling ? { telling: true } : {} });
+      E.proposals = E.proposals.filter((p) => p.status === "pending").concat(E.proposals.filter((p) => p.status !== "pending").slice(-10));
       const record = {
         id: tickId,
         at: Date.now(),
@@ -15882,6 +16149,7 @@ async function runElsewhere(chatId, userId, opts = {}) {
         hours: Math.round(res.hours * 10) / 10,
         beats: res.cards.filter((c) => !c.seed && !c.ending).length,
         seeds: res.seeded.length,
+        proposed: res.proposals.length,
         hops: res.hops.length,
         arrivals: res.arrivals.length,
         status: telling ? "telling" : "engine",
@@ -15954,6 +16222,9 @@ async function tell(chatId, tickId, userId) {
     text = await quiet([sys(p.system), usr(p.user)], { userId, connectionId: settings.simConnection || undefined, reasoningOff: true, timeoutMs: 120000, label: "Elsewhere" });
   } catch (err) {
     rec.status = "failed";
+    for (const p of E.proposals ?? [])
+      if (p.tick === tickId)
+        delete p.telling;
     delete rec.cards;
     delete rec.lines;
     save(chatId, "meta", userId);
@@ -15974,6 +16245,7 @@ async function tell(chatId, tickId, userId) {
     for (const card of r2.cards) {
       if (card.seed) {
         const raw = (res?.seeds ?? []).find((s) => s?.card === card.id);
+        const pr = card.proposal ? E2.proposals?.find((p) => p.id === card.proposal && p.tick === tickId) : undefined;
         if (!raw)
           continue;
         const v = validateSeed(card, raw, ctx);
@@ -15981,7 +16253,12 @@ async function tell(chatId, tickId, userId) {
           rejected.push(`${card.arcId} (seed): ${v.rejected}`);
           continue;
         }
-        if (/\| by: player\b/.test(lines[card.line]))
+        if (pr) {
+          Object.assign(pr, { premise: v.seed.premise, want: v.seed.want, fear: v.seed.fear });
+          pr.line = setField(setField(setField(pr.line, "premise", v.seed.premise), "want", v.seed.want), "fear", v.seed.fear);
+          continue;
+        }
+        if (card.line < 0 || /\| by: player\b/.test(lines[card.line]))
           continue;
         lines[card.line] = setField(setField(setField(lines[card.line], "premise", v.seed.premise), "want", v.seed.want), "fear", v.seed.fear);
         continue;
@@ -16018,6 +16295,9 @@ async function tell(chatId, tickId, userId) {
         E2.profiles[who.key] = v;
     }
     putLines(fresh, r2.anchor, `${SIM_ID}${tickId}`, lines);
+    for (const p of E2.proposals ?? [])
+      if (p.tick === tickId)
+        delete p.telling;
     r2.status = res ? "told" : "failed";
     r2.tokens = estTokens(p.system + p.user) + estTokens(text);
     r2.rejected = res ? rejected : ["the reply wasn't JSON"];
@@ -16046,7 +16326,8 @@ function elsewhereNote(o) {
     mode: mode === "off" ? list.some((a) => a.status === "pending" || a.status === "offered") ? "quiet" : "off" : mode,
     onPath: o.onPath,
     seen: E.seen,
-    lastPlace: E.lastPlace
+    lastPlace: E.lastPlace,
+    userName: o.userName
   });
   if (!o.dryRun) {
     E.seen = lane.seen;
@@ -16070,6 +16351,34 @@ async function elsewhereAction(chatId, m, userId) {
   const arc = m.id ? st.arcs?.[m.id] : undefined;
   const now = st.time ? absMinutes(st.time) : 0;
   let line = null;
+  const more = [];
+  if (m.action === "decline" || m.action === "accept") {
+    const res = await serial(`chat:${chatId}`, async () => {
+      const files = await loadChat(chatId, userId);
+      const E = elsewhereOf(files.meta);
+      const p = E.proposals.find((x) => x.id === m.id && x.status === "pending");
+      if (!p)
+        return null;
+      if (m.action === "decline") {
+        p.status = "declined";
+        E.declined = [...E.declined.filter((k) => k !== p.key), p.key].slice(-100);
+      } else
+        p.status = "accepted";
+      save(chatId, "meta", userId, 0);
+      return p;
+    });
+    if (!res)
+      return { warn: "That proposal is no longer waiting." };
+    if (m.action === "decline")
+      return null;
+    let id = res.id;
+    for (let i = 2;st.arcs?.[id]; i++)
+      id = `${res.id}-${i}`;
+    line = setField(setField(res.line.replace(/^arc new #[^:]+:/, `arc new #${id}:`), "at", String(now)), "push", "yes");
+    const light = res.replaces ? st.arcs?.[res.replaces] : undefined;
+    if (light && (light.status === "running" || light.status === "held"))
+      more.push(`arc drop #${light.id}: reason: gave way to a story you accepted (${res.kind})`);
+  }
   switch (m.action) {
     case "hold":
       line = arc ? `arc set #${arc.id}: status: held` : null;
@@ -16124,20 +16433,20 @@ async function elsewhereAction(chatId, m, userId) {
   const target = L.lastAssistant();
   if (!target)
     return { warn: "The chat has no reply to anchor this to yet." };
-  const op = parseLine(line);
-  if (!op)
+  const ops = [line, ...more].map((l) => parseLine(l)).filter((o) => !!o);
+  if (!ops.length)
     return { warn: "That couldn't be recorded." };
   const files = await loadChat(chatId, userId);
   const key = anchorKey(target.index);
-  files.side[key] = [...files.side[key] ?? [], { source: "user", ops: [op], id: `ewu:${Date.now().toString(36)}`, at: Date.now() }];
+  files.side[key] = [...files.side[key] ?? [], { source: "user", ops, id: `ewu:${Date.now().toString(36)}`, at: Date.now() }];
   save(chatId, "side", userId, 0);
   await L.refresh();
-  if (["fate", "bring", "nudge", "author"].includes(m.action)) {
+  if (["fate", "bring", "nudge", "author", "accept"].includes(m.action)) {
     const rec = await runElsewhere(chatId, userId).catch((err) => {
       warn(`elsewhere: ${describe(err)}`);
       return null;
     });
-    if (m.action === "nudge" || m.action === "author")
+    if (m.action === "nudge" || m.action === "author" || m.action === "accept")
       return { info: tickSummary(rec, L.state.arcs) };
   }
   return null;
@@ -16166,10 +16475,12 @@ function tickSummary(rec, arcs = {}) {
   const name = (id) => arcs[id] ? `${arcs[id].lead}'s ${arcs[id].kind}` : id;
   const moved = rec.log.filter((l) => /= -?\d+ \u2192 (win|cost|loss)/.test(l)).map((l) => `${name(l.split(":")[0])} (${/\u2192 (\w+)/.exec(l)[1]})`);
   const seeded = rec.log.filter((l) => l.startsWith("seeded ")).map((l) => /\(([^)]+)\)/.exec(l)?.[1]?.replace(/^(\w+), (.+)$/, "$2's $1") ?? "");
+  const proposed = rec.log.filter((l) => l.startsWith("proposed ")).map((l) => /\(([^)]+)\)/.exec(l)?.[1]?.replace(/^(\w+), (.+)$/, "$2's $1") ?? "");
   const held = rec.log.filter((l) => /held back/.test(l)).map((l) => `${name(l.split(":")[0])} waits (${/held back \((.*)\)$/.exec(l)?.[1] ?? ""})`);
   const parts = [
     moved.length ? `moved: ${moved.join(", ")}` : "",
     seeded.length ? `new: ${seeded.join(", ")}` : "",
+    proposed.length ? `proposed: ${proposed.join(", ")} (accept or decline them on the Elsewhere page)` : "",
     rec.hops ? `${rec.hops} piece${rec.hops === 1 ? "" : "s"} of news travelled` : "",
     held.length ? held.join("; ") : ""
   ].filter(Boolean);
@@ -16213,9 +16524,9 @@ function elsewhereView(o) {
     next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "",
     wait: a.status === "running" ? a.wait ?? "" : "",
     pushed: !!a.push,
-    reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered")).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" }))
+    reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered") && callFits(x, st, roster)).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" }))
   }));
-  const ticks = E.order.map((id) => E.ticks[id]).filter(Boolean).reverse().map((t) => ({ id: t.id, at: t.at, from: o.fmt(t.from), to: o.fmt(t.to), hours: t.hours, beats: t.beats, seeds: t.seeds, hops: t.hops, arrivals: t.arrivals, status: t.status, tokens: t.tokens ?? 0, log: t.log, rejected: t.rejected ?? [], awake: t.awake }));
+  const ticks = E.order.map((id) => E.ticks[id]).filter(Boolean).reverse().map((t) => ({ id: t.id, at: t.at, from: o.fmt(t.from), to: o.fmt(t.to), hours: t.hours, beats: t.beats, seeds: t.seeds, proposed: t.proposed ?? 0, hops: t.hops, arrivals: t.arrivals, status: t.status, tokens: t.tokens ?? 0, log: t.log, rejected: t.rejected ?? [], awake: t.awake }));
   const awake = new Set(ticks[0]?.awake ?? []);
   const leads = new Set(Object.values(st.arcs ?? {}).filter((a) => a.status === "running" || a.status === "held" || a.status === "fate").map((a) => a.lead.toLowerCase()));
   const people = roster.actors.map((a) => ({
@@ -16241,10 +16552,26 @@ function elsewhereView(o) {
     ticks: ticks.slice(0, 6),
     people,
     town: roster.town ?? "",
+    seeding: o.settings.elsewhereSeeding ?? "ask",
+    proposals: (E.proposals ?? []).filter((p) => p.status === "pending").map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      lead: p.lead,
+      cast: p.cast,
+      premise: p.premise,
+      want: p.want,
+      fear: p.fear,
+      secrecy: p.secrecy,
+      why: p.why,
+      telling: !!p.telling,
+      at: o.fmt(p.atAbs),
+      grounds: p.grounds.map((g) => ({ id: g, name: groundName(g) })),
+      replaces: p.replaces ? st.arcs?.[p.replaces]?.premise ?? "" : ""
+    })),
     arrivals: list.slice(-20).reverse().map((x) => ({ id: x.id, kind: x.kind, status: x.status, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "", lead: x.lead ?? "", arc: x.arc ?? "", why: x.why ?? "" }))
   };
 }
-var SIM_ID = "ew:", busy2;
+var PROPOSAL_SHELF, SIM_ID = "ew:", busy2;
 var init_elsewhere = __esm(() => {
   init_branch();
   init_dsl();
@@ -16253,12 +16580,14 @@ var init_elsewhere = __esm(() => {
   init_util();
   init_crossings();
   init_roster();
+  init_arcs();
   init_storyteller();
   init_telling();
   init_host();
   init_ledger();
   init_llm();
   init_store();
+  PROPOSAL_SHELF = 3 * 1440;
   busy2 = new Set;
 });
 

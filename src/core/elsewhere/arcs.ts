@@ -6,7 +6,7 @@ import type { CodexRecord } from "../codex";
 import type { WeaverWorld } from "../lore";
 import type { ArcKind, ArcState, BeatResult, WorldState } from "../types";
 import { slug } from "../util";
-import { GENRE_LEAN, kindFromText, SPECS } from "./grammar";
+import { atPlace, GENRE_LEAN, groupName, kindFromText, SPECS } from "./grammar";
 import { canAct, hasFact, TRAVEL, type Actor, type Roster } from "./roster";
 import { newsValue } from "./news";
 
@@ -62,21 +62,53 @@ export function isLight(a: ArcState): boolean {
 
 
 const VERB = /^(be|get|find|keep|protect|stay|win|make|help|see|know|learn|stop|save|leave|go|return|prove|earn|marry|take|have|become|avoid|escape|fix|end|mend|settle|reach|reunite|bring|destroy|kill|defeat|hide|claim|seize|rule|serve|free|heal|understand|undo|break|build|finish|catch|expose|warn|confront|reclaim|regain|restore|redeem|repay|survive|live|do|be)\b/i;
+/** An archivist's blank ("Unknown — last seen…", "n/a", "—"): no want or fear at all. */
+const PLACEHOLDER = /^(?:unknown|unclear|none|n\/a|tbd|not (?:known|stated)|\?+|[—–-]+)(?:\b|\s|$)/i;
+
 /** A want as "to …": "Gabriel's recovery" becomes "to see Gabriel's recovery". */
 export function asWant(text: string | undefined, fallback: string): string {
   // An archivist's note ("Unanswered apology suggests she wants forgiveness") holds the want after "wants".
   const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0].replace(/^.*?\b(?:wants?|wishes|longs? for|hopes? for)\s+/i, "");
-  if (!t) return fallback;
+  if (!t || PLACEHOLDER.test(t)) return fallback;
   const bare = t.replace(/^to\s+/i, "");
   if (VERB.test(bare)) return `to ${bare.charAt(0).toLowerCase()}${bare.slice(1)}`;
   // A name or a thing ("Gabriel's recovery") is seen through; a state ("forgiveness") is found; anything else reads as a verb ("guide Buffy").
   if (/^(?:the|a|an|his|her|their|its|my|our|\p{Lu})/u.test(bare)) return `to see ${bare}`;
   if (/^\w+(?:ness|tion|sion|ment|ity|ance|ence|dom|ship|cy)\b/i.test(bare)) return `to find ${bare}`;
+  // Things ("shoes for Saturday") are got; a bare verb rarely ends in a lone s ("pass", "focus" do).
+  if (/^\w+[^su\s]s\b/i.test(bare)) return `to get ${bare}`;
   return `to ${bare}`;
 }
+/** A clause as a sentence: capital first, full stop last. */
+export function sentence(t: string): string {
+  const s = t.trim().replace(/[;,:\s]+$/, "");
+  return s ? `${s.charAt(0).toUpperCase()}${s.slice(1)}${/[.!?…”"]$/.test(s) ? "" : "."}` : "";
+}
+
+/** A faction's clock as the start of a story: "The Hellions mean to raid Sunnydale, and they're already well on the way." */
+export function factionPremise(name: string, project: string, cur: number, max: number): string {
+  const g = groupName(name);
+  const who = g.charAt(0).toUpperCase() + g.slice(1);
+  const plural = /s$/.test(name.split(/\s+/).at(-1)!) && !/&/.test(name);
+  const aim = project.replace(/^to\s+/i, "");
+  const how = cur <= 0 ? "" : cur >= max - 1 ? `, and ${plural ? "they're" : "it's"} nearly ready` : cur >= max / 2 ? `, and ${plural ? "they're" : "it's"} well on the way` : `, and ${plural ? "they've" : "it's"} made a start`;
+  return `${who} ${plural ? "mean" : "means"} to ${aim}${how}.`;
+}
+
+const MINOR = /\b(?:(?:[1-9]|1[0-7]|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen)[- ]year[- ]old|child|kid|little (?:girl|boy)|teenage(?:r|d)?|high[- ]school(?:er)?|minor)\b/i;
+const FAMILY_TIE = /\b(mother|father|mom|mum|dad|parent|son|daughter|sister|brother|sibling|aunt|uncle|niece|nephew|cousin|grand\w*|step\w*|in-law|guardian|ward)\b/i;
+/** Someone their record calls a child or a teenager. */
+export const isMinor = (a: Actor) => MINOR.test(`${a.text} ${a.drives.role ?? ""}`);
+
+/** A thread's latest news without the bookkeeping a model sometimes writes into it ("; latest: …; stalls: 0"). */
+export function threadLatest(text: string | undefined): string {
+  return (text ?? "").replace(/^[;:\s]*latest:\s*/i, "").replace(/;?\s*\bstalls:\s*\d+\s*/gi, "").replace(/[;,\s]+$/, "").trim();
+}
+
 /** A fear as a plain clause: "That the Willow she loves is gone" becomes "the Willow she loves is gone". */
 export function asFear(text: string | undefined, fallback: string): string {
   const t = (text ?? "").trim().replace(/[.;]+$/, "").split(/;\s*/)[0].replace(/^(?:that|the fear that|fears? that)\s+/i, "");
+  if (PLACEHOLDER.test(t)) return fallback;
   return t ? `${t.charAt(0).toLowerCase()}${t.slice(1)}` : fallback;
 }
 
@@ -120,6 +152,8 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
   const lean = new Set(ctx.genres.flatMap((g) => GENRE_LEAN[g.toLowerCase()] ?? []));
   const push = (c: Omit<SeedCand, "id" | "weight"> & { weight: number }) => {
     if (c.grounds.some((g) => usedGrounds.has(g))) return;
+    // A romance never with a child, and never within a family.
+    if (c.kind === "courtship" && c.cast.some((o) => isMinor(o) || isMinor(c.lead) || c.lead.ties.some((t) => t.to === o.key && FAMILY_TIE.test(t.kind)))) return;
     const id = slug(`${first(c.lead.name)}-${c.kind}`) || `arc-${out.length}`;
     if (recentlyEnded.has(id)) return;
     out.push({ ...c, id, weight: c.weight * (lean.has(c.kind) ? 1.5 : 1) });
@@ -136,7 +170,7 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
       const leaders = r.actors.filter((a) => a.ties.some((t) => t.to === g.key && t.strength >= 3) && canAct(a));
       const kind = kindFromText(`${f.name} ${clk.name}`) ?? "threat";
       push({
-        kind: kind === "pursuit" ? "threat" : kind, lead: g, cast: leaders.slice(0, 2), premise: `${f.name}: ${clk.name} (${clk.cur}/${clk.max})`, want: `to ${clk.name.replace(/^to\s+/i, "")}`,
+        kind: kind === "pursuit" ? "threat" : kind, lead: g, cast: leaders.slice(0, 2), premise: factionPremise(f.name, clk.name, clk.cur, clk.max), want: `to ${clk.name.replace(/^to\s+/i, "")}`,
         fear: spec("threat").fear, grounds: [`fac:${slug(f.name)}`], secrecy: "public", weight: 3, place: town, heat: 2, clock: clk.max, cur: clk.cur,
         faction: { name: f.name, project: clk.name }, by: "engine", why: `${f.name}'s clock`,
       });
@@ -155,13 +189,14 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
   // Story residue: open threads that name someone off the page.
   for (const t of Object.values(st.threads)) {
     if (t.status === "resolved") continue;
-    const text = `${t.title}. ${t.latest ?? ""}`;
+    const latest = threadLatest(t.latest);
+    const text = `${t.title}. ${latest}`;
     const who = namesIn(text, r).filter((a) => !a.group);
     const lead = who.find(free);
     if (!lead) continue;
     const kind = kindFromText(text) ?? "pursuit";
     push({
-      kind, lead, cast: who.filter((a) => a !== lead).slice(0, 3), premise: clip(`${t.title}: ${t.latest ?? ""}`.replace(/:\s*$/, ""), 200), want: lead.drives.want ? asWant(lead.drives.want, "") : `to settle "${t.title}"`,
+      kind, lead, cast: who.filter((a) => a !== lead).slice(0, 3), premise: clip(latest ? latest.split(/;\s*/).slice(0, 2).map(sentence).join(" ") : `${lead.name} is still caught up in “${t.title}”.`, 220), want: asWant(lead.drives.want, "") || `to see “${t.title}” through`,
       fear: asFear(lead.drives.fear, "") || spec(kind).fear, grounds: [t.id], secrecy: spec(kind).secrecy, weight: 2.5, heat: 1, clock: spec(kind).clock, by: "engine", why: `the thread "${t.title}"`,
     });
   }
@@ -173,7 +208,7 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
     if (!free(lead)) continue;
     const whom = c.whom ? r.actors.find((a) => a.charId === c.whom) : undefined;
     push({
-      kind: "debt", lead, cast: whom ? [whom] : [], premise: clip(`${lead.name} ${c.kind === "owe" ? "owes" : "faces"}${whom ? ` ${whom.name}` : ""}: ${c.what}`, 200), want: "to settle what's owed", fear: spec("debt").fear,
+      kind: "debt", lead, cast: whom ? [whom] : [], premise: clip(c.kind === "owe" ? `${lead.name} still owes${whom ? ` ${whom.name}` : ""} ${c.what.replace(/\.$/, "")}, and it hasn't been settled.` : `${lead.name} has a reckoning coming${whom ? ` with ${whom.name}` : ""}: ${c.what.replace(/\.$/, "")}.`, 200), want: "to settle what's owed", fear: spec("debt").fear,
       grounds: [c.id], secrecy: "private", weight: 2, heat: c.status === "due" ? 2 : 1, clock: 4, by: "engine", why: "an open debt",
     });
   }
@@ -185,7 +220,7 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
     if (!free(lead)) continue;
     const from = r.actors.filter((a) => a.charId && f.keptFrom!.includes(a.charId));
     push({
-      kind: "secret", lead, cast: from.slice(0, 2), premise: clip(`${lead.name} keeps something from ${from.map((a) => a.name).join(" and ") || "others"} (#${f.key})`, 200), want: "to keep it hidden", fear: "it comes out",
+      kind: "secret", lead, cast: from.slice(0, 2), premise: clip(`${lead.name} is keeping something from ${from.map((a) => a.name).join(" and ") || "the people closest to them"}, and keeping it is getting harder.`, 200), want: "to keep it hidden", fear: "it comes out",
       grounds: [`#${f.key}`], secrecy: "secret", weight: 1.5, heat: 1, clock: 6, by: "engine", why: `a secret (#${f.key})`,
     });
   }
@@ -196,9 +231,9 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
     const o = b.to === "user" ? undefined : r.actors.find((x) => x.charId === b.to);
     if (!free(a) || !o) continue;
     const ax = b.axes;
-    if ((ax.resentment ?? 0) >= 3 || (ax.rivalry ?? 0) >= 3) push({ kind: "rivalry", lead: a, cast: [o], premise: `${a.name} and ${o.name}: ${b.label ?? "bad blood"}`, want: "to come out on top", fear: spec("rivalry").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 2, clock: 6, by: "engine", why: "a bond gone sour" });
-    else if ((ax.attraction ?? 0) >= 3) push({ kind: "courtship", lead: a, cast: [o], premise: `${a.name} is drawn to ${o.name}`, want: `to be with ${o.name}`, fear: spec("courtship").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 1, clock: 6, by: "engine", why: "an attraction" });
-    else if ((ax.trust ?? 0) <= -3 || (ax.affection ?? 0) <= -3) push({ kind: "rift", lead: a, cast: [o], premise: `${a.name} and ${o.name} have fallen out`, want: "to mend it, or end it cleanly", fear: spec("rift").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 1, clock: 4, by: "engine", why: "a strained bond" });
+    if ((ax.resentment ?? 0) >= 3 || (ax.rivalry ?? 0) >= 3) push({ kind: "rivalry", lead: a, cast: [o], premise: b.label ? `${a.name} and ${o.name}: ${b.label}. It hasn't cooled.` : `There's bad blood between ${a.name} and ${o.name}, and it hasn't cooled.`, want: "to come out on top", fear: spec("rivalry").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 2, clock: 6, by: "engine", why: "a bond gone sour" });
+    else if ((ax.attraction ?? 0) >= 3) push({ kind: "courtship", lead: a, cast: [o], premise: `${a.name} is drawn to ${o.name}, more than ${a.name} has said aloud.`, want: `to be with ${o.name}`, fear: spec("courtship").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 1, clock: 6, by: "engine", why: "an attraction" });
+    else if ((ax.trust ?? 0) <= -3 || (ax.affection ?? 0) <= -3) push({ kind: "rift", lead: a, cast: [o], premise: `${a.name} and ${o.name} have fallen out, and neither has made the first move.`, want: "to mend it, or end it cleanly", fear: spec("rift").fear, grounds: [`bond:${b.from}>${b.to}`], secrecy: "private", weight: 2, heat: 1, clock: 4, by: "engine", why: "a strained bond" });
   }
 
   // Lore: situations the story moved past, and forecasts (canon gravity).
@@ -218,7 +253,7 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
       if (!gone) continue;
       const place = rec.body?.place ?? /\bat ((?:[A-Z][\w'’-]+\s?)+)/.exec(rec.summary)?.[1]?.trim();
       push({
-        kind: "pursuit", lead, cast: [gone, ...cast.filter((a) => a !== gone)].slice(0, 3), premise: clip(`${rec.summary.replace(/\.$/, "")}; the story has since taken ${gone.name} elsewhere`, 220),
+        kind: "pursuit", lead, cast: [gone, ...cast.filter((a) => a !== gone)].slice(0, 3), premise: clip(`${rec.summary.replace(/\.$/, "")}. Since then, ${gone.name} has gone elsewhere, and ${lead.name} doesn't know where.`, 240),
         want: `to find out where ${first(gone.name)} went`, fear: `${first(gone.name)} is in danger`, grounds: [rec.id], secrecy: "private", weight: 2.5, place, heat: 1, clock: 6, by: "lore", why: "a lore situation the story moved past",
       });
       continue;
@@ -232,7 +267,7 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
     const sp = spec(kind);
     push({
       kind, lead, cast: [...(reason && !cast.includes(reason.about) ? [reason.about] : []), ...cast].slice(0, 3), premise: clip(text, 220),
-      want: kind === "return" && reason ? `to see ${first(reason.about.name)} with their own eyes` : lead.drives.want ? asWant(lead.drives.want, "") : sp.want,
+      want: kind === "return" && reason ? `to see ${first(reason.about.name)} with their own eyes` : asWant(lead.drives.want, "") || sp.want,
       fear: asFear(lead.drives.fear, "") || sp.fear, grounds: [rec.id, ...(reason ? [`#${reason.key}`] : [])], secrecy: sp.secrecy, weight: ctx.canonGravity === "strong" ? 3 : 1.5, heat: 1, clock: sp.clock, by: "lore", why: `the forecast "${clip(rec.name, 50)}"`,
     });
   }
@@ -253,13 +288,13 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
     const sp = spec(kind);
     const grounds = [a.recordId ?? `char:${a.key}`];
     if (kind === "life") {
-      push({ kind, lead: a, cast: [], premise: clip(`${a.name}'s own life${a.where ? ` in ${a.where}` : ""}${a.drives.role ? `, as ${a.drives.role.replace(/^an?\s+/i, "a ")}` : ""}`, 200), want: sp.want, fear: sp.fear, grounds, secrecy: "private", weight: toUser ? 1.1 : 0.7, heat: 0, clock: 6, by: "lore", why: "their own life" });
+      push({ kind, lead: a, cast: [], premise: clip(`${a.name}${a.name.endsWith("s") ? "'" : "'s"} own life goes on${a.where ? ` ${atPlace(a.where)}` : ""}${a.drives.role ? `: ${a.drives.role.replace(/[.;]+$/, "")}` : ""}.`, 200), want: sp.want, fear: sp.fear, grounds, secrecy: "private", weight: toUser ? 1.1 : 0.7, heat: 0, clock: 6, by: "lore", why: "their own life" });
       continue;
     }
     // Whoever their own record names (a rival, a mentor) is in it with them.
     const named = namesIn(a.lore, r).filter((o) => o !== a && !o.group && o.ring !== "onstage").slice(0, 2);
     push({
-      kind, lead: a, cast: named, premise: clip(`${a.name}: ${a.drives.want ? `wants ${asWant(a.drives.want, "")}` : a.text.replace(new RegExp(`^${a.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(is|was)\\s+`), "")}`, 200), want: asWant(a.drives.want, sp.want),
+      kind, lead: a, cast: named, premise: clip(a.drives.want ? `${a.name} wants ${asWant(a.drives.want, "").replace(/^to\s+/i, "to ")}${a.drives.fear ? `, and fears ${asFear(a.drives.fear, "")}` : ""}.` : sentence(a.text), 200), want: asWant(a.drives.want, sp.want),
       fear: asFear(a.drives.fear, sp.fear), grounds, secrecy: sp.secrecy, weight: 1, heat: 1, clock: sp.clock, by: "lore", why: "what drives them",
     });
   }
@@ -269,7 +304,7 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
     const a = r.actors.find((x) => x.charId === charId);
     if (!free(a) || out.some((c) => c.lead === a && c.weight >= 1.2)) continue;
     const kind = kindFromText(text) ?? "secret";
-    push({ kind, lead: a, cast: [], premise: `${a.name} ${text}`, want: spec(kind).want, fear: spec(kind).fear, grounds: [`pressure:${charId}`], secrecy: "secret", weight: 1.2, heat: 1, clock: spec(kind).clock, by: "engine", why: "a hidden pressure" });
+    push({ kind, lead: a, cast: [], premise: sentence(`${a.name} ${text}`), want: spec(kind).want, fear: spec(kind).fear, grounds: [`pressure:${charId}`], secrecy: "secret", weight: 1.2, heat: 1, clock: spec(kind).clock, by: "engine", why: "a hidden pressure" });
   }
 
   // One candidate per lead: the best grounded.

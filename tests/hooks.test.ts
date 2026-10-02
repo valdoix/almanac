@@ -485,4 +485,43 @@ describe("Elsewhere against the host (1.14)", () => {
     expect(surprise).toContain("What has reached you");
     expect(surprise).not.toContain("In the wings");
   });
+
+  test("a proposed subplot waits on the page; accepted it starts, declined it never comes back", async () => {
+    const EC = "elsewhere-chat";
+    const { elsewhereAction, elsewhereOf } = await import("../src/backend/elsewhere");
+    const { loadChat, save } = await import("../src/backend/store");
+    const { ledgerFor } = await import("../src/backend/ledger");
+    const f = await loadChat(EC, USER);
+    const E = elsewhereOf(f.meta);
+    const now = 5000;
+    const mk = (id: string, lead: string) => ({
+      id, key: `${lead.toLowerCase()}|investigation|lore:x`, kind: "investigation" as const, lead, cast: [], premise: `${lead} looks into the old case`, want: "to find the answer", fear: "it comes too late",
+      secrecy: "private" as const, grounds: ["lore:x"], why: `the forecast "x"`, atAbs: now, status: "pending" as const, tick: "w1",
+      line: `arc new #${id}: investigation | lead: ${lead} | secrecy: private | clock: 6 | heat: 1 | at: ${now} | premise: ${lead} looks into the old case | want: to find the answer | fear: it comes too late | grounds: lore:x | by: lore`,
+    });
+    E.proposals = [mk("p_one", "Willow"), mk("p_two", "Xander")];
+    save(EC, "meta", USER, 0);
+    const { buildView } = await import("../src/backend/view");
+    const { AlmanacApp } = await import("../src/frontend/app");
+    const view: any = await buildView(EC, USER);
+    expect(view.elsewhere.proposals.map((p: any) => p.id)).toEqual(["p_one", "p_two"]);
+    const page = (AlmanacApp.prototype as any).tab_elsewhere.call({ editing: null }, view);
+    expect(page).toContain("Proposed");
+    expect(page).toContain('data-act="ewPropose" data-id="p_one" data-what="accept"');
+
+    await elsewhereAction(EC, { action: "decline", id: "p_two" }, USER);
+    await elsewhereAction(EC, { action: "accept", id: "p_one" }, USER);
+    const g = await loadChat(EC, USER);
+    const E2 = elsewhereOf(g.meta);
+    expect(E2.proposals!.find((p) => p.id === "p_one")!.status).toBe("accepted");
+    expect(E2.proposals!.find((p) => p.id === "p_two")!.status).toBe("declined");
+    expect(E2.declined).toContain("xander|investigation|lore:x");
+    // The accepted one is a subplot now, written by the player's hand and started at once.
+    const st = (await ledgerFor(EC, USER).refresh()).state;
+    expect(st.arcs?.p_one).toMatchObject({ lead: "Willow", kind: "investigation" });
+    expect(st.arcs?.p_two).toBeUndefined();
+    const ops = Object.values(g.side).flat().filter((s) => s.source === "user").flatMap((s) => s.ops.map((o) => o.raw ?? ""));
+    expect(ops.some((l) => /^arc new #p_one: .*push: yes/.test(l))).toBe(true);
+    expect((await elsewhereAction(EC, { action: "accept", id: "p_two" }, USER))?.warn).toContain("no longer waiting");
+  });
 });

@@ -4,6 +4,24 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.16.0 (2026-10-02)
+
+**Elsewhere: proposed subplots.** The world still finds its own subplots in the story and the lorebooks: open threads, debts, kept secrets, soured or charged bonds, lore forecasts and situations, what drives people, hidden pressures. Now it can ask you first.
+- **Settings → New subplots from the story and lorebooks:** *propose them* (the default: each waits for you to accept or decline), *start them on their own* (as before), or *off* (only stories you write).
+- **Proposed** subplots appear at the top of the Elsewhere page with what they rest on ("from the forecast …", the grounds) and what they'd replace. **Accept** starts one at once, with its first step. **Decline** and it is never proposed again. A proposal the story moves past (its lead gets a story, or three story days pass) is withdrawn. The sidebar counts proposals as waiting on you.
+- With the model telling, proposals are put into the story's words like any new subplot.
+
+**Elsewhere says what happened, specifically.** Beats, endings, proposals and what reaches the scene were written like ledger entries ("Valeria leaned on it a little; this time it worked out", "it got somewhere, at a price: a sleepless night", "Hellions: raid Sunnydale (3/6)"). Now each step is two plain sentences: what happened, naming the real news and people, then where that leaves things.
+- **The model** is asked for exactly that, in the register of "Giles heard the news of Buffy's resurrection. He's thinking of going back to Sunnydale." Each card now carries what the story has established about its lead, so the model has the specifics: names, news, what was decided. It never gets anything about your character, or a secret kept from the lead. Arrivals say the news they carry. Premises name what happened and what the lead means to do about it, and a story you write gets wants and fears in natural English.
+- **The engine's own words** follow the same shape: "Giles heard that Buffy is alive again. Giles is thinking of coming back to Sunnydale." "Cordelia raised the stakes with Harmony. The other side struck back." "The Witches' Circle concluded the investigation. In the end, the Witches' Circle managed to judge what Willow did." Endings that go badly say what came true ("Giles came back too late"). Proposals lead with the news ("Tara confronted Willow privately after they left…"), and factions read "The Hellions mean to raid Sunnydale, and they're well on the way."
+- **Fixed: a lawsuit read as a romance.** "Court option" in a thread made Gabriel's father a *courtship* subplot with Buffy and Dawn. A romance now needs romance words ("dating", "attracted to", "in love"…). A courtship is never seeded with someone whose record calls them a child or a teenager, or between family. "Audit" and "inquiry" now suggest an investigation.
+- Fixed: a want made of things read as a verb ("to shoes for Saturday" is now "to get shoes for Saturday"). An archivist's blank ("Unknown — last seen…") became a want. A thread's bookkeeping ("; latest: … stalls: 0") showed in premises. Every proposal's seed card had the same id, so the model's wording reached only one of them.
+
+**Elsewhere: a search doesn't phone the house where its quarry is.** In the Buffy chat, "Spike is searching for Dawn" left Gabriel a missed call from Spike, who has never met him, with news of Dawn, who was in Gabriel's house. A call could reach the scene just because someone in the subplot was in it.
+- **A call or a letter is for someone.** It reaches the scene only if the lead knows the player, or knows someone in the scene, and then it says whom it's for ("a call from Spike for Buffy"). A call left for the player by someone who doesn't know them is dropped, and the page says why.
+- **Whom a story is looking for stays out of reach until it ends.** "Spike is searching for Dawn": Dawn doesn't carry its news or take its calls, and Spike can't walk into a scene she's in unless the search ends with him finding her (or you bring him in). When Dawn is back on the page, Spike's search is no longer listed as something she did off it.
+- **The telling knows it too.** The card tells the model Spike doesn't know where Dawn is, and a step that finds her before the ending falls back to the engine's words.
+
 ## 1.15.1 (2026-10-01)
 
 **Elsewhere: your own stories move, and make sense.** In the Buffy chat, two stories written on the Elsewhere page sat still through three "Move the world a step now" presses and a nudge. The one step that happened was told in the engine's words ("Valeria leaned on it a little"), even with the model telling.

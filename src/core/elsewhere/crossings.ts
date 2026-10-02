@@ -7,7 +7,7 @@
 import type { ArcState, WorldState } from "../types";
 import { normFact } from "../state";
 import { fmtTime, fromAbs } from "../util";
-import type { RouteKind } from "./grammar";
+import { atPlace, type RouteKind } from "./grammar";
 import { canAct, hasFact, type Actor, type Roster } from "./roster";
 import { newsValue } from "./news";
 
@@ -28,6 +28,8 @@ export interface Arrival {
   template?: string;
   carrier?: string;
   medium?: string;
+  /** Whom a call or letter is for, when it isn't the player. */
+  to?: string;
   untilAbs?: number;
   status?: "pending" | "offered" | "used" | "expired";
   /** Message counts it was offered at. */
@@ -67,6 +69,37 @@ function placeMatch(arrival: string[], scene: string[]): boolean {
   return scene.some((s) => s === deep || (deep.length >= 5 && s.includes(deep)) || (s.length >= 5 && deep.includes(s)));
 }
 
+const SEEK = "find|finds|finding|locate|locating|track(?:s|ing)? down|search(?:es|ing)? for|look(?:s|ing)? for|hunt(?:s|ing)? for|rescue|rescuing|get back|bring back|where";
+
+/**
+ * The people a subplot is looking for ("Spike is searching for Dawn"): the lead doesn't know where
+ * they are. Until the search ends, nothing reaches them, they carry none of its news, and the lead
+ * can't call or walk into a scene because they're in it.
+ */
+export function soughtOf(arc: Pick<ArcState, "cast" | "want" | "premise">, r: Roster): Actor[] {
+  const text = `${arc.want}. ${arc.premise}`;
+  return arc.cast
+    .map((n) => r.find(n))
+    .filter((a): a is Actor => !!a && a.names.some((n) => n.length >= 3 && new RegExp(`\\b(?:${SEEK})\\b[^.;]{0,30}?\\b${n.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)));
+}
+
+/** Who in the scene a lead's call or letter can be for: the player if they know them, else someone present they're close to (never whom they're looking for). Null: nobody. */
+export function callee(arc: Pick<ArcState, "cast" | "want" | "premise">, lead: Actor | undefined, r: Roster, onstage: Actor[]): { to?: string } | null {
+  if (!lead || lead.group) return null;
+  if (lead.ties.some((t) => t.to === "user" && t.strength >= 2)) return {};
+  const sought = soughtOf(arc, r);
+  const known = onstage.find((a) => !sought.includes(a) && lead.ties.some((t) => t.to === a.key && t.strength >= 2));
+  return known ? { to: known.name } : null;
+}
+
+/** False for a call or letter to the player from a lead who doesn't know them (made before calls had to be for someone). */
+export function callFits(a: Arrival, st: WorldState, r: Roster): boolean {
+  if (!a.medium || !a.arc || a.to || (a.status !== "pending" && a.status !== "offered")) return true;
+  const arc = st.arcs?.[a.arc];
+  const lead = r.find(a.lead);
+  return !arc || !lead || !!lead.group || lead.ties.some((t) => t.to === "user" && t.strength >= 2);
+}
+
 /** A route for a beat (design/09 §10.1). Null: it stays off the page for now. */
 export function routeFor(o: {
   arc: ArcState; lead?: Actor; roster: Roster; routes: RouteKind[]; text: string; atAbs: number; place?: string; result: string;
@@ -79,14 +112,20 @@ export function routeFor(o: {
   const { arc, lead, roster: r } = o;
   if (arc.secrecy === "secret" && !o.slip && !o.ending) return null;
   const castActors = arc.cast.map((n) => r.find(n)).filter(Boolean) as Actor[];
-  const aboutStage = castActors.some((c) => o.onstage.includes(c)) || o.onstage.some((c) => c.names.some((n) => arc.want.includes(n.split(" ")[0])));
-  const toUser = !!lead?.ties.some((t) => t.to === "user" && t.strength >= 2);
+  // A call or a letter needs someone in the scene who'd take it: being in the subplot isn't enough
+  // (Spike, who has never met Gabriel, doesn't ring his house because Dawn is there).
+  const call = callee(arc, lead, r, o.onstage);
+  const sought = soughtOf(arc, r);
+  // Walking in where the one sought is means finding them: only a search that ends well, or the player's bring-in.
+  const soughtHere = sought.some((a) => o.onstage.includes(a));
+  const found = !!arc.bring || (o.ending ? o.result === "met" || o.result === "price" : o.result === "win" && arc.clock.cur + 1 >= arc.clock.max - 1);
   const near = (a?: Actor) => !!a && (a.reach === "town" || a.reach === "house");
   // A carrier: someone local who has been on the page and is close to the lead (or the lead). Someone
-  // in the subplot only as its target (Willow, in Valeria's report on her) doesn't carry its news.
+  // in the subplot only as its target (Willow, in Valeria's report on her) doesn't carry its news,
+  // and nobody carries a search's news to the one it's looking for.
   const close = (a: Actor) => a === lead || !!lead?.ties.some((t) => t.to === a.key && t.strength >= 2);
   const carriers = [lead, ...castActors, ...(lead?.ties ?? []).filter((t) => t.strength >= 2).map((t) => r.byKey(t.to))]
-    .filter((a): a is Actor => !!a && !a.group && near(a) && canAct(a) && a.ring === "offstage" && close(a));
+    .filter((a): a is Actor => !!a && !a.group && near(a) && canAct(a) && a.ring === "offstage" && close(a) && !sought.includes(a));
   // A trace waits somewhere particular: the beat's own place if it's a spot in town, else a place an open thread will take the player.
   const isTown = (p?: string) => !p || (!!o.town && p.toLowerCase() === o.town.toLowerCase());
   const spot = !isTown(o.place) && r.local.some((x) => x.length >= 4 && (o.place!.toLowerCase().includes(x) || x.includes(o.place!.toLowerCase()))) ? o.place!.split(/\s*›\s*/) : o.tracePlaces?.[0];
@@ -94,10 +133,10 @@ export function routeFor(o: {
   const feasible = (k: RouteKind): boolean => {
     switch (k) {
       case "carrier": return carriers.length > 0;
-      case "signal": return (toUser || aboutStage) && !!lead && !lead.group && lead.reach !== "house";
+      case "signal": return !!call && !!lead && lead.reach !== "house";
       case "ambient": return arc.secrecy === "public" && (near(lead) || !!lead?.group);
       case "trace": return !!local && arc.secrecy !== "secret";
-      case "entrance": return !!lead && !lead.group && (toUser || aboutStage) && (near(lead) || arc.kind === "return") && (o.ending || arc.clock.cur >= arc.clock.max - 1 || !!arc.bring);
+      case "entrance": return !!lead && !lead.group && (soughtHere ? found : !!call) && (near(lead) || arc.kind === "return") && (o.ending || arc.clock.cur >= arc.clock.max - 1 || !!arc.bring);
     }
   };
   let options = o.routes.filter(feasible);
@@ -112,25 +151,27 @@ export function routeFor(o: {
   switch (kind) {
     case "carrier": {
       const c = carriers.find((a) => a !== lead) ?? carriers[0];
-      const t = c === lead ? `${c.name} can tell of it: ${o.text}` : `${c.name} has news of ${leadName}: ${o.gist ?? o.text}`;
+      const t = c === lead ? `${c.name} could bring it up: ${o.text}` : `${c.name} has heard from ${leadName}: ${o.gist ?? o.text}`;
       return { ...base, carrier: c.name, text: t, template: t };
     }
     case "signal": {
       const at = decentHour(o.atAbs);
-      const t = `${MEDIUM_WORD[r.medium]} from ${leadName}${lead?.where ? ` (${lead.where})` : ""}: ${o.gist ?? o.text}`;
-      return { ...base, atAbs: at, untilAbs: at + UNTIL.signal, medium: r.medium, text: t, template: t };
+      // The call already says where it's from: "In England, Giles…" loses its "In England".
+      const said = (o.gist ?? o.text).replace(/^(?:At|In) [^,]{1,60}, (\S)/, (_, c: string) => c.toUpperCase());
+      const t = `${MEDIUM_WORD[r.medium]} from ${leadName}${lead?.where ? ` ${atPlace(lead.where)}` : ""}${call?.to ? `, for ${call.to}` : ""}: ${said}`;
+      return { ...base, atAbs: at, untilAbs: at + UNTIL.signal, medium: r.medium, text: t, template: t, ...(call?.to ? { to: call.to } : {}) };
     }
     case "ambient": {
       const t = o.text;
       return { ...base, place: o.town ? [o.town] : [], text: t, template: t };
     }
     case "trace": {
-      const t = `At ${spot!.at(-1)}, signs of what happened: ${o.text}`;
+      const t = `At ${spot!.at(-1)}, there are signs of it: ${o.text}`;
       return { ...base, place: spot!, text: t, template: t };
     }
     case "entrance": {
       const travel = lead && (lead.reach === "far" || lead.reach === "region") ? (lead.reach === "far" ? 960 : 240) : 0;
-      const t = `${leadName} could turn up (${arc.want.replace(/^to\s+/i, "wanting to ")})`;
+      const t = `${leadName} might turn up, still wanting ${arc.want.replace(/^to\s+/i, "to ")}`;
       return { ...base, atAbs: o.atAbs + travel, untilAbs: o.atAbs + travel + UNTIL.entrance, text: t, template: t, urgent: !!arc.fate };
     }
   }
@@ -154,6 +195,8 @@ export interface LaneInput {
   seen: Record<string, number>;
   lastPlace?: string;
   offPageWords?: string[];
+  /** The player's character, for why a call was dropped. */
+  userName?: string;
   budget?: number;
 }
 
@@ -182,7 +225,7 @@ export function expireArrivals(arrivals: Arrival[], now: number | null): { id: s
     if (a.untilAbs == null || now <= a.untilAbs) continue;
     if (a.kind === "signal") {
       // An unanswered call is a missed call; a letter waits.
-      const missed = a.medium === "phone" ? `A missed call and a message from ${a.lead ?? "someone"}: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
+      const missed = a.medium === "phone" ? `A missed call and a message from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
       Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, untilAbs: now + 2880, why: "the call went unanswered" });
       continue;
     }
@@ -201,6 +244,17 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
   const present = (name?: string) => !!name && onstage.some((a) => a.names.some((n) => n.toLowerCase() === name.toLowerCase()) || a.name.toLowerCase() === name.toLowerCase());
   for (const a of inp.arrivals) Object.assign(a, upgradeArrival(a));
   const expired = expireArrivals(inp.arrivals, inp.now);
+  // A call or a letter is for someone. One for the player from a lead who doesn't know them (made
+  // before the engine checked) is gone; one for someone else waits until they're in the scene.
+  const forHere = (a: Arrival): boolean => {
+    if (!callFits(a, st, r)) {
+      a.status = "expired";
+      a.why = `${a.lead} doesn't know ${inp.userName ?? "the player"}`;
+      expired.push({ id: a.id, why: a.why });
+      return false;
+    }
+    return !a.to || present(a.to);
+  };
   const sceneStart = st.sceneStartMsg ?? 0;
   const thisScene = inp.arrivals.filter((a) => (a.offered ?? []).some((i) => i >= sceneStart)).length;
   const cap = SCENE_CAP[inp.mode] ?? 1;
@@ -209,6 +263,7 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
   const ready = inp.arrivals.filter((a) => {
     if (a.status !== "pending" && a.status !== "offered") return false;
     if (!inp.onPath(a.msgId)) return false;
+    if (!forHere(a)) return false;
     if (a.atAbs != null && inp.now != null && a.atAbs > inp.now) return false;
     if (inp.tier !== "routine" && !a.urgent) return false;
     switch (a.kind) {
@@ -240,7 +295,8 @@ export function elsewhereLane(inp: LaneInput): LaneResult {
   const back: string[] = [];
   for (const a of onstage) {
     const isMe = (n: string) => a.names.some((m) => m.toLowerCase() === n.toLowerCase()) || r.find(n) === a;
-    const mine = Object.values(st.arcs ?? {}).filter((x) => isMe(x.lead) || (x.secrecy !== "secret" && x.cast.some(isMe)));
+    // Someone a search is looking for didn't take part in it: Spike's hunt isn't Dawn's doing.
+    const mine = Object.values(st.arcs ?? {}).filter((x) => isMe(x.lead) || (x.secrecy !== "secret" && x.cast.some(isMe) && !soughtOf(x, r).includes(a)));
     const since = seen[a.key] ?? -1;
     const beats = mine.flatMap((x) => x.beats.filter((b) => b.msgIndex > since && (inp.now == null || b.atAbs <= inp.now) && (inp.now == null || inp.now - b.atAbs <= 4320)).map((b) => ({ b, x }))).sort((p, q) => p.b.atAbs - q.b.atAbs);
     if (beats.length) {
@@ -310,7 +366,7 @@ export function confirmArrivals(arrivals: Arrival[], o: { prose: string; roster:
     } else if ((a.offered?.length ?? 0) >= OFFERS[a.kind ?? "ambient"]) {
       if (a.kind === "signal") {
         // An unanswered call becomes a message waiting.
-        const missed = a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}, and a message: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
+        const missed = a.medium === "phone" ? `A missed call from ${a.lead ?? "someone"}${a.to ? ` for ${a.to}` : ""}, and a message: ${a.text.replace(/^a call from [^:]+:\s*/i, "")}` : a.text;
         Object.assign(a, { kind: "trace", place: [], text: missed, template: missed, status: "pending", offered: [], why: "the call went unanswered" });
         continue;
       }

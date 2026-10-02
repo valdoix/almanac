@@ -80,7 +80,7 @@ export function summary(p: Page, v: any): string {
       const x = v.elsewhere;
       if (!x || x.mode === "off") return "off";
       const live = (x.arcs ?? []).filter((a: any) => a.status === "running" || a.status === "held" || a.status === "fate").length;
-      const fates = (x.arcs ?? []).filter((a: any) => a.status === "fate").length;
+      const fates = (x.arcs ?? []).filter((a: any) => a.status === "fate").length + (x.proposals ?? []).length;
       return `${n(live, "subplot")}${fates ? ` · ${fates} waiting on you` : ""}`;
     }
     case "codex": return n((v.codex ?? []).length, "record");
