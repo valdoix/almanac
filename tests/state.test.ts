@@ -82,6 +82,56 @@ bond Mara>Kael: affection +5 — shared a drink
     expect(state.items["item:locket"].holder).toBe("user");
   });
 
+  test("a group named where a person goes is a faction, not a character", () => {
+    const lines = `<ledger>
+bond Mara>The Witches' Circle: trust +1 — the ritual held
+journal Council: "the girl must be stopped"
+mood Order of Aurelius: smug
+bond Kael>Master of the Order: fear +1 — the old vampire looked at him
+</ledger>`;
+    const { events, state } = new LedgerRuntime().fold(toPath([msg(0, R1), msg(1, lines)]), OPTS);
+    const names = Object.values(state.chars).map((c) => c.name);
+    expect(names).not.toContain("The Witches' Circle");
+    expect(names).not.toContain("Council");
+    expect(names).not.toContain("Order of Aurelius");
+    expect(names).toContain("Master of the Order");
+    expect(Object.values(state.factions).map((f) => f.name)).toEqual(expect.arrayContaining(["The Witches' Circle", "Council", "Order of Aurelius"]));
+    expect(events.filter((e) => e.verdict === "rejected").map((e) => e.op.op)).toEqual(["bond", "journal", "mood"]);
+  });
+
+  describe("factions", () => {
+    const fold = (factionEdits: FoldOptions["factionEdits"], ...rs: string[]) =>
+      new LedgerRuntime().fold(toPath([msg(0, R1), ...rs.map((r, i) => msg(i + 1, `<ledger>\n${r}\n</ledger>`))]), { ...OPTS, factionEdits });
+    const names = (st: any) => Object.values(st.factions).map((f: any) => f.name);
+
+    test("a group's name with its business run on is that group's clock", () => {
+      const { state } = fold(undefined, "clockf Council back-pay: card ETA 2 days (unchanged) 2/6 — they paid a creditor", "clockf Council back-pay: card ETA 2 days 3/6 — a threat");
+      expect(names(state)).toEqual(["Council"]);
+      const f: any = Object.values(state.factions)[0];
+      expect(Object.values(f.clocks).map((c: any) => [c.name, c.cur])).toEqual([["back-pay", 3]]);
+      expect(f.aliases).toContain("Council back-pay");
+    });
+
+    test("rename, other names, merge, delete and add", () => {
+      const lines = ["clockf The Hellions: raid Sunnydale 2/6", "clockf Witches' Circle: judge Willow 1/4", "clockf The Coven: judge Willow 2/4", "clockf Mayor's Office: ascension 1/6"];
+      const { state, events } = fold({
+        "fac:the_hellions": { name: "Hellion Gang", addAliases: ["the bikers"] },
+        "fac:the_coven": { into: "fac:witches_circle", was: "The Coven" },
+        "fac:mayors_office": { removed: true, was: "Mayor's Office" },
+        "fac:wolfram_hart": { name: "Wolfram & Hart", added: 0 },
+      }, ...lines, "clockf the bikers: raid Sunnydale +1", "mood Wolfram & Hart: smug");
+      expect(names(state).sort()).toEqual(["Hellion Gang", "Witches' Circle", "Wolfram & Hart"]);
+      const by = (n: string): any => Object.values(state.factions).find((f: any) => f.name === n);
+      expect(by("Hellion Gang").aliases).toEqual(expect.arrayContaining(["The Hellions", "the bikers"]));
+      expect(Object.values(by("Hellion Gang").clocks).map((c: any) => c.cur)).toEqual([3]);
+      // The Coven's clock is the Circle's now.
+      expect(Object.values(by("Witches' Circle").clocks).map((c: any) => c.cur)).toEqual([2]);
+      expect(events.some((e) => e.verdict === "rejected" && /not a faction/.test(e.reason ?? ""))).toBe(true);
+      // A faction the player added is never taken for a person.
+      expect(Object.values(state.chars).map((c) => c.name)).not.toContain("Wolfram & Hart");
+    });
+  });
+
   describe("hunger, thirst and fatigue", () => {
     // R1 starts at Day 1 18:40.
     const meters = (...rs: string[]) => new LedgerRuntime().fold(toPath([msg(0, R1), ...rs.map((r, i) => msg(i + 1, `<ledger>\n${r}\n</ledger>`))]), OPTS).state.chars.mara.meters;

@@ -4,6 +4,15 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.25.0 (2026-10-03)
+
+**Factions are yours to edit, like the cast.**
+- **Groups are never people.** A group named where a person goes ("bond Valeria>The Witches' Circle", "journal Council") no longer adds a character. The line is set aside and the group is kept as a faction. A group is a name ending in Council, Circle, Coven, Order, Guild, Cult, Society, Brotherhood and the like ("the Order of Aurelius" too; "Master of the Order" is still a person), or any faction's name.
+- **"Council back-pay" is the Council's back-pay.** A faction name with its business run on after it is split: the faction is the Council, its clock is "back-pay", and the old name still finds it (an Elsewhere subplot led by "Council back-pay" included).
+- **Factions on the World page** (in place of Clocks): add a faction, rename it, give or take away other names, merge it into another (**Same faction as…**, undone with ✕), or delete it (its clocks go and lines about it are dropped; **Deleted factions** brings it back). Lines naming it any way it's known go to it, and none of its names is ever taken for a person.
+- **A faction** on a cast card turns someone the story mistook for a person into a faction.
+- Reputation with a faction goes under the faction's name, whatever the line calls it.
+
 ## 1.24.1 (2026-10-03)
 
 **The Soundtrack keeps playing.**

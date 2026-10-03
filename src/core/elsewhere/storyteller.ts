@@ -161,7 +161,7 @@ export function tick(inp: TickInput): TickResult {
   const roster = buildRoster({ state: st, records: inp.records, userName: inp.userName, notPeople: inp.notPeople, people: inp.people, profiles: inp.profiles });
   const arcs = Object.values(st.arcs ?? {});
   const onstage = roster.actors.filter((a) => a.ring === "onstage");
-  const leadOf = (arc: ArcState): Actor | undefined => roster.find(arc.lead) ?? (arc.faction ? roster.groups.find((g) => g.name.toLowerCase() === arc.faction!.name.toLowerCase()) : undefined);
+  const leadOf = (arc: ArcState): Actor | undefined => roster.find(arc.lead) ?? (arc.faction ? roster.groups.find((g) => g.names.some((n) => n.toLowerCase() === arc.faction!.name.toLowerCase())) : undefined);
   const town = roster.town ?? st.place[0];
   const recentKinds = inp.recentArrivals.filter((a) => a.kind).slice(-6).map((a) => a.kind!) as RouteKind[];
   const lastRouteOf = (arcId: string) => [...inp.recentArrivals].reverse().find((a) => a.arc === arcId)?.kind;

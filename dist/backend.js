@@ -4423,6 +4423,10 @@ class Folder {
     }
     if (!create)
       return null;
+    if (isGroupName(n) || this.knownFaction(n)) {
+      this.factionFor(n);
+      return null;
+    }
     let id = slug(n);
     if (id === "user")
       id = "user_npc";
@@ -4524,6 +4528,8 @@ class Folder {
         continue;
       }
       const id = this.charId(s.name, msgIndex, true);
+      if (!id)
+        continue;
       this.state.chars[id].voiced = true;
       if (s.slot && s.slot >= 1 && s.slot <= 12) {
         this.state.voices[id] = s.slot;
@@ -4695,6 +4701,7 @@ class Folder {
     if (kc.repaired && ops.some((o) => KNOW_OPS.includes(o.op)))
       st.knowRepair.push(msgIndex);
     this.applyCastEdits(msgIndex);
+    this.applyFactionEdits(msgIndex);
     applyFactEdits(st, msgIndex, this.opts.factEdits ?? {});
     closeMetGaps(st);
     if (!fromUser)
@@ -4787,6 +4794,13 @@ class Folder {
     }
     if (CHAR_OPS.has(op.op) && (this.notAPerson(op.subject) || this.notAPerson(op.object))) {
       return reject(`${this.notAPerson(op.subject) ? op.subject : op.object} is not a person (removed from the cast)`);
+    }
+    if (CHAR_OPS.has(op.op)) {
+      const group = [op.subject, op.object].find((n) => n && (isGroupName(n) || this.knownFaction(n)) && !this.lookup(n));
+      if (group) {
+        this.factionFor(group);
+        return reject(`${group} is a group, not a person (kept as a faction)`);
+      }
     }
     switch (op.op) {
       case "clock": {
@@ -5306,9 +5320,15 @@ class Folder {
         return { verdict: "accepted", line: `\u2696 ${this.nm(who)}${whom ? " \u2192 " + this.nm(whom) : ""}: ${a.what} (${c.status})` };
       }
       case "clockf": {
-        const fid = `fac:${slug(op.subject)}`;
-        const f = st.factions[fid] ?? { id: fid, name: op.subject, clocks: {} };
-        st.factions[fid] = f;
+        const split = !Object.values(st.factions).some((x) => bareGroup(x.name) === bareGroup(op.subject)) ? splitGroupLead(op.subject) : null;
+        const f = this.factionFor(split ? split[0] : op.subject);
+        if (!f)
+          return reject(`${op.subject} is not a faction (deleted)`);
+        if (split) {
+          a.project = split[1];
+          if (!(f.aliases ?? []).some((x) => bareGroup(x) === bareGroup(op.subject)))
+            (f.aliases ??= []).push(op.subject);
+        }
         const existing = Object.entries(f.clocks);
         const near = existing.find(([, c]) => overlap2(normFact(c.name), normFact(a.project)) >= 0.5)?.[0];
         const pk = f.clocks[slug(a.project)] ? slug(a.project) : near ?? (existing.length === 1 && (a.project === "project" || !normFact(a.project)) ? existing[0][0] : slug(a.project));
@@ -5338,8 +5358,9 @@ class Folder {
         return { verdict: "accepted", line: `\uD83D\uDDE3 ${text}` };
       }
       case "rep": {
-        const gid = slug(op.object);
-        const r = st.rep[gid] ?? { group: op.object, score: 0, tags: [], history: [] };
+        const group = this.factionFor(op.object, false)?.name ?? op.object;
+        const gid = slug(group);
+        const r = st.rep[gid] ?? { group, score: 0, tags: [], history: [] };
         r.score = clamp(r.score + (a.delta ?? 0), -3, 3);
         if (a.tag && !r.tags.includes(a.tag))
           r.tags.push(a.tag);
@@ -5509,6 +5530,62 @@ class Folder {
     if (this.state.places[pid])
       return pid;
     return this.charId(name, mi) ?? (this.notAPerson(name) ? name.trim() : undefined);
+  }
+  factionFor(name, create = true) {
+    const st = this.state;
+    const edits = this.opts.factionEdits ?? {};
+    const n = name.replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").trim();
+    if (!n)
+      return null;
+    const b = bareGroup(n);
+    let id = Object.values(st.factions).find((f) => [f.name, ...f.aliases ?? []].some((a) => bareGroup(a) === b))?.id ?? Object.entries(edits).find(([k, e]) => k === `fac:${slug(n)}` || [e.was, e.name, ...e.addAliases ?? []].some((a) => a && bareGroup(a) === b))?.[0] ?? `fac:${slug(n)}`;
+    for (let i = 0;i < 8 && edits[id]?.into && edits[id].into !== id; i++)
+      id = edits[id].into;
+    if (edits[id]?.removed)
+      return null;
+    let f = st.factions[id];
+    if (!f) {
+      if (!create)
+        return null;
+      f = st.factions[id] = { id, name: edits[id]?.name || n, clocks: {} };
+    }
+    if (bareGroup(f.name) !== b && !(f.aliases ?? []).some((a) => bareGroup(a) === b) && !(edits[id]?.dropAliases ?? []).some((a) => bareGroup(a) === b))
+      (f.aliases ??= []).push(n);
+    return f;
+  }
+  knownFaction(name) {
+    const b = bareGroup(name);
+    if (!b)
+      return false;
+    return Object.values(this.state.factions).some((f) => [f.name, ...f.aliases ?? []].some((a) => bareGroup(a) === b)) || Object.values(this.opts.factionEdits ?? {}).some((e) => [e.was, e.name, ...e.addAliases ?? []].some((a) => a && bareGroup(a) === b));
+  }
+  applyFactionEdits(mi) {
+    const st = this.state;
+    for (const [id, e] of Object.entries(this.opts.factionEdits ?? {})) {
+      if (e.removed || e.into) {
+        delete st.factions[id];
+        continue;
+      }
+      let f = st.factions[id];
+      if (!f && e.added !== undefined && mi >= e.added && e.name)
+        f = st.factions[id] = { id, name: e.name, clocks: {} };
+      if (!f)
+        continue;
+      const low = (a) => a.toLowerCase();
+      if (e.name?.trim() && f.name !== e.name.trim()) {
+        f.aliases = (f.aliases ?? []).filter((a) => low(a) !== low(e.name.trim()));
+        if (!f.aliases.some((a) => low(a) === low(f.name)))
+          f.aliases.push(f.name);
+        f.name = e.name.trim();
+      }
+      if (e.dropAliases?.length)
+        f.aliases = (f.aliases ?? []).filter((a) => !e.dropAliases.some((d) => low(d) === low(a)));
+      for (const a of e.addAliases ?? [])
+        if (a.trim() && low(a) !== low(f.name) && !(f.aliases ?? []).some((x) => low(x) === low(a)))
+          (f.aliases ??= []).push(a.trim());
+      if (f.aliases && !f.aliases.length)
+        delete f.aliases;
+    }
   }
   notAPerson(name) {
     if (!name)
@@ -5711,6 +5788,29 @@ function fmtClock(minute) {
 function carried(st, id) {
   return Object.values(st.items).filter((i) => i.holder === id && !i.gone && ((i.lastMsg ?? i.custody[i.custody.length - 1]?.msgIndex ?? -1) >= st.sceneStartMsg || ON_PERSON.test(i.where ?? "")));
 }
+function isGroupName(name) {
+  const n = name.replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").trim().replace(/\s+of\s+.*$/i, "");
+  const words = n.split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > 5)
+    return false;
+  const head = words[words.length - 1].replace(/['\u2019]s?$/, "").toLowerCase();
+  return GROUP_HEAD.test(head) && words.slice(0, -1).every((w) => /^(?:the|The|\p{Lu}[\p{L}'\u2019.-]*)$/u.test(w));
+}
+function bareGroup(name) {
+  return name.replace(/#\d+$/, "").replace(/^["\u201C]|["\u201D]$/g, "").toLowerCase().replace(/^the\s+/, "").replace(/['\u2019]/g, "").replace(/\s+/g, " ").trim();
+}
+function splitGroupLead(name) {
+  const words = name.trim().split(/\s+/);
+  for (let k = words.length - 1;k >= 1; k--) {
+    const rest = words.slice(k);
+    if (!/^\p{Ll}/u.test(rest[0]) || /^(?:of|the|and|de|du|da|von|van)$/.test(rest[0]))
+      continue;
+    const head = words.slice(0, k).join(" ");
+    if (isGroupName(head))
+      return [head, rest.join(" ")];
+  }
+  return null;
+}
 function normFact(s) {
   return s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
 }
@@ -5740,7 +5840,7 @@ function parseDue(raw, now) {
     return { at: { day: now.day, minute: 21 * 60 }, raw };
   return { trigger: raw, raw };
 }
-var CONFIDENCE, PIVOTAL, escapeRe2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), HUNGER_RATE = 360, THIRST_RATE = 300, FATIGUE_RATE = 300, OFF_PAGE = 180, LOOK_WET, LOOK_POSE, MEALS, DEPRIVED, ASLEEP_NOW, ELSEWHERE, LADDER_FALL, LADDER_FALL_HARD, LADDER_WARM, LASTING, isLasting = (f) => LASTING.test(f), FIXTURE, NOT_A_PERSON = "-", ON_PERSON, ALIAS_SHAPE, RELATION, CHAR_OPS, STOP3;
+var CONFIDENCE, PIVOTAL, escapeRe2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), HUNGER_RATE = 360, THIRST_RATE = 300, FATIGUE_RATE = 300, OFF_PAGE = 180, LOOK_WET, LOOK_POSE, MEALS, DEPRIVED, ASLEEP_NOW, ELSEWHERE, LADDER_FALL, LADDER_FALL_HARD, LADDER_WARM, LASTING, isLasting = (f) => LASTING.test(f), FIXTURE, NOT_A_PERSON = "-", ON_PERSON, ALIAS_SHAPE, RELATION, GROUP_HEAD, CHAR_OPS, STOP3;
 var init_state = __esm(() => {
   init_types();
   init_facts();
@@ -5776,6 +5876,7 @@ var init_state = __esm(() => {
   ON_PERSON = /\b(?:worn|wearing|wears|pockets?|wrist|neck|necklace|finger|ears?|belt|holster|sheath|scabbard|purse|wallet|keyring|key ring|on (?:him|her|them))\b/i;
   ALIAS_SHAPE = /^\p{Lu}[\p{L}'\u2019.-]*(?:\s+(?:\p{Lu}[\p{L}'\u2019.-]*|of|the|de|van|von|al|du|da|le|la))*$/u;
   RELATION = /['\u2019]s\b|\b(?:his|her|their|my|your)\s|\b(?:mother|mom|mum|father|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|aunt|uncle|cousin|niece|nephew|grand\w+|friend|boss|ex)\b/i;
+  GROUP_HEAD = /^(?:council|circle|coven|order|guild|clan|cult|society|brotherhood|sisterhood|syndicate|cabal|league|alliance|faction|gang|tribe|legion|army|agency|initiative|senate|parliament|conclave|corporation)s?$/;
   CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "unaware", "status", "journal"]);
   STOP3 = new Set("the a an of to in on at is was be and or for with by from that this it its his her their he she they".split(" "));
 });
@@ -7780,6 +7881,7 @@ class ChatLedger {
       merges: meta.config.merges,
       factEdits: meta.config.factEdits,
       castEdits: meta.config.castEdits,
+      factionEdits: meta.config.factionEdits,
       ...Object.keys(this.staminaSources).length ? { stamina: this.staminaSources } : {},
       playerFacts: settings.playerFacts ?? "rules",
       calendarKey: `${meta.config.calendar || settings.calendar || ""}|${meta.config.startPoint ?? ""}`,
@@ -8064,7 +8166,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.24.3";
+var VERSION = "1.25.0";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -16188,8 +16290,9 @@ function buildRoster(input) {
   const groups = [];
   const groupNames = new Set;
   for (const f of Object.values(st.factions)) {
-    groupNames.add(low(f.name));
-    groups.push(groupActor(f.name, `fac:${slug(f.name)}`, records.find((r) => r.kind === "group" && low(r.name).includes(low(f.name)))?.summary ?? "", isLocal));
+    for (const n of [f.name, ...f.aliases ?? []])
+      groupNames.add(low(n));
+    groups.push(groupActor(f.name, `fac:${slug(f.name)}`, records.find((r) => r.kind === "group" && low(r.name).includes(low(f.name)))?.summary ?? "", isLocal, f.aliases));
   }
   for (const r of records)
     if (r.kind === "group" && !groupNames.has(low(r.name)) && ![...groupNames].some((g) => low(r.name).includes(g)))
@@ -16333,12 +16436,12 @@ function topPlace(st) {
   const best = [...count.values()].sort((a, b) => b.n - a.n)[0];
   return best?.name ?? st.place[0];
 }
-function groupActor(name, id, text, isLocal) {
+function groupActor(name, id, text, isLocal, aliases = []) {
   const where = readStanding(text).where;
   return {
     key: id,
     name,
-    names: [name],
+    names: [name, ...aliases],
     recordId: id,
     ring: "unmet",
     standing: "here",
@@ -16962,7 +17065,7 @@ function seedCandidates(ctx) {
     for (const clk of Object.values(f.clocks)) {
       if (clk.cur >= clk.max)
         continue;
-      if (live.some((a) => a.faction && low2(a.faction.name) === low2(f.name)))
+      if (live.some((a) => a.faction && [f.name, ...f.aliases ?? []].some((n) => low2(n) === low2(a.faction.name))))
         continue;
       const g = r.groups.find((x) => low2(x.name) === low2(f.name));
       if (!g)
@@ -17331,7 +17434,7 @@ function tick(inp) {
   const roster = buildRoster({ state: st, records: inp.records, userName: inp.userName, notPeople: inp.notPeople, people: inp.people, profiles: inp.profiles });
   const arcs = Object.values(st.arcs ?? {});
   const onstage = roster.actors.filter((a) => a.ring === "onstage");
-  const leadOf = (arc) => roster.find(arc.lead) ?? (arc.faction ? roster.groups.find((g) => g.name.toLowerCase() === arc.faction.name.toLowerCase()) : undefined);
+  const leadOf = (arc) => roster.find(arc.lead) ?? (arc.faction ? roster.groups.find((g) => g.names.some((n) => n.toLowerCase() === arc.faction.name.toLowerCase())) : undefined);
   const town = roster.town ?? st.place[0];
   const recentKinds = inp.recentArrivals.filter((a) => a.kind).slice(-6).map((a) => a.kind);
   const lastRouteOf = (arcId) => [...inp.recentArrivals].reverse().find((a) => a.arc === arcId)?.kind;
@@ -23221,7 +23324,7 @@ async function buildView(chatId, userId) {
     chronicle: { units, coverage, tokens, counts: levelCounts, mode: !settings.chronicle ? "off" : relevantOnly ? "relevant" : "all" },
     timeline: st.milestones.slice(-120).map((m) => ({ at: m.at ? fmtTime(m.at) : "", day: m.at?.day ?? null, kind: m.kind, text: m.text, msgIndex: m.msgIndex })),
     world: {
-      factions: Object.values(st.factions).map((f) => ({ name: f.name, clocks: Object.values(f.clocks) })),
+      factions: Object.values(st.factions).map((f) => ({ id: f.id, name: f.name, aliases: f.aliases ?? [], clocks: Object.values(f.clocks), edit: meta.config.factionEdits?.[f.id] ?? null })),
       rumors: st.rumors.slice(-12),
       rep: Object.values(st.rep),
       gauges: Object.values(st.gauges),

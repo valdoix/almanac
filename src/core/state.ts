@@ -4,7 +4,7 @@
 // caller: only messages on the active path (current swipes) are folded.
 
 import type {
-  BondAxis, BondState, CastEdit, CharacterState, EventSource, FactEdit, KnowRow, LedgerEvent, MessageDelta,
+  BondAxis, BondState, CastEdit, CharacterState, EventSource, FactEdit, FactionEdit, FactionState, KnowRow, LedgerEvent, MessageDelta,
   ItemState, ParsedLedger, ParsedOp, ThoughtState, Trait, WorldState,
 } from "./types";
 import { KNOW_OPS } from "./types";
@@ -32,6 +32,8 @@ export interface FoldOptions {
   factEdits?: Record<string, FactEdit>;
   /** Player edits to the cast (names, age, appearance, people added by hand). */
   castEdits?: Record<string, CastEdit>;
+  /** Player edits to the factions (names, added by hand, deleted, merged). */
+  factionEdits?: Record<string, FactionEdit>;
   /** Stamina the card, persona and lore give people, by lower-case name ("user" for the persona). */
   stamina?: Record<string, { kind: string; by: "card" | "lore" }>;
   /** Read facts from the player's own messages (dates, looks, pinned truths). */
@@ -228,6 +230,11 @@ export class Folder {
       return typo[0].id;
     }
     if (!create) return null;
+    // A group's name never enters the cast as a person.
+    if (isGroupName(n) || this.knownFaction(n)) {
+      this.factionFor(n);
+      return null;
+    }
     let id = slug(n);
     if (id === "user") id = "user_npc";
     while (this.state.chars[id] && this.state.chars[id].name.toLowerCase() !== low) id += "_";
@@ -312,7 +319,8 @@ export class Folder {
         this.state.chars[existing].voiced = true;
         continue;
       }
-      const id = this.charId(s.name, msgIndex, true)!;
+      const id = this.charId(s.name, msgIndex, true);
+      if (!id) continue;
       this.state.chars[id].voiced = true;
       if (s.slot && s.slot >= 1 && s.slot <= 12) {
         this.state.voices[id] = s.slot;
@@ -482,6 +490,7 @@ export class Folder {
     st.knowRepair = (st.knowRepair ?? []).filter((i) => i !== msgIndex && i >= msgIndex - 200);
     if (kc.repaired && ops.some((o) => KNOW_OPS.includes(o.op))) st.knowRepair.push(msgIndex);
     this.applyCastEdits(msgIndex);
+    this.applyFactionEdits(msgIndex);
     applyFactEdits(st, msgIndex, this.opts.factEdits ?? {});
     closeMetGaps(st);
     if (!fromUser) st.lastReply = msgIndex;
@@ -585,6 +594,14 @@ export class Folder {
     // Names the player removed from the cast (a force, a spell, a place): lines about them as people are dropped.
     if (CHAR_OPS.has(op.op) && (this.notAPerson(op.subject) || this.notAPerson(op.object))) {
       return reject(`${this.notAPerson(op.subject) ? op.subject : op.object} is not a person (removed from the cast)`);
+    }
+    // "The Witches' Circle", "the Council": a group named where a person goes is a faction, not someone new in the cast.
+    if (CHAR_OPS.has(op.op)) {
+      const group = [op.subject, op.object].find((n) => n && (isGroupName(n) || this.knownFaction(n)) && !this.lookup(n));
+      if (group) {
+        this.factionFor(group);
+        return reject(`${group} is a group, not a person (kept as a faction)`);
+      }
     }
 
     switch (op.op) {
@@ -1051,9 +1068,14 @@ export class Folder {
         return { verdict: "accepted", line: `⚖ ${this.nm(who)}${whom ? " → " + this.nm(whom) : ""}: ${a.what} (${c.status})` };
       }
       case "clockf": {
-        const fid = `fac:${slug(op.subject!)}`;
-        const f = st.factions[fid] ?? { id: fid, name: op.subject!, clocks: {} };
-        st.factions[fid] = f;
+        // "Council back-pay: card ETA 2 days" is the Council's back-pay, not a faction called that.
+        const split = !Object.values(st.factions).some((x) => bareGroup(x.name) === bareGroup(op.subject!)) ? splitGroupLead(op.subject!) : null;
+        const f = this.factionFor(split ? split[0] : op.subject!);
+        if (!f) return reject(`${op.subject} is not a faction (deleted)`);
+        if (split) {
+          a.project = split[1];
+          if (!(f.aliases ?? []).some((x) => bareGroup(x) === bareGroup(op.subject!))) (f.aliases ??= []).push(op.subject!);
+        }
         // The same project under a looser name ("raid Sunnydale", "the raid"), or no name at all for a faction with one clock.
         const existing = Object.entries(f.clocks);
         const near = existing.find(([, c]) => overlap(normFact(c.name), normFact(a.project)) >= 0.5)?.[0];
@@ -1080,8 +1102,10 @@ export class Folder {
         return { verdict: "accepted", line: `🗣 ${text}` };
       }
       case "rep": {
-        const gid = slug(op.object!);
-        const r = st.rep[gid] ?? { group: op.object!, score: 0, tags: [], history: [] };
+        // Standing with a faction goes under its name, whatever the line calls it.
+        const group = this.factionFor(op.object!, false)?.name ?? op.object!;
+        const gid = slug(group);
+        const r = st.rep[gid] ?? { group, score: 0, tags: [], history: [] };
         r.score = clamp(r.score + (a.delta ?? 0), -3, 3);
         if (a.tag && !r.tags.includes(a.tag)) r.tags.push(a.tag);
         r.history.push({ delta: a.delta ?? 0, deed: op.cause, msgIndex: mi });
@@ -1235,6 +1259,61 @@ export class Folder {
     const pid = `loc:${slug(name.trim())}`;
     if (this.state.places[pid]) return pid;
     return this.charId(name, mi) ?? (this.notAPerson(name) ? name.trim() : undefined);
+  }
+
+  /**
+   * The faction a name means, made on first sight: "The Witches' Circle" and "Witches Circle" are one,
+   * a name merged into another faction is that faction, and a deleted one is none (null).
+   */
+  factionFor(name: string, create = true): FactionState | null {
+    const st = this.state;
+    const edits = this.opts.factionEdits ?? {};
+    const n = name.replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").trim();
+    if (!n) return null;
+    const b = bareGroup(n);
+    let id = Object.values(st.factions).find((f) => [f.name, ...(f.aliases ?? [])].some((a) => bareGroup(a) === b))?.id
+      ?? Object.entries(edits).find(([k, e]) => k === `fac:${slug(n)}` || [e.was, e.name, ...(e.addAliases ?? [])].some((a) => a && bareGroup(a) === b))?.[0]
+      ?? `fac:${slug(n)}`;
+    for (let i = 0; i < 8 && edits[id]?.into && edits[id].into !== id; i++) id = edits[id].into!;
+    if (edits[id]?.removed) return null;
+    let f = st.factions[id];
+    if (!f) {
+      if (!create) return null;
+      f = st.factions[id] = { id, name: edits[id]?.name || n, clocks: {} };
+    }
+    if (bareGroup(f.name) !== b && !(f.aliases ?? []).some((a) => bareGroup(a) === b) && !(edits[id]?.dropAliases ?? []).some((a) => bareGroup(a) === b)) (f.aliases ??= []).push(n);
+    return f;
+  }
+
+  /** A name the story or the player has given a faction, deleted ones included. */
+  private knownFaction(name: string): boolean {
+    const b = bareGroup(name);
+    if (!b) return false;
+    return Object.values(this.state.factions).some((f) => [f.name, ...(f.aliases ?? [])].some((a) => bareGroup(a) === b))
+      || Object.values(this.opts.factionEdits ?? {}).some((e) => [e.was, e.name, ...(e.addAliases ?? [])].some((a) => a && bareGroup(a) === b));
+  }
+
+  /** The player's say on the factions: names, ones added by hand, deleted and merged ones. Applied after every message. */
+  private applyFactionEdits(mi: number): void {
+    const st = this.state;
+    for (const [id, e] of Object.entries(this.opts.factionEdits ?? {})) {
+      if (e.removed || e.into) {
+        delete st.factions[id];
+        continue;
+      }
+      let f = st.factions[id];
+      if (!f && e.added !== undefined && mi >= e.added && e.name) f = st.factions[id] = { id, name: e.name, clocks: {} };
+      if (!f) continue;
+      const low = (a: string) => a.toLowerCase();
+      if (e.name?.trim() && f.name !== e.name.trim()) {
+        f.aliases = (f.aliases ?? []).filter((a) => low(a) !== low(e.name!.trim()));
+        if (!f.aliases.some((a) => low(a) === low(f!.name))) f.aliases.push(f.name);
+        f.name = e.name.trim();
+      }
+      if (e.dropAliases?.length) f.aliases = (f.aliases ?? []).filter((a) => !e.dropAliases!.some((d) => low(d) === low(a)));
+      for (const a of e.addAliases ?? []) if (a.trim() && low(a) !== low(f.name) && !(f.aliases ?? []).some((x) => low(x) === low(a))) (f.aliases ??= []).push(a.trim());
+      if (f.aliases && !f.aliases.length) delete f.aliases;
+    }
   }
 
   private notAPerson(name?: string): boolean {
@@ -1495,6 +1574,37 @@ const ALIAS_SHAPE = /^\p{Lu}[\p{L}'’.-]*(?:\s+(?:\p{Lu}[\p{L}'’.-]*|of|the|d
 /** A relation in brackets after a name ("Gabriel's sister", "his mother"): who is meant, not a note. */
 const RELATION = /['’]s\b|\b(?:his|her|their|my|your)\s|\b(?:mother|mom|mum|father|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|aunt|uncle|cousin|niece|nephew|grand\w+|friend|boss|ex)\b/i;
 /** Ops whose subject or object must be a person. */
+const GROUP_HEAD = /^(?:council|circle|coven|order|guild|clan|cult|society|brotherhood|sisterhood|syndicate|cabal|league|alliance|faction|gang|tribe|legion|army|agency|initiative|senate|parliament|conclave|corporation)s?$/;
+
+/**
+ * A group's name, never a person's: "The Witches' Circle", "Council", "the Watchers Council",
+ * "the Order of Aurelius". "Master of the Order" is a person (the head noun is "Master").
+ */
+export function isGroupName(name: string): boolean {
+  const n = name.replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").trim().replace(/\s+of\s+.*$/i, "");
+  const words = n.split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > 5) return false;
+  const head = words[words.length - 1].replace(/['’]s?$/, "").toLowerCase();
+  return GROUP_HEAD.test(head) && words.slice(0, -1).every((w) => /^(?:the|The|\p{Lu}[\p{L}'’.-]*)$/u.test(w));
+}
+
+/** "The Witches' Circle" → "witches circle": the same group however it's written. */
+function bareGroup(name: string): string {
+  return name.replace(/#\d+$/, "").replace(/^["“]|["”]$/g, "").toLowerCase().replace(/^the\s+/, "").replace(/['’]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** "Council back-pay" → ["Council", "back-pay"]: a group's name with its business run on after it. */
+export function splitGroupLead(name: string): [string, string] | null {
+  const words = name.trim().split(/\s+/);
+  for (let k = words.length - 1; k >= 1; k--) {
+    const rest = words.slice(k);
+    if (!/^\p{Ll}/u.test(rest[0]) || /^(?:of|the|and|de|du|da|von|van)$/.test(rest[0])) continue;
+    const head = words.slice(0, k).join(" ");
+    if (isGroupName(head)) return [head, rest.join(" ")];
+  }
+  return null;
+}
+
 const CHAR_OPS = new Set(["mood", "body", "look", "bond", "ladder", "know", "unaware", "status", "journal"]);
 
 export function normFact(s: string): string {

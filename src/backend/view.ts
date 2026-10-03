@@ -236,7 +236,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     chronicle: { units, coverage, tokens, counts: levelCounts, mode: !settings.chronicle ? "off" : relevantOnly ? "relevant" : "all" },
     timeline: st.milestones.slice(-120).map((m) => ({ at: m.at ? fmtTime(m.at) : "", day: m.at?.day ?? null, kind: m.kind, text: m.text, msgIndex: m.msgIndex })),
     world: {
-      factions: Object.values(st.factions).map((f) => ({ name: f.name, clocks: Object.values(f.clocks) })),
+      factions: Object.values(st.factions).map((f) => ({ id: f.id, name: f.name, aliases: f.aliases ?? [], clocks: Object.values(f.clocks), edit: meta.config.factionEdits?.[f.id] ?? null })),
       rumors: st.rumors.slice(-12), rep: Object.values(st.rep), gauges: Object.values(st.gauges),
       deadlines: Object.values(st.deadlines).map((d) => ({ title: d.title, at: fmtTime(d.at), left: now != null ? fmtSpan(absMinutes(d.at) - now) : "", leftMin: now != null ? absMinutes(d.at) - now : null, done: !!d.done, passed: now != null && absMinutes(d.at) <= now })),
       cons: Object.values(st.cons).map((c) => ({ ...c, whoName: nm(c.who), whomName: c.whom ? nm(c.whom) : undefined, dueText: c.due?.at ? fmtTime(c.due.at) : c.due?.trigger })),

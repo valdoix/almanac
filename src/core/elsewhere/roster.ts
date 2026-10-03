@@ -234,8 +234,8 @@ export function buildRoster(input: RosterInput): Roster {
   const groups: Actor[] = [];
   const groupNames = new Set<string>();
   for (const f of Object.values(st.factions)) {
-    groupNames.add(low(f.name));
-    groups.push(groupActor(f.name, `fac:${slug(f.name)}`, records.find((r) => r.kind === "group" && low(r.name).includes(low(f.name)))?.summary ?? "", isLocal));
+    for (const n of [f.name, ...(f.aliases ?? [])]) groupNames.add(low(n));
+    groups.push(groupActor(f.name, `fac:${slug(f.name)}`, records.find((r) => r.kind === "group" && low(r.name).includes(low(f.name)))?.summary ?? "", isLocal, f.aliases));
   }
   for (const r of records) if (r.kind === "group" && !groupNames.has(low(r.name)) && ![...groupNames].some((g) => low(r.name).includes(g))) groups.push(groupActor(r.name, r.id, `${r.summary} ${r.body?.lore ?? ""}`, isLocal));
 
@@ -364,10 +364,10 @@ function topPlace(st: WorldState): string | undefined {
   return best?.name ?? st.place[0];
 }
 
-function groupActor(name: string, id: string, text: string, isLocal: (w: string) => boolean): Actor {
+function groupActor(name: string, id: string, text: string, isLocal: (w: string) => boolean, aliases: string[] = []): Actor {
   const where = readStanding(text).where;
   return {
-    key: id, name, names: [name], recordId: id, ring: "unmet", standing: "here", where, reach: where && !isLocal(where) ? (FAR.test(where) ? "far" : "region") : "town",
+    key: id, name, names: [name, ...aliases], recordId: id, ring: "unmet", standing: "here", where, reach: where && !isLocal(where) ? (FAR.test(where) ? "far" : "region") : "town",
     drives: {}, ties: [], nocturnal: /\b(vampire|demon|undead)\b/i.test(text.replace(SLAYS_THEM, "")), lastPage: -1, protected: false, flags: {}, text: text.slice(0, 300), lore: text, knows: [], means: 1, group: true,
   };
 }

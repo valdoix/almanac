@@ -3,7 +3,7 @@
 // Library (Codex · Lore · Creator) and Engine (Recall · Craft · Settings).
 
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
-import { escapeHtml as e, estTokens, initials, kpNote } from "../core/util";
+import { escapeHtml as e, estTokens, initials, kpNote, slug } from "../core/util";
 import { PRESET_VERSION, olderThan } from "../core/version";
 import { renderGraph, type GEdge, type GNode } from "./graph";
 import { CreatorUI } from "./creator-ui";
@@ -83,6 +83,7 @@ export class AlmanacApp {
   editingFact: string | null = null;
   /** Cast page: the character being edited ("__new": adding someone). */
   editingChar: string | null = null;
+  editingFaction: string | null = null;
   openFacts = new Set<string>();
   /** Cast page: people away from the scene shown as full cards. Settings: sections left open. */
   castOpen = new Set<string>();
@@ -336,7 +337,7 @@ ${mood.name ? `<div class="almx-em" style="margin-top:10px">${e(mood.name)}</div
       if (this.editingChar === c.id) return `<div class="card almx-pcs"><div class="almx-row" style="margin-bottom:10px">${medal(c.name, c.color, "sm")}<b class="grow">${e(c.name)}</b></div>${this.charEditor(c)}</div>`;
       const journal = c.journal?.length ? `<div class="almx-quote" style="margin-top:14px"><div class="almx-lbl">In their own words</div>${c.journal.slice(-2).map((j: any) => `<p>“${e(j.text)}”</p>`).join("")}</div>` : "";
       const pressure = c.isUser ? "" : `<div style="margin-top:14px"><div class="almx-lbl">Hidden pressure · narrator only</div><div class="row" style="margin-top:6px;flex-wrap:nowrap"><span class="spoiler grow almx-inset" tabindex="0">${e(c.pressure || "none drawn yet")}</span><button class="btn sm" data-act="editPressure" data-id="${e(c.id)}">Edit</button></div></div>`;
-      const actions = `<div class="row" style="margin-top:14px"><button class="btn sm" data-act="charEdit" data-id="${e(c.id)}" title="${c.isUser ? "Age and appearance" : "Name, age and appearance"}">${ic("pencil", "sm")}Edit</button><label class="btn sm" title="${c.isUser ? "Your persona's colour" : "Voice colour"}"><input type="color" class="swatch" data-color="${e(c.id)}" value="${e(toHex(c.color))}" aria-label="${e(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}" style="width:18px;height:18px">Colour</label><span class="grow"></span>${closable ? `<button class="btn sm ghost" data-act="castOpen" data-id="${e(c.id)}">Close</button>` : ""}${c.isUser ? "" : `<button class="btn sm danger" data-act="notPerson" data-name="${e(c.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button>`}</div>`;
+      const actions = `<div class="row" style="margin-top:14px"><button class="btn sm" data-act="charEdit" data-id="${e(c.id)}" title="${c.isUser ? "Age and appearance" : "Name, age and appearance"}">${ic("pencil", "sm")}Edit</button><label class="btn sm" title="${c.isUser ? "Your persona's colour" : "Voice colour"}"><input type="color" class="swatch" data-color="${e(c.id)}" value="${e(toHex(c.color))}" aria-label="${e(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}" style="width:18px;height:18px">Colour</label><span class="grow"></span>${closable ? `<button class="btn sm ghost" data-act="castOpen" data-id="${e(c.id)}">Close</button>` : ""}${c.isUser ? "" : `<button class="btn sm" data-act="castToFaction" data-name="${e(c.name)}" title="A group the story mistook for a person: it leaves the cast and becomes a faction">${ic("flag", "sm")}A faction</button>`}${c.isUser ? "" : `<button class="btn sm danger" data-act="notPerson" data-name="${e(c.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button>`}</div>`;
       return this.castCard(c, false, `${journal}${pressure}${this.mergeRow(v, c)}${actions}`);
     };
     const open = away.filter((c: any) => this.castOpen.has(c.id) || this.editingChar === c.id);
@@ -371,6 +372,38 @@ ${this.staminaEditor(c)}
 <label class="f">Kind<select id="almStamKind"><option value="">${e(autoLabel)}</option>${kinds}</select></label>
 <div class="almx-g2">${speed("almStamHunger", "Hunger builds", NEED_SPEEDS, ed.hunger)}${speed("almStamThirst", "Thirst builds", NEED_SPEEDS, ed.thirst)}${speed("almStamFatigue", "Tiredness builds", NEED_SPEEDS, ed.fatigue)}${speed("almStamHeal", "Wounds heal", HEAL_SPEEDS, ed.heal)}</div>
 <p class="muted"><small>How fast hunger, thirst and tiredness build while they're awake, and how fast wounds heal, against an ordinary person. A Slayer tires slowly and heals in days; a vampire wants blood, not food or water. The model is told too. A stamina potion or stimulant in a body line holds tiredness off for a few hours.</small></p>`;
+  }
+
+  /** Factions with their clocks, and the player's say: rename, other names, add, delete, merge. */
+  factionsSection(v: any): string {
+    const facs: any[] = v.world.factions ?? [];
+    const edits: Record<string, any> = v.config?.factionEdits ?? {};
+    const add = this.editingFaction === "__new"
+      ? this.factionEditor(null)
+      : `<div class="row" style="justify-content:flex-end;margin-bottom:10px"><button class="btn sm" data-act="facAdd" title="A group the story should treat as a faction, not a person">${ic("plus", "sm")}Add a faction</button></div>`;
+    const card = (f: any) => {
+      if (this.editingFaction === f.id) return this.factionEditor(f);
+      const merged = Object.entries(edits).filter(([, x]) => x.into === f.id);
+      const chips = merged.map(([id, x]) => `<span class="pill">${e(x.was || id.replace(/^fac:/, ""))} <button class="btn sm ghost" data-act="facUnmerge" data-id="${e(id)}" title="Split this faction off again" style="min-height:24px;padding:0 6px">✕</button></span>`).join("");
+      const others = facs.filter((o) => o.id !== f.id);
+      const pick = others.length ? `<label class="f">Same faction as…<select data-facmerge="${e(f.id)}"><option value="">No, a different faction</option>${others.map((o) => `<option value="${e(o.id)}">${e(o.name)}</option>`).join("")}</select></label>` : "";
+      const clocks = f.clocks.length ? `<div class="alm-clocks" style="margin-top:10px">${f.clocks.map((c: any) => `<div class="almx-row">${ring(c.cur, c.max, "var(--alm-danger)")}<div class="grow"><small class="muted">${e(c.name)}</small></div></div>`).join("")}</div>` : `<small class="muted" style="display:block;margin-top:6px">No clock running.</small>`;
+      return `<div class="card tight"><div class="almx-row">${ic("flag", "sm")}<div class="grow" style="min-width:0"><b style="font-size:14px">${e(f.name)}</b>${f.aliases?.length ? `<small class="muted" style="display:block">also ${e(f.aliases.join(" · "))}</small>` : ""}</div>${f.edit?.added != null ? stk("added", "g", "You added this faction") : ""}</div>
+${clocks}${chips || pick ? `<div class="almx-merge" style="margin-top:10px">${chips ? `<div class="row" style="margin-bottom:8px"><small class="muted">Merged in:</small>${chips}</div>` : ""}${pick}</div>` : ""}
+<div class="row" style="margin-top:10px"><button class="btn sm" data-act="facEdit" data-id="${e(f.id)}" title="Name and other names">${ic("pencil", "sm")}Edit</button><span class="grow"></span><button class="btn sm danger" data-act="facDelete" data-id="${e(f.id)}" title="Not a faction: its clocks go, and lines about it are dropped. You can restore it below.">Delete</button></div></div>`;
+    };
+    const gone = Object.entries(edits).filter(([, x]) => x.removed);
+    const goneRow = gone.length ? `${sec("Deleted factions", gone.length)}<div class="row">${gone.map(([id, x]) => `<span class="pill">${e(x.was || x.name || id.replace(/^fac:/, ""))} <button class="btn sm ghost" data-act="facRestore" data-id="${e(id)}" style="min-height:24px;padding:0 6px">restore</button></span>`).join("")}</div>` : "";
+    return `${sec("Factions", facs.length || null, "groups, and the clocks they fill")}${add}${facs.length ? `<div class="almx-stack">${facs.map(card).join("")}</div>` : `<div class="empty">No factions yet.</div>`}${goneRow}`;
+  }
+
+  /** A faction's name and other names (a new faction when `f` is null). */
+  factionEditor(f: any | null): string {
+    const id = f?.id ?? "__new";
+    return `<div class="card hl almk--edit"><label class="f">Name<input type="text" id="almFacName" value="${e(f?.name ?? "")}" placeholder="${f ? "" : "The Watchers Council"}"></label>${f ? `<p class="muted"><small>The old name keeps working in the story's lines.</small></p>` : ""}
+<label class="f">Also called<input type="text" id="almFacAliases" value="${e((f?.aliases ?? []).join("; "))}" placeholder="Other names it goes by, separated by ;"></label>
+<p class="muted"><small>Lines that name it under any of these go to this faction, and none of them is ever taken for a person.</small></p>
+<div class="row" style="margin-top:10px"><button class="btn primary" data-act="facSave" data-id="${e(id)}">${f ? "Save" : "Add"}</button><button class="btn" data-act="facCancel">Cancel</button></div></div>`;
   }
 
   /** Names taken out of the cast, with a way back. */
@@ -624,7 +657,7 @@ ${sec("Milestones", ev.length || null, "newest first")}${ev.length ? `<div class
     const bitTones: Tone[] = ["g", "acc", "acc2", "good", "warn"];
     return `<div class="almx-g2"><div class="almx-tile"><div class="almx-lbl">${ic("cal", "sm")}Calendar</div><div class="almx-val">${e(cal ? cal.date : "not started")}</div>${cal ? `<small>${e([cal.weekday, cal.season].filter(Boolean).join(" · "))}</small>` : ""}</div><div class="almx-tile"><div class="almx-lbl">${ic("leaf", "sm")}Climate</div><div class="almx-val">${e(w.climate || "—")}</div></div></div>
 <details class="card tight" style="margin-top:10px"><summary class="muted">Schedule weather</summary><div class="row" style="margin-top:8px"><input type="number" id="almWxDay" placeholder="day" style="width:72px"><input type="number" id="almWxHour" placeholder="hour" style="width:72px"><input type="number" id="almWxLen" placeholder="hours" style="width:72px"><input type="text" id="almWxCond" placeholder="thunderstorm" class="grow"><button class="btn" data-act="scheduleWx">Schedule</button></div></details>
-${w.factions.length ? `${sec("Clocks", null, "they fill, then something happens")}<div class="alm-clocks">${w.factions.flatMap((f: any) => f.clocks.map((c: any) => `<div class="card tight almx-row">${ring(c.cur, c.max, "var(--alm-danger)")}<div class="grow"><b style="font-size:14px">${e(f.name)}</b><small class="muted" style="display:block">${e(c.name)}</small></div></div>`)).join("")}</div>` : ""}
+${this.factionsSection(v)}
 ${w.gauges.length ? `${sec("Gauges")}<div class="alm-clocks">${w.gauges.map((g: any) => `<div class="card tight almx-row">${ring(g.cur, g.max, "var(--alm-accent-2)")}<div class="grow"><b style="font-size:14px">${e(g.name)}</b>${g.cause ? `<small class="muted" style="display:block">${e(g.cause)}</small>` : ""}</div></div>`).join("")}</div>` : ""}
 ${w.deadlines.length ? `${sec("Deadlines", w.deadlines.length)}<div class="almx-stack">${w.deadlines.map((d: any) => `<div class="card tight almx-row${d.passed && !d.done ? " almx-bad" : ""}">${ic("clock")}<div class="grow"><b>${e(d.title)}</b><small class="muted" style="display:block">${e(d.at)}</small></div>${d.done ? stk("done", "good") : d.passed ? stk("passed", "bad") : stk(`${d.left} left`, "warn")}</div>`).join("")}</div>` : ""}
 ${w.threads.length ? `${sec("Threads", w.threads.length)}<div class="card almx-rows" style="padding:2px 16px">${w.threads.map((t: any) => `<div><div class="almx-row"><b class="grow">${e(t.title)}</b>${stk(t.status, STATUS[String(t.status).toLowerCase()] ?? "g")}</div>${t.latest ? `<div class="muted" style="font-size:13.5px;margin-top:2px">${e(t.latest)}</div>` : ""}${t.blocker ? `<div style="font-size:13.5px;margin-top:4px;color:var(--alm-danger)">Blocked: ${e(t.blocker)}</div>` : ""}</div>`).join("")}</div>` : ""}
@@ -1026,6 +1059,89 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
       case "charAdd": this.editingChar = "__new"; this.render(); break;
       case "charEdit": this.editingChar = this.editingChar === id ? null : id ?? null; this.render(); break;
       case "charCancel": this.editingChar = null; this.render(); break;
+      case "facAdd": this.editingFaction = "__new"; this.render(); break;
+      case "facEdit": this.editingFaction = this.editingFaction === id ? null : id ?? null; this.render(); break;
+      case "facCancel": this.editingFaction = null; this.render(); break;
+      case "facSave": {
+        if (!id) break;
+        const val = (sel: string) => (this.root.querySelector(sel) as HTMLInputElement | null)?.value?.trim() ?? "";
+        const name = val("#almFacName");
+        const aliases = val("#almFacAliases").split(/\s*[;\n]\s*/).map((a) => a.trim()).filter(Boolean);
+        const low = (a: string) => a.toLowerCase();
+        const facs: any[] = this.view?.world?.factions ?? [];
+        const edits: Record<string, any> = { ...(this.view?.config?.factionEdits ?? {}) };
+        if (id === "__new") {
+          if (!name) break;
+          const taken = facs.find((f) => [f.name, ...(f.aliases ?? [])].some((a: string) => low(a) === low(name)));
+          if (taken) {
+            window.alert(`${taken.name} is already a faction.`);
+            break;
+          }
+          const key = `fac:${slug(name) || "faction"}`;
+          edits[key] = { name, ...(aliases.length ? { addAliases: aliases } : {}), added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
+        } else {
+          const f = facs.find((x) => x.id === id);
+          const next: any = { ...(edits[id] ?? {}) };
+          if (name && name !== f?.name) next.name = name;
+          const before: string[] = f?.aliases ?? [];
+          const removed = before.filter((a) => !aliases.some((x) => low(x) === low(a)));
+          const added = aliases.filter((x) => !before.some((a) => low(a) === low(x)));
+          const drop = [...((next.dropAliases ?? []) as string[]).filter((a) => !added.some((x) => low(x) === low(a))), ...removed];
+          const give = [...((next.addAliases ?? []) as string[]).filter((a) => !removed.some((x) => low(x) === low(a))), ...added];
+          if (drop.length) next.dropAliases = drop;
+          else delete next.dropAliases;
+          if (give.length) next.addAliases = give;
+          else delete next.addAliases;
+          edits[id] = next;
+        }
+        this.editingFaction = null;
+        this.send({ type: "config", patch: { factionEdits: edits } });
+        break;
+      }
+      case "facDelete": {
+        const b = t.closest("button") as HTMLButtonElement | null;
+        if (b && b.dataset.armed !== "1") {
+          b.dataset.armed = "1";
+          b.textContent = "Click again to delete";
+          setTimeout(() => { if (b.isConnected) { b.dataset.armed = ""; b.textContent = "Delete"; } }, 4000);
+          break;
+        }
+        if (!id) break;
+        const f = (this.view?.world?.factions ?? []).find((x: any) => x.id === id);
+        const edits: Record<string, any> = { ...(this.view?.config?.factionEdits ?? {}) };
+        const next: any = { ...(edits[id] ?? {}), removed: true, was: f?.name ?? edits[id]?.was };
+        delete next.into;
+        edits[id] = next;
+        this.editingFaction = null;
+        this.send({ type: "config", patch: { factionEdits: edits } });
+        break;
+      }
+      case "facRestore":
+      case "facUnmerge": {
+        if (!id) break;
+        const edits: Record<string, any> = { ...(this.view?.config?.factionEdits ?? {}) };
+        const next: any = { ...(edits[id] ?? {}) };
+        delete next[act.act === "facRestore" ? "removed" : "into"];
+        // Nothing left of the player's say but the old name: the faction is the story's again.
+        if (Object.keys(next).every((k) => k === "was")) delete edits[id];
+        else edits[id] = next;
+        this.send({ type: "config", patch: { factionEdits: edits } });
+        break;
+      }
+      case "castToFaction": {
+        const c = this.view?.cast.find((x: any) => x.name === act.name);
+        if (!c) break;
+        const merges = { ...(this.view?.config?.merges ?? {}) };
+        for (const n of [c.name, ...(c.aliases ?? [])]) if (n) merges[String(n).toLowerCase()] = NOT_A_PERSON;
+        const edits: Record<string, any> = { ...(this.view?.config?.factionEdits ?? {}) };
+        const key = `fac:${slug(c.name) || "faction"}`;
+        const next: any = { ...(edits[key] ?? {}) };
+        delete next.removed;
+        if (!(this.view?.world?.factions ?? []).some((f: any) => f.id === key)) Object.assign(next, { name: c.name, ...(c.aliases?.length ? { addAliases: c.aliases } : {}), added: 0 });
+        edits[key] = next;
+        this.send({ type: "config", patch: { merges, factionEdits: edits } });
+        break;
+      }
       case "charSave": {
         if (!id) break;
         const val = (sel: string) => (this.root.querySelector(sel) as HTMLInputElement | HTMLTextAreaElement | null)?.value?.trim();
@@ -1298,6 +1414,16 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
     }
     if (d.color) {
       this.send({ type: "color", charId: d.color, color: t.value });
+      return;
+    }
+    if (d.facmerge != null && t.value) {
+      // This faction's clocks and lines become the chosen one's; the story refolds.
+      const f = (this.view?.world?.factions ?? []).find((x: any) => x.id === d.facmerge);
+      const edits: Record<string, any> = { ...(this.view?.config?.factionEdits ?? {}) };
+      const next: any = { ...(edits[d.facmerge] ?? {}), into: t.value, was: f?.name };
+      delete next.removed;
+      edits[d.facmerge] = next;
+      this.send({ type: "config", patch: { factionEdits: edits } });
       return;
     }
     if (d.merge != null && t.value) {

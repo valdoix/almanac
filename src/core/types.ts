@@ -378,6 +378,8 @@ export interface ConsState {
 export interface FactionState {
   id: string;
   name: string;
+  /** Other names the story used for it ("Witches' Circle", a name merged into it). */
+  aliases?: string[];
   clocks: Record<string, { name: string; cur: number; max: number; history: number[] }>;
 }
 
@@ -713,6 +715,8 @@ export interface ChatConfig {
   factEdits?: Record<string, FactEdit>;
   /** Player edits to the cast, by character id: a new name, age and appearance, or someone added by hand. */
   castEdits?: Record<string, CastEdit>;
+  /** Player edits to the factions, by faction id ("fac:council"): a new name, other names, added, deleted or merged. */
+  factionEdits?: Record<string, FactionEdit>;
   enabledOverride?: boolean;
   /** Story truths the player pinned, always in the note ("Jaime and Cersei are strictly family"). */
   truths?: string[];
@@ -733,6 +737,22 @@ export interface CastEdit {
   added?: number;
   /** Their stamina: a kind ("slayer") and speeds of their own; absent, it's read from the sources. */
   stamina?: StaminaEdit;
+}
+
+/** The player's say on a faction. */
+export interface FactionEdit {
+  name?: string;
+  /** Names the player took away, and ones they gave. */
+  dropAliases?: string[];
+  addAliases?: string[];
+  /** Added by the player: the message it joins the story at. */
+  added?: number;
+  /** Deleted: not a faction. Its clocks go, and lines about it are dropped. */
+  removed?: boolean;
+  /** Merged into another faction (that faction's id): its clocks and lines are that faction's. */
+  into?: string;
+  /** The name it had, for the page once it's deleted or merged. */
+  was?: string;
 }
 
 /** The player's say on someone's stamina: a kind, and speeds against an ordinary person (0 = never). */

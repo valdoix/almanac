@@ -164,7 +164,7 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
   for (const f of Object.values(st.factions)) {
     for (const clk of Object.values(f.clocks)) {
       if (clk.cur >= clk.max) continue;
-      if (live.some((a) => a.faction && low(a.faction.name) === low(f.name))) continue;
+      if (live.some((a) => a.faction && [f.name, ...(f.aliases ?? [])].some((n) => low(n) === low(a.faction!.name)))) continue;
       const g = r.groups.find((x) => low(x.name) === low(f.name));
       if (!g) continue;
       const leaders = r.actors.filter((a) => a.ties.some((t) => t.to === g.key && t.strength >= 3) && canAct(a));

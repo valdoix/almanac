@@ -168,6 +168,7 @@ export class ChatLedger {
       merges: meta.config.merges,
       factEdits: meta.config.factEdits,
       castEdits: meta.config.castEdits,
+      factionEdits: meta.config.factionEdits,
       ...(Object.keys(this.staminaSources).length ? { stamina: this.staminaSources } : {}),
       playerFacts: settings.playerFacts ?? "rules",
       calendarKey: `${meta.config.calendar || settings.calendar || ""}|${meta.config.startPoint ?? ""}`,
