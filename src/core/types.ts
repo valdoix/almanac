@@ -142,6 +142,10 @@ export interface CharacterState {
   /** Replies whose cast line had them present (four or more without a word: not a person). */
   castSeen?: number;
   lastDriftAbs?: number;
+  /** How fast their needs build and recover (a Slayer tires slowly, a vampire wants blood). */
+  stamina?: import("./stamina").ResolvedStamina;
+  /** A potion or stimulant holding a need off until this minute (absolute). */
+  boost?: { hunger?: number; thirst?: number; fatigue?: number };
   pressure?: string; // hidden pressure (narrator-only)
   /**
    * What doesn't change from scene to scene: eyes, hair, build, scars, voice, age. One entry per
@@ -727,6 +731,17 @@ export interface CastEdit {
   addAliases?: string[];
   /** Added by the player: the message they join the story at. */
   added?: number;
+  /** Their stamina: a kind ("slayer") and speeds of their own; absent, it's read from the sources. */
+  stamina?: StaminaEdit;
+}
+
+/** The player's say on someone's stamina: a kind, and speeds against an ordinary person (0 = never). */
+export interface StaminaEdit {
+  kind?: string;
+  hunger?: number;
+  thirst?: number;
+  fatigue?: number;
+  heal?: number;
 }
 
 export const DEFAULT_CHAT_CONFIG: ChatConfig = {

@@ -21,6 +21,15 @@ import { fixedTraits } from "../core/note";
 import { carried } from "../core/state";
 import { isOffPage } from "../core/offpage";
 import { seedTraitsFor } from "./traitseed";
+import { resolveStamina, staminaWords, STAMINA_KINDS, type ResolvedStamina } from "../core/stamina";
+import type { CharacterState } from "../core/types";
+
+/** Someone's stamina for the Cast page: what holds, in words, and what the sources alone would say. */
+function staminaView(c: CharacterState, sources: Record<string, { kind: string; by: "card" | "lore" }>) {
+  const s: ResolvedStamina = c.stamina ?? { kind: "ordinary", by: "", hunger: 1, thirst: 1, fatigue: 1, sleep: 1, heal: 1 };
+  const auto = resolveStamina({ ...c, stamina: undefined }, sources, undefined);
+  return { ...s, label: STAMINA_KINDS[s.kind]?.label ?? s.kind, words: staminaWords(s), auto: { kind: auto.kind, label: STAMINA_KINDS[auto.kind]?.label ?? auto.kind, by: auto.by } };
+}
 
 export interface UIView {
   version: string;
@@ -212,6 +221,7 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       age: c.age ?? c.traits?.find((t) => t.kind === "age")?.text ?? loreAge(L.records, c.name, c.aliases), ageSet: !!c.age, appearance: c.appearance, edit: meta.config.castEdits?.[c.id] ?? null,
       fixed: fixedTraits(c, seed[c.id]), traits: (c.traits ?? []).map((t) => ({ kind: t.kind, text: t.text, by: t.by })),
       held: carried(st, c.id).map((i) => i.name),
+      stamina: staminaView(c, L.staminaSources),
       moodFresh: !!c.mood?.prev && c.mood.prev !== c.mood.name && c.mood.msg != null && c.mood.msg === st.replyDelta?.msgIndex,
       toYou: bondToUser(st, c.id),
     })),

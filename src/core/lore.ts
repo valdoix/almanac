@@ -7,6 +7,7 @@
 import type { CodexKind, CodexOverlay } from "./codex";
 import { slug } from "./util";
 import { traitsFromText } from "./traits";
+import { detectStamina } from "./stamina";
 import type { TraitKind } from "./types";
 import { BARE_DESCRIPTOR, category, categoryOfLabel, contentTag, DATED, HONORIFIC, isRank as isRankWord, labelNames, pairNames, readLoreMeta, VOICE_DESCRIPTOR, type LoreCategory } from "./loreformat";
 
@@ -61,6 +62,8 @@ export interface Classified {
   keys?: string[];
   /** Eyes, hair, age the entry states for a person. */
   looks?: { kind: TraitKind; text: string }[];
+  /** What the entry says this person is, for their stamina ("vampire", "slayer"). */
+  stamina?: string;
   weaver?: { role: WeaverRole; part?: WeaverPart };
   /** Always-on entries the Ledger must leave to the host: never folded, forced or switched off. */
   pinned?: boolean;
@@ -408,6 +411,8 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
       // Eyes, hair and age the entry states for this person (not for someone it mentions).
       const looks = traitsFromText(content, [base.name, base.name.split(/\s+/)[0], ...base.aliases]);
       if (looks.length) base.looks = looks;
+      const stamina = detectStamina(content, [base.name, base.name.split(/\s+/)[0], ...base.aliases]);
+      if (stamina) base.stamina = stamina;
       if (/\b(died|is dead|was killed|passed away)\b/i.test(fs) || /^deceased\b/i.test(t.descriptor ?? "")) base.dead = true;
       break;
     }
@@ -728,6 +733,7 @@ export function seedOverlays(items: Classified[], opts: { userName?: string } = 
     if (want) body.want = want;
     if (voice) body.voice = voice;
     if (c.looks?.length) body.looks = c.looks;
+    if (c.stamina) body.stamina = c.stamina;
     const tension = c.tension ?? anchors.find((a) => a.tension)?.tension;
     if (tension) body.tension = tension;
     if (c.hours) body.hours = c.hours;

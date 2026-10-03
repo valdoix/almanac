@@ -11,6 +11,7 @@ import { KNOW_OPS } from "./types";
 import { applyFactEdits, canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
 import { careIn, hasPart, isBareWound, opWordOf, parseLine, sameSpot } from "./dsl";
 import { mergeTraits } from "./traits";
+import { resolveStamina } from "./stamina";
 import { applyArcOp, applyWhereabouts } from "./elsewhere/fold";
 import type { KnowArgs } from "./knowparse";
 import { ALL_AXES, BIPOLAR_AXES, LADDER_NAMES } from "./types";
@@ -31,6 +32,8 @@ export interface FoldOptions {
   factEdits?: Record<string, FactEdit>;
   /** Player edits to the cast (names, age, appearance, people added by hand). */
   castEdits?: Record<string, CastEdit>;
+  /** Stamina the card, persona and lore give people, by lower-case name ("user" for the persona). */
+  stamina?: Record<string, { kind: string; by: "card" | "lore" }>;
   /** Read facts from the player's own messages (dates, looks, pinned truths). */
   playerFacts?: "off" | "rules" | "model";
   /** The story day a calendar date names ("Second Moon 7"), near a given day; set by the calendar engine. */
@@ -256,6 +259,12 @@ export class Folder {
         c.aliases = c.aliases.filter((a) => !drop.has(a.toLowerCase()));
       }
       for (const a of e.addAliases ?? []) if (a.trim() && a.toLowerCase() !== c.name.toLowerCase() && !c.aliases.some((x) => x.toLowerCase() === a.toLowerCase())) c.aliases.push(a.trim());
+    }
+    // Stamina after names: a renamed person keeps what their card says about them.
+    for (const c of Object.values(this.state.chars)) {
+      const s = resolveStamina(c, this.opts.stamina, this.opts.castEdits?.[c.id]?.stamina);
+      if (s.kind === "ordinary" && !s.custom) delete c.stamina;
+      else c.stamina = s;
     }
   }
 
@@ -782,6 +791,11 @@ export class Folder {
           if (inj.severity >= 3) this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
         }
         for (const h of a.heals as string[]) c.injuries = c.injuries.filter((i) => !i.where.toLowerCase().includes(h.toLowerCase()));
+        // A stamina potion or a stimulant: the need drops now and holds off for a while.
+        for (const b of (a.boosts ?? []) as { need: "hunger" | "thirst" | "fatigue"; hours: number }[]) {
+          if (!a.meters[b.need]) c.meters[b.need] = Math.min(c.meters[b.need] ?? 1, 1);
+          if (st.time) (c.boost ??= {})[b.need] = absMinutes(st.time) + b.hours * 60;
+        }
         this.care.push({ id, marks: a.care ?? [] });
         if (c.flags.length > 12) c.flags = c.flags.slice(-12);
         return { verdict: "accepted", line: bits.length ? `🩹 ${c.name}: ${bits.join(", ")}` : undefined };
@@ -1338,8 +1352,19 @@ export class Folder {
       const slept = asleep ? (ASLEEP_NOW.test(said) || this.state.mode === "downtime" ? span : night) : 0;
       const awake = span - slept;
       const meal = offPage && !deprived ? lastMeal(fromAbs0, toAbs) : null;
+      // A Slayer's needs build slower than a librarian's; an android's never do.
+      const sta = c.stamina;
       const bump = (k: "hunger" | "thirst" | "fatigue", rate: number, minutes: number, cap: number) => {
         if (m[k] == null) return;
+        const speed = sta?.[k] ?? 1;
+        if (speed <= 0) return;
+        // A potion holds the need off: only the time after it wears off counts.
+        const until = c.boost?.[k];
+        if (until != null) {
+          minutes = Math.max(0, minutes - Math.max(0, Math.min(toAbs, until) - fromAbs0));
+          if (until <= toAbs) delete c.boost![k];
+        }
+        rate /= speed;
         acc[k] += minutes;
         const n = Math.floor(acc[k] / rate);
         if (n > 0) {
@@ -1358,7 +1383,8 @@ export class Folder {
       }
       if (slept >= 180 && m.fatigue != null) {
         // About one step for every ninety minutes; a short night leaves them tired.
-        m.fatigue = clamp(m.fatigue - Math.floor(slept / 90), slept < 300 ? 2 : 0, 5);
+        const rest = slept * (sta?.sleep ?? 1);
+        m.fatigue = clamp(m.fatigue - Math.floor(rest / 90), rest < 300 ? 2 : 0, 5);
         acc.fatigue = 0;
         bump("fatigue", FATIGUE_RATE, awake, 4);
       } else bump("fatigue", FATIGUE_RATE, awake, 4);
@@ -1375,7 +1401,8 @@ export class Folder {
         if (!inj.since) return true;
         const age = toAbs - absMinutes(inj.since);
         const heal = [0, 2 * MIN_PER_DAY, 14 * MIN_PER_DAY, 42 * MIN_PER_DAY, Infinity][inj.severity];
-        if (age >= heal * (inj.treated ? 1 : 1.5)) {
+        const speed = c.stamina?.heal ?? 1;
+        if (speed > 0 && age >= (heal * (inj.treated ? 1 : 1.5)) / speed) {
           if (inj.severity >= 3 && !c.flags.includes(`scar: ${inj.where}`)) c.flags.push(`scar: ${inj.where}`);
           return false;
         }

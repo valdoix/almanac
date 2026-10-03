@@ -1434,6 +1434,11 @@ function readMeter(seg, meters) {
   meters[k] = { v: parseInt(mm[2], 10), rel: !arrow && /^[+-]/.test(mm[2]) };
   return true;
 }
+function potionIn(seg) {
+  if (!POTION.test(seg) || /\b(?:wear(?:s|ing)? off|worn off|fad(?:es|ing|ed)|crash\w*|no (?:more )?potion|out of|needs?|wants?|craving)\b/i.test(seg))
+    return [];
+  return POTION_FOR.filter(([re]) => re.test(seg)).map(([, need, hours]) => ({ need, hours }));
+}
 function readNeedWords(seg, meters) {
   const s = seg.trim().toLowerCase().replace(/\s*\([^)]*\)\s*$/, "").replace(/[.!]$/, "");
   const hit = NEED_WORDS.find(([re]) => re.test(s));
@@ -1835,7 +1840,7 @@ function rewriteKnowledgeLines(text, filed) {
   const next = `${rest.slice(0, at)}${insert}${rest.slice(at)}`;
   return text.slice(0, block.index) + `<ledger>${next}</ledger>` + text.slice(block.index + block[0].length);
 }
-var OP_ALIASES, SUBJECT_OPS, SCENE_MODES, AXIS_ALIASES, METER_ALIASES, SEVERITY, TIER_ALIASES, CAUSE_SPLIT, PARSERS, INJURY, NOT_HURT, PART, MILD, BAD, TENDED, NOT_YET, CARE, REGION, hasPart = (where) => PART.test(where), isBareWound = (where) => /^wound$/i.test(where.trim()), METER, NEED_WORDS, NOUN, GLYPHS = "\u2600\uFE0F|\u2600|\uD83C\uDF19|\u2728|\uD83C\uDF24\uFE0F|\uD83C\uDF24|\u26C5\uFE0F|\u26C5|\uD83C\uDF25\uFE0F|\uD83C\uDF25|\u2601\uFE0F|\u2601|\uD83C\uDF26\uFE0F|\uD83C\uDF26|\uD83C\uDF27\uFE0F|\uD83C\uDF27|\u26C8\uFE0F|\u26C8|\uD83C\uDF29\uFE0F|\uD83C\uDF29|\uD83C\uDF28\uFE0F|\uD83C\uDF28|\u2744\uFE0F|\u2744|\uD83C\uDF2B\uFE0F|\uD83C\uDF2B|\uD83C\uDF2C\uFE0F|\uD83C\uDF2C|\uD83C\uDF2A\uFE0F|\uD83C\uDF2A|\uD83D\uDD25|\uD83E\uDDCA|\uD83C\uDF21\uFE0F|\uD83C\uDF21", CLOCK = "(?:\uD83D\uDD70|[\\u{1F550}-\\u{1F567}]|\u23F0|\u231A|\u23F1|\u23F2)\\uFE0F?", SPEAKER_LABEL, QUOTED = `["\\u201C][^"\\u201C\\u201D\\n]{1,1200}["\\u201D]`, MARK_AFTER, JUNK_CLOSER, QUIET_TONE, KNOW_LINE;
+var OP_ALIASES, SUBJECT_OPS, SCENE_MODES, AXIS_ALIASES, METER_ALIASES, SEVERITY, TIER_ALIASES, CAUSE_SPLIT, PARSERS, INJURY, NOT_HURT, PART, MILD, BAD, TENDED, NOT_YET, CARE, REGION, hasPart = (where) => PART.test(where), isBareWound = (where) => /^wound$/i.test(where.trim()), METER, NEED_WORDS, POTION, POTION_FOR, NOUN, GLYPHS = "\u2600\uFE0F|\u2600|\uD83C\uDF19|\u2728|\uD83C\uDF24\uFE0F|\uD83C\uDF24|\u26C5\uFE0F|\u26C5|\uD83C\uDF25\uFE0F|\uD83C\uDF25|\u2601\uFE0F|\u2601|\uD83C\uDF26\uFE0F|\uD83C\uDF26|\uD83C\uDF27\uFE0F|\uD83C\uDF27|\u26C8\uFE0F|\u26C8|\uD83C\uDF29\uFE0F|\uD83C\uDF29|\uD83C\uDF28\uFE0F|\uD83C\uDF28|\u2744\uFE0F|\u2744|\uD83C\uDF2B\uFE0F|\uD83C\uDF2B|\uD83C\uDF2C\uFE0F|\uD83C\uDF2C|\uD83C\uDF2A\uFE0F|\uD83C\uDF2A|\uD83D\uDD25|\uD83E\uDDCA|\uD83C\uDF21\uFE0F|\uD83C\uDF21", CLOCK = "(?:\uD83D\uDD70|[\\u{1F550}-\\u{1F567}]|\u23F0|\u231A|\u23F1|\u23F2)\\uFE0F?", SPEAKER_LABEL, QUOTED = `["\\u201C][^"\\u201C\\u201D\\n]{1,1200}["\\u201D]`, MARK_AFTER, JUNK_CLOSER, QUIET_TONE, KNOW_LINE;
 var init_dsl = __esm(() => {
   init_types();
   init_traits();
@@ -2159,6 +2164,7 @@ var init_dsl = __esm(() => {
       const unflags = [];
       const injuries = [];
       const heals = [];
+      const boosts = [];
       for (const seg0 of main.split(/\s*;\s*(?![^()]*\))/)) {
         const seg = seg0.trim();
         if (!seg)
@@ -2190,7 +2196,15 @@ var init_dsl = __esm(() => {
           const ff = f.trim();
           if (!ff)
             continue;
-          if (readMeter(ff, meters) || readNeedWords(ff, meters))
+          if (readMeter(ff, meters))
+            continue;
+          const boost = potionIn(ff);
+          if (boost.length) {
+            boosts.push(...boost);
+            flags.push(ff.toLowerCase());
+            continue;
+          }
+          if (readNeedWords(ff, meters))
             continue;
           if (ff.startsWith("-") || ff.startsWith("no longer "))
             unflags.push(ff.replace(/^-|^no longer /, "").trim().toLowerCase());
@@ -2205,7 +2219,7 @@ var init_dsl = __esm(() => {
           }
         }
       }
-      p.args = { meters, flags, unflags, injuries, heals, care: careIn(rest) };
+      p.args = { meters, flags, unflags, injuries, heals, boosts, care: careIn(rest) };
       return p;
     },
     look(p, s, rest) {
@@ -2588,6 +2602,12 @@ var init_dsl = __esm(() => {
     [/^(?:still )?thirsty$/, "thirst", 3, false],
     [/^(?:still )?(?:exhausted|worn out|spent)$/, "fatigue", 4, false],
     [/^(?:still )?(?:tired|weary|drowsy|sleepy)$/, "fatigue", 3, false]
+  ];
+  POTION = /\b(?:potions?|draughts?|elixirs?|tonics?|philt(?:er|re)s?|brews?|serums?|stims?|stimulants?|stimpacks?|energy drinks?|pep pills?|smelling salts)\b/i;
+  POTION_FOR = [
+    [/\b(?:stamina|energy|energi[sz]\w*|vigou?r\w*|wakeful\w*|awake\w*|alert\w*|pepper[- ]?up|invigorat\w*|restor\w*|revitali[sz]\w*|endurance|stims?|stimulants?|stimpacks?|energy drinks?|pep pills?|smelling salts)\b/i, "fatigue", 6],
+    [/\b(?:nourish\w*|sustenance|satiat\w*|hunger)\b/i, "hunger", 8],
+    [/\b(?:hydrat\w*|thirst\w*)\b/i, "thirst", 8]
   ];
   NOUN = [[/^(wound|stitch)/, "wound"], [/^bruis/, "bruise"], [/^burn/, "burn"], [/^scrap/, "scrape"], [/^graz/, "graze"], [/^stab/, "stab wound"], [/^slash/, "slash"], [/^fractur/, "fracture"], [/^sprain/, "sprain"], [/^bite/, "bite"], [/^cut/, "cut"], [/^gash/, "gash"], [/^lacerat/, "laceration"], [/^blister/, "blister"], [/^welt/, "welt"], [/^punctur/, "puncture"]];
   SPEAKER_LABEL = /(^|\n)([ \t]*)(?:\*\*|__)?\[?([A-Z\u00C0-\u00D6\u00D8-\u00DE?][^\n\[\]#|:*_"\u201C=<>]{0,59}?)[ \t]*#(\d{1,2})[ \t]*(?:\|[ \t]*([a-z]+)[ \t]*)?\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[ \t]*([^\n]*)/g;
@@ -3896,6 +3916,163 @@ var init_facts = __esm(() => {
   DEED = /\b(?:said|told|asked|offered|admitted|confessed|refused|joked|made a joke|laughed|promised|lied|whispered|shouted|agreed|accepted|kissed|hugged|killed|fought|attacked|saved|pulled|dug|arrived|left|cried|wept|broke down|slapped|chose|decided|threatened|begged|swore|called (?:him|her|them)sel(?:f|ves))\b/i;
 });
 
+// src/core/stamina.ts
+function detectStamina(text, names) {
+  if (!text)
+    return null;
+  const subj = [...new Set(names.filter((n) => n && n.length >= 2).map(esc))].join("|");
+  const who = `(?:${subj ? `${subj}|` : ""}she|he|they|i)`;
+  const score = {};
+  for (const [kind, terms, strongOnly] of TERMS) {
+    const term = `(${terms})(?![\\p{L}-])`;
+    const strong = [
+      new RegExp(`(?:^|\\n)[ \\t>*#_-]*(?:identity|species|race|kind|type|nature|class|heritage|blood status|calling|occupation|role|what (?:she|he|they) (?:is|are))[*_ \\t]*:[*_ \\t]*[^\\n]{0,80}?\\b${term}`, "giu"),
+      new RegExp(`\\b${who}\\s+(?:is|was|am|are|became|becomes|remains|['\u2019]s)\\s+(?:(?:now|also|still|currently|actually|really|secretly|newly)\\s+)?(?:(?:a|an|the)\\s+)?${FILLER}{0,7}?${term}`, "giu"),
+      ...subj ? [new RegExp(`\\b(?:${subj})\\b[^.\\n,\u2014\u2013]{0,30}?(?:,|\u2014|\u2013| - )\\s*(?:\\d{1,3}\\s*(?:,|\u2014|\u2013| - )\\s*)?(?:(?:a|an|the)\\s+)${FILLER}{0,5}?${term}`, "giu")] : [],
+      new RegExp(`\\b(?:called|chosen|activated|turned|sired|made|born|reborn|raised)\\s+(?:as|into)\\s+(?:(?:a|an|the)\\s+)?${FILLER}{0,3}?${term}`, "giu")
+    ];
+    let s = 0;
+    for (const re of strong) {
+      for (const m of text.matchAll(re)) {
+        const at = m.index + m[0].length - m[1].length;
+        NOT_THEIRS.lastIndex = m.index + m[0].length;
+        if (NOT_THEIRS.test(text))
+          continue;
+        if (NEGATED.test(text.slice(Math.max(0, at - 40), at)))
+          continue;
+        s += 5;
+      }
+    }
+    if (!strongOnly) {
+      for (const m of text.matchAll(new RegExp(`\\b${term}`, "giu"))) {
+        NOT_THEIRS.lastIndex = m.index + m[0].length;
+        if (NOT_THEIRS.test(text))
+          continue;
+        const lead = text.slice(Math.max(0, m.index - 50), m.index);
+        if (/\b[A-Z][\p{L}'\u2019-]+,\s+(?:(?:a|an|the)\s+)?(?:[\p{L}-]+\s+){0,2}$/u.test(lead) && !(subj && new RegExp(`\\b(?:${subj}),\\s+(?:(?:a|an|the)\\s+)?(?:[\\p{L}-]+\\s+){0,2}$`, "iu").test(lead)))
+          continue;
+        if (NEGATED.test(lead))
+          continue;
+        s += 1;
+      }
+    }
+    if (s)
+      score[kind] = s;
+  }
+  const best = Object.entries(score).sort((a, b) => b[1] - a[1] || PRIORITY.indexOf(a[0]) - PRIORITY.indexOf(b[0]))[0];
+  return best && best[1] >= 3 ? best[0] : null;
+}
+function staminaFromTraits(texts) {
+  const parts = texts.flatMap((t) => t.split(/\s*[;,\u00B7]\s*/)).map((p) => p.trim()).filter(Boolean);
+  for (const [kind, terms] of TERMS) {
+    const re = new RegExp(`^(?:(?:a|an|the)\\s+)?(?:[\\p{L}'\u2019-]+\\s+){0,3}?(${terms})(?![\\p{L}-])`, "iu");
+    for (const p of parts) {
+      const m = re.exec(p);
+      if (!m)
+        continue;
+      NOT_THEIRS.lastIndex = m[0].length;
+      if (!NOT_THEIRS.test(p) && !NEGATED.test(p.slice(0, m[0].length - m[1].length)))
+        return kind;
+    }
+  }
+  return null;
+}
+function resolveStamina(c, sources, edit) {
+  let kind = "ordinary";
+  let by = "";
+  const src = sources ? (c.isUser ? sources.user : undefined) ?? sourceFor(c, sources) : undefined;
+  if (edit?.kind && STAMINA_KINDS[edit.kind]) {
+    kind = edit.kind;
+    by = "user";
+  } else if (src && STAMINA_KINDS[src.kind]) {
+    kind = src.kind;
+    by = src.by;
+  } else {
+    const told = staminaFromTraits([...(c.traits ?? []).map((t) => t.text), c.always ?? ""].filter(Boolean));
+    if (told) {
+      kind = told;
+      by = "story";
+    }
+  }
+  const p = { ...STAMINA_KINDS[kind].p };
+  let custom = false;
+  for (const k of ["hunger", "thirst", "fatigue", "heal"]) {
+    const v = edit?.[k];
+    if (typeof v === "number" && v >= 0 && v <= 10) {
+      if (v !== p[k])
+        custom = true;
+      p[k] = v;
+    }
+  }
+  return { kind, by: custom && !by ? "user" : by, ...p, ...custom ? { custom } : {} };
+}
+function sourceFor(c, sources) {
+  const names = [c.name, ...c.aliases].map((n) => n.toLowerCase());
+  for (const n of names)
+    if (sources[n])
+      return sources[n];
+  const first = c.name.split(/\s+/)[0].toLowerCase();
+  for (const [k, v] of Object.entries(sources))
+    if (k !== "user" && k.split(/\s+/)[0] === first)
+      return v;
+  return;
+}
+function staminaWords(s) {
+  const k = STAMINA_KINDS[s.kind] ?? STAMINA_KINDS.ordinary;
+  const bits = [];
+  const need = (v, never, slow, slower, fast) => v === 0 ? never : v <= 0.3 ? slower : v < 0.9 ? slow : v >= 1.3 ? fast : "";
+  const sameHunger = k.hungerWords && s.hunger === k.p.hunger;
+  if (sameHunger)
+    bits.push(k.hungerWords);
+  else if (s.hunger === s.thirst && s.hunger !== 1)
+    bits.push(need(s.hunger, "needs no food or drink", "hungers and thirsts slowly", "rarely hungry or thirsty", "hungers and thirsts fast"));
+  else {
+    bits.push(need(s.hunger, "needs no food", "hungers slowly", "rarely hungry", "eats a lot"));
+    if (!(sameHunger && s.thirst === 0 && k.hungerWords))
+      bits.push(need(s.thirst, "no thirst", "thirsts slowly", "rarely thirsty", "thirsts fast"));
+  }
+  if (sameHunger && s.thirst === 0)
+    bits.push("no thirst");
+  bits.push(need(s.fatigue, "never tires", "tires slowly", "rarely tires", "tires fast"));
+  if (s.fatigue > 0 && s.sleep >= 1.5)
+    bits.push("recovers fast");
+  bits.push(s.heal === 0 ? "doesn't heal on its own" : s.heal >= 4 ? "heals very fast" : s.heal >= 2 ? "heals fast" : s.heal < 0.9 ? "heals slowly" : "");
+  if (k.extra)
+    bits.push(k.extra);
+  const said = [...new Set(bits.filter(Boolean))].join(", ");
+  if (!said)
+    return s.kind === "ordinary" || s.kind === "wizard" ? "" : k.label;
+  return `${s.kind === "ordinary" ? "stamina" : k.label.split(" (")[0]}: ${said}`;
+}
+var ORDINARY, STAMINA_KINDS, TERMS, PRIORITY, NOT_THEIRS, NEGATED, FILLER = "(?:(?!(?:who|whom|that|which|hunts?|hunted|kills?|killed|fights?|fought|slays?|slew|loves?|loved|met|meets|with|by|of|for|against|from|to|than|like|and\\s+(?:a|an)\\b)\\b)[\\p{L}'\u2019-]+\\s+)", esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var init_stamina = __esm(() => {
+  ORDINARY = { hunger: 1, thirst: 1, fatigue: 1, sleep: 1, heal: 1 };
+  STAMINA_KINDS = {
+    ordinary: { label: "Ordinary", p: ORDINARY },
+    hardy: { label: "Hardy (soldier, athlete)", p: { hunger: 1, thirst: 1, fatigue: 0.7, sleep: 1.25, heal: 1.25 } },
+    slayer: { label: "Slayer", p: { hunger: 1, thirst: 1, fatigue: 0.4, sleep: 1.5, heal: 3 } },
+    superhuman: { label: "Superhuman", p: { hunger: 0.6, thirst: 0.6, fatigue: 0.3, sleep: 2, heal: 3 } },
+    werewolf: { label: "Werewolf / shifter", p: { hunger: 1.5, thirst: 1, fatigue: 0.7, sleep: 1.25, heal: 3 } },
+    vampire: { label: "Vampire", p: { hunger: 0.4, thirst: 0, fatigue: 0.5, sleep: 1, heal: 5 }, hungerWords: "hungers for blood, not food", extra: "sleeps by day" },
+    immortal: { label: "Immortal / divine", p: { hunger: 0, thirst: 0, fatigue: 0.25, sleep: 2, heal: 5 } },
+    construct: { label: "Construct / ghost", p: { hunger: 0, thirst: 0, fatigue: 0, sleep: 1, heal: 0 } },
+    wizard: { label: "Witch / wizard", p: ORDINARY }
+  };
+  TERMS = [
+    ["construct", "android|robot|automaton|golem|cyborg|ghost|spectre|specter|wraith|zombie|revenant|lich|undead construct", true],
+    ["immortal", "angel|archangel|demon|deity|god|goddess|immortal|celestial|seraph", true],
+    ["vampire", "vampire|vampyre|nosferatu", false],
+    ["werewolf", "werewolf|lycanthrope|shape-?shifter|skinwalker|wolf shifter", false],
+    ["slayer", "slayer|chosen one|vampire slayer", false],
+    ["superhuman", "superhero|super-?soldier|superhuman|kryptonian|mutant|meta-?human|demigod|dhampir|half-vampire|half-demon", false],
+    ["wizard", "wizard|witch|warlock|sorcerer|sorceress|mage|wizarding|magic-user", false],
+    ["hardy", "soldier|knight|warrior|athlete|ranger|mercenary|marine|legionnaire|gladiator|commando", true]
+  ];
+  PRIORITY = TERMS.map(([k]) => k);
+  NOT_THEIRS = /\s+(?:slayers?|hunters?|killers?|incidents?|attacks?|nests?|bites?|lairs?|dens?|kills?|fights?|problems?|activity|sightings?|lore|movies?|novels?|stor(?:y|ies)|shows?|clans?|court)\b/iy;
+  NEGATED = /\b(?:not|n['\u2019]t|never|no longer|former|ex-|formerly|pretends? to be|disguised as|posing as|thought (?:she|he|they) was)\s+(?:(?:a|an|the)\s+)?(?:[\p{L}'\u2019-]+\s+){0,2}$/iu;
+});
+
 // src/core/elsewhere/fold.ts
 function applyArcOp(st, op, mi) {
   const a = op.args;
@@ -4270,6 +4447,13 @@ class Folder {
       for (const a of e.addAliases ?? [])
         if (a.trim() && a.toLowerCase() !== c.name.toLowerCase() && !c.aliases.some((x) => x.toLowerCase() === a.toLowerCase()))
           c.aliases.push(a.trim());
+    }
+    for (const c of Object.values(this.state.chars)) {
+      const s = resolveStamina(c, this.opts.stamina, this.opts.castEdits?.[c.id]?.stamina);
+      if (s.kind === "ordinary" && !s.custom)
+        delete c.stamina;
+      else
+        c.stamina = s;
     }
   }
   ensureChar(id, name, msgIndex, isUser) {
@@ -4809,6 +4993,12 @@ class Folder {
         }
         for (const h of a.heals)
           c.injuries = c.injuries.filter((i) => !i.where.toLowerCase().includes(h.toLowerCase()));
+        for (const b of a.boosts ?? []) {
+          if (!a.meters[b.need])
+            c.meters[b.need] = Math.min(c.meters[b.need] ?? 1, 1);
+          if (st.time)
+            (c.boost ??= {})[b.need] = absMinutes(st.time) + b.hours * 60;
+        }
         this.care.push({ id, marks: a.care ?? [] });
         if (c.flags.length > 12)
           c.flags = c.flags.slice(-12);
@@ -5414,9 +5604,20 @@ class Folder {
       const slept = asleep ? ASLEEP_NOW.test(said) || this.state.mode === "downtime" ? span : night : 0;
       const awake = span - slept;
       const meal = offPage && !deprived ? lastMeal(fromAbs0, toAbs) : null;
+      const sta = c.stamina;
       const bump = (k, rate, minutes, cap) => {
         if (m[k] == null)
           return;
+        const speed = sta?.[k] ?? 1;
+        if (speed <= 0)
+          return;
+        const until = c.boost?.[k];
+        if (until != null) {
+          minutes = Math.max(0, minutes - Math.max(0, Math.min(toAbs, until) - fromAbs0));
+          if (until <= toAbs)
+            delete c.boost[k];
+        }
+        rate /= speed;
         acc[k] += minutes;
         const n = Math.floor(acc[k] / rate);
         if (n > 0) {
@@ -5434,7 +5635,8 @@ class Folder {
           bump(k, rate, awake, deprived ? 5 : 3);
       }
       if (slept >= 180 && m.fatigue != null) {
-        m.fatigue = clamp(m.fatigue - Math.floor(slept / 90), slept < 300 ? 2 : 0, 5);
+        const rest = slept * (sta?.sleep ?? 1);
+        m.fatigue = clamp(m.fatigue - Math.floor(rest / 90), rest < 300 ? 2 : 0, 5);
         acc.fatigue = 0;
         bump("fatigue", FATIGUE_RATE, awake, 4);
       } else
@@ -5452,7 +5654,8 @@ class Folder {
           return true;
         const age = toAbs - absMinutes(inj.since);
         const heal = [0, 2 * MIN_PER_DAY, 14 * MIN_PER_DAY, 42 * MIN_PER_DAY, Infinity][inj.severity];
-        if (age >= heal * (inj.treated ? 1 : 1.5)) {
+        const speed = c.stamina?.heal ?? 1;
+        if (speed > 0 && age >= heal * (inj.treated ? 1 : 1.5) / speed) {
           if (inj.severity >= 3 && !c.flags.includes(`scar: ${inj.where}`))
             c.flags.push(`scar: ${inj.where}`);
           return false;
@@ -5529,6 +5732,7 @@ var init_state = __esm(() => {
   init_facts();
   init_dsl();
   init_traits();
+  init_stamina();
   init_fold();
   init_types();
   init_util();
@@ -6351,7 +6555,7 @@ function findDate(cal, text) {
     best = { at: r.index, month, day, year: r[yearGroup] ? parseInt(r[yearGroup], 10) : undefined };
   };
   cal.months.forEach((mo, i) => {
-    const n = esc(mo.name);
+    const n = esc2(mo.name);
     if (mo.festival && mo.days === 1) {
       consider(new RegExp(`(?<![\\w'])${n}(?![\\w'])${yearTail}`, "i"), i, null, 1);
       return;
@@ -6667,7 +6871,7 @@ function describeCalendar(cal) {
     parts.push(`The story sets the season: when it turns, write "season: winter" (or spring, summer, autumn) in the ledger.`);
   return parts.join(" ");
 }
-var GREG_MONTHS, GREG_DAYS, sumDays = (months) => months.reduce((s, m) => s + m.days, 0) || 365, SEASON_DOY, esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"), splitList = (s) => s.split(/\s*,\s*(?![^()[\]]*[)\]])/).map((x) => x.trim()).filter(Boolean), DEFAULT_FORMAT = "{weekday} {day} {month} {year} {era}";
+var GREG_MONTHS, GREG_DAYS, sumDays = (months) => months.reduce((s, m) => s + m.days, 0) || 365, SEASON_DOY, esc2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"), splitList = (s) => s.split(/\s*,\s*(?![^()[\]]*[)\]])/).map((x) => x.trim()).filter(Boolean), DEFAULT_FORMAT = "{weekday} {day} {month} {year} {era}";
 var init_calendar = __esm(() => {
   init_calendars();
   GREG_MONTHS = [
@@ -7456,6 +7660,30 @@ function chatPersonaId(chat) {
   const id = md.active_persona_id ?? md.persona_id ?? md.personaId;
   return typeof id === "string" && id ? id : undefined;
 }
+function staminaSourcesFor(names, codex) {
+  const out = {};
+  for (const o of Object.values(codex?.overlays ?? {})) {
+    if (o.kind !== "person" || !o.name)
+      continue;
+    const kind = typeof o.body?.stamina === "string" ? o.body.stamina : detectStamina(`${o.name} is ${o.body?.role ?? ""}. ${o.summary ?? ""}`, [o.name, o.name.split(/\s+/)[0], ...o.aliases ?? []]);
+    if (!kind)
+      continue;
+    const key = o.id === "char:user" ? "user" : o.name.toLowerCase();
+    out[key] = { kind, by: "lore" };
+  }
+  const cards = names.cards?.length ? names.cards : names.char ? [{ id: "", name: names.char, text: names.charText ?? "" }] : [];
+  for (const c of cards) {
+    const kind = detectStamina(c.text, [c.name, c.name.split(/\s+/)[0]]);
+    if (kind)
+      out[c.name.toLowerCase()] = { kind, by: "card" };
+  }
+  if (names.personaText) {
+    const kind = detectStamina(names.personaText, [names.user, names.user.split(/\s+/)[0]]);
+    if (kind)
+      out.user = { kind, by: "card" };
+  }
+  return out;
+}
 
 class ChatLedger {
   chatId;
@@ -7471,6 +7699,7 @@ class ChatLedger {
   stamp = "";
   loadedAt = 0;
   namesLoaded = false;
+  staminaSources = {};
   constructor(chatId, userId) {
     this.chatId = chatId;
     this.userId = userId;
@@ -7537,6 +7766,7 @@ class ChatLedger {
       merges: meta.config.merges,
       factEdits: meta.config.factEdits,
       castEdits: meta.config.castEdits,
+      ...Object.keys(this.staminaSources).length ? { stamina: this.staminaSources } : {},
       playerFacts: settings.playerFacts ?? "rules",
       calendarKey: `${meta.config.calendar || settings.calendar || ""}|${meta.config.startPoint ?? ""}`,
       dayOfDate: (text, near) => {
@@ -7576,6 +7806,7 @@ class ChatLedger {
         path = path.slice(0, -1);
     }
     this.path = path;
+    this.staminaSources = staminaSourcesFor(this.names, files.codex);
     const fo = this.foldOptions(files.meta, settings);
     const res = this.runtime.fold(path, fo, files.side);
     this.state = res.state;
@@ -7678,6 +7909,7 @@ var init_ledger = __esm(() => {
   init_calendar();
   init_keys();
   init_dsl();
+  init_stamina();
   init_util();
   init_host();
   init_store();
@@ -7818,7 +8050,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.23.0";
+var VERSION = "1.24.0";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -14152,15 +14384,15 @@ function drawPlate(h, genre, as) {
     fx
   };
   const css = BASE + art(attrs.k) + (FX[fx] ? minCss(FX[fx].replaceAll("&", `[data-fx=${fx}]`)) : "") + (GENRE_FX[g] ? minCss(GENRE_FX[g].replaceAll("&", `[data-genre=${g}]`)) : "");
-  const segs = h.place.split(/[ \t]*\u203A[ \t]*/).filter((s) => s.length).map(esc2);
+  const segs = h.place.split(/[ \t]*\u203A[ \t]*/).filter((s) => s.length).map(esc3);
   const crumb = segs.length > 1 ? `${segs.slice(0, -1).join(" <span>\u203A</span> ")} <span>\u203A</span> <b>${segs[segs.length - 1]}</b>` : segs.join("");
   const day = /^\s*((?:Day|Dia|D\u00EDa|Jour|Tag)\s*\d+)/i.exec(h.date)?.[1] ?? h.date;
   const dayN = /^\s*(?:Day|Dia|D\u00EDa|Jour|Tag)\s*(\d+)/i.exec(h.date)?.[1] ?? "";
-  const kicker = esc2(day) + (lead ? ` \xB7 ${esc2(lead.replace(/_/g, " "))}` : "");
+  const kicker = esc3(day) + (lead ? ` \xB7 ${esc3(lead.replace(/_/g, " "))}` : "");
   const dateOnly = h.date.replace(/^\s*(?:(?:Day|Dia|D\u00EDa|Jour|Tag)\s*\d+\s*[\u00B7\u2022|,]\s*)?/i, "");
-  const pills = esc2(h.cond).replace(/\bwind[ \t]+([NSEW]{1,3})\b/i, `<i class="wind">\u27A4</i> $1`).replace(/(-?\d{1,3})[ \t]*\u00B0[ \t]*([CF])\b/i, `<i class="thermo"></i>$1\xB0$2`).replace(/[ \t]*[\u00B7\u2022|][ \t]*/g, `</span><span class="gl">`);
+  const pills = esc3(h.cond).replace(/\bwind[ \t]+([NSEW]{1,3})\b/i, `<i class="wind">\u27A4</i> $1`).replace(/(-?\d{1,3})[ \t]*\u00B0[ \t]*([CF])\b/i, `<i class="thermo"></i>$1\xB0$2`).replace(/[ \t]*[\u00B7\u2022|][ \t]*/g, `</span><span class="gl">`);
   const clock = `${h.hour < 10 ? "0" : ""}${h.hour}:${h.minute}`;
-  return `<div class="p" ${Object.entries(attrs).map(([k, x]) => `data-${k}="${x}"`).join(" ")} style="${style}"><style>${css}</style>` + `<div class="scene"><div class="l sky"></div><div class="l wash"></div><div class="l glow"></div><div class="l stars"></div><div class="l fx"></div><div class="l fx2"></div><div class="l rays"></div><div class="l sun"></div><div class="l moon"></div><div class="l clouds"></div><div class="l clouds2"></div><div class="l gx"></div><div class="l kx2"></div><div class="l ground"></div>` + `<div class="far land"></div><div class="l water"></div><div class="l glint"></div><div class="l mglint"></div><div class="refl land"></div><div class="mid land"></div><div class="lit land"></div><div class="l kx"></div><div class="near land"></div><div class="fg land"></div>` + `<div class="l fog"></div><div class="l windl"></div><div class="l heat"></div><div class="l rain"></div><div class="l rain r2"></div><div class="l snow"></div><div class="l snow big"></div><div class="l flash"></div></div>` + (kind.startsWith("r_") ? `<div class="l room wall"></div><div class="l room walldim"></div><div class="l room wain"></div><div class="l room lamp"></div><div class="beam"></div><div class="wf"></div><div class="sill"></div><div class="room ra"></div><div class="room rb"></div><div class="room rc"></div><div class="room rd"></div>` + `<div class="room set">${"<i></i>".repeat(SLOTS.i)}${"<b></b>".repeat(SLOTS.b)}</div><div class="l room spill"></div><div class="l room motes"></div><div class="l room roomflash"></div><div class="l room vig"></div>` : "") + `<div class="l scrim"></div><div class="l grade"></div><div class="l grain"></div><div class="l frame"></div>` + `<div class="top"><span class="crumb">${crumb}</span><span class="dial"><i class="mk"></i><span>${clock}</span></span></div>` + `<div class="title" data-n="${dayN}"><span class="kicker">${kicker}</span><h3 class="ttl">${esc2(h.title)}</h3></div>` + `<div class="strip"><span class="gl">\uD83D\uDDD3 ${esc2(dateOnly)}</span><span class="gl">${h.glyph ? `${h.glyph} ` : ""}${pills}</span>${h.rise ? `<span class="gl">\u2600 ${h.rise} \u2013 ${h.set}</span>` : ""}${h.moon ? `<span class="gl"><i class="mo"></i>${esc2(h.moon)}</span>` : ""}</div></div>`;
+  return `<div class="p" ${Object.entries(attrs).map(([k, x]) => `data-${k}="${x}"`).join(" ")} style="${style}"><style>${css}</style>` + `<div class="scene"><div class="l sky"></div><div class="l wash"></div><div class="l glow"></div><div class="l stars"></div><div class="l fx"></div><div class="l fx2"></div><div class="l rays"></div><div class="l sun"></div><div class="l moon"></div><div class="l clouds"></div><div class="l clouds2"></div><div class="l gx"></div><div class="l kx2"></div><div class="l ground"></div>` + `<div class="far land"></div><div class="l water"></div><div class="l glint"></div><div class="l mglint"></div><div class="refl land"></div><div class="mid land"></div><div class="lit land"></div><div class="l kx"></div><div class="near land"></div><div class="fg land"></div>` + `<div class="l fog"></div><div class="l windl"></div><div class="l heat"></div><div class="l rain"></div><div class="l rain r2"></div><div class="l snow"></div><div class="l snow big"></div><div class="l flash"></div></div>` + (kind.startsWith("r_") ? `<div class="l room wall"></div><div class="l room walldim"></div><div class="l room wain"></div><div class="l room lamp"></div><div class="beam"></div><div class="wf"></div><div class="sill"></div><div class="room ra"></div><div class="room rb"></div><div class="room rc"></div><div class="room rd"></div>` + `<div class="room set">${"<i></i>".repeat(SLOTS.i)}${"<b></b>".repeat(SLOTS.b)}</div><div class="l room spill"></div><div class="l room motes"></div><div class="l room roomflash"></div><div class="l room vig"></div>` : "") + `<div class="l scrim"></div><div class="l grade"></div><div class="l grain"></div><div class="l frame"></div>` + `<div class="top"><span class="crumb">${crumb}</span><span class="dial"><i class="mk"></i><span>${clock}</span></span></div>` + `<div class="title" data-n="${dayN}"><span class="kicker">${kicker}</span><h3 class="ttl">${esc3(h.title)}</h3></div>` + `<div class="strip"><span class="gl">\uD83D\uDDD3 ${esc3(dateOnly)}</span><span class="gl">${h.glyph ? `${h.glyph} ` : ""}${pills}</span>${h.rise ? `<span class="gl">\u2600 ${h.rise} \u2013 ${h.set}</span>` : ""}${h.moon ? `<span class="gl"><i class="mo"></i>${esc3(h.moon)}</span>` : ""}</div></div>`;
 }
 function drawPlates(content, genre) {
   return content.replace(new RegExp(PLATE_FIND, "g"), (all, date, hour, minute, glyph, cond, rh, rm, sh, sm, moon, place, title) => {
@@ -14182,7 +14414,7 @@ ${drawPlate({
 `;
   });
 }
-var esc2 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"), BANDS2, GLYPH_WX, WIND_DEG, intensity = (c) => /torrential|downpour|blizzard|driving/i.test(c) ? "torrential" : /heavy|hard|thick|dense/i.test(c) ? "heavy" : /light|drizzle|thin|fine|patchy/i.test(c) ? "light" : "moderate", EXT_A, PLACE_ORDER, wordRe = (w) => new RegExp(String.raw`\b(?:${w})(?:s|es)?(?![a-z])`, "i"), ORDER_RE, firstKind = (text) => ORDER_RE.find(([, re]) => re.test(text))?.[0], ART = null, art = (key) => (ART ??= new Map(kindChunks().map((c) => [c.key, minCss(c.css)]))).get(key) ?? "", BASE, vowels = (s, set) => s.replace(set, "").length;
+var esc3 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"), BANDS2, GLYPH_WX, WIND_DEG, intensity = (c) => /torrential|downpour|blizzard|driving/i.test(c) ? "torrential" : /heavy|hard|thick|dense/i.test(c) ? "heavy" : /light|drizzle|thin|fine|patchy/i.test(c) ? "light" : "moderate", EXT_A, PLACE_ORDER, wordRe = (w) => new RegExp(String.raw`\b(?:${w})(?:s|es)?(?![a-z])`, "i"), ORDER_RE, firstKind = (text) => ORDER_RE.find(([, re]) => re.test(text))?.[0], ART = null, art = (key) => (ART ??= new Map(kindChunks().map((c) => [c.key, minCss(c.css)]))).get(key) ?? "", BASE, vowels = (s, set) => s.replace(set, "").length;
 var init_plate = __esm(() => {
   init_kinds();
   init_fx();
@@ -14226,7 +14458,7 @@ function offPageFacts(st, auto) {
 }
 function wordPattern(words) {
   const w = words.map((x) => x.trim()).filter((x) => x.length >= 2);
-  return w.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${w.map(esc3).join("|")})(?![\\p{L}\\p{N}])`, "giu") : null;
+  return w.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${w.map(esc4).join("|")})(?![\\p{L}\\p{N}])`, "giu") : null;
 }
 function redact(text, list) {
   let out = text;
@@ -14257,7 +14489,7 @@ function offPageLines(list, nm, max = 4) {
     return `#${o.key} (${who}): not on the page yet. No narration, thought or register states it${never}${as}. It comes out only in a scene where someone tells it.`;
   });
 }
-var esc3 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var esc4 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // src/core/note.ts
 function vad(c) {
@@ -14282,6 +14514,9 @@ function capsule(c, state, opts) {
   const fixed = fixedTraits(c, opts.seed);
   if (fixed)
     bits.push(`always: ${fixed}`);
+  const stamina = c.stamina ? staminaWords(c.stamina) : "";
+  if (stamina)
+    bits.push(stamina);
   if (c.activity)
     bits.push(c.activity);
   const inner = !(c.isUser && opts.sealed);
@@ -14520,6 +14755,7 @@ ${order.filter((k) => lanes[k]).map((k) => lanes[k]).join(`
 var DEFAULT_BUDGETS, METER_WORDS;
 var init_note = __esm(() => {
   init_traits();
+  init_stamina();
   init_util();
   init_state();
   init_facts();
@@ -15392,7 +15628,7 @@ function kindForStory(premise, lead, others) {
         let best = -1;
         let mine = true;
         for (const x of names) {
-          const hits = [...clause.matchAll(new RegExp(`\\b${esc4(x.n)}\\b`, "gi"))];
+          const hits = [...clause.matchAll(new RegExp(`\\b${esc5(x.n)}\\b`, "gi"))];
           const j = hits.length ? hits[hits.length - 1].index : -1;
           if (j > best) {
             best = j;
@@ -15489,7 +15725,7 @@ function endTemplate(o) {
     return `${firstLine}${cap3(lead)} came close to the worst, but it didn't come to that.`;
   return `${firstLine}It went badly for ${lead}. ${cameTrue(fear, lead, !!o.group)}`;
 }
-var SPECS, ORDER, ATTRIBUTE, esc4 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), bare = (want) => want.replace(/[.!]+$/, "").trim(), ROOMISH, GROUPISH, isPluralName = (name) => /^[A-Z][\w'\u2019-]*s$/.test(name.split(/\s+/).at(-1)) && !/&/.test(name), cap3 = (s) => s.charAt(0).toUpperCase() + s.slice(1), sentence = (s) => {
+var SPECS, ORDER, ATTRIBUTE, esc5 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), bare = (want) => want.replace(/[.!]+$/, "").trim(), ROOMISH, GROUPISH, isPluralName = (name) => /^[A-Z][\w'\u2019-]*s$/.test(name.split(/\s+/).at(-1)) && !/&/.test(name), cap3 = (s) => s.charAt(0).toUpperCase() + s.slice(1), sentence = (s) => {
   const t = s.trim().replace(/[;,:\s]+$/, "");
   return t ? `${cap3(t)}${/[.!?\u2026\u201D"]$/.test(t) ? "" : "."}` : "";
 }, END_FIRST, PAST, GENRE_LEAN;
@@ -15887,7 +16123,7 @@ function buildRoster(input) {
     let base;
     for (const p of placeRecs) {
       const s = `${p.summary} ${p.body?.lore ?? ""}`;
-      if (names.some((n) => n.length >= 3 && new RegExp(`\\b${esc5(n)}(?:'s|\u2019s)?\\b[^.]*\\b(lives|home|sleeps|works|keeps)\\b|\\bwhere ${esc5(n)} (lives|sleeps|works)`, "i").test(s)))
+      if (names.some((n) => n.length >= 3 && new RegExp(`\\b${esc6(n)}(?:'s|\u2019s)?\\b[^.]*\\b(lives|home|sleeps|works|keeps)\\b|\\bwhere ${esc6(n)} (lives|sleeps|works)`, "i").test(s)))
         base = p.name;
     }
     const lastPlace = c && ring === "offstage" && c.place && /^\p{Lu}/u.test(c.place) && isLocal(c.place) ? c.place : undefined;
@@ -15997,7 +16233,7 @@ function buildRoster(input) {
   }
   const userNames = [userName, userName.split(/\s+/)[0]].filter((n) => n && n.length >= 3);
   const named = (a) => a.names.length ? [...a.names, ...a.names.flatMap((n) => n.split(/\s+/).filter((w) => w.length >= 3 && part.get(low(w)) === a))] : [];
-  const strongRe = (n) => new RegExp(`\\b${esc5(n)}(?:'s|\u2019s|'|\u2019)\\s+(?:[\\w-]+\\s+){0,3}?(${FAMILY}|${WORK})\\b|\\b(${FAMILY}|${WORK})\\s+(?:of|to)\\s+(?:[\\w-]+\\s+){0,2}?${esc5(n)}\\b`, "i");
+  const strongRe = (n) => new RegExp(`\\b${esc6(n)}(?:'s|\u2019s|'|\u2019)\\s+(?:[\\w-]+\\s+){0,3}?(${FAMILY}|${WORK})\\b|\\b(${FAMILY}|${WORK})\\s+(?:of|to)\\s+(?:[\\w-]+\\s+){0,2}?${esc6(n)}\\b`, "i");
   for (const a of actors) {
     if (!a.lore)
       continue;
@@ -16005,7 +16241,7 @@ function buildRoster(input) {
     for (const o of others) {
       const ns = o === "user" ? userNames : named(o);
       for (const n of ns) {
-        if (!new RegExp(`\\b${esc5(n)}\\b`).test(a.lore))
+        if (!new RegExp(`\\b${esc6(n)}\\b`).test(a.lore))
           continue;
         const m = strongRe(n).exec(a.lore);
         const word = (m?.[1] ?? m?.[2] ?? "").toLowerCase();
@@ -16036,7 +16272,7 @@ function buildRoster(input) {
       both(a, find(a.owner) ?? (userNames.some((u) => low(u) === low(a.owner)) ? "user" : undefined), 3, "owner");
   for (const g of groups)
     for (const a of actors) {
-      if (new RegExp(`\\b(leads?|heads?|runs?|member of|serves?|works for)\\b[^.]*\\b${esc5(g.name)}`, "i").test(a.lore))
+      if (new RegExp(`\\b(leads?|heads?|runs?|member of|serves?|works for)\\b[^.]*\\b${esc6(g.name)}`, "i").test(a.lore))
         both(a, g, /\b(leads?|heads?|runs?)\b/i.test(a.lore) ? 3 : 2, "member");
     }
   for (const f of Object.values(st.facts ?? {})) {
@@ -16136,7 +16372,7 @@ function awakeSet(r, opts) {
       out.push(a);
   return out;
 }
-var REACH_WEIGHT, low = (s) => s.toLowerCase().replace(/[\u2019]/g, "'").trim(), esc5 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), firstSentence = (t) => /^[\s\S]*?[.!?](?:\s|$)/.exec(t)?.[0] ?? t, CLOSE = "mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|fianc[e\xE9]e?|lover|partner|mentor|best friend|closest friend|twin|sire|ward|guardian|betrothed|consort|parent|child|children|sibling", EXTENDED = "uncle|aunt|cousin|nephew|niece|grandmother|grandfather|grandson|granddaughter|ex-girlfriend|ex-boyfriend|ex|heir|patriarch|matriarch", FAMILY, WORK = "watcher|doctor|physician|bodyguard|servant|employer|boss|maid|squire|liege|knight|master|apprentice|assistant|friend|ally|confidante?|handler|teacher|student|lawyer|attorney|captain|rider", FAR, ANIMAL, MEANS_UP, MEANS_DOWN, NOCTURNAL, SLAYS_THEM;
+var REACH_WEIGHT, low = (s) => s.toLowerCase().replace(/[\u2019]/g, "'").trim(), esc6 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), firstSentence = (t) => /^[\s\S]*?[.!?](?:\s|$)/.exec(t)?.[0] ?? t, CLOSE = "mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|girlfriend|boyfriend|fianc[e\xE9]e?|lover|partner|mentor|best friend|closest friend|twin|sire|ward|guardian|betrothed|consort|parent|child|children|sibling", EXTENDED = "uncle|aunt|cousin|nephew|niece|grandmother|grandfather|grandson|granddaughter|ex-girlfriend|ex-boyfriend|ex|heir|patriarch|matriarch", FAMILY, WORK = "watcher|doctor|physician|bodyguard|servant|employer|boss|maid|squire|liege|knight|master|apprentice|assistant|friend|ally|confidante?|handler|teacher|student|lawyer|attorney|captain|rider", FAR, ANIMAL, MEANS_UP, MEANS_DOWN, NOCTURNAL, SLAYS_THEM;
 var init_roster = __esm(() => {
   init_util();
   REACH_WEIGHT = { house: 1, town: 0.8, region: 0.5, far: 0.3, none: 0 };
@@ -18567,6 +18803,9 @@ function classify(e, book = null) {
       const looks = traitsFromText(content, [base.name, base.name.split(/\s+/)[0], ...base.aliases]);
       if (looks.length)
         base.looks = looks;
+      const stamina = detectStamina(content, [base.name, base.name.split(/\s+/)[0], ...base.aliases]);
+      if (stamina)
+        base.stamina = stamina;
       if (/\b(died|is dead|was killed|passed away)\b/i.test(fs) || /^deceased\b/i.test(t.descriptor ?? ""))
         base.dead = true;
       break;
@@ -18859,6 +19098,8 @@ function seedOverlays(items, opts = {}) {
       body.voice = voice;
     if (c.looks?.length)
       body.looks = c.looks;
+    if (c.stamina)
+      body.stamina = c.stamina;
     const tension = c.tension ?? anchors.find((a) => a.tension)?.tension;
     if (tension)
       body.tension = tension;
@@ -18920,6 +19161,7 @@ var WORLD_RULE, WEAVER_BOOKS, GROUP_HINT, OBJECT_HINT, PLACE_HINT, HISTORY_HINT,
 var init_lore = __esm(() => {
   init_util();
   init_traits();
+  init_stamina();
   init_loreformat();
   WORLD_RULE = /^\s*<weaver_(?:lore|narrator|npcs|world_agency|agency)>/i;
   WEAVER_BOOKS = [
@@ -22710,6 +22952,11 @@ var init_ingest = __esm(() => {
 });
 
 // src/backend/view.ts
+function staminaView(c, sources) {
+  const s = c.stamina ?? { kind: "ordinary", by: "", hunger: 1, thirst: 1, fatigue: 1, sleep: 1, heal: 1 };
+  const auto = resolveStamina({ ...c, stamina: undefined }, sources, undefined);
+  return { ...s, label: STAMINA_KINDS[s.kind]?.label ?? s.kind, words: staminaWords(s), auto: { kind: auto.kind, label: STAMINA_KINDS[auto.kind]?.label ?? auto.kind, by: auto.by } };
+}
 function themeFor(settingsTheme, detectedTheme, lead, configTheme) {
   if (settingsTheme && settingsTheme !== "preset")
     return settingsTheme;
@@ -22893,6 +23140,7 @@ async function buildView(chatId, userId) {
       fixed: fixedTraits(c, seed[c.id]),
       traits: (c.traits ?? []).map((t) => ({ kind: t.kind, text: t.text, by: t.by })),
       held: carried(st, c.id).map((i) => i.name),
+      stamina: staminaView(c, L.staminaSources),
       moodFresh: !!c.mood?.prev && c.mood.prev !== c.mood.name && c.mood.msg != null && c.mood.msg === st.replyDelta?.msgIndex,
       toYou: bondToUser(st, c.id)
     })),
@@ -23014,6 +23262,7 @@ var init_view = __esm(() => {
   init_note();
   init_state();
   init_traitseed();
+  init_stamina();
   AUTO_THEME = {
     horror: "nocturne",
     tragedy: "nocturne",
@@ -25060,7 +25309,7 @@ function validateEntry(e0, opts = {}) {
 function firstSentence3(s) {
   return (/^[\s\S]*?[.!?](\s|$)/.exec(s.trim())?.[0] ?? s).trim();
 }
-var esc6 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var esc7 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 function linkEntries(entries) {
   const edges = [];
   const live = entries.filter((e) => e.op !== "retire");
@@ -25069,7 +25318,7 @@ function linkEntries(entries) {
     for (const b of live) {
       if (a.uid === b.uid)
         continue;
-      const hit = b.key.find((k) => k.length > 2 && new RegExp(`\\b${esc6(k.toLowerCase())}\\b`).test(text));
+      const hit = b.key.find((k) => k.length > 2 && new RegExp(`\\b${esc7(k.toLowerCase())}\\b`).test(text));
       if (hit)
         edges.push({ from: a.uid, to: b.uid, via: hit });
     }
@@ -25124,7 +25373,7 @@ function simulateActivation(entries, scene, maxPasses = 3) {
         continue;
       if (pass === 0 && e.delayUntilRecursion)
         continue;
-      const hit = e.key.find((k) => new RegExp(`\\b${esc6(k.toLowerCase())}\\b`).test(text));
+      const hit = e.key.find((k) => new RegExp(`\\b${esc7(k.toLowerCase())}\\b`).test(text));
       if (!hit)
         continue;
       if (e.selective && e.keysecondary.length) {

@@ -8,6 +8,8 @@ import { dayOfDate } from "../core/engines/calendar";
 import { KeyIndex, cleanKeys, DEFAULT_STOP } from "../core/keys";
 import { parseMessage } from "../core/dsl";
 import type { FoldOptions } from "../core/state";
+import { detectStamina } from "../core/stamina";
+import type { CodexStore } from "../core/codex";
 import type { LedgerEvent, Settings, WorldState } from "../core/types";
 import { hash } from "../core/util";
 import { describe, has, host, rememberUser, warn } from "./host";
@@ -55,6 +57,31 @@ export function chatPersonaId(chat: { metadata?: unknown } | null | undefined): 
   return typeof id === "string" && id ? id : undefined;
 }
 
+/**
+ * What the sources say people are, for their stamina: each card and the persona from their
+ * whole description, the lorebooks' people from what the scan read (or their summary and role).
+ */
+export function staminaSourcesFor(names: Names, codex: CodexStore | undefined): Record<string, { kind: string; by: "card" | "lore" }> {
+  const out: Record<string, { kind: string; by: "card" | "lore" }> = {};
+  for (const o of Object.values(codex?.overlays ?? {})) {
+    if (o.kind !== "person" || !o.name) continue;
+    const kind = typeof o.body?.stamina === "string" ? o.body.stamina : detectStamina(`${o.name} is ${o.body?.role ?? ""}. ${o.summary ?? ""}`, [o.name, o.name.split(/\s+/)[0], ...(o.aliases ?? [])]);
+    if (!kind) continue;
+    const key = o.id === "char:user" ? "user" : o.name.toLowerCase();
+    out[key] = { kind, by: "lore" };
+  }
+  const cards = names.cards?.length ? names.cards : names.char ? [{ id: "", name: names.char, text: names.charText ?? "" }] : [];
+  for (const c of cards) {
+    const kind = detectStamina(c.text, [c.name, c.name.split(/\s+/)[0]]);
+    if (kind) out[c.name.toLowerCase()] = { kind, by: "card" };
+  }
+  if (names.personaText) {
+    const kind = detectStamina(names.personaText, [names.user, names.user.split(/\s+/)[0]]);
+    if (kind) out.user = { kind, by: "card" };
+  }
+  return out;
+}
+
 export class ChatLedger {
   readonly chatId: string;
   userId?: string;
@@ -69,6 +96,8 @@ export class ChatLedger {
   stamp = "";
   loadedAt = 0;
   namesLoaded = false;
+  /** Stamina the cards, the persona and the lore's people give them, by lower-case name. */
+  staminaSources: Record<string, { kind: string; by: "card" | "lore" }> = {};
 
   constructor(chatId: string, userId?: string) {
     this.chatId = chatId;
@@ -139,6 +168,7 @@ export class ChatLedger {
       merges: meta.config.merges,
       factEdits: meta.config.factEdits,
       castEdits: meta.config.castEdits,
+      ...(Object.keys(this.staminaSources).length ? { stamina: this.staminaSources } : {}),
       playerFacts: settings.playerFacts ?? "rules",
       calendarKey: `${meta.config.calendar || settings.calendar || ""}|${meta.config.startPoint ?? ""}`,
       dayOfDate: (text, near) => {
@@ -180,6 +210,7 @@ export class ChatLedger {
       while (path.length && !path[path.length - 1].isUser) path = path.slice(0, -1);
     }
     this.path = path;
+    this.staminaSources = staminaSourcesFor(this.names, files.codex);
     const fo = this.foldOptions(files.meta, settings);
     const res = this.runtime.fold(path, fo, files.side);
     this.state = res.state;

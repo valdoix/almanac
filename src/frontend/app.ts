@@ -11,6 +11,7 @@ import { SoundtrackUI } from "./soundtrack";
 import { VERSION } from "../core/version";
 import { FONT_CHOICES, FONT_ROLES, FONT_SIZES, SIZE_MAX, SIZE_MIN, SKIN_COLORS, SKIN_LIST, cleanFontName, skinPalette } from "./skins";
 import { NOT_A_PERSON } from "../core/state";
+import { HEAL_SPEEDS, NEED_SPEEDS, STAMINA_KINDS } from "../core/stamina";
 import { PAGES, dock, emptySky, engineKeys, groupOf, pageTitle, skyHeader, type Page } from "./orrery";
 import { dots, ic, medal, n, ring, sec, stk, toggle, type Tone } from "./ui";
 
@@ -307,6 +308,7 @@ ${v.recall ? `<details class="card tight"><summary class="muted">Recall block</s
     const tags = [...(c.flags ?? []).slice(-4).map((f: string) => `<span class="alm-tag">${e(f)}</span>`), ...(c.injuries ?? []).map((i: any) => `<span class="alm-tag warn">${e(i.where)}</span>`), ...(c.held ?? []).slice(0, 3).map((h: string) => `<span class="alm-tag">holds: ${e(h)}</span>`)];
     const rows = [
       c.fixed ? `<b title="Sent to the model every turn while they're present. Edit them to change it">Always</b><span>${e(c.fixed)} ${ic("lock", "sm")}</span>` : "",
+      c.stamina?.words ? `<b title="How fast their hunger, thirst and tiredness build, and how fast they heal. Edit them to change it">Stamina</b><span>${e(c.stamina.words)}${c.stamina.by && c.stamina.by !== "user" ? ` <small class="muted">from the ${c.stamina.by === "card" ? (c.isUser ? "persona" : "card") : c.stamina.by}</small>` : ""}</span>` : "",
       c.activity ? `<b>Doing</b><span>${e(c.activity)}</span>` : "",
       !compact && c.age ? `<b>Age</b><span>${e(c.age)}${c.ageSet ? "" : ` <small class="muted" title="From the lore">from the lore</small>`}</span>` : "",
       !compact && c.appearance ? `<b>Looks</b><span>${e(c.appearance)}</span>` : "",
@@ -353,7 +355,22 @@ ${v.cast.length ? "" : `<div class="empty">No one has appeared yet.</div>`}${thi
 <label class="f">Also called<input type="text" id="almCharAliases" value="${e((c?.aliases ?? []).join("; "))}" placeholder="Other names they go by, separated by ;"></label>
 <label class="f">Always<textarea id="almCharAlways" placeholder="Eyes, hair, build, what people notice first">${e(c?.fixed ?? "")}</textarea></label>
 <p class="muted"><small>Always is sent with them every turn while they're present, and holds whatever the story writes. Change or delete anything in it; empty it to go back to what the card, the lore and the story say.</small></p>
+${this.staminaEditor(c)}
 <div class="row" style="margin-top:10px"><button class="btn primary" data-act="charSave" data-id="${e(id)}">${c ? "Save" : "Add"}</button><button class="btn" data-act="charCancel">Cancel</button></div></div>`;
+  }
+
+  /** Stamina: a kind (Auto reads the card, persona, lore and story) and each speed of their own. */
+  staminaEditor(c: any | null): string {
+    const ed = c?.edit?.stamina ?? {};
+    const auto = c?.stamina?.auto;
+    const autoLabel = auto ? `Auto — ${auto.label}${auto.by ? ` (from the ${auto.by === "card" ? (c.isUser ? "persona" : "card") : auto.by})` : ""}` : "Auto — from the story";
+    const kinds = Object.entries(STAMINA_KINDS).map(([k, x]) => `<option value="${e(k)}"${ed.kind === k ? " selected" : ""}>${e(x.label)}</option>`).join("");
+    const speed = (id: string, label: string, list: [number, string][], cur: number | undefined) =>
+      `<label class="f">${label}<select id="${id}"><option value="">as the kind</option>${list.map(([v, l]) => `<option value="${v}"${cur === v ? " selected" : ""}>${e(l)}</option>`).join("")}</select></label>`;
+    return `<div class="almx-lbl" style="margin-top:12px">Stamina</div>
+<label class="f">Kind<select id="almStamKind"><option value="">${e(autoLabel)}</option>${kinds}</select></label>
+<div class="almx-g2">${speed("almStamHunger", "Hunger builds", NEED_SPEEDS, ed.hunger)}${speed("almStamThirst", "Thirst builds", NEED_SPEEDS, ed.thirst)}${speed("almStamFatigue", "Tiredness builds", NEED_SPEEDS, ed.fatigue)}${speed("almStamHeal", "Wounds heal", HEAL_SPEEDS, ed.heal)}</div>
+<p class="muted"><small>How fast hunger, thirst and tiredness build while they're awake, and how fast wounds heal, against an ordinary person. A Slayer tires slowly and heals in days; a vampire wants blood, not food or water. The model is told too. A stamina potion or stimulant in a body line holds tiredness off for a few hours.</small></p>`;
   }
 
   /** Names taken out of the cast, with a way back. */
@@ -1016,6 +1033,14 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
         const age = val("#almCharAge") ?? "";
         const always = val("#almCharAlways") ?? "";
         const aliases = (val("#almCharAliases") ?? "").split(/\s*[;\n]\s*/).map((a) => a.trim()).filter(Boolean);
+        // Stamina: the kind and any speed set apart from it; all on Auto, the sources speak.
+        const stamina: Record<string, string | number> = {};
+        const kind = val("#almStamKind");
+        if (kind) stamina.kind = kind;
+        for (const [k, sel] of [["hunger", "#almStamHunger"], ["thirst", "#almStamThirst"], ["fatigue", "#almStamFatigue"], ["heal", "#almStamHeal"]]) {
+          const x = val(sel);
+          if (x) stamina[k] = Number(x);
+        }
         const low = (a: string) => a.toLowerCase();
         const edits = { ...(this.view?.config?.castEdits ?? {}) };
         const cast: any[] = this.view?.cast ?? [];
@@ -1029,12 +1054,14 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
           }
           let key = low.normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "person";
           while (cast.some((c) => c.id === key) || edits[key]) key += "_";
-          edits[key] = { name, ...(age ? { age } : {}), ...(always ? { always } : {}), ...(aliases.length ? { addAliases: aliases } : {}), added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
+          edits[key] = { name, ...(age ? { age } : {}), ...(always ? { always } : {}), ...(aliases.length ? { addAliases: aliases } : {}), ...(Object.keys(stamina).length ? { stamina } : {}), added: Math.max(0, (this.view?.counts?.messages ?? 1) - 1) };
         } else {
           const c = cast.find((x) => x.id === id);
           const next: any = { ...(edits[id] ?? {}) };
           if (name && !c?.isUser && name !== c?.name) next.name = name;
           next.age = age;
+          if (Object.keys(stamina).length) next.stamina = stamina;
+          else delete next.stamina;
           // Aliases taken away stay away; ones given are kept, and giving one back undoes taking it.
           const before: string[] = c?.aliases ?? [];
           const removed = before.filter((a) => !aliases.some((x) => low(x) === low(a)));

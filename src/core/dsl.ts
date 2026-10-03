@@ -330,6 +330,7 @@ const PARSERS: Record<OpName, LineParser> = {
     const unflags: string[] = [];
     const injuries: any[] = [];
     const heals: string[] = [];
+    const boosts: { need: "hunger" | "thirst" | "fatigue"; hours: number }[] = [];
     // Split on ";" outside brackets: "hunger 4→2 (fed; real food)" is one meter.
     for (const seg0 of main.split(/\s*;\s*(?![^()]*\))/)) {
       const seg = seg0.trim();
@@ -358,7 +359,15 @@ const PARSERS: Record<OpName, LineParser> = {
       for (const f of seg.split(/\s*,\s*(?![^()]*\))/)) {
         const ff = f.trim();
         if (!ff) continue;
-        if (readMeter(ff, meters) || readNeedWords(ff, meters)) continue;
+        if (readMeter(ff, meters)) continue;
+        // "drank a Pepper-Up potion": a boost, and a flag worth seeing (not "drank" → thirst).
+        const boost = potionIn(ff);
+        if (boost.length) {
+          boosts.push(...boost);
+          flags.push(ff.toLowerCase());
+          continue;
+        }
+        if (readNeedWords(ff, meters)) continue;
         if (ff.startsWith("-") || ff.startsWith("no longer ")) unflags.push(ff.replace(/^-|^no longer /, "").trim().toLowerCase());
         else if (/^(dead|died|killed)$/i.test(ff)) flags.push("dead");
         else {
@@ -370,7 +379,7 @@ const PARSERS: Record<OpName, LineParser> = {
         }
       }
     }
-    p.args = { meters, flags, unflags, injuries, heals, care: careIn(rest) };
+    p.args = { meters, flags, unflags, injuries, heals, boosts, care: careIn(rest) };
     return p;
   },
   look(p, s, rest) {
@@ -802,6 +811,18 @@ const NEED_WORDS: [RegExp, string, number, boolean][] = [
   [/^(?:still )?(?:exhausted|worn out|spent)$/, "fatigue", 4, false],
   [/^(?:still )?(?:tired|weary|drowsy|sleepy)$/, "fatigue", 3, false],
 ];
+
+/** A potion, elixir or stimulant that holds a need off: what it holds, and for how many hours. */
+const POTION = /\b(?:potions?|draughts?|elixirs?|tonics?|philt(?:er|re)s?|brews?|serums?|stims?|stimulants?|stimpacks?|energy drinks?|pep pills?|smelling salts)\b/i;
+const POTION_FOR: [RegExp, "hunger" | "thirst" | "fatigue", number][] = [
+  [/\b(?:stamina|energy|energi[sz]\w*|vigou?r\w*|wakeful\w*|awake\w*|alert\w*|pepper[- ]?up|invigorat\w*|restor\w*|revitali[sz]\w*|endurance|stims?|stimulants?|stimpacks?|energy drinks?|pep pills?|smelling salts)\b/i, "fatigue", 6],
+  [/\b(?:nourish\w*|sustenance|satiat\w*|hunger)\b/i, "hunger", 8],
+  [/\b(?:hydrat\w*|thirst\w*)\b/i, "thirst", 8],
+];
+export function potionIn(seg: string): { need: "hunger" | "thirst" | "fatigue"; hours: number }[] {
+  if (!POTION.test(seg) || /\b(?:wear(?:s|ing)? off|worn off|fad(?:es|ing|ed)|crash\w*|no (?:more )?potion|out of|needs?|wants?|craving)\b/i.test(seg)) return [];
+  return POTION_FOR.filter(([re]) => re.test(seg)).map(([, need, hours]) => ({ need, hours }));
+}
 
 function readNeedWords(seg: string, meters: Record<string, { v: number; rel: boolean }>): boolean {
   const s = seg.trim().toLowerCase().replace(/\s*\([^)]*\)\s*$/, "").replace(/[.!]$/, "");

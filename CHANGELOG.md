@@ -4,6 +4,21 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.24.0 (2026-10-03) · preset 1.1.5
+
+**Stamina: needs follow what someone is.** Hunger, thirst and tiredness build at each person's own speed, and wounds heal at their own pace too.
+- **Read from the sources.** The card, the persona, the lorebooks' person entries and the story's own trait lines say what someone is. In the Buffy chats, Buffy (card) and Gabriel (persona) come out as Slayers, Angel as a vampire, and Valeria, Willow and Tara as witches. Someone the card only mentions ("Angel, a vampire", "fighting vampires") doesn't change the card's own person.
+- **Kinds:**
+  - **Slayer:** tires at 0.4× speed, sleep restores 1.5× faster, wounds heal 3× faster; eats like anyone.
+  - **Hardy** (soldier, athlete), **Superhuman** (superhero, mutant, Kryptonian), **Werewolf / shifter** (eats more, heals fast).
+  - **Vampire:** hungers for blood, not food; no thirst; heals 5× faster.
+  - **Immortal / divine:** no food or drink, rarely tires. **Construct / ghost:** no needs, no healing on its own.
+  - **Witch / wizard:** an ordinary body.
+- **Adjustable.** Edit someone on the Cast page: **Stamina** has a Kind (Auto shows what the sources say) and four speeds of your own: Hunger, Thirst, Tiredness (never, ¼ speed … twice as fast) and Wounds heal (not on its own … five times as fast). Your choice beats the sources.
+- **The model is told.** The note carries a short line with each person who isn't ordinary ("Slayer: tires slowly, recovers fast, heals fast"). The preset (1.1.5) tells the model to keep its own body lines to it.
+- **Potions and stimulants.** A body line like "drank a Pepper-Up potion", "stamina potion" or "stimpack" brings tiredness down to 1 and holds it off for six hours. Nourishing and hydrating potions do the same for hunger and thirst. "Drank a … potion" no longer counts as a drink of water.
+- Replay of 6170f171: Gabriel ends at tiredness 2 rather than 4, and Buffy's treated wounds close days sooner.
+
 ## 1.23.0 (2026-10-03)
 
 **Thumbs up and down teach the Soundtrack.** Every song has 👍 and 👎: on the Soundtrack page, in the Now window, and next to each song in "Played in this story". A thumb says whether the song fits the mood it played for, and later picks learn from it:

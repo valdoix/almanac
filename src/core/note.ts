@@ -7,6 +7,7 @@ import type { CodexRecord } from "./codex";
 import type { CraftReport } from "./telemetry";
 import type { CharacterState, MessageDelta, Trait, WorldState } from "./types";
 import { mergeTraits, traitLine } from "./traits";
+import { staminaWords } from "./stamina";
 import { offPageFacts, offPageLines } from "./offpage";
 import { absMinutes, estTokens, fmtSpan, fmtTime, partyName, truncateTokens } from "./util";
 import { carried, LADDER_NAMES, normFact, overlap } from "./state";
@@ -87,6 +88,9 @@ export function capsule(c: CharacterState, state: WorldState, opts: { sealed: bo
   // Eyes, hair, age: sent every turn, even in the short form; they never change without a cause.
   const fixed = fixedTraits(c, opts.seed);
   if (fixed) bits.push(`always: ${fixed}`);
+  // A Slayer's or a vampire's body runs on other rules: the model keeps their needs to them.
+  const stamina = c.stamina ? staminaWords(c.stamina) : "";
+  if (stamina) bits.push(stamina);
   if (c.activity) bits.push(c.activity);
   const inner = !(c.isUser && opts.sealed);
   if (inner && c.mood?.name) bits.push(`${c.mood.name}${vad(c)}`);

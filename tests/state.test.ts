@@ -121,6 +121,43 @@ bond Mara>Kael: affection +5 — shared a drink
     });
   });
 
+  describe("stamina", () => {
+    const fold = (opts: Partial<FoldOptions>, ...rs: string[]) => new LedgerRuntime().fold(toPath([msg(0, R1), ...rs.map((r, i) => msg(i + 1, `<ledger>\n${r}\n</ledger>`))]), { ...OPTS, ...opts }).state.chars.mara;
+    const night = Array.from({ length: 30 }, () => "mode: crisis\nclock: +1h");
+    test("a Slayer from the card tires and hungers slower than anyone", () => {
+      const ordinary = fold({}, "body Mara: hunger 1; thirst 1; fatigue 1", ...night.slice(0, 12)).meters;
+      const slayer = fold({ stamina: { "mara": { kind: "slayer", by: "card" } } }, "body Mara: hunger 1; thirst 1; fatigue 1", ...night.slice(0, 12));
+      expect(slayer.stamina?.kind).toBe("slayer");
+      expect(ordinary.fatigue).toBe(3);
+      expect(slayer.meters.fatigue).toBe(1);
+      expect(slayer.meters.hunger!).toBeLessThanOrEqual(ordinary.hunger!);
+    });
+    test("a vampire never thirsts and an android never tires; the story's trait line says so too", () => {
+      const v = fold({}, "trait Mara: vampire; black hair", "body Mara: hunger 1; thirst 1; fatigue 1", ...night);
+      expect(v.stamina?.kind).toBe("vampire");
+      expect(v.stamina?.by).toBe("story");
+      expect(v.meters.thirst).toBe(1);
+      const a = fold({ castEdits: { mara: { stamina: { kind: "construct" } } } }, "body Mara: hunger 1; thirst 1; fatigue 1", ...night).meters;
+      expect(a).toMatchObject({ hunger: 1, thirst: 1, fatigue: 1 });
+    });
+    test("the player's speeds beat the card's kind", () => {
+      const m = fold({ stamina: { mara: { kind: "slayer", by: "card" } }, castEdits: { mara: { stamina: { fatigue: 2 } } } }, "body Mara: fatigue 1", ...night.slice(0, 6));
+      expect(m.stamina).toMatchObject({ kind: "slayer", fatigue: 2, custom: true });
+      expect(m.meters.fatigue).toBe(3);
+    });
+    test("a stamina potion lifts tiredness and holds it off for hours", () => {
+      const m = fold({}, "body Mara: fatigue 4", "body Mara: drank a Pepper-Up potion", ...night.slice(0, 5));
+      expect(m.meters.fatigue).toBe(1);
+      expect(m.meters.thirst).toBeUndefined();
+      expect(fold({}, "body Mara: fatigue 1", "body Mara: drank a Pepper-Up potion", ...night.slice(0, 12)).meters.fatigue).toBe(2);
+    });
+    test("a Slayer's wounds close sooner", () => {
+      const hurt = ["body Mara: injury: left arm, wound, bandaged", "clock: → Day 7 18:00"];
+      expect(fold({}, ...hurt).injuries.length).toBe(1);
+      expect(fold({ stamina: { mara: { kind: "slayer", by: "card" } } }, ...hurt).injuries.length).toBe(0);
+    });
+  });
+
   test("snapshots give identical results", () => {
     const msgs: RawChatMessage[] = [msg(0, R1)];
     for (let i = 1; i < 60; i++) msgs.push(msg(i, i % 2 ? "go on" : `<ledger>\nclock: +5m\nbond Mara>Kael: trust +1 — talk ${i}\n</ledger>`, i % 2 === 1));
