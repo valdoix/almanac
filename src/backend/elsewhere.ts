@@ -466,7 +466,7 @@ export function confirmElsewhere(meta: ChatMeta, o: { state: WorldState; records
 }
 
 /** The player's controls: hold, resume, nudge, bring in, drop, edit, fates, a story of their own. */
-export async function elsewhereAction(chatId: string, m: { action: string; id?: string; name?: string; premise?: string; want?: string; fear?: string; kind?: string; secrecy?: string; decision?: string }, userId?: string): Promise<{ warn?: string; info?: string } | null> {
+export async function elsewhereAction(chatId: string, m: { action: string; id?: string; name?: string; premise?: string; want?: string; fear?: string; kind?: string; secrecy?: string; decision?: string; result?: string }, userId?: string): Promise<{ warn?: string; info?: string } | null> {
   const L = ledgerFor(chatId, userId);
   await L.refresh();
   const st = L.state;
@@ -497,9 +497,18 @@ export async function elsewhereAction(chatId: string, m: { action: string; id?: 
     if (light && (light.status === "running" || light.status === "held")) more.push(`arc drop #${light.id}: reason: gave way to a story you accepted (${res.kind})`);
   }
   switch (m.action) {
+    case "unforce": line = arc ? `arc set #${arc.id}: force: none | push: no` : null; break;
     case "hold": line = arc ? `arc set #${arc.id}: status: held` : null; break;
     case "resume": line = arc ? `arc set #${arc.id}: status: running | next: ${now}` : null; break;
     case "nudge": line = arc ? `arc set #${arc.id}: push: yes | next: ${now} | heat: ${Math.min(3, arc.heat + 1)}` : null; break;
+    case "force": {
+      if (!arc || !["win", "cost", "loss", "twist"].includes(m.result ?? "")) break;
+      if (arc.status !== "running") return { warn: "Resume it first: a held subplot doesn't move." };
+      if (arc.fate) return { warn: "Its ending is waiting on you above; decide that first." };
+      if (arc.clock.cur >= arc.clock.max) return { warn: "Its clock is full: its ending comes next, not another step." };
+      line = `arc set #${arc.id}: push: yes | force: ${m.result} | next: ${now}`;
+      break;
+    }
     case "bring": line = arc ? `arc set #${arc.id}: bring: yes | next: ${now}` : null; break;
     case "drop": line = arc ? `arc drop #${arc.id}: reason: dropped by the player` : null; break;
     case "edit": {
@@ -538,12 +547,17 @@ export async function elsewhereAction(chatId: string, m: { action: string; id?: 
   save(chatId, "side", userId, 0);
   await L.refresh();
   // Fates, bring-ins, nudges and a new story act at once.
-  if (["fate", "bring", "nudge", "author", "accept"].includes(m.action)) {
+  if (["fate", "bring", "nudge", "force", "author", "accept"].includes(m.action)) {
     const rec = await runElsewhere(chatId, userId).catch((err) => {
       warn(`elsewhere: ${describe(err)}`);
       return null;
     });
-    if (m.action === "nudge" || m.action === "author" || m.action === "accept") return { info: tickSummary(rec, L.state.arcs) };
+    if (m.action === "force" && L.state.arcs?.[arc!.id]?.force) {
+      // It couldn't move (its lead is on the page): the choice doesn't wait for a later step.
+      await elsewhereAction(chatId, { action: "unforce", id: arc!.id }, userId);
+      return { warn: `${arc!.lead}'s story couldn't step now${rec ? "" : " (nothing could move)"}; nothing was forced.` };
+    }
+    if (m.action === "nudge" || m.action === "force" || m.action === "author" || m.action === "accept") return { info: tickSummary(rec, L.state.arcs) };
   }
   return null;
 }
@@ -601,7 +615,7 @@ export function elsewhereView(o: { state: WorldState; records: ReturnType<typeof
       id: a.id, kind: a.kind, lead: a.lead, cast: a.cast, premise: a.premise, want: a.want, fear: a.fear, secrecy: a.secrecy, clock: a.clock, tally: a.tally, stage: a.stage,
       status: a.status, crossed: !!a.crossed, by: a.by, locked: !!a.locked, heat: a.heat, note: a.note, ending: a.ending ? { ...a.ending, at: o.fmt(a.ending.atAbs) } : null, fate: a.fate ?? null,
       grounds: a.grounds.map((g) => ({ id: g, name: groundName(g) })), earlier: a.earlier ?? "",
-      beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "", note: b.note ?? "", telling: b.told === "template" && !!b.tick && telling.has(b.tick),
+      beats: a.beats.slice(-6).map((b) => ({ at: o.fmt(b.atAbs), result: b.result, roll: b.roll, mod: b.mod, text: b.text, told: b.told, twist: b.twist ?? "", forced: !!b.forced, note: b.note ?? "", telling: b.told === "template" && !!b.tick && telling.has(b.tick),
         tick: b.tick ?? "", atAbs: b.atAbs, retell: !!b.tick && !telling.has(b.tick) })),
       // When its next step can come, and why it waits.
       next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "", wait: a.status === "running" ? a.wait ?? "" : "", pushed: !!a.push,

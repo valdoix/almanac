@@ -138,10 +138,19 @@ export function extractJson<T = any>(text: string): T | null {
       const close = open === "{" ? "}" : "]";
       const end = c.lastIndexOf(close);
       if (end > start) {
+        const slice = c.slice(start, end + 1);
         try {
-          return JSON.parse(c.slice(start, end + 1)) as T;
+          return JSON.parse(slice) as T;
         } catch {
-          /* try the next bracket */
+          /* mended below, or the next bracket */
+        }
+        const mended = mendJson(slice);
+        if (mended !== slice) {
+          try {
+            return JSON.parse(mended) as T;
+          } catch {
+            /* try the next bracket */
+          }
         }
       }
       const next = c.slice(start + 1).search(/[[{]/);
@@ -149,4 +158,15 @@ export function extractJson<T = any>(text: string): T | null {
     }
   }
   return null;
+}
+
+/**
+ * The slips models make in otherwise good JSON: a word value missing a quote ("result":cost" or
+ * "result":cost,) and a comma before a closing bracket. Only tried when the reply doesn't parse.
+ */
+function mendJson(s: string): string {
+  return s
+    .replace(/("[\w-]+"\s*:\s*)([A-Za-z_][\w-]*)"/g, (m, key, word) => (/^(?:true|false|null)$/.test(word) ? m : `${key}"${word}"`))
+    .replace(/("[\w-]+"\s*:\s*)([A-Za-z_][\w-]*)(\s*[,}\]])/g, (m, key, word, tail) => (/^(?:true|false|null)$/.test(word) ? m : `${key}"${word}"${tail}`))
+    .replace(/,(\s*[}\]])/g, "$1");
 }

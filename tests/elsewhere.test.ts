@@ -451,6 +451,27 @@ describe("the player's own stories", () => {
     expect(card.sofar).toEqual([]);
   });
 
+  test("a forced step comes out as the player chose, now, even while it would wait for news", () => {
+    for (const force of ["win", "cost", "loss", "twist"] as const) {
+      const { st, records } = spikeWorld();
+      st.arcs = { spike_pursuit: arc({ force, push: true, grounds: ["#unheard"] }) };
+      const t = tick(inp(st, records));
+      const line = t.lines.find((l) => l.startsWith("arc beat #spike_pursuit:"))!;
+      expect(line).toContain("forced: yes");
+      if (force === "twist") expect(line).toMatch(/\| twist: /);
+      else {
+        expect(line).toMatch(new RegExp(`^arc beat #spike_pursuit: ${force} \\|`));
+        expect(t.cards.find((c) => c.arcId === "spike_pursuit")!.result).toBe(force);
+      }
+      // Folded, the beat is marked and the choice is spent.
+      const f = new Folder({ userName: "Gabriel", strictness: "strict", sealed: false }, st);
+      f.applyMessage(12, "m12", 0, { ops: [], unknown: [], format: "none", truncated: false }, "model", t.lines.map((l) => parseLine(l)).filter(Boolean).map((o) => ({ ...o!, src: "sim" as const })));
+      const after = f.state.arcs!.spike_pursuit;
+      expect(after.force).toBeUndefined();
+      expect(after.beats.at(-1)!.forced).toBe(true);
+    }
+  });
+
   test("moving the world a step moves something, even a subplot just nudged", () => {
     const { st, records } = spikeWorld();
     st.chars.willow.place = "Sunnydale";

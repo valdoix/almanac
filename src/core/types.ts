@@ -781,6 +781,8 @@ export interface ArcBeat {
   mod: number;
   result: BeatResult;
   twist?: string;
+  /** The player chose its outcome (force win/cost/loss/twist). */
+  forced?: boolean;
   text: string;
   told: "model" | "template";
   msgIndex: number;
@@ -825,6 +827,8 @@ export interface ArcState {
   bring?: boolean;
   /** The player asked for its next step now (nudge, or a story they just wrote). */
   push?: boolean;
+  /** The player chose how that next step comes out: a result, or a step with a twist (dice decide its result). */
+  force?: BeatResult | "twist";
   /** Why its next step waits (asleep, news not yet heard), shown on the Elsewhere page. */
   wait?: string;
   /** A faction clock it moves (the Hellions' raid). */

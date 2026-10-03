@@ -245,7 +245,7 @@ export function tick(inp: TickInput): TickResult {
   for (const arc of running) {
     const lead = leadOf(arc);
     if (lead?.ring === "onstage" || arc.clock.cur >= arc.clock.max || arc.fate) continue;
-    if (arc.bring || arc.push) {
+    if (arc.bring || arc.push || arc.force) {
       cands.push({ arc, lead, prio: 3, push: true });
       continue;
     }
@@ -348,7 +348,10 @@ export function tick(inp: TickInput): TickResult {
   const tried = new Set<string>();
   const doBeat = (arc: ArcState, lead: Actor | undefined, forced?: { atAbs: number; place?: string; twist?: string }, push?: boolean) => {
     tried.add(arc.id);
-    const g: GateResult = forced ? { ok: true, mod: 0, atAbs: forced.atAbs, why: ["collision"] } : gate(arc, lead, roster, { from: inp.from, now: inp.now, rand, push, forced: inp.forced });
+    let g: GateResult = forced ? { ok: true, mod: 0, atAbs: forced.atAbs, why: ["collision"] } : gate(arc, lead, roster, { from: inp.from, now: inp.now, rand, push, forced: inp.forced });
+    // The player chose the outcome: it happens now, whatever would have made it wait.
+    const chosenOutcome = forced ? undefined : arc.force;
+    if (!g.ok && !g.drop && chosenOutcome) g = { ok: true, mod: 0, atAbs: inp.now, why: ["forced"] };
     if (!g.ok) {
       if (g.drop) lines.push(`arc drop #${arc.id}: reason: ${cleanVal(g.drop)}`);
       else if (g.deferTo != null) lines.push(`arc set #${arc.id}: next: ${g.deferTo}${g.wait ? ` | wait: ${cleanVal(g.wait)}` : ""}${arc.push ? " | push: no" : ""}`);
@@ -357,9 +360,13 @@ export function tick(inp: TickInput): TickResult {
     }
     moved++;
     const spec = SPECS[arc.kind];
-    const roll: [number, number] = [d6(rand), d6(rand)];
+    const resultOf = (t: number): BeatResult => (t >= 10 ? "win" : t >= 7 ? "cost" : "loss");
+    let roll: [number, number] = [d6(rand), d6(rand)];
+    // A chosen result: dice that read as it, where the modifier allows.
+    const want = chosenOutcome && chosenOutcome !== "twist" ? chosenOutcome : undefined;
+    for (let i = 0; want && i < 60 && resultOf(roll[0] + roll[1] + g.mod) !== want; i++) roll = [d6(rand), d6(rand)];
     const total = roll[0] + roll[1] + g.mod;
-    const result: BeatResult = total >= 10 ? "win" : total >= 7 ? "cost" : "loss";
+    const result: BeatResult = want ?? resultOf(total);
     const price = result === "cost" ? pickOf(rand, spec.prices) : undefined;
     const worse = result === "loss" ? pickOf(rand, spec.worse) : undefined;
     const atAbs = g.atAbs ?? inp.now;
@@ -367,7 +374,7 @@ export function tick(inp: TickInput): TickResult {
     // The twist die: something that already exists gets in the way, or helps.
     let twistText = forced?.twist;
     let slip = false;
-    if (!forced && rand() < M.twist) {
+    if (!forced && (chosenOutcome === "twist" || (!chosenOutcome && rand() < M.twist))) {
       const order = [...TWISTS] as Twist[];
       for (let i = order.length - 1; i > 0; i--) {
         const j = Math.floor(rand() * (i + 1));
@@ -389,6 +396,7 @@ export function tick(inp: TickInput): TickResult {
         }
         break;
       }
+      if (!twistText && chosenOutcome === "twist") twistText = "something nobody planned for got in the way";
     }
     const cur = Math.min(arc.clock.max, arc.clock.cur + 1);
     const stage = stageOf(cur, arc.clock.max);
@@ -402,10 +410,10 @@ export function tick(inp: TickInput): TickResult {
     });
     const next = atAbs + Math.round(120 + rand() * 240 / M.factor);
     const twistLine = twistText ? sentence(/^ran into\b/.test(twistText) ? `${lead?.group ? groupName(arc.lead) : arc.lead} ${twistText}` : twistText) : "";
-    lines.push(beatLine(arc.id, { result, roll, mod: g.mod, at: atAbs, text: twistLine ? `${text} ${twistLine}` : text, told: "template", twist: twistText, place, tick: inp.tickId, next }));
+    lines.push(beatLine(arc.id, { result, roll, mod: g.mod, at: atAbs, text: twistLine ? `${text} ${twistLine}` : text, told: "template", twist: twistText, place, tick: inp.tickId, next, forced: !!chosenOutcome }));
     const beatIdx = lines.length - 1;
     if (stage !== arc.stage && stage !== "aftermath") lines.push(`arc stage #${arc.id}: ${stage}`);
-    log.push(`${arc.id}: ${roll[0]}+${roll[1]}${g.mod ? (g.mod > 0 ? "+" : "") + g.mod : ""} = ${total} → ${result}${twistText ? ` (twist: ${twistText})` : ""}`);
+    log.push(`${arc.id}: ${roll[0]}+${roll[1]}${g.mod ? (g.mod > 0 ? "+" : "") + g.mod : ""} = ${total} → ${result}${twistText ? ` (twist: ${twistText})` : ""}${chosenOutcome ? ` (forced ${chosenOutcome})` : ""}`);
     // A faction's clock is the subplot's clock.
     if (arc.faction) lines.push(`clockf ${arc.faction.name}: ${arc.faction.project} ${cur}/${arc.clock.max} — ${cleanVal(text.slice(0, 80))}`);
     // Whereabouts: someone coming back is on the way, then here.

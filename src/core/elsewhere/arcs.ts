@@ -430,8 +430,8 @@ export function arcNewLine(c: { id: string; kind: ArcKind; lead: string; cast: s
   return `arc new #${c.id}: ${c.kind} | ${f.join(" | ")}`;
 }
 
-export function beatLine(id: string, b: { result: BeatResult; roll: [number, number]; mod: number; at: number; text: string; told: "model" | "template"; twist?: string; place?: string; tick: string; next: number; note?: string }): string {
+export function beatLine(id: string, b: { result: BeatResult; roll: [number, number]; mod: number; at: number; text: string; told: "model" | "template"; twist?: string; place?: string; tick: string; next: number; note?: string; forced?: boolean }): string {
   const mod = b.mod ? `${b.mod > 0 ? "+" : "-"}${Math.abs(b.mod)}` : "";
-  const f = [`roll: ${b.roll[0]}+${b.roll[1]}${mod}`, `at: ${b.at}`, b.twist ? `twist: ${cleanVal(b.twist)}` : "", b.place ? `place: ${cleanVal(b.place)}` : "", `tick: ${b.tick}`, `next: ${b.next}`, `told: ${b.told}`, b.note ? `note: ${cleanVal(b.note)}` : "", `text: ${cleanVal(b.text)}`].filter(Boolean);
+  const f = [`roll: ${b.roll[0]}+${b.roll[1]}${mod}`, `at: ${b.at}`, b.twist ? `twist: ${cleanVal(b.twist)}` : "", b.place ? `place: ${cleanVal(b.place)}` : "", b.forced ? "forced: yes" : "", `tick: ${b.tick}`, `next: ${b.next}`, `told: ${b.told}`, b.note ? `note: ${cleanVal(b.note)}` : "", `text: ${cleanVal(b.text)}`].filter(Boolean);
   return `arc beat #${id}: ${b.result} | ${f.join(" | ")}`;
 }

@@ -58,7 +58,7 @@ export function applyArcOp(st: WorldState, op: ParsedOp, mi: number): boolean {
       const at = int(f.at, now);
       arc.beats.push({
         atAbs: at, roll: roll ? [parseInt(roll[1], 10), parseInt(roll[2], 10)] : [0, 0], mod: roll?.[3] ? parseInt(roll[3].replace(/\s/g, ""), 10) : 0,
-        result, twist: clean(f.twist) || undefined, text: clean(f.text), told: f.told === "model" ? "model" : "template", msgIndex: mi, tick: clean(f.tick) || undefined, place: clean(f.place) || undefined,
+        result, twist: clean(f.twist) || undefined, forced: f.forced === "yes" || undefined, text: clean(f.text), told: f.told === "model" ? "model" : "template", msgIndex: mi, tick: clean(f.tick) || undefined, place: clean(f.place) || undefined,
         note: clean(f.note) || undefined,
       });
       if (arc.beats.length > BEATS_KEPT) {
@@ -72,6 +72,7 @@ export function applyArcOp(st: WorldState, op: ParsedOp, mi: number): boolean {
       if (f.place) arc.place = clean(f.place);
       arc.bring = undefined;
       arc.push = undefined;
+      arc.force = undefined;
       arc.wait = undefined;
       return true;
     }
@@ -108,6 +109,7 @@ export function applyArcOp(st: WorldState, op: ParsedOp, mi: number): boolean {
       if (f.next) arc.nextAbs = int(f.next, arc.nextAbs);
       if (f.bring) arc.bring = f.bring === "yes" || undefined;
       if (f.push) arc.push = f.push === "yes" || undefined;
+      if (f.force) arc.force = ["win", "cost", "loss", "twist"].includes(f.force) ? (f.force as ArcState["force"]) : undefined;
       if ("wait" in f) arc.wait = clean(f.wait) || undefined;
       if ((KINDS as string[]).includes(f.kind ?? "") && f.kind !== "world") arc.kind = f.kind as ArcKind;
       if (f.kind) arc.locked = true;

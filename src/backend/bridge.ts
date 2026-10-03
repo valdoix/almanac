@@ -373,7 +373,7 @@ export function registerBridge() {
           }
           const res = m.action === "retell"
             ? await retellBeat(m.chatId, String(m.id ?? ""), Number(m.at), String(m.tick ?? ""), userId)
-            : await elsewhereAction(m.chatId, { action: m.action, id: m.id, name: m.name, premise: m.premise, want: m.want, fear: m.fear, kind: m.kind, secrecy: m.secrecy, decision: m.decision }, userId);
+            : await elsewhereAction(m.chatId, { action: m.action, id: m.id, name: m.name, premise: m.premise, want: m.want, fear: m.fear, kind: m.kind, secrecy: m.secrecy, decision: m.decision, result: m.result }, userId);
           if (res?.warn) toast(userId, "warning", res.warn);
           if (res?.info) toast(userId, "info", res.info);
           onMutation(m.chatId, userId);
