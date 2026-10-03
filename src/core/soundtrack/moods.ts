@@ -1,7 +1,7 @@
 // Soundtrack (design/11): the tables the cue is read from. Data, not code: tune these by replay.
 
 export const MOODS = [
-  "calm", "warm", "playful", "tender", "romantic", "hopeful", "triumphant", "adventurous",
+  "calm", "warm", "playful", "tender", "romantic", "sensual", "erotic", "hopeful", "triumphant", "adventurous",
   "mysterious", "eerie", "tense", "dread", "combat", "melancholy", "grief", "dreamy",
 ] as const;
 export type Mood = (typeof MOODS)[number];
@@ -13,7 +13,9 @@ export const MOOD_WORDS: Record<Mood, string[]> = {
   warm: ["warm", "feel good", "cozy"],
   playful: ["playful", "upbeat", "fun"],
   tender: ["tender", "gentle", "soft"],
-  romantic: ["romantic", "love", "sensual"],
+  romantic: ["romantic", "love", "love songs"],
+  sensual: ["sensual", "seductive", "sultry"],
+  erotic: ["sexy", "erotic", "sensual"],
   hopeful: ["hopeful", "uplifting", "inspiring"],
   triumphant: ["triumphant", "epic", "victory"],
   adventurous: ["adventure", "journey", "uplifting"],
@@ -34,6 +36,8 @@ export const MOOD_VEC: Record<Mood, [number, number, number, number]> = {
   playful: [0.6, 0.6, 0.15, 0.2],
   tender: [0.25, 0.5, 0.2, 0.7],
   romantic: [0.35, 0.6, 0.3, 0.85],
+  sensual: [0.4, 0.55, 0.45, 0.92],
+  erotic: [0.6, 0.5, 0.6, 1],
   hopeful: [0.5, 0.6, 0.2, 0.3],
   triumphant: [0.85, 0.7, 0.3, 0.2],
   adventurous: [0.6, 0.4, 0.3, 0.1],
@@ -57,6 +61,16 @@ export const MODE_BASE: Record<string, { mood: Mood; energy: number; valence: nu
   travel: { mood: "adventurous", energy: 0.55, valence: 0.3, tension: 0.3, intimacy: 0.1 },
   stealth: { mood: "tense", energy: 0.35, valence: -0.3, tension: 0.7, intimacy: 0.05 },
   crisis: { mood: "dread", energy: 0.9, valence: -0.6, tension: 0.95, intimacy: 0.05 },
+};
+
+/**
+ * Moods that have music of their own: a sex scene in a fantasy story sounds like R&B, not like a
+ * film score with "sexy" typed after it. Searched as well as the taste's genres, unless the taste
+ * is strict.
+ */
+export const MOOD_GENRES: Partial<Record<Mood, string[]>> = {
+  sensual: ["r&b", "neo soul", "trip hop"],
+  erotic: ["r&b", "slow jams", "neo soul"],
 };
 
 /** Story genre (Session Zero) → music genres to suggest. */

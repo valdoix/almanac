@@ -212,7 +212,7 @@ test("artist search parses names and channel ids", () => {
 /** A cue; `sceneNo` picks the spot ("room1", "room2"…) so tests can move the scene. */
 const cueOf = (over: Partial<Cue> = {}): Cue => {
   const sceneNo = over.sceneNo ?? 2;
-  return { mood: "tense", energy: 0.7, valence: -0.4, tension: 0.8, intimacy: 0.1, colour: ["rain"], sharp: false, death: false, sceneNo, place: `room${sceneNo}`, at: 1000, why: "tense", ...over };
+  return { mood: "tense", energy: 0.7, valence: -0.4, tension: 0.8, intimacy: 0.1, colour: ["rain"], sharp: false, death: false, heat: 0, explicit: false, sceneNo, place: `room${sceneNo}`, at: 1000, why: "tense", ...over };
 };
 
 test("genres: strict keeps mine; blend or none fills from the story", () => {
@@ -405,6 +405,124 @@ test("stop drops the queued song and picks nothing more", () => {
   const r = step(s, { type: "stop" });
   expect(r.actions).toEqual([{ type: "drop-next", videoId: "s1" }]);
   expect(step(r.state, { type: "cue", cue: cueOf({ sceneNo: 5 }), now: 3, ...opts }).actions).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// Intimate scenes and what the people present feel
+// ---------------------------------------------------------------------------
+
+describe("soundtrack heat and feelings", () => {
+  const person = (name: string, mood: string, msg: number, over: any = {}) => ({ id: name.toLowerCase(), name, aliases: [], slot: 1, isUser: false, firstSeen: 0, lastSeen: msg, tier: "spot", meters: {}, flags: [], injuries: [], mood: { name: mood, msg }, ...over });
+  const withPeople = (mode: string, ...people: any[]) => state({ mode, lastReply: 20, chars: Object.fromEntries(people.map((p) => [p.id, p])) } as any);
+  const SEX = "She rides him slowly, his hands on her breasts, and he thrusts up into her until she comes apart.";
+  const KISS = "He kisses her, slow. Her breath hitches; she straddles him on the sofa and his hand finds the hem of her shirt.";
+
+  test("a hug is tender, a kiss that builds is sensual, sex on the page is erotic", () => {
+    expect(readCue({ state: state({ mode: "intimacy" }), genres: [], reply: "She leans into his shoulder and he holds her while she cries." }).mood).toBe("tender");
+    const kiss = readCue({ state: state({ mode: "intimacy" }), genres: [], reply: KISS });
+    expect(kiss.mood).toBe("sensual");
+    expect(kiss.heat).toBe(1);
+    const sex = readCue({ state: state({ mode: "intimacy" }), genres: ["romance"], reply: SEX });
+    expect(sex.mood).toBe("erotic");
+    expect(sex.heat).toBe(2);
+    expect(sex.explicit).toBe(true);
+    expect(sex.sharp).toBe(true);
+    expect(sex.intimacy).toBe(1);
+  });
+
+  test("two explicit words and a character filed as wanting is sex; the player's message counts", () => {
+    const st = withPeople("intimacy", person("Buffy", "wanton-brave", 20));
+    const msg = `"I want to make you come," he says, thumb on her nipple.`;
+    expect(readCue({ state: st, genres: [], playerMsg: msg, reply: "She arches." }).mood).toBe("erotic");
+    expect(readCue({ state: state({ mode: "intimacy" }), genres: [], playerMsg: msg, reply: "She arches." }).mood).toBe("sensual");
+  });
+
+  test("the plan, the ledger and a running joke about moaning at soup are not the page", () => {
+    const plan = "<plan>The kiss is the turn's climax; stop at its threshold. No orgasm, no thrusting.</plan>She smiles at him over the soup.";
+    expect(readCue({ state: state({ mode: "intimacy" }), genres: [], reply: plan }).heat).toBe(0);
+    const ledger = "He holds her hand.\n<ledger>\nbody Buffy: arousal 4, naked, thrusting\nmode: intimacy\n</ledger>";
+    expect(readCue({ state: state({ mode: "intimacy" }), genres: [], reply: ledger }).heat).toBe(0);
+    const soup = `Gabriel moans at the eggs. "You moan at everything," Dawn says. "You moaned at soup. You moaned at the mac and cheese." He moans again.`;
+    expect(readCue({ state: state({ mode: "social" }), genres: ["comedy"], reply: soup }).mood).toBe("playful");
+  });
+
+  test("intimacy off or fading to black gets desire at most, and no explicit songs", () => {
+    for (const nsfw of ["off", "fade"]) {
+      const c = readCue({ state: state({ mode: "intimacy" }), genres: [], reply: SEX, nsfw });
+      expect(c.mood).toBe("sensual");
+      expect(c.explicit).toBe(false);
+    }
+    const sensual = readCue({ state: state({ mode: "intimacy" }), genres: [], reply: SEX, nsfw: "sensual" });
+    expect(sensual.mood).toBe("erotic");
+    expect(sensual.explicit).toBe(false);
+  });
+
+  test("sex filed under another mode counts when the page is unmistakable, never in a fight", () => {
+    const strong = "Naked on the couch, she rides him, his cock inside her, thrusting until her orgasm.";
+    expect(readCue({ state: state({ mode: "social" }), genres: [], reply: strong }).mood).toBe("erotic");
+    expect(readCue({ state: state({ mode: "conflict" }), genres: [], reply: strong }).mood).not.toBe("erotic");
+  });
+
+  test("a breath between rounds stays the scene's music; a new scene doesn't", () => {
+    const heated = { place: "kitchen", at: T0 };
+    expect(readCue({ state: state({ mode: "intimacy" }), genres: [], reply: KISS, heated }).mood).toBe("erotic");
+    expect(readCue({ state: state({ mode: "intimacy" }), genres: [], reply: "They lie still and talk about nothing.", heated }).mood).not.toBe("erotic");
+    expect(readCue({ state: state({ mode: "intimacy", place: ["Sunnydale", "bedroom"] }), genres: [], reply: KISS, heated }).mood).toBe("sensual");
+  });
+
+  test("the model's once-a-scene reading can't hold back a scene that turned to sex", () => {
+    const hint = { place: "kitchen", at: T0, mood: "tender" as const, colour: [] };
+    expect(readCue({ state: state({ mode: "intimacy" }), genres: [], reply: SEX, hint }).mood).toBe("erotic");
+    expect(readCue({ state: state({ mode: "intimacy" }), genres: [], reply: KISS, hint }).mood).toBe("sensual");
+    expect(readCue({ state: state({ mode: "intimacy" }), genres: [], reply: "He holds her.", hint }).mood).toBe("tender");
+  });
+
+  test("what people feel moves a plain scene: grief at breakfast, giddy in the rain; one flustered word doesn't", () => {
+    expect(readCue({ state: withPeople("social", person("Buffy", "guilt-grief", 20)), genres: ["comedy"] }).mood).toBe("melancholy");
+    expect(readCue({ state: withPeople("downtime", person("Dawn", "terror", 19), person("Buffy", "afraid-angry", 20)), genres: [] }).mood).toBe("tense");
+    expect(readCue({ state: withPeople("social", person("Buffy", "defensive-panicked", 20)), genres: ["comedy"] }).mood).toBe("playful");
+    const rain = { condition: "light rain" } as any;
+    expect(readCue({ state: { ...withPeople("social", person("Dawn", "giddy", 20)), weather: rain }, genres: [] }).mood).toBe("warm");
+    expect(readCue({ state: { ...withPeople("social"), weather: rain }, genres: [] }).mood).toBe("melancholy");
+    // A mood filed long ago is not what they feel now.
+    expect(readCue({ state: withPeople("social", person("Valeria", "grief", 4)), genres: ["comedy"] }).mood).toBe("playful");
+  });
+
+  test("a sex scene searches its own music unless the taste is strict, and explicit songs rise", () => {
+    const sex = cueOf({ mood: "erotic", heat: 2, explicit: true, intimacy: 1 });
+    const blend = queriesFor(sex, { ...DEFAULT_TASTE, genres: ["film score"] }, ["fantasy"]);
+    expect(blend.some((q) => q.rank === 0 && /^(r&b|slow jams|neo soul) /.test(q.q))).toBe(true);
+    const strict = queriesFor(sex, { ...DEFAULT_TASTE, genres: ["film score"], genreMode: "strict" }, ["fantasy"]);
+    expect(strict.every((q) => q.q.startsWith("film score"))).toBe(true);
+    // A taste that already plays R&B isn't searched twice.
+    expect(queriesFor(sex, { ...DEFAULT_TASTE, genres: ["r&b"], genreMode: "strict" }, []).length).toBe(1);
+
+    const q = { q: "r&b sexy", key: "k", genre: "r&b", rank: 0 };
+    const cands: Candidate[] = [
+      { track: track("clean", "Slow Motion", "A"), query: q, pos: 0 },
+      { track: track("x", "Slow Motion (Explicit)", "B", { explicit: true }), query: q, pos: 1 },
+      { track: track("lull", "Lullaby for You", "C"), query: q, pos: 0 },
+    ];
+    const order = scoreAll(cands, sex, DEFAULT_TASTE, emptyHistory(), { now: Date.now(), seed: "" }).map((s) => s.track.videoId);
+    expect(order[0]).toBe("x");
+    expect(order[2]).toBe("lull");
+    // Without sex on the page the explicit one gets no help.
+    const tender = scoreAll(cands, cueOf({ mood: "tender" }), DEFAULT_TASTE, emptyHistory(), { now: Date.now(), seed: "" }).map((s) => s.track.videoId);
+    expect(tender.indexOf("clean")).toBeLessThan(tender.indexOf("x"));
+    // ...and a lullaby fits a tender scene.
+    expect(tender[0]).toBe("lull");
+  });
+
+  test("a scene turning to sex cuts in with a fade, once per music scene", () => {
+    const c1 = cueOf({ mood: "romantic", energy: 0.35, valence: 0.6, tension: 0.3, intimacy: 0.85, sceneNo: 1 });
+    const { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1"), now: 3, banned: null }]);
+    const sex = cueOf({ mood: "erotic", energy: 0.6, valence: 0.5, tension: 0.6, intimacy: 1, sharp: true, heat: 2, sceneNo: 1 });
+    const r = step(s, { type: "cue", cue: sex, now: 30_000, ...opts });
+    expect(r.actions).toEqual([{ type: "pick", when: "now", cue: sex, reason: "sharp turn", fade: true }]);
+    // It cooled to romantic and the song now playing was picked for that; heating up again in the same scene doesn't cut.
+    const again = step({ ...r.state, picking: 0, playingCue: c1 }, { type: "cue", cue: sex, now: 90_000, ...opts });
+    expect(again.actions.some((a) => a.type === "pick" && a.when === "now")).toBe(false);
+  });
 });
 
 describe("soundtrack listener tags", () => {

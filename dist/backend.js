@@ -7818,7 +7818,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.22.0";
+var VERSION = "1.22.1";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -19759,7 +19759,7 @@ function hourBand(minute) {
     return "dusk";
   return "night";
 }
-var MOODS, isMood = (x) => typeof x === "string" && MOODS.includes(x), MOOD_WORDS, MOOD_VEC, MODE_BASE, GENRE_SUGGEST, GENRE_CHIPS, PLACE_COLOUR;
+var MOODS, isMood = (x) => typeof x === "string" && MOODS.includes(x), MOOD_WORDS, MOOD_VEC, MODE_BASE, MOOD_GENRES, GENRE_SUGGEST, GENRE_CHIPS, PLACE_COLOUR;
 var init_moods = __esm(() => {
   MOODS = [
     "calm",
@@ -19767,6 +19767,8 @@ var init_moods = __esm(() => {
     "playful",
     "tender",
     "romantic",
+    "sensual",
+    "erotic",
     "hopeful",
     "triumphant",
     "adventurous",
@@ -19784,7 +19786,9 @@ var init_moods = __esm(() => {
     warm: ["warm", "feel good", "cozy"],
     playful: ["playful", "upbeat", "fun"],
     tender: ["tender", "gentle", "soft"],
-    romantic: ["romantic", "love", "sensual"],
+    romantic: ["romantic", "love", "love songs"],
+    sensual: ["sensual", "seductive", "sultry"],
+    erotic: ["sexy", "erotic", "sensual"],
     hopeful: ["hopeful", "uplifting", "inspiring"],
     triumphant: ["triumphant", "epic", "victory"],
     adventurous: ["adventure", "journey", "uplifting"],
@@ -19803,6 +19807,8 @@ var init_moods = __esm(() => {
     playful: [0.6, 0.6, 0.15, 0.2],
     tender: [0.25, 0.5, 0.2, 0.7],
     romantic: [0.35, 0.6, 0.3, 0.85],
+    sensual: [0.4, 0.55, 0.45, 0.92],
+    erotic: [0.6, 0.5, 0.6, 1],
     hopeful: [0.5, 0.6, 0.2, 0.3],
     triumphant: [0.85, 0.7, 0.3, 0.2],
     adventurous: [0.6, 0.4, 0.3, 0.1],
@@ -19824,6 +19830,10 @@ var init_moods = __esm(() => {
     travel: { mood: "adventurous", energy: 0.55, valence: 0.3, tension: 0.3, intimacy: 0.1 },
     stealth: { mood: "tense", energy: 0.35, valence: -0.3, tension: 0.7, intimacy: 0.05 },
     crisis: { mood: "dread", energy: 0.9, valence: -0.6, tension: 0.95, intimacy: 0.05 }
+  };
+  MOOD_GENRES = {
+    sensual: ["r&b", "neo soul", "trip hop"],
+    erotic: ["r&b", "slow jams", "neo soul"]
   };
   GENRE_SUGGEST = {
     fantasy: ["film score", "celtic folk", "orchestral"],
@@ -19889,6 +19899,31 @@ var init_moods = __esm(() => {
 });
 
 // src/core/soundtrack/cue.ts
+function feelings(state) {
+  const last = state.lastReply ?? -1;
+  const fresh = Object.values(state.chars ?? {}).filter((c) => (c.tier === "spot" || c.tier === "peri") && !c.dead && c.mood?.name && c.mood.msg != null && c.mood.msg >= last - 2);
+  const score = {};
+  const vs = [];
+  const as = [];
+  for (const c of fresh) {
+    const words = c.mood.name.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+    words.forEach((w, i) => {
+      const f = FEELING_WORDS.find(([, re]) => re.test(w))?.[0];
+      if (f)
+        score[f] = (score[f] ?? 0) + (i === 0 ? 1 : 0.4);
+    });
+    if (typeof c.mood.v === "number")
+      vs.push(c.mood.v);
+    if (typeof c.mood.a === "number")
+      as.push(c.mood.a);
+  }
+  let top = null;
+  for (const [f] of FEELING_WORDS)
+    if ((score[f] ?? 0) > (top ? score[top] ?? 0 : 0))
+      top = f;
+  const avg = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+  return { top, score: top ? score[top] ?? 0 : 0, v: avg(vs), a: avg(as) };
+}
 function weatherWord(cond) {
   const c = cond.toLowerCase();
   if (/thunder|storm|gale|blizzard|hurricane|tempest/.test(c))
@@ -19911,13 +19946,54 @@ function readCue(inp) {
   let { energy, valence, tension, intimacy } = base;
   const why = [mode];
   const recent = `${inp.playerMsg ?? ""}
-${inp.reply ?? ""}`;
+${inp.reply ?? ""}`.replace(OFF_PAGE2, " ");
   const fight = FIGHT.test(recent);
   const death = (state.milestones ?? []).some((m) => m.kind === "death" && m.msgIndex === state.lastReply);
   if (mode === "social" && has("comedy"))
     mood = "playful";
   if (mode === "intimacy" && has("romance", "erotic"))
     mood = "romantic";
+  const feel = feelings(state);
+  const x = termsIn(recent, EXPLICIT);
+  const sx = termsIn(recent, SENSUAL);
+  let heat = 0;
+  const quiet = mode === "conflict" || mode === "crisis" || mode === "investigation" || mode === "stealth";
+  if (mode === "intimacy") {
+    if (x >= 3 || x >= 2 && feel.top === "desire")
+      heat = 2;
+    else if (x >= 1 || sx >= 3 || feel.top === "desire")
+      heat = 1;
+  } else if (!quiet && x >= 4)
+    heat = 2;
+  const now = state.time ? absMinutes(state.time) : null;
+  const here = { place: placeKey(state.place ?? []), at: now };
+  if (heat === 1 && mode === "intimacy" && inp.heated && sameScene(inp.heated, here))
+    heat = 2;
+  const nsfw = (inp.nsfw ?? "").toLowerCase();
+  if (heat === 2 && (nsfw === "off" || nsfw === "fade"))
+    heat = 1;
+  if (heat === 2) {
+    mood = "erotic";
+    intimacy = 1;
+    energy = Math.max(energy, 0.5);
+    why.push("sex");
+  } else if (heat === 1 && mode === "intimacy") {
+    mood = "sensual";
+    why.push("desire");
+  }
+  const plain = mood === "calm" || mood === "warm" || mood === "playful" || mood === "dreamy" || mood === "adventurous";
+  if (feel.top && mode !== "intimacy") {
+    if (feel.top === "sad" && feel.score >= 1 && plain)
+      mood = "melancholy";
+    else if ((feel.top === "fear" || feel.top === "anger") && feel.score >= 1.4 && (plain || mood === "mysterious") && mode !== "travel")
+      mood = "tense";
+    if (feel.top !== "warm" && feel.top !== "desire")
+      why.push(feel.top);
+  }
+  if (feel.v != null)
+    valence += clamp2(feel.v / 3, -1, 1) * 0.2;
+  if (feel.a != null)
+    energy += (clamp2(feel.a / 5) - 0.4) * 0.2;
   if ((mode === "conflict" || mode === "crisis") && fight) {
     mood = "combat";
     energy = Math.max(energy, 0.9);
@@ -19945,7 +20021,7 @@ ${inp.reply ?? ""}`;
     why.push(wx);
     if (wx === "storm")
       tension += 0.15;
-    if ((wx === "rain" || wx === "fog") && (mood === "calm" || mood === "warm"))
+    if ((wx === "rain" || wx === "fog") && (mood === "calm" || mood === "warm") && feel.top !== "joy" && feel.top !== "warm")
       mood = "melancholy";
     if (wx === "snow" && mood === "calm")
       mood = "dreamy";
@@ -19957,7 +20033,6 @@ ${inp.reply ?? ""}`;
     if (word && !colour.includes(word))
       colour.push(word);
   }
-  const now = state.time ? absMinutes(state.time) : null;
   if (now != null && Object.values(state.deadlines ?? {}).some((d) => !d.done && d.at && absMinutes(d.at) - now >= 0 && absMinutes(d.at) - now <= 120)) {
     tension += 0.15;
     why.push("deadline");
@@ -19976,12 +20051,11 @@ ${inp.reply ?? ""}`;
   if (has("cozy") && (mood === "dread" || mood === "eerie"))
     mood = "tense";
   const sceneNo = state.sceneNo ?? 0;
-  const here = { place: placeKey(state.place ?? []), at: now };
   if (death || inp.grief && sameScene(inp.grief, here)) {
     mood = "grief";
     why.push("loss");
   }
-  if (inp.hint && sameScene(inp.hint, here) && isMood(inp.hint.mood) && mood !== "grief" && mood !== "combat") {
+  if (inp.hint && sameScene(inp.hint, here) && isMood(inp.hint.mood) && mood !== "grief" && mood !== "combat" && mood !== "erotic" && !(mood === "sensual" && inp.hint.mood !== "erotic")) {
     mood = inp.hint.mood;
     for (const c of inp.hint.colour)
       if (c && !colour.includes(c))
@@ -19994,8 +20068,9 @@ ${inp.reply ?? ""}`;
   tension = clamp2((tension + t) / 2);
   intimacy = clamp2((intimacy + i) / 2);
   const tier = inp.playerMsg ? tierGuess(inp.playerMsg, state) : "routine";
-  const sharp = death || fight && (mode === "conflict" || mode === "crisis") || tier === "pivotal" && tension >= 0.7;
-  return { mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp, death, sceneNo, place: here.place, at: here.at, why: `${mood} \xB7 ${why.join(" \xB7 ")}` };
+  const sharp = death || fight && (mode === "conflict" || mode === "crisis") || tier === "pivotal" && tension >= 0.7 || mood === "erotic";
+  const explicit = mood === "erotic" && (nsfw === "" || nsfw === "explicit");
+  return { mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp, death, heat, explicit, sceneNo, place: here.place, at: here.at, why: `${mood} \xB7 ${why.join(" \xB7 ")}` };
 }
 function cueDistance(a, b) {
   if (!a || !b)
@@ -20015,13 +20090,55 @@ function sameScene(a, b) {
     return false;
   return a.at == null || b.at == null || Math.abs(b.at - a.at) < 90;
 }
-var FIGHT, clamp2 = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
+var FIGHT, clamp2 = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x)), EXPLICIT, SENSUAL, OFF_PAGE2, termsIn = (text, terms) => terms.filter((t) => t.test(text)).length, FEELING_WORDS;
 var init_cue = __esm(() => {
   init_util();
   init_plate();
   init_recall();
   init_moods();
   FIGHT = /\b(attacks?|attacked|strikes?|struck|stabs?|stabbed|shoots?|shot|slash(?:es|ed)?|punch(?:es|ed)?|swings? (?:at|his|her|the)|lunges?|parr(?:y|ies|ied)|gunfire|blades? (?:clash|meet)|fight(?:s|ing)? (?:back|breaks out)|draws? (?:a |his |her |my )?(?:sword|gun|knife|blade|pistol)|opens? fire|charges? at)\b/i;
+  EXPLICIT = [
+    /\b(cock|dick|shaft|his length)\b/i,
+    /\b(pussy|clit|clitoris|cunt)\b/i,
+    /\b(cum|cumming|orgasm\w*|climax(?:es|ed|ing)?)\b/i,
+    /\b(make|made|let) (you|her|him|me) come\b|\bcom(?:e|es|ing) (for|on|inside|apart) (me|you|him|her)\b/i,
+    /\bthrust(s|ing|ed)?\b/i,
+    /\b(erection|hard against)\b/i,
+    /\binside (her|him|me|you)\b(?! (chest|head|ribs|mind|skull|sternum|throat|the))/i,
+    /\bnipples?\b/i,
+    /\b(breasts?|tits)\b/i,
+    /\b(naked|nude|undress\w*|strips? (her|him|me|off)|bare (skin|chest|breasts?))\b/i,
+    /\bbetween (her|his|my|your) (legs|thighs)\b/i,
+    /\b(rid(?:es|ing) (him|her|me)|on top of (him|her))\b/i,
+    /\bgrind(s|ing|ed)? (against|into|down)\b/i,
+    /\bfuck(s|ing|ed)? (her|him|me|you)\b|\bfucks\b/i,
+    /\b(condom|lube)\b/i,
+    /\b(post-orgasm|making love|made love|make love|has sex|having sex)\b/i,
+    /\b(hips? (buck|roll|rock|snap)\w*|buck(s|ing) (into|up))\b/i
+  ];
+  SENSUAL = [
+    /\bkiss(es|ed|ing)?\b/i,
+    /\b(tongue|open-mouthed|mouth (on|against) (his|hers?|my))\b/i,
+    /\b(kiss\w*|mouth\w*|lips?) (along |down |on |against )?(her|his) (neck|throat|collarbone|jaw)\b/i,
+    /\bstraddl\w*|\bin (his|her) lap\b/i,
+    /\b(unbutton\w*|shirt off|bra|hem of)\b/i,
+    /\b(her|his) thighs?\b/i,
+    /\b(want(s|ing|ed)? (you|him|her)|desire|aroused|arousal|lust)\b/i,
+    /\b(breath|breathing) (hitch|catch|stutter)\w*/i,
+    /\b(caress\w*|trails? (his|her) (fingers|hand|mouth))\b/i,
+    /\bbites? (her|his) (lip|lower lip)\b/i,
+    /\b(pulls? (her|him) (closer|against|onto)|presses? (herself|himself) against)\b/i,
+    /\bmoans? (into|against) (his|her|my) (mouth|lips|neck)\b/i
+  ];
+  OFF_PAGE2 = /<(ledger|unspoken|plan|think|thinking|ooc|folio)\b[^>]*>[\s\S]*?(<\/\1>|$)/gi;
+  FEELING_WORDS = [
+    ["fear", /^(terrif\w*|terror|afraid|scared|fear\w*|panic\w*|dread|trapped|horror|horrified|frighten\w*|alarmed|anxious)$/],
+    ["anger", /^(fury|furious|rage|raging|angry|anger|livid|seething|hostile|wrath\w*)$/],
+    ["sad", /^(grief|griev\w*|sorrow\w*|crying|tears|devastat\w*|heartbroken|hollow|guilt\w*|mourning|shattered|despair\w*|sad|loss|bereft|desolate)$/],
+    ["desire", /^(want|wanting|wanton|burning|aroused|desire|desirous|lust\w*|heated|needy|yearning)$/],
+    ["joy", /^(giddy|glee\w*|delight\w*|elated|triumphant|playful|smug|laughing|amused|vindicated|bliss\w*|joyful|euphoric)$/],
+    ["warm", /^(tender|warm|soft|settled|content|safe|fond|adored|grateful|relief|relieved|sated|peaceful|cozy)$/]
+  ];
 });
 
 // src/core/soundtrack/director.ts
@@ -20213,7 +20330,10 @@ function step(prev, ev) {
       }
       const d = cueDistance(s.playingCue, cue);
       const sceneChanged = newScene || !sameScene(s.playingCue, cue);
-      const jump = cue.tension - s.playingCue.tension >= TENSION_JUMP || cue.death && s.playingCue.mood !== "grief";
+      const turnedOn = cue.mood === "erotic" && s.playingCue.mood !== "erotic" && s.eroticScene !== s.sceneId;
+      if (cue.mood === "erotic")
+        s.eroticScene = s.sceneId;
+      const jump = cue.tension - s.playingCue.tension >= TENSION_JUMP || cue.death && s.playingCue.mood !== "grief" || turnedOn;
       if (cue.sharp && jump && ev.cutOnSharp && !s.lastPaused && ev.now - s.startedAt >= SHARP_DWELL_MS) {
         s.pending = null;
         pick("now", cue, "sharp turn", ev.now, true);
@@ -20340,6 +20460,96 @@ var init_taste = __esm(() => {
   };
 });
 
+// src/core/soundtrack/tags.ts
+function cleanTags(raw) {
+  if (!Array.isArray(raw))
+    return [];
+  const out = [];
+  for (const t of raw) {
+    const name = String(t?.name ?? "").toLowerCase().trim();
+    const count = Number(t?.count ?? 0);
+    if (!name || name.length > 40 || NOISE2.test(name) || !(count > 0))
+      continue;
+    if (!out.some((o) => o.name === name))
+      out.push({ name, count: Math.min(100, count) });
+  }
+  return out.slice(0, 30);
+}
+function tagFit(tags, mood, genres, strict = false) {
+  if (!tags.length)
+    return { delta: 0, reasons: [] };
+  const { fit, clash } = MOOD_TAGS[mood];
+  const f = has2(tags, fit);
+  const c = has2(tags, clash);
+  let delta = 0.45 * f.w - 0.45 * c.w;
+  const reasons = [];
+  if (f.hit)
+    reasons.push(`tagged ${f.hit}`);
+  if (c.hit && c.w >= 0.2)
+    reasons.push(`but tagged ${c.hit}`);
+  if (genres.length) {
+    const g = genres.map(normName);
+    const gw = Math.max(0, ...tags.filter((t) => g.some((x) => x === normName(t.name) || normName(t.name).includes(x))).map((t) => t.count / 100));
+    if (gw > 0) {
+      delta += 0.15 * gw;
+    } else if (strict && tags.length >= 5) {
+      delta -= 0.15;
+      reasons.push("not tagged with your genres");
+    }
+  }
+  return { delta, reasons };
+}
+function lookupTitle(title) {
+  return title.replace(/\s*[([][^)\]]*(official|video|audio|lyrics?|visuali[sz]er|remaster|hd|hq|4k|mv|m\/v|feat\.?|ft\.?|with)[^)\]]*[)\]]/gi, "").replace(/\s+-\s+(\d{4}\s+)?remaster(ed)?.*$/i, "").replace(/\s+(feat\.?|ft\.?)\s+.*$/i, "").trim() || title;
+}
+function retag(scored, tags, mood, genres, strict = false) {
+  const out = scored.map((s) => {
+    const t = tags.get(s.track.videoId);
+    if (!t)
+      return s;
+    const f = tagFit(t, mood, genres, strict);
+    return { ...s, score: s.score + f.delta, reasons: [...f.reasons, ...s.reasons] };
+  });
+  return out.sort((a, b) => b.score - a.score);
+}
+var MOOD_TAGS, NOISE2, has2 = (tags, words) => {
+  let best = 0;
+  let hit = "";
+  for (const t of tags) {
+    if (words.some((w) => t.name === w || t.name.split(/[\s-]+/).includes(w) || w.includes(" ") && t.name.includes(w))) {
+      if (t.count > best) {
+        best = t.count;
+        hit = t.name;
+      }
+    }
+  }
+  return { w: best / 100, hit };
+};
+var init_tags = __esm(() => {
+  init_taste();
+  MOOD_TAGS = {
+    calm: { fit: ["calm", "chill", "chillout", "relaxing", "peaceful", "mellow", "ambient", "soft", "soothing", "easy listening"], clash: ["aggressive", "energetic", "brutal", "party", "hardcore"] },
+    warm: { fit: ["feel good", "happy", "warm", "cozy", "mellow", "sunny", "chill", "summer", "upbeat"], clash: ["dark", "aggressive", "depressing", "creepy", "brutal"] },
+    playful: { fit: ["fun", "upbeat", "happy", "quirky", "playful", "catchy", "feel good", "party", "cute"], clash: ["sad", "dark", "depressing", "melancholic", "brutal"] },
+    tender: { fit: ["tender", "beautiful", "gentle", "soft", "love", "romantic", "intimate", "sweet", "lullaby"], clash: ["aggressive", "angry", "brutal", "party", "hardcore"] },
+    romantic: { fit: ["romantic", "love", "love songs", "beautiful", "intimate", "sweet", "sensual"], clash: ["aggressive", "angry", "brutal", "creepy"] },
+    sensual: { fit: ["sensual", "sexy", "seductive", "sultry", "smooth", "intimate", "slow jams", "late night", "desire"], clash: ["aggressive", "brutal", "party", "happy", "fun", "lullaby", "kids", "christmas", "funeral"] },
+    erotic: { fit: ["sexy", "sex", "erotic", "sensual", "seductive", "slow jams", "bedroom", "lust", "sultry", "explicit"], clash: ["lullaby", "kids", "children", "christmas", "funeral", "requiem", "sad", "epic", "battle", "creepy", "happy", "fun"] },
+    hopeful: { fit: ["hopeful", "uplifting", "inspiring", "inspirational", "optimistic", "beautiful", "feel good"], clash: ["depressing", "dark", "nihilistic", "creepy"] },
+    triumphant: { fit: ["epic", "triumphant", "heroic", "powerful", "anthem", "uplifting", "victory", "orchestral"], clash: ["sad", "depressing", "sleepy", "lullaby"] },
+    adventurous: { fit: ["epic", "adventure", "journey", "uplifting", "cinematic", "travel", "road trip", "wanderlust"], clash: ["depressing", "sleepy", "lullaby"] },
+    mysterious: { fit: ["mysterious", "mystery", "atmospheric", "enigmatic", "dark", "noir", "moody", "ethereal"], clash: ["happy", "party", "fun", "feel good"] },
+    eerie: { fit: ["eerie", "creepy", "haunting", "dark", "unsettling", "spooky", "horror", "dark ambient", "disturbing"], clash: ["happy", "party", "fun", "feel good", "upbeat", "love"] },
+    tense: { fit: ["tense", "suspense", "intense", "dark", "thriller", "ominous", "driving", "cinematic"], clash: ["happy", "chill", "relaxing", "feel good", "lullaby", "party"] },
+    dread: { fit: ["dark", "ominous", "dread", "doom", "menacing", "sinister", "apocalyptic", "dark ambient", "heavy"], clash: ["happy", "fun", "feel good", "party", "love", "cute"] },
+    combat: { fit: ["epic", "intense", "aggressive", "battle", "energetic", "heavy", "action", "powerful", "fast"], clash: ["chill", "relaxing", "sleepy", "lullaby", "love", "mellow", "romantic"] },
+    melancholy: { fit: ["melancholy", "melancholic", "sad", "wistful", "bittersweet", "nostalgic", "rainy day", "lonely", "longing"], clash: ["party", "happy", "fun", "upbeat", "aggressive"] },
+    grief: { fit: ["sad", "grief", "mourning", "heartbreaking", "requiem", "depressing", "sorrow", "elegy", "melancholic", "funeral"], clash: ["party", "happy", "fun", "upbeat", "sexy", "feel good"] },
+    dreamy: { fit: ["dreamy", "ethereal", "dream pop", "atmospheric", "night", "spacey", "hazy", "shoegaze", "ambient"], clash: ["aggressive", "angry", "brutal", "hardcore", "party"] }
+  };
+  NOISE2 = /^(seen live|favou?rites?|favou?rite songs?|my favou?rites?|love at first listen|awesome|amazing|good|best|cool|beautiful voice|\d{2,4}s?|male vocalists?|female vocalists?|spotify|youtube|albums i own|under \d+ listeners)$/;
+});
+
 // src/core/soundtrack/picker.ts
 function genresFor(taste, storyGenres) {
   const own = taste.genres.slice(0, 8);
@@ -20360,6 +20570,12 @@ function queriesFor(cue, taste, storyGenres, salt = 0) {
     const q = [g, word, colour].filter(Boolean).join(" ") + inst;
     out.push({ q, key: `m:${q.toLowerCase()}`, genre: g, rank: genres.indexOf(g) });
   });
+  const own = MOOD_GENRES[cue.mood] ?? [];
+  if (own.length && !(taste.genreMode === "strict" && taste.genres.length) && !pickGenres.some((g) => own.some((o) => normName(o) === normName(g)))) {
+    const g = rotate(own, cue.sceneNo + salt)[0];
+    const q = `${g} ${word}${inst}`;
+    out.push({ q, key: `m:${q.toLowerCase()}`, genre: g, rank: 0 });
+  }
   if (!out.length)
     out.push({ q: `${word} music${inst}`, key: `m:${word} music${inst}`, genre: "", rank: 9 });
   const prefCount = taste.variety === "focused" ? 3 : taste.variety === "balanced" ? 2 : 1;
@@ -20396,6 +20612,15 @@ function excluded(t, taste, h, now) {
     return "same artist as the last song";
   return null;
 }
+function titleFit(title, mood) {
+  const t = ` ${title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ")} `;
+  const { fit, clash } = MOOD_TAGS[mood];
+  const c = clash.find((w) => t.includes(` ${w} `));
+  if (c)
+    return { delta: -0.3, reason: `title says ${c}` };
+  const f = fit.find((w) => w.length > 3 && t.includes(` ${w} `));
+  return f ? { delta: 0.1, reason: `title says ${f}` } : { delta: 0 };
+}
 function scoreAll(cands, cue, taste, h, o) {
   const byId = new Map;
   for (const c of cands) {
@@ -20428,6 +20653,14 @@ function scoreAll(cands, cue, taste, h, o) {
       s += INSTRUMENTAL.test(`${t.title} ${t.album ?? ""}`) ? 0.2 : -0.1;
     if (t.kind === "song")
       s += 0.05;
+    const tf = titleFit(t.title, cue.mood);
+    s += tf.delta;
+    if (tf.reason)
+      reasons.push(tf.reason);
+    if (cue.explicit && t.explicit) {
+      s += 0.2;
+      reasons.push("explicit");
+    }
     const prev = byId.get(t.videoId);
     if (prev) {
       prev.score = Math.max(prev.score, s) + 0.1;
@@ -20459,6 +20692,7 @@ var TWO_HOURS, INSTRUMENTAL;
 var init_picker = __esm(() => {
   init_util();
   init_moods();
+  init_tags();
   init_taste();
   TWO_HOURS = 2 * 3600000;
   INSTRUMENTAL = /\b(instrumental|ost|score|theme|ambient|piano|orchestral|soundtrack|suite)\b/i;
@@ -20929,94 +21163,6 @@ var init_pear = __esm(() => {
   };
 });
 
-// src/core/soundtrack/tags.ts
-function cleanTags(raw) {
-  if (!Array.isArray(raw))
-    return [];
-  const out = [];
-  for (const t of raw) {
-    const name = String(t?.name ?? "").toLowerCase().trim();
-    const count = Number(t?.count ?? 0);
-    if (!name || name.length > 40 || NOISE2.test(name) || !(count > 0))
-      continue;
-    if (!out.some((o) => o.name === name))
-      out.push({ name, count: Math.min(100, count) });
-  }
-  return out.slice(0, 30);
-}
-function tagFit(tags, mood, genres, strict = false) {
-  if (!tags.length)
-    return { delta: 0, reasons: [] };
-  const { fit, clash } = MOOD_TAGS[mood];
-  const f = has2(tags, fit);
-  const c = has2(tags, clash);
-  let delta = 0.45 * f.w - 0.45 * c.w;
-  const reasons = [];
-  if (f.hit)
-    reasons.push(`tagged ${f.hit}`);
-  if (c.hit && c.w >= 0.2)
-    reasons.push(`but tagged ${c.hit}`);
-  if (genres.length) {
-    const g = genres.map(normName);
-    const gw = Math.max(0, ...tags.filter((t) => g.some((x) => x === normName(t.name) || normName(t.name).includes(x))).map((t) => t.count / 100));
-    if (gw > 0) {
-      delta += 0.15 * gw;
-    } else if (strict && tags.length >= 5) {
-      delta -= 0.15;
-      reasons.push("not tagged with your genres");
-    }
-  }
-  return { delta, reasons };
-}
-function lookupTitle(title) {
-  return title.replace(/\s*[([][^)\]]*(official|video|audio|lyrics?|visuali[sz]er|remaster|hd|hq|4k|mv|m\/v|feat\.?|ft\.?|with)[^)\]]*[)\]]/gi, "").replace(/\s+-\s+(\d{4}\s+)?remaster(ed)?.*$/i, "").replace(/\s+(feat\.?|ft\.?)\s+.*$/i, "").trim() || title;
-}
-function retag(scored, tags, mood, genres, strict = false) {
-  const out = scored.map((s) => {
-    const t = tags.get(s.track.videoId);
-    if (!t)
-      return s;
-    const f = tagFit(t, mood, genres, strict);
-    return { ...s, score: s.score + f.delta, reasons: [...f.reasons, ...s.reasons] };
-  });
-  return out.sort((a, b) => b.score - a.score);
-}
-var MOOD_TAGS, NOISE2, has2 = (tags, words) => {
-  let best = 0;
-  let hit = "";
-  for (const t of tags) {
-    if (words.some((w) => t.name === w || t.name.split(/[\s-]+/).includes(w) || w.includes(" ") && t.name.includes(w))) {
-      if (t.count > best) {
-        best = t.count;
-        hit = t.name;
-      }
-    }
-  }
-  return { w: best / 100, hit };
-};
-var init_tags = __esm(() => {
-  init_taste();
-  MOOD_TAGS = {
-    calm: { fit: ["calm", "chill", "chillout", "relaxing", "peaceful", "mellow", "ambient", "soft", "soothing", "easy listening"], clash: ["aggressive", "energetic", "brutal", "party", "hardcore"] },
-    warm: { fit: ["feel good", "happy", "warm", "cozy", "mellow", "sunny", "chill", "summer", "upbeat"], clash: ["dark", "aggressive", "depressing", "creepy", "brutal"] },
-    playful: { fit: ["fun", "upbeat", "happy", "quirky", "playful", "catchy", "feel good", "party", "cute"], clash: ["sad", "dark", "depressing", "melancholic", "brutal"] },
-    tender: { fit: ["tender", "beautiful", "gentle", "soft", "love", "romantic", "intimate", "sweet", "lullaby"], clash: ["aggressive", "angry", "brutal", "party", "hardcore"] },
-    romantic: { fit: ["romantic", "love", "sensual", "sexy", "love songs", "beautiful", "intimate", "slow jams"], clash: ["aggressive", "angry", "brutal", "creepy"] },
-    hopeful: { fit: ["hopeful", "uplifting", "inspiring", "inspirational", "optimistic", "beautiful", "feel good"], clash: ["depressing", "dark", "nihilistic", "creepy"] },
-    triumphant: { fit: ["epic", "triumphant", "heroic", "powerful", "anthem", "uplifting", "victory", "orchestral"], clash: ["sad", "depressing", "sleepy", "lullaby"] },
-    adventurous: { fit: ["epic", "adventure", "journey", "uplifting", "cinematic", "travel", "road trip", "wanderlust"], clash: ["depressing", "sleepy", "lullaby"] },
-    mysterious: { fit: ["mysterious", "mystery", "atmospheric", "enigmatic", "dark", "noir", "moody", "ethereal"], clash: ["happy", "party", "fun", "feel good"] },
-    eerie: { fit: ["eerie", "creepy", "haunting", "dark", "unsettling", "spooky", "horror", "dark ambient", "disturbing"], clash: ["happy", "party", "fun", "feel good", "upbeat", "love"] },
-    tense: { fit: ["tense", "suspense", "intense", "dark", "thriller", "ominous", "driving", "cinematic"], clash: ["happy", "chill", "relaxing", "feel good", "lullaby", "party"] },
-    dread: { fit: ["dark", "ominous", "dread", "doom", "menacing", "sinister", "apocalyptic", "dark ambient", "heavy"], clash: ["happy", "fun", "feel good", "party", "love", "cute"] },
-    combat: { fit: ["epic", "intense", "aggressive", "battle", "energetic", "heavy", "action", "powerful", "fast"], clash: ["chill", "relaxing", "sleepy", "lullaby", "love", "mellow", "romantic"] },
-    melancholy: { fit: ["melancholy", "melancholic", "sad", "wistful", "bittersweet", "nostalgic", "rainy day", "lonely", "longing"], clash: ["party", "happy", "fun", "upbeat", "aggressive"] },
-    grief: { fit: ["sad", "grief", "mourning", "heartbreaking", "requiem", "depressing", "sorrow", "elegy", "melancholic", "funeral"], clash: ["party", "happy", "fun", "upbeat", "sexy", "feel good"] },
-    dreamy: { fit: ["dreamy", "ethereal", "dream pop", "atmospheric", "night", "spacey", "hazy", "shoegaze", "ambient"], clash: ["aggressive", "angry", "brutal", "hardcore", "party"] }
-  };
-  NOISE2 = /^(seen live|favou?rites?|favou?rite songs?|my favou?rites?|love at first listen|awesome|amazing|good|best|cool|beautiful voice|\d{2,4}s?|male vocalists?|female vocalists?|spotify|youtube|albums i own|under \d+ listeners)$/;
-});
-
 // src/backend/soundtrack/lastfm.ts
 async function cache2(userId) {
   const hit = caches.get(userId);
@@ -21256,7 +21402,7 @@ async function directorHint(s, chatId, cs, reply, here) {
   ].filter(Boolean).join(`
 `);
   const text = await quiet([
-    sys(`You score scenes for a story's soundtrack. Read the scene and answer with JSON only: {"mood": one of ${MOODS.map((m) => `"${m}"`).join(", ")}, "colour": [up to two plain lower-case texture words for a music search, like "rain", "candlelit", "neon", "desert"]}. Judge only what has happened on the page; never anticipate what might come next.`),
+    sys(`You score scenes for a story's soundtrack. Read the scene and answer with JSON only: {"mood": one of ${MOODS.map((m) => `"${m}"`).join(", ")}, "colour": [up to two plain lower-case texture words for a music search, like "rain", "candlelit", "neon", "desert"]}. Tender is closeness and comfort, romantic is love said or shown, sensual is kissing and building desire, erotic is sex on the page. Judge only what has happened on the page; never anticipate what might come next.`),
     usr(`${scene}
 
 The scene so far (latest reply):
@@ -21305,10 +21451,16 @@ async function cueFor(s, chatId) {
     playerMsg: lastUser?.content,
     reply: lastReply?.content,
     grief: griefLive,
-    hint: s.config.director === "model" ? hint : null
+    heated: cs.heated ?? null,
+    hint: s.config.director === "model" ? hint : null,
+    nsfw: files.meta.config.nsfw || files.meta.detected.nsfw || ""
   });
   if (cue.death && lastReply && (g?.msgId !== lastReply.id || g?.swipe !== lastReply.swipe)) {
     cs.grief = { place: cue.place, at: cue.at, msgId: lastReply.id, swipe: lastReply.swipe };
+    saveChat(chatId, s.userId);
+  }
+  if (cue.heat === 2 && (cs.heated?.place !== cue.place || cs.heated?.at !== cue.at)) {
+    cs.heated = { place: cue.place, at: cue.at };
     saveChat(chatId, s.userId);
   }
   return { cue, stamp: `${lastReply?.id ?? ""}:${lastReply?.swipe ?? 0}:${lastUser?.id ?? ""}` };

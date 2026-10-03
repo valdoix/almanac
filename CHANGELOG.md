@@ -4,6 +4,21 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.22.1 (2026-10-03)
+
+**The Soundtrack knows a sex scene from a hug.** Every intimate scene used to get the same "romantic" search. In the Buffy chat that was 83 of 193 replies, whether it was a hug on the floor or two hours in bed.
+- **Two new moods:**
+  - **Sensual** is for kissing and building desire. It's searched as "sensual", "seductive" and "sultry".
+  - **Erotic** is for sex on the page. It's searched as "sexy" and "erotic", in R&B, slow jams or neo soul as well as your genres (not under "Only mine").
+  - In an erotic scene, explicit songs come first when the story's Intimacy setting is Explicit (or the preset's). Titles that clash with the mood drop, like "Lullaby" in a sex scene or "Party" at a funeral, and titles that fit rise a little.
+- **How the scene is read:**
+  - The mood comes from what the latest exchange shows, your message included: distinct explicit terms, signs of desire, and characters the Ledger just filed as *wanting*.
+  - The model's plans, the ledger block and asides don't count. Neither does a running joke ("you moan at everything") in a breakfast scene.
+  - Intimacy Off or Fade to black gets sensual at most.
+  - Sex filed under another mode counts only when the page is unmistakable, and never in a fight.
+- **When it changes:** a scene turning to sex cuts in with a fade, once per music scene. The scene keeps that music between rounds while desire is still on the page. The once-a-scene model reading can't hold a scene back at "tender" after it has moved on.
+- **Feelings colour other scenes too:** the moods filed for the people present in the last two replies count. Guilt and grief at breakfast play melancholy, not playful. Real terror in a quiet room plays tense. Everyone giddy on a rainy afternoon no longer plays melancholy. One flustered word ("defensive-panicked") isn't enough to turn a scene tense.
+
 ## 1.22.0 (2026-10-03)
 
 **Soundtrack: YouTube Music that follows the scene.** A new page under Story › Soundtrack plays music through **Pear Desktop** (the YouTube Music desktop app) and picks it to fit the scene. It reads the mood from what the Ledger has filed: the scene's mode, the hour, the weather, the place, wounds, deadlines, and fights or deaths in the latest reply. A tavern gets something warm, a fight gets something urgent, a dark hallway in the rain gets something low. Nothing about the story the player hasn't seen goes in, so the music can't give away what's coming.

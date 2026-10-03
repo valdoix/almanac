@@ -54,6 +54,8 @@ export interface DirectorState {
   sceneId: number;
   /** A "pick" was sent and not answered yet (no second pick on top of it). */
   picking: number;
+  /** The music scene that last turned to sex: only the first turn in a scene cuts in. */
+  eroticScene?: number | null;
 }
 
 export type Action =
@@ -251,7 +253,9 @@ export function step(prev: DirectorState, ev: Event): { state: DirectorState; ac
       }
       const d = cueDistance(s.playingCue, cue);
       const sceneChanged = newScene || !sameScene(s.playingCue, cue);
-      const jump = cue.tension - s.playingCue.tension >= TENSION_JUMP || (cue.death && s.playingCue.mood !== "grief");
+      const turnedOn = cue.mood === "erotic" && s.playingCue.mood !== "erotic" && s.eroticScene !== s.sceneId;
+      if (cue.mood === "erotic") s.eroticScene = s.sceneId;
+      const jump = cue.tension - s.playingCue.tension >= TENSION_JUMP || (cue.death && s.playingCue.mood !== "grief") || turnedOn;
       if (cue.sharp && jump && ev.cutOnSharp && !s.lastPaused && ev.now - s.startedAt >= SHARP_DWELL_MS) {
         s.pending = null;
         pick("now", cue, "sharp turn", ev.now, true);

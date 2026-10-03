@@ -74,6 +74,8 @@ interface ChatSoundtrack {
   plays: Play[];
   /** Where and when someone died, and the reply that filed it (a swipe away from it ends the grief). */
   grief?: (SceneMark & { msgId: string; swipe: number }) | null;
+  /** Where and when the scene was last sex on the page (it holds while desire does). */
+  heated?: SceneMark | null;
   /** The model's reading of the current music scene. */
   hint?: (SceneMark & { mood: string; colour: string[] }) | null;
 }
@@ -206,7 +208,7 @@ async function directorHint(s: Session, chatId: string, cs: ChatSoundtrack, repl
   ].filter(Boolean).join("\n");
   const text = await quiet(
     [
-      sys(`You score scenes for a story's soundtrack. Read the scene and answer with JSON only: {"mood": one of ${MOODS.map((m) => `"${m}"`).join(", ")}, "colour": [up to two plain lower-case texture words for a music search, like "rain", "candlelit", "neon", "desert"]}. Judge only what has happened on the page; never anticipate what might come next.`),
+      sys(`You score scenes for a story's soundtrack. Read the scene and answer with JSON only: {"mood": one of ${MOODS.map((m) => `"${m}"`).join(", ")}, "colour": [up to two plain lower-case texture words for a music search, like "rain", "candlelit", "neon", "desert"]}. Tender is closeness and comfort, romantic is love said or shown, sensual is kissing and building desire, erotic is sex on the page. Judge only what has happened on the page; never anticipate what might come next.`),
       usr(`${scene}\n\nThe scene so far (latest reply):\n${reply.slice(0, 1600)}`),
     ],
     { connectionId: s.config.connection || settings.summarizerConnection || undefined, userId: s.userId, reasoningOff: true, maxTokens: 80, timeoutMs: 15_000, label: "soundtrack director" },
@@ -253,10 +255,16 @@ async function cueFor(s: Session, chatId: string): Promise<{ cue: Cue; stamp: st
     playerMsg: lastUser?.content,
     reply: lastReply?.content,
     grief: griefLive,
+    heated: cs.heated ?? null,
     hint: s.config.director === "model" ? hint : null,
+    nsfw: files.meta.config.nsfw || files.meta.detected.nsfw || "",
   });
   if (cue.death && lastReply && (g?.msgId !== lastReply.id || g?.swipe !== lastReply.swipe)) {
     cs.grief = { place: cue.place, at: cue.at, msgId: lastReply.id, swipe: lastReply.swipe };
+    saveChat(chatId, s.userId);
+  }
+  if (cue.heat === 2 && (cs.heated?.place !== cue.place || cs.heated?.at !== cue.at)) {
+    cs.heated = { place: cue.place, at: cue.at };
     saveChat(chatId, s.userId);
   }
   return { cue, stamp: `${lastReply?.id ?? ""}:${lastReply?.swipe ?? 0}:${lastUser?.id ?? ""}` };

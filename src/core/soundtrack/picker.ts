@@ -2,7 +2,8 @@
 
 import { rng } from "../util";
 import type { Cue } from "./cue";
-import { MOOD_WORDS, suggestGenres } from "./moods";
+import { MOOD_GENRES, MOOD_WORDS, suggestGenres } from "./moods";
+import { MOOD_TAGS } from "./tags";
 import { banReason, creditsOf, normName, preferredOf, type Taste, type Track } from "./taste";
 
 export interface Query {
@@ -40,6 +41,14 @@ export function queriesFor(cue: Cue, taste: Taste, storyGenres: string[], salt =
     const q = [g, word, colour].filter(Boolean).join(" ") + inst;
     out.push({ q, key: `m:${q.toLowerCase()}`, genre: g, rank: genres.indexOf(g) });
   });
+  // A mood with music of its own (a sex scene: R&B, slow jams) is searched in it too, as if it led
+  // the taste, unless the taste is strict or already plays it.
+  const own = MOOD_GENRES[cue.mood] ?? [];
+  if (own.length && !(taste.genreMode === "strict" && taste.genres.length) && !pickGenres.some((g) => own.some((o) => normName(o) === normName(g)))) {
+    const g = rotate(own, cue.sceneNo + salt)[0];
+    const q = `${g} ${word}${inst}`;
+    out.push({ q, key: `m:${q.toLowerCase()}`, genre: g, rank: 0 });
+  }
   if (!out.length) out.push({ q: `${word} music${inst}`, key: `m:${word} music${inst}`, genre: "", rank: 9 });
   const prefCount = taste.variety === "focused" ? 3 : taste.variety === "balanced" ? 2 : 1;
   for (const a of rotate(taste.preferred, cue.sceneNo + salt).slice(0, prefCount)) {
@@ -110,6 +119,16 @@ export function excluded(t: Track, taste: Taste, h: History, now: number): strin
 
 const INSTRUMENTAL = /\b(instrumental|ost|score|theme|ambient|piano|orchestral|soundtrack|suite)\b/i;
 
+/** A title that says the mood ("Sultry", "Requiem") or says against it ("Lullaby" in a sex scene). */
+export function titleFit(title: string, mood: Cue["mood"]): { delta: number; reason?: string } {
+  const t = ` ${title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ")} `;
+  const { fit, clash } = MOOD_TAGS[mood];
+  const c = clash.find((w) => t.includes(` ${w} `));
+  if (c) return { delta: -0.3, reason: `title says ${c}` };
+  const f = fit.find((w) => w.length > 3 && t.includes(` ${w} `));
+  return f ? { delta: 0.1, reason: `title says ${f}` } : { delta: 0 };
+}
+
 /** Score what survived the filters, best first. */
 export function scoreAll(cands: Candidate[], cue: Cue, taste: Taste, h: History, o: PickOptions): Scored[] {
   const byId = new Map<string, Scored>();
@@ -137,6 +156,14 @@ export function scoreAll(cands: Candidate[], cue: Cue, taste: Taste, h: History,
     if (skipA) s -= 0.2 * skipA;
     if (taste.vocals === "quiet-in-dialogue" && o.dialogue) s += INSTRUMENTAL.test(`${t.title} ${t.album ?? ""}`) ? 0.2 : -0.1;
     if (t.kind === "song") s += 0.05;
+    const tf = titleFit(t.title, cue.mood);
+    s += tf.delta;
+    if (tf.reason) reasons.push(tf.reason);
+    // Sex on the page in an explicit story: songs that say it out loud come first.
+    if (cue.explicit && t.explicit) {
+      s += 0.2;
+      reasons.push("explicit");
+    }
     const prev = byId.get(t.videoId);
     // Found by two searches: it fits twice.
     if (prev) {

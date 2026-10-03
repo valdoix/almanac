@@ -349,3 +349,32 @@ Where the code differs from the plan above, and why.
 - **Built since:** the HUD strip (`musicStrip` in hud.ts: open window controls, ♪ on the pill and the docked tab; fed by `SoundtrackUI.hudMusic()`; the frontend sends a `get` at each chat's first state request so the widget knows the song without opening the page). The Session Zero row (`musicRow` in sessionzero.ts: usual / own genres / off, sent as `taste` scope chat and `chatOff`). Last.fm tags (`core/soundtrack/tags.ts`: `MOOD_TAGS` fit/clash, `tagFit`, `retag`; `backend/soundtrack/lastfm.ts`: track tags, artist tags at 0.7 weight when the track has fewer than five, 30-day cache in `soundtrack/tags.json`, at most 4 calls a second, a 5 s budget per pick, the key in the enclave as `soundtrack_lastfm_key`). Tags only reorder the top ten that survive the filters; they never add a song.
 - **Not built yet:** YTMDesktop and link mode.
 - **Validation.** `tests/soundtrack.test.ts` covers cue, place keys, bans, InnerTube fixtures, filters and scoring, and director sequences. `tests/hooks.test.ts` "soundtrack with Pear Desktop" runs the backend against a fake API Server with the real routes: connect, start, keep-ahead, guard skip, the user's own banned pick, artist search and disconnect. The cue timeline was replayed over `6170f171` and `7124f750`.
+
+## 20. Heat and feelings (1.22.1)
+
+Every `intimacy` scene used to read as `tender`, or as `romantic` in a romance or erotic story. In `6170f171` that was 83 of 193 replies, and it covered a night of bandaged hands and two hours of sex alike.
+
+- **18 moods:** `sensual` and `erotic` were added after `romantic`. `Cue.heat` (0 close, 1 desire, 2 sex) and `Cue.explicit` were added too.
+- **Heat** is read from the player's message and the reply, with the off-page blocks stripped (`ledger`, `unspoken`, `plan`, `think`, `ooc`, `folio`). The model's planning text says "no climax" and "the kiss is the turn's climax". Stripping also stops a `<plan>` that says "she attacks" from counting as a fight.
+  - `EXPLICIT` and `SENSUAL` are lists of patterns, and each counts once however often it matches. "moan" isn't one of them, because it's the chat's running joke about Gabriel and soup (#46, #148, #268 have 16 to 18 each).
+  - In `intimacy`, the scene is erotic with 3 explicit terms, or with 2 when someone present was just filed with a desire mood ("wanton-brave"). It's sensual with 1 explicit term, 3 sensual ones, or a fresh desire mood.
+  - Outside `intimacy`, it takes 4 explicit terms, and never in conflict, crisis, investigation or stealth.
+  - Session Zero's Intimacy set to `off` or `fade` caps the scene at sensual. `explicit` means the story is erotic and its setting is `explicit` or unset (the preset's).
+- **Heated scenes:** like grief, the chat's `soundtrack.json` keeps `heated`, the place and time of the last erotic cue. A sensual reply in the same music scene stays erotic, so a breath between rounds doesn't change the song.
+- **Director:** a scene's first turn to erotic is a jump, so with cut-on-sharp it cuts in with a fade (`eroticScene` remembers the scene). Turning erotic again in the same music scene changes the song the usual way.
+- **Model hint:** it can't override `erotic`, and it can override `sensual` only with `erotic`. It's read once per scene, and scenes heat up after that.
+- **Picker:**
+  - `MOOD_GENRES` gives sensual R&B, neo soul and trip hop, and erotic R&B, slow jams and neo soul. These are searched as an extra rank-0 query unless the taste is strict or already plays one of them.
+  - `cue.explicit` and an explicit track give +0.2.
+  - `titleFit` scores titles against `MOOD_TAGS` (a fit word +0.1, a clash word −0.3).
+- **Feelings:** the moods of present characters filed in the last two replies (`mood.msg ≥ lastReply − 2`) are sorted into fear, anger, sad, desire, joy and warm. A character's first word counts 1 and the rest count 0.4. VAD numbers nudge valence and energy.
+  - Sad (≥ 1) turns a plain mood melancholy.
+  - Fear or anger (≥ 1.4) turns it tense, except in travel.
+  - Joy or warmth keeps rain from making a scene melancholy.
+  - A meter isn't used: Buffy's `arousal 5` stayed through a day of family scenes.
+- **Replay** (`6170f171`, Intimacy explicit, genres erotic, comedy and cozy): romantic 37, sensual 18, erotic 28.
+  - The sex scene #218–258 is erotic throughout, with one cut at #218. The build-ups at #80 ("Devoured"), #328 (the pool) and #378 ("The Experiment") each cut in once.
+  - The night-1 comfort scene (#18–40) is romantic.
+  - #152 "The Empty Shelf" (guilt-grief) is melancholy, and the giddy kitchen scenes in the rain are playful.
+  - The chat has 44 song changes, up from 31. The new changes are intimate scenes moving between romantic, sensual and erotic.
+  - In `7124f750` the sex scene #98–104 is erotic, with sensual before it.
