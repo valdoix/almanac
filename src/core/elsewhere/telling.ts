@@ -89,12 +89,16 @@ const IRREVERSIBLE = /\b(died|dies|killed|dead|murdered|suicide|overdosed|marrie
 const VERBISH = /^(?:\w+ly\s+)?(?:said|says|did|does|went|goes|decided|decides|felt|feels|thought|thinks|knew|knows|asked|asks|told|tells|agreed|agrees|refused|refuses|took|takes|gave|gives|kissed|kisses|walked|walks|ran|runs|looked|looks|smiled|smiles|called|calls|answered|answers|replied|replies|promised|promises|wanted|wants|chose|chooses|left|leaves|came|comes|met|meets|found|finds|saw|sees|heard|hears|realized|realised|learned|learnt|was|is|had|has|would|will|could|can|should|must|might)\b/i;
 
 /** The capitalised names a sentence uses (not its first word). */
+const PLACE_WORD = /^(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Boulevard|Blvd|Drive|Dr|Way|Place|Pl|Square|Sq|Court|Ct|Terrace|Alley|Row|Highway|Hwy|Parkway|Park|Bridge|Hill|Heights|Plaza|Market|Mall|Station|Cemetery|Center|Centre)$/;
+
 function capNames(text: string): string[] {
   const out: string[] = [];
   for (const s of text.split(/(?<=[.!?;:—])\s+|\s+[—–-]\s+|["“”(]/)) {
     const toks = s.trim().split(/\s+/);
     for (let i = 1; i < toks.length; i++) {
       const w = toks[i].replace(/^[^\p{L}]+|[^\p{L}'’-]+$/gu, "").replace(/['’]s$/, "");
+      // "Seventh Street", "Revello Drive": the street word goes with the name before it, which is checked itself.
+      if (PLACE_WORD.test(w) && /^(?:\p{Lu}|\d)/u.test(toks[i - 1].replace(/^[^\p{L}\p{N}]+/u, ""))) continue;
       if (/^\p{Lu}[\p{L}'’-]+$/u.test(w) && !/^(I|I'm|I'd|A|An|The|He|She|They|It|We|You|His|Her|Their|Its|God|Day|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December|Mr|Mrs|Ms|Dr|Sir|Ser|Lady|Lord|King|Queen|Prince|Princess)$/.test(w)) out.push(w);
     }
   }
@@ -120,7 +124,7 @@ export function validateTold(c: BeatCard, raw: { text?: string; result?: string;
     if (a) a.names.forEach(addNames);
   }
   addNames(ctx.userName);
-  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...(c.established ?? []), ...(c.groundText ?? [])]) addNames(p);
+  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...(c.established ?? []), ...(c.groundText ?? []), ...(c.sofar ?? []), c.arrival ?? ""]) addNames(p);
   const others = new Set(ctx.roster.actors.flatMap((a) => a.names.flatMap((n) => n.split(/\s+/))).map((w) => w.toLowerCase()));
   // What the lead's and cast's own lore names ("Harvard Law") is theirs to use; the people it names still need the card.
   const lore = new Set([c.leadText, ...c.cast.map((n) => ctx.roster.find(n)?.text ?? "")].join(" ").match(/\p{Lu}[\p{L}'’-]+/gu)?.map((w) => w.toLowerCase().replace(/['’]s$/, "")) ?? []);

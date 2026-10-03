@@ -374,6 +374,20 @@ describe("the telling's validator", () => {
     expect(v.rejected).toBeUndefined();
     expect(v.lines).toEqual(["know Giles: #buffy-alive Buffy is alive | told by Willow, by phone · knows"]);
   });
+  test("someone the subplot's earlier steps or its own arrival already name may be named again", () => {
+    const c = { ...card, lead: "Giles", cast: [], premise: "Giles means to see Buffy okay.", want: "to see Buffy okay", template: "Giles kept at it. It strained a friendship." };
+    const told = { result: "cost", text: "Giles pushed Willow for straight answers about Buffy, and Willow pushed back just as hard." };
+    expect(validateTold(c, told, ctx).rejected).toBe("names Willow, who isn't on the card");
+    expect(validateTold({ ...c, sofar: ["Giles fixed the porch step at dawn. Willow noticed him there."] }, told, ctx).rejected).toBeUndefined();
+    expect(validateTold({ ...c, arrival: "Willow has heard from Giles: he kept at it." }, told, ctx).rejected).toBeUndefined();
+  });
+
+  test("a street word goes with its name: a known street passes, an invented one still doesn't", () => {
+    const c = { ...card, template: "Giles asked a dealer on Seventh about flights." };
+    expect(validateTold(c, { result: "cost", text: "Giles bought the ticket from a dealer on Seventh Street, with money he couldn't spare." }, ctx).rejected).toBeUndefined();
+    expect(validateTold(c, { result: "cost", text: "Giles bought the ticket from a dealer on Kingman Street." }, ctx).rejected).toBe("a new name: Kingman");
+  });
+
   test("rejects a new name, a decision for the player, a secret, a changed outcome, an irreversible end", () => {
     expect(validateTold(card, { result: "cost", text: "Giles called his old friend Ethan for help." }, ctx).rejected).toContain("Ethan");
     expect(validateTold(card, { result: "cost", text: "Giles phoned, and Gabriel agreed to meet him." }, ctx).rejected).toContain("decides for");

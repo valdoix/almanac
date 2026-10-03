@@ -8064,7 +8064,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.24.2";
+var VERSION = "1.24.3";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -17956,6 +17956,8 @@ function capNames(text) {
     const toks = s.trim().split(/\s+/);
     for (let i = 1;i < toks.length; i++) {
       const w = toks[i].replace(/^[^\p{L}]+|[^\p{L}'\u2019-]+$/gu, "").replace(/['\u2019]s$/, "");
+      if (PLACE_WORD.test(w) && /^(?:\p{Lu}|\d)/u.test(toks[i - 1].replace(/^[^\p{L}\p{N}]+/u, "")))
+        continue;
       if (/^\p{Lu}[\p{L}'\u2019-]+$/u.test(w) && !/^(I|I'm|I'd|A|An|The|He|She|They|It|We|You|His|Her|Their|Its|God|Day|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December|Mr|Mrs|Ms|Dr|Sir|Ser|Lady|Lord|King|Queen|Prince|Princess)$/.test(w))
         out.push(w);
     }
@@ -17985,7 +17987,7 @@ function validateTold(c, raw, ctx) {
       a.names.forEach(addNames);
   }
   addNames(ctx.userName);
-  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...c.established ?? [], ...c.groundText ?? []])
+  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...c.established ?? [], ...c.groundText ?? [], ...c.sofar ?? [], c.arrival ?? ""])
     addNames(p);
   const others = new Set(ctx.roster.actors.flatMap((a) => a.names.flatMap((n) => n.split(/\s+/))).map((w) => w.toLowerCase()));
   const lore = new Set([c.leadText, ...c.cast.map((n) => ctx.roster.find(n)?.text ?? "")].join(" ").match(/\p{Lu}[\p{L}'\u2019-]+/gu)?.map((w) => w.toLowerCase().replace(/['\u2019]s$/, "")) ?? []);
@@ -18109,7 +18111,7 @@ function validateShape(raw, roster, lead) {
     out.place = place;
   return Object.keys(out).length ? out : null;
 }
-var RESULT_WORD, OPPOSITE, IRREVERSIBLE, VERBISH, STANDINGS, REACHES, KIND_MEANING, KIND_NAMES;
+var RESULT_WORD, OPPOSITE, IRREVERSIBLE, VERBISH, PLACE_WORD, STANDINGS, REACHES, KIND_MEANING, KIND_NAMES;
 var init_telling = __esm(() => {
   init_dsl();
   init_state();
@@ -18136,6 +18138,7 @@ var init_telling = __esm(() => {
   };
   IRREVERSIBLE = /\b(died|dies|killed|dead|murdered|suicide|overdosed|married|wedding vows|pregnan\w*|gave birth|left (?:town|for good) forever|maimed|paralys\w*|lost (?:an? )?(?:arm|leg|eye|hand))\b/i;
   VERBISH = /^(?:\w+ly\s+)?(?:said|says|did|does|went|goes|decided|decides|felt|feels|thought|thinks|knew|knows|asked|asks|told|tells|agreed|agrees|refused|refuses|took|takes|gave|gives|kissed|kisses|walked|walks|ran|runs|looked|looks|smiled|smiles|called|calls|answered|answers|replied|replies|promised|promises|wanted|wants|chose|chooses|left|leaves|came|comes|met|meets|found|finds|saw|sees|heard|hears|realized|realised|learned|learnt|was|is|had|has|would|will|could|can|should|must|might)\b/i;
+  PLACE_WORD = /^(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Boulevard|Blvd|Drive|Dr|Way|Place|Pl|Square|Sq|Court|Ct|Terrace|Alley|Row|Highway|Hwy|Parkway|Park|Bridge|Hill|Heights|Plaza|Market|Mall|Station|Cemetery|Center|Centre)$/;
   STANDINGS = ["here", "away", "captive", "changed", "dead", "companion", "construct"];
   REACHES = ["house", "town", "region", "far"];
   KIND_MEANING = {
