@@ -109,7 +109,13 @@ const BASE = `
 .alm-hudc .alm-hudc__muart{flex:none;display:grid;place-items:center;width:38px;height:38px;padding:0;border:0;border-radius:6px;overflow:hidden;cursor:pointer;color:var(--alm-accent);background:color-mix(in oklab,var(--alm-accent) 14%,transparent)}
 .alm-hudc .alm-hudc__muart img{width:100%;height:100%;object-fit:cover;display:block}
 .alm-hudc__mut{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
-.alm-hudc__mut b,.alm-hudc__mut i,.alm-hudc__mut em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alm-hudc__mut b,.alm-hudc__mut i,.alm-hudc .alm-hudc__mumood{align-self:flex-start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0;border:0;background:none;cursor:pointer;font:500 9.5px/1.2 var(--alm-font-mono);letter-spacing:.04em;color:color-mix(in oklab,var(--alm-accent) 80%,var(--alm-ink))}
+.alm-hudc .alm-hudc__mumood:hover{text-decoration:underline}
+.alm-hudc__mumenu{flex:none;display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid var(--alm-line);background:color-mix(in oklab,var(--alm-accent) 5%,var(--alm-panel))}
+.alm-hudc .alm-hudc__mumenu button{padding:3px 8px;border:0;border-radius:999px;background:color-mix(in oklab,var(--alm-ink) 7%,transparent);color:var(--alm-ink);font:500 10.5px/1.2 var(--alm-font-body);cursor:pointer}
+.alm-hudc .alm-hudc__mumenu button:hover{background:color-mix(in oklab,var(--alm-accent) 18%,transparent)}
+.alm-hudc .alm-hudc__mumenu button[aria-pressed="true"]{background:var(--alm-accent);color:var(--alm-panel)}
+.alm-hudc__mut em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .alm-hudc__mut b{font-weight:600;color:var(--alm-ink)}
 .alm-hudc__mut i{font-style:normal;color:var(--alm-muted);font-size:10.5px}
 .alm-hudc__mut em{font:500 9.5px/1.2 var(--alm-font-mono);font-style:normal;letter-spacing:.04em;color:color-mix(in oklab,var(--alm-accent) 80%,var(--alm-ink))}

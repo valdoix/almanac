@@ -5,7 +5,7 @@
 import { placeKey, readCue, sameScene, type Cue, type SceneMark } from "../../core/soundtrack/cue";
 import { absMinutes } from "../../core/util";
 import { emptyDirector, step, type Action, type DirectorState, type Event, type NowPlaying } from "../../core/soundtrack/director";
-import { GENRE_CHIPS, isMood, MOODS, suggestGenres } from "../../core/soundtrack/moods";
+import { GENRE_CHIPS, isMood, MOODS, suggestGenres, type Mood } from "../../core/soundtrack/moods";
 import { draw, emptyHistory, excluded, genresFor, queriesFor, scoreAll, type Candidate, type History, type Scored } from "../../core/soundtrack/picker";
 import { artistLine, banReason, cleanTaste, creditsOf, DEFAULT_TASTE, mergeTaste, normName, type ArtistRef, type Taste, type Track } from "../../core/soundtrack/taste";
 import { describe, has, host, log, serial, warn } from "../host";
@@ -76,6 +76,8 @@ interface ChatSoundtrack {
   grief?: (SceneMark & { msgId: string; swipe: number }) | null;
   /** Where and when the scene was last sex on the page (it holds while desire does). */
   heated?: SceneMark | null;
+  /** The mood the player chose for this story's music; null or absent is Auto. */
+  mood?: Mood | null;
   /** The model's reading of the current music scene. */
   hint?: (SceneMark & { mood: string; colour: string[] }) | null;
 }
@@ -240,8 +242,9 @@ async function cueFor(s: Session, chatId: string): Promise<{ cue: Cue; stamp: st
   const lastReply = [...path].reverse().find((m) => !m.isUser);
   const lastUser = [...path].reverse().find((m) => m.isUser);
   const here: SceneMark = { place: placeKey(st.place ?? []), at: st.time ? absMinutes(st.time) : null };
-  // One model call per music scene (the same spot, within an hour and a half), not per reply.
-  if (s.config.director === "model" && lastReply && !sameScene(cs.hint, here)) {
+  const chosen = cs.mood && isMood(cs.mood) ? cs.mood : null;
+  // One model call per music scene (the same spot, within an hour and a half), not per reply; none while the player chose the mood.
+  if (s.config.director === "model" && !chosen && lastReply && !sameScene(cs.hint, here)) {
     await directorHint(s, chatId, cs, lastReply.content, here).catch((err) => warn(`soundtrack director: ${describe(err)}`));
   }
   const hint = cs.hint && isMood(cs.hint.mood) ? { place: cs.hint.place, at: cs.hint.at, mood: cs.hint.mood, colour: cs.hint.colour ?? [] } : null;
@@ -258,6 +261,7 @@ async function cueFor(s: Session, chatId: string): Promise<{ cue: Cue; stamp: st
     heated: cs.heated ?? null,
     hint: s.config.director === "model" ? hint : null,
     nsfw: files.meta.config.nsfw || files.meta.detected.nsfw || "",
+    chosen,
   });
   if (cue.death && lastReply && (g?.msgId !== lastReply.id || g?.swipe !== lastReply.swipe)) {
     cs.grief = { place: cue.place, at: cue.at, msgId: lastReply.id, swipe: lastReply.swipe };
@@ -495,6 +499,8 @@ export async function soundtrackSwitch(chatId: string, userId?: string): Promise
   await soundtrackChanged(chatId, userId, 0);
 }
 
+const cueKeyOf = (chatId: string, r: { cue: Cue; stamp: string }) => `${chatId}|${r.stamp}|${r.cue.mood}|${r.cue.place}|${Math.round(r.cue.tension * 10)}`;
+
 /** The story moved (a reply filed, a swipe, an edit): read the cue and tell the director. */
 export async function soundtrackChanged(chatId: string, userId?: string, delay = 1200): Promise<void> {
   const s = sessions.get(userId ?? "") ?? (await session(userId).catch(() => null));
@@ -508,7 +514,7 @@ export async function soundtrackChanged(chatId: string, userId?: string, delay =
       return null;
     });
     if (!r) return;
-    const key = `${chatId}|${r.stamp}|${r.cue.mood}|${r.cue.place}|${Math.round(r.cue.tension * 10)}`;
+    const key = cueKeyOf(chatId, r);
     if (key === s.cueKey) return;
     s.cueKey = key;
     s.cue = r.cue;
@@ -549,6 +555,8 @@ async function viewOf(s: Session): Promise<Record<string, unknown>> {
     chatId,
     chatTaste: cs?.taste ?? null,
     chatOff: !!cs?.off,
+    moodPick: cs?.mood ?? null,
+    moods: MOODS,
     effectiveGenres: genresFor(taste, storyGenres),
     suggestions: suggestGenres(storyGenres),
     chips: GENRE_CHIPS,
@@ -556,7 +564,7 @@ async function viewOf(s: Session): Promise<Record<string, unknown>> {
     origin: s.dir.origin,
     np: np ? { videoId: np.videoId, title: np.title, artist: np.artist, thumb: np.thumb, album: np.album, isPaused: np.isPaused, elapsedS: np.elapsedS, durationS: np.durationS, why: mine?.why ?? "", reason: mine?.reason ?? "" } : null,
     next: next ? { title: next.track.title, artist: artistLine(next.track), why: next.why } : null,
-    cue: s.cue ? { mood: s.cue.mood, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place } : null,
+    cue: s.cue ? { mood: s.cue.mood, chosen: !!s.cue.chosen, read: s.cue.read ?? null, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place } : null,
     plays: (cs?.plays ?? []).slice(-15).reverse(),
     note: s.lastNote,
   };
@@ -632,6 +640,25 @@ export async function soundtrackAction(m: Record<string, any>, userId?: string):
       saveChat(s.chatId, userId);
       forgetCueKey(s);
       if (!cs.off) void soundtrackChanged(s.chatId, userId, 0);
+      break;
+    }
+    case "mood": {
+      // The player's mood for this story's music, or Auto (null): played at once when the Almanac is choosing.
+      if (!s.chatId) break;
+      const chatId = s.chatId;
+      const cs = await chatStore(chatId, userId);
+      cs.mood = isMood(m.mood) ? m.mood : null;
+      saveChat(chatId, userId);
+      await run(s, async () => {
+        const r = await cueFor(s, chatId).catch((err) => {
+          warn(`soundtrack cue: ${describe(err)}`);
+          return null;
+        });
+        if (!r) return;
+        s.cue = r.cue;
+        s.cueKey = cueKeyOf(chatId, r);
+        await apply(s, { type: "mood", cue: r.cue, now: Date.now() });
+      });
       break;
     }
     case "connect": {

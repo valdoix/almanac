@@ -7818,7 +7818,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.22.1";
+var VERSION = "1.22.2";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -20062,14 +20062,39 @@ ${inp.reply ?? ""}`.replace(OFF_PAGE2, " ");
         colour.unshift(c);
     why.push("director");
   }
+  const read = mood;
+  const chosen = inp.chosen && isMood(inp.chosen) ? inp.chosen : null;
+  if (chosen)
+    mood = chosen;
   const [e, v, t, i] = MOOD_VEC[mood];
-  energy = clamp2((energy + e) / 2);
-  valence = clamp2((valence + v) / 2, -1, 1);
-  tension = clamp2((tension + t) / 2);
-  intimacy = clamp2((intimacy + i) / 2);
+  const w = chosen ? 0.8 : 0.5;
+  energy = clamp2(energy * (1 - w) + e * w);
+  valence = clamp2(valence * (1 - w) + v * w, -1, 1);
+  tension = clamp2(tension * (1 - w) + t * w);
+  intimacy = clamp2(intimacy * (1 - w) + i * w);
   const tier = inp.playerMsg ? tierGuess(inp.playerMsg, state) : "routine";
   const sharp = death || fight && (mode === "conflict" || mode === "crisis") || tier === "pivotal" && tension >= 0.7 || mood === "erotic";
   const explicit = mood === "erotic" && (nsfw === "" || nsfw === "explicit");
+  if (chosen) {
+    return {
+      mood,
+      energy,
+      valence,
+      tension,
+      intimacy,
+      colour: colour.slice(0, 3),
+      sharp: false,
+      death,
+      heat,
+      explicit,
+      chosen: true,
+      read,
+      sceneNo,
+      place: here.place,
+      at: here.at,
+      why: `${mood} \xB7 chosen by you${read !== mood ? ` (the scene reads ${read})` : ""}`
+    };
+  }
   return { mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp, death, heat, explicit, sceneNo, place: here.place, at: here.at, why: `${mood} \xB7 ${why.join(" \xB7 ")}` };
 }
 function cueDistance(a, b) {
@@ -20208,6 +20233,27 @@ function step(prev, ev) {
         s.holdScene = null;
       }
       break;
+    case "mood": {
+      const newScene = !sameScene(s.scene, ev.cue);
+      if (newScene) {
+        s.scene = { place: ev.cue.place, at: ev.cue.at };
+        s.sceneId++;
+      }
+      s.lastCue = ev.cue;
+      s.pending = null;
+      if (!s.running)
+        break;
+      s.mode = "following";
+      s.holdScene = null;
+      if (s.playingCue && s.playingCue.mood === ev.cue.mood && s.current && s.origin !== "user") {
+        if (s.next && s.next.cue.mood !== ev.cue.mood)
+          pick("next", ev.cue, "you chose the mood", ev.now);
+        break;
+      }
+      s.picking = 0;
+      pick("now", ev.cue, "you chose the mood", ev.now, !!s.current && !s.lastPaused);
+      break;
+    }
     case "user-skip": {
       if (s.current && s.lastCue && s.origin !== "user")
         actions.push({ type: "penalise", videoId: s.current, mood: s.playingCue?.mood ?? s.lastCue.mood });
@@ -21438,7 +21484,8 @@ async function cueFor(s, chatId) {
   const lastReply = [...path].reverse().find((m) => !m.isUser);
   const lastUser = [...path].reverse().find((m) => m.isUser);
   const here = { place: placeKey(st.place ?? []), at: st.time ? absMinutes(st.time) : null };
-  if (s.config.director === "model" && lastReply && !sameScene(cs.hint, here)) {
+  const chosen = cs.mood && isMood(cs.mood) ? cs.mood : null;
+  if (s.config.director === "model" && !chosen && lastReply && !sameScene(cs.hint, here)) {
     await directorHint(s, chatId, cs, lastReply.content, here).catch((err) => warn(`soundtrack director: ${describe(err)}`));
   }
   const hint = cs.hint && isMood(cs.hint.mood) ? { place: cs.hint.place, at: cs.hint.at, mood: cs.hint.mood, colour: cs.hint.colour ?? [] } : null;
@@ -21453,7 +21500,8 @@ async function cueFor(s, chatId) {
     grief: griefLive,
     heated: cs.heated ?? null,
     hint: s.config.director === "model" ? hint : null,
-    nsfw: files.meta.config.nsfw || files.meta.detected.nsfw || ""
+    nsfw: files.meta.config.nsfw || files.meta.detected.nsfw || "",
+    chosen
   });
   if (cue.death && lastReply && (g?.msgId !== lastReply.id || g?.swipe !== lastReply.swipe)) {
     cs.grief = { place: cue.place, at: cue.at, msgId: lastReply.id, swipe: lastReply.swipe };
@@ -21705,7 +21753,7 @@ async function soundtrackChanged(chatId, userId, delay = 1200) {
     });
     if (!r)
       return;
-    const key = `${chatId}|${r.stamp}|${r.cue.mood}|${r.cue.place}|${Math.round(r.cue.tension * 10)}`;
+    const key = cueKeyOf(chatId, r);
     if (key === s.cueKey)
       return;
     s.cueKey = key;
@@ -21742,6 +21790,8 @@ async function viewOf(s) {
     chatId,
     chatTaste: cs?.taste ?? null,
     chatOff: !!cs?.off,
+    moodPick: cs?.mood ?? null,
+    moods: MOODS,
     effectiveGenres: genresFor(taste, storyGenres),
     suggestions: suggestGenres(storyGenres),
     chips: GENRE_CHIPS,
@@ -21749,7 +21799,7 @@ async function viewOf(s) {
     origin: s.dir.origin,
     np: np ? { videoId: np.videoId, title: np.title, artist: np.artist, thumb: np.thumb, album: np.album, isPaused: np.isPaused, elapsedS: np.elapsedS, durationS: np.durationS, why: mine?.why ?? "", reason: mine?.reason ?? "" } : null,
     next: next ? { title: next.track.title, artist: artistLine(next.track), why: next.why } : null,
-    cue: s.cue ? { mood: s.cue.mood, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place } : null,
+    cue: s.cue ? { mood: s.cue.mood, chosen: !!s.cue.chosen, read: s.cue.read ?? null, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place } : null,
     plays: (cs?.plays ?? []).slice(-15).reverse(),
     note: s.lastNote
   };
@@ -21825,6 +21875,26 @@ async function soundtrackAction(m, userId) {
       forgetCueKey(s);
       if (!cs.off)
         soundtrackChanged(s.chatId, userId, 0);
+      break;
+    }
+    case "mood": {
+      if (!s.chatId)
+        break;
+      const chatId = s.chatId;
+      const cs = await chatStore(chatId, userId);
+      cs.mood = isMood(m.mood) ? m.mood : null;
+      saveChat(chatId, userId);
+      await run(s, async () => {
+        const r = await cueFor(s, chatId).catch((err) => {
+          warn(`soundtrack cue: ${describe(err)}`);
+          return null;
+        });
+        if (!r)
+          return;
+        s.cue = r.cue;
+        s.cueKey = cueKeyOf(chatId, r);
+        await apply(s, { type: "mood", cue: r.cue, now: Date.now() });
+      });
       break;
     }
     case "connect": {
@@ -21986,7 +22056,7 @@ function forgetCueKey(s) {
   if (s.chatId)
     soundtrackChanged(s.chatId, s.userId, 0);
 }
-var DEFAULT_CONFIG, CONFIG = "soundtrack/config.json", HISTORY = "soundtrack/history.json", chatPath = (chatId) => `chats/${chatId.replace(/[^\w-]/g, "_")}/soundtrack.json`, TOKEN = "soundtrack_pear_token", sessions, loadingSession, historyTimer = null, chatCache, VALID_COLOUR, pushChain, refList = (x) => cleanTaste({ preferred: x }).preferred;
+var DEFAULT_CONFIG, CONFIG = "soundtrack/config.json", HISTORY = "soundtrack/history.json", chatPath = (chatId) => `chats/${chatId.replace(/[^\w-]/g, "_")}/soundtrack.json`, TOKEN = "soundtrack_pear_token", sessions, loadingSession, historyTimer = null, chatCache, VALID_COLOUR, cueKeyOf = (chatId, r) => `${chatId}|${r.stamp}|${r.cue.mood}|${r.cue.place}|${Math.round(r.cue.tension * 10)}`, pushChain, refList = (x) => cleanTaste({ preferred: x }).preferred;
 var init_soundtrack = __esm(() => {
   init_cue();
   init_util();

@@ -43,6 +43,12 @@ export interface HudMusic {
   mode: string;
   /** Who started the song: ours, user, autoplay. */
   origin: string;
+  /** The player chose the mood (not Auto). */
+  chosen: boolean;
+  /** The mood picker is open: Auto first, then every mood as [value, label]. */
+  menu: [string, string][] | null;
+  /** The mood the player chose, or "" for Auto. */
+  pick: string;
 }
 
 export const HUD_SIZE = { w: 360, h: 540, minW: 250, minH: 320, maxW: 720, maxH: 960 };
@@ -141,12 +147,16 @@ function musicStrip(m: HudMusic | null | undefined): string {
     return `<div class="alm-hudc__mu is-idle"><button class="alm-hudc__muart" data-hud="music" data-m="open" aria-label="Open the Soundtrack" title="Open the Soundtrack">${NOTE}</button><span class="alm-hudc__mut"><b>Nothing playing</b><i>${m.running ? "music starts with the next reply" : "press Start to score the scene"}</i></span><span class="alm-hudc__muc">${run}</span></div>`;
   }
   const state = m.mode === "holding" ? "holding this song" : m.mode === "yielded" || m.origin === "user" ? "your pick" : m.origin === "autoplay" ? "autoplay" : m.running ? m.mood || "following the scene" : "not choosing";
+  const menu = m.menu
+    ? `<div class="alm-hudc__mumenu" role="group" aria-label="The music's mood">${m.menu.map(([k, label]) => `<button data-hud="music" data-m="mood" data-mood="${e(k)}" aria-pressed="${k === m.pick}">${e(label)}</button>`).join("")}</div>`
+    : "";
+  const moodBtn = `<button class="alm-hudc__mumood" data-hud="music" data-m="moods" aria-expanded="${!!m.menu}" title="Change the music's mood (Auto: the scene decides)">${m.paused ? "paused · " : ""}${e(state)}${m.chosen ? " · yours" : ""} ▾</button>`;
   const hold = m.mode === "holding" ? b("release", "Release: change with the scene again", HOLD, " is-on") : b("hold", "Hold this song until the scene changes", HOLD);
   return `<div class="alm-hudc__mu${m.paused ? " is-paused" : ""}" title="${e(musicTip(m))}">
 <button class="alm-hudc__muart" data-hud="music" data-m="open" aria-label="Open the Soundtrack" title="Open the Soundtrack">${m.thumb ? `<img src="${e(m.thumb)}" alt="">` : NOTE}</button>
-<span class="alm-hudc__mut"><b>${e(m.title)}</b><i>${e(m.artist)}</i><em>${m.paused ? "paused · " : ""}${e(state)}</em></span>
+<span class="alm-hudc__mut"><b>${e(m.title)}</b><i>${e(m.artist)}</i>${moodBtn}</span>
 <span class="alm-hudc__muc">${b(m.paused ? "play" : "pause", m.paused ? "Play" : "Pause", m.paused ? "▶" : "❚❚")}${b("skip", "Skip: another song for this scene", "⏭")}${m.running ? hold : ""}${b("never", "Never play this song again", "⊘", " is-dim")}${run}</span>
-</div>`;
+</div>${menu}`;
 }
 
 /** The collapsed pill. `note` replaces the scene when there is nothing to show yet. */

@@ -378,3 +378,14 @@ Every `intimacy` scene used to read as `tender`, or as `romantic` in a romance o
   - #152 "The Empty Shelf" (guilt-grief) is melancholy, and the giddy kitchen scenes in the rain are playful.
   - The chat has 44 song changes, up from 31. The new changes are intimate scenes moving between romantic, sensual and erotic.
   - In `7124f750` the sex scene #98–104 is erotic, with sensual before it.
+
+## 21. The player's mood (1.22.2)
+
+- **Storage:** the chat's `soundtrack.json` keeps `mood` (null or absent is Auto). The page sends `{action: "mood", mood}`.
+- **Cue:** `readCue` takes `chosen`. The scene is still read (`read` keeps its mood, and grief and heat are still filed), then the chosen mood replaces the label.
+  - The numbers blend 80% toward `MOOD_VEC` instead of 50%.
+  - `sharp` is false: the scene can't cut in over the player's choice.
+  - `why` is "‹mood› · chosen by you (the scene reads ‹read›)".
+  - With the model director, `directorHint` isn't called while a mood is chosen.
+- **Director:** a `mood` event sets `lastCue` and, when running, ends a hold or a yield and picks now with a fade, unless the song playing was already picked for that mood. After that every cue has the chosen mood, so the song changes only when the numbers drift past `CHANGE_AT` at a new scene, which rarely happens.
+- **UI:** the Soundtrack page's Mood chips (Auto plus `MOODS`, with hints) and the Now window's mood menu (`SoundtrackUI.moodMenu`, opened from the line under the song).

@@ -24,6 +24,9 @@ export interface Cue {
   heat: 0 | 1 | 2;
   /** Explicit songs fit: sex on the page in a story whose intimacy setting is explicit (or the preset's). */
   explicit: boolean;
+  /** The player chose the mood (Soundtrack page): `read` is what the scene itself reads as. */
+  chosen?: boolean;
+  read?: Mood;
   /** The Ledger's scene number (display only: it turns over at every sub-place and title). */
   sceneNo: number;
   /** The room or spot the scene is in, as a key ("kitchen"), and when (absolute minutes): see sameScene. */
@@ -54,6 +57,8 @@ export interface CueInput {
   hint?: (SceneMark & { mood: Mood; colour: string[] }) | null;
   /** Session Zero's intimacy setting: "off", "fade", "sensual", "explicit" or "" (the preset's). */
   nsfw?: string;
+  /** The mood the player chose on the Soundtrack page; null or absent is Auto (the scene decides). */
+  chosen?: Mood | null;
 }
 
 const FIGHT = /\b(attacks?|attacked|strikes?|struck|stabs?|stabbed|shoots?|shot|slash(?:es|ed)?|punch(?:es|ed)?|swings? (?:at|his|her|the)|lunges?|parr(?:y|ies|ied)|gunfire|blades? (?:clash|meet)|fight(?:s|ing)? (?:back|breaks out)|draws? (?:a |his |her |my )?(?:sword|gun|knife|blade|pistol)|opens? fire|charges? at)\b/i;
@@ -248,17 +253,30 @@ export function readCue(inp: CueInput): Cue {
     why.push("director");
   }
 
-  // Blend the numbers toward the label, so the meter and distances agree with the name.
+  // The player's choice beats everything, a fight and a death included: it's their music.
+  const read = mood;
+  const chosen = inp.chosen && isMood(inp.chosen) ? inp.chosen : null;
+  if (chosen) mood = chosen;
+
+  // Blend the numbers toward the label, so the meter and distances agree with the name
+  // (mostly the label's, when the player chose it: the scene only shades it).
   const [e, v, t, i] = MOOD_VEC[mood];
-  energy = clamp((energy + e) / 2);
-  valence = clamp((valence + v) / 2, -1, 1);
-  tension = clamp((tension + t) / 2);
-  intimacy = clamp((intimacy + i) / 2);
+  const w = chosen ? 0.8 : 0.5;
+  energy = clamp(energy * (1 - w) + e * w);
+  valence = clamp(valence * (1 - w) + v * w, -1, 1);
+  tension = clamp(tension * (1 - w) + t * w);
+  intimacy = clamp(intimacy * (1 - w) + i * w);
 
   const tier = inp.playerMsg ? tierGuess(inp.playerMsg, state) : "routine";
   // Sex starting is a turn: the music shouldn't wait out the song that played over the talking.
   const sharp = death || (fight && (mode === "conflict" || mode === "crisis")) || (tier === "pivotal" && tension >= 0.7) || mood === "erotic";
   const explicit = mood === "erotic" && (nsfw === "" || nsfw === "explicit");
+  if (chosen) {
+    return {
+      mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp: false, death, heat, explicit, chosen: true, read, sceneNo, place: here.place, at: here.at,
+      why: `${mood} · chosen by you${read !== mood ? ` (the scene reads ${read})` : ""}`,
+    };
+  }
   return { mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp, death, heat, explicit, sceneNo, place: here.place, at: here.at, why: `${mood} · ${why.join(" · ")}` };
 }
 

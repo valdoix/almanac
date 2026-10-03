@@ -4,6 +4,17 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.22.2 (2026-10-03)
+
+**Choose the music's mood yourself.** The Soundtrack page has a new **Mood** row under the scene: **Auto** (the scene decides, as before) or any of the 18 moods.
+- **How a chosen mood works:**
+  - It holds in that story through every scene until you choose Auto again, fights and deaths included.
+  - The song changes at once with a fade. Choosing a mood also ends a Hold and takes the music back from a song you picked yourself.
+  - The page shows "Your mood: …" and what the scene itself reads as.
+  - A chosen erotic plays explicit songs only where the story's Intimacy setting allows them.
+  - With "Engine + model", no model call is made while you've chosen the mood.
+- **In the Now window:** the line under the song opens the same moods ("· yours" when you chose one).
+
 ## 1.22.1 (2026-10-03)
 
 **The Soundtrack knows a sex scene from a hug.** Every intimate scene used to get the same "romantic" search. In the Buffy chat that was 83 of 193 replies, whether it was a hug on the floor or two hours in bed.

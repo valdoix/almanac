@@ -79,6 +79,8 @@ export type Event =
   | { type: "start"; now: number }
   | { type: "stop" }
   | { type: "hold"; on: boolean }
+  /** The player chose a mood (or Auto) on the page: the cue for it, played at once. */
+  | { type: "mood"; cue: Cue; now: number }
   | { type: "user-skip"; now: number };
 
 export const CHANGE_AT = 0.35;
@@ -138,6 +140,28 @@ export function step(prev: DirectorState, ev: Event): { state: DirectorState; ac
         s.holdScene = null;
       }
       break;
+
+    case "mood": {
+      // Asking for a mood is asking for music now: it ends a hold and takes back from the player's own song.
+      const newScene = !sameScene(s.scene, ev.cue);
+      if (newScene) {
+        s.scene = { place: ev.cue.place, at: ev.cue.at };
+        s.sceneId++;
+      }
+      s.lastCue = ev.cue;
+      s.pending = null;
+      if (!s.running) break;
+      s.mode = "following";
+      s.holdScene = null;
+      if (s.playingCue && s.playingCue.mood === ev.cue.mood && s.current && s.origin !== "user") {
+        // Already playing that mood: whatever was queued for another one goes.
+        if (s.next && s.next.cue.mood !== ev.cue.mood) pick("next", ev.cue, "you chose the mood", ev.now);
+        break;
+      }
+      s.picking = 0; // the player's ask comes before a pick still out
+      pick("now", ev.cue, "you chose the mood", ev.now, !!s.current && !s.lastPaused);
+      break;
+    }
 
     case "user-skip": {
       // Skip pressed on the Almanac's page: the next song for the same mood, and this one counts against itself.

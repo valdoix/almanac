@@ -559,3 +559,51 @@ describe("soundtrack listener tags", () => {
     expect(lookupTitle("(Untitled)")).toBe("(Untitled)");
   });
 });
+
+describe("soundtrack mood chosen by the player", () => {
+  const FIGHT = "He draws his sword and lunges; steel rings off steel.";
+
+  test("a chosen mood beats the scene, even a fight, and says so; Auto reads the scene", () => {
+    const st = state({ mode: "conflict" });
+    const auto = readCue({ state: st, genres: [], reply: FIGHT });
+    expect(auto.mood).toBe("combat");
+    expect(auto.chosen).toBeUndefined();
+    const calm = readCue({ state: st, genres: [], reply: FIGHT, chosen: "calm" });
+    expect(calm.mood).toBe("calm");
+    expect(calm.chosen).toBe(true);
+    expect(calm.read).toBe("combat");
+    expect(calm.sharp).toBe(false);
+    expect(calm.why).toContain("chosen by you");
+    expect(calm.why).toContain("the scene reads combat");
+    // The numbers follow the choice, mostly.
+    expect(calm.tension).toBeLessThan(auto.tension);
+    expect(calm.tension).toBeLessThan(0.4);
+    expect(readCue({ state: st, genres: [], reply: FIGHT, chosen: null }).mood).toBe("combat");
+  });
+
+  test("a chosen erotic is explicit only where the story's intimacy allows it", () => {
+    expect(readCue({ state: state({ mode: "social" }), genres: [], chosen: "erotic" }).explicit).toBe(true);
+    expect(readCue({ state: state({ mode: "social" }), genres: [], chosen: "erotic", nsfw: "fade" }).explicit).toBe(false);
+  });
+
+  test("choosing a mood plays it now with a fade, ends a hold and takes back from the player's song", () => {
+    const c1 = cueOf({ sceneNo: 1 });
+    const { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1"), now: 3, banned: null }, { type: "hold", on: true }]);
+    expect(s.mode).toBe("holding");
+    const calm = cueOf({ mood: "calm", energy: 0.2, valence: 0.3, tension: 0.1, sceneNo: 1, chosen: true });
+    const r = step(s, { type: "mood", cue: calm, now: 5 });
+    expect(r.state.mode).toBe("following");
+    expect(r.actions).toEqual([{ type: "pick", when: "now", cue: calm, reason: "you chose the mood", fade: true }]);
+    expect(r.state.lastCue).toBe(calm);
+    // The player's own song: choosing a mood takes the music back.
+    const yielded = step({ ...s, mode: "yielded", origin: "user" }, { type: "mood", cue: calm, now: 5 });
+    expect(yielded.actions.some((a) => a.type === "pick" && a.when === "now")).toBe(true);
+    // Already that mood: nothing changes.
+    const same = step({ ...s, mode: "following", playingCue: calm }, { type: "mood", cue: calm, now: 5 });
+    expect(same.actions).toEqual([]);
+    // Not running: remembered for Start.
+    const off = step({ ...s, running: false }, { type: "mood", cue: calm, now: 5 });
+    expect(off.actions).toEqual([]);
+    expect(off.state.lastCue).toBe(calm);
+  });
+});

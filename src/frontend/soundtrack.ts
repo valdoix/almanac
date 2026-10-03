@@ -11,6 +11,13 @@ import type { HudMusic } from "./hud";
 export const soundtrackNow = { line: "", mood: "" };
 
 const MOOD_LABEL: Record<string, string> = { combat: "a fight", dread: "dread", adventurous: "adventure" };
+const MOOD_HINT: Record<string, string> = {
+  calm: "quiet, unhurried", warm: "friendly, easy", playful: "light, teasing", tender: "gentle, close", romantic: "love songs",
+  sensual: "slow, seductive", erotic: "sexy: R&B, slow jams", hopeful: "uplifting", triumphant: "victory, big",
+  adventurous: "on the road, onward", mysterious: "something hidden", eerie: "uncanny", tense: "on edge", dread: "something terrible is coming",
+  combat: "the fight", melancholy: "wistful, sad", grief: "mourning", dreamy: "hazy, floating",
+};
+const moodName = (m: string) => MOOD_LABEL[m] ?? m;
 const STATUS: Record<string, [string, string]> = {
   connected: ["connected", "good"],
   unknown: ["checking…", ""],
@@ -40,6 +47,8 @@ export class SoundtrackUI {
   error = "";
   /** The Last.fm key check's answer ("" while none). */
   lfmMsg = "";
+  /** The HUD's mood picker is open. */
+  moodMenu = false;
   private rid = 0;
   private pending = new Map<number, (m: any) => void>();
   private timers: Record<string, ReturnType<typeof setTimeout>> = {};
@@ -86,6 +95,8 @@ export class SoundtrackUI {
     return {
       title: np?.title ?? "", artist: np?.artist ?? "", thumb: np?.thumb, videoId: np?.videoId, paused: !!np?.isPaused,
       mood: MOOD_LABEL[v.cue?.mood] ?? v.cue?.mood ?? "", running: !!v.running, mode: String(v.mode ?? ""), origin: String(v.origin ?? ""),
+      chosen: !!v.moodPick, pick: v.moodPick ?? "",
+      menu: this.moodMenu && v.chatId ? [["", "Auto"], ...((v.moods ?? []) as string[]).map((m): [string, string] => [m, moodName(m)])] : null,
     };
   }
 
@@ -163,10 +174,11 @@ ${v.note ? `<p class="muted" style="margin:8px 0 0"><small>${e(v.note)}</small><
     const cue = v.cue;
     const meter = (label: string, x: number, color: string) => `<div style="flex:1;min-width:70px"><small class="muted">${label}</small><div class="bar" style="height:6px;margin-top:3px"><i style="display:block;height:100%;border-radius:inherit;width:${Math.round(Math.max(0, Math.min(1, x)) * 100)}%;background:${color}"></i></div></div>`;
     const mode = v.mode === "holding" ? stk("holding this song", "acc") : v.mode === "yielded" ? stk("your music", "acc2", "You chose a song: the Almanac waits (it takes over again at a new scene if “Take back” is on)") : v.running ? stk("following the scene", "g") : stk("not choosing", "ghost");
-    const cueBlock = cue
-      ? `<div class="almx-inset" style="margin-top:12px"><div class="almx-row"><b class="grow">The scene: ${e(MOOD_LABEL[cue.mood] ?? cue.mood)}</b>${cue.place ? `<small class="muted">${e(cue.place)}</small>` : ""}</div><small class="muted">${e(cue.why)}</small>
+    const head = cue?.chosen ? `Your mood: ${e(moodName(cue.mood))}` : cue ? `The scene: ${e(moodName(cue.mood))}` : "";
+    const cueBlock = (cue
+      ? `<div class="almx-inset" style="margin-top:12px"><div class="almx-row"><b class="grow">${head}</b>${cue.place ? `<small class="muted">${e(cue.place)}</small>` : ""}</div><small class="muted">${e(cue.why)}</small>
 <div class="row" style="gap:10px;margin-top:8px;flex-wrap:nowrap">${meter("energy", cue.energy, "var(--alm-warn)")}${meter("brightness", (cue.valence + 1) / 2, "var(--alm-good)")}${meter("tension", cue.tension, "var(--alm-danger)")}</div></div>`
-      : `<p class="muted" style="margin:10px 0 0"><small>The scene is read after the next reply in an ALMANAC chat.</small></p>`;
+      : `<p class="muted" style="margin:10px 0 0"><small>The scene is read after the next reply in an ALMANAC chat.</small></p>`) + this.moodPicker(v);
     if (!np) return `${sec("Now playing")}<div class="card"><div class="almx-row"><span class="grow muted">Nothing is playing.</span>${mode}</div>${cueBlock}</div>`;
     const pct = np.durationS ? Math.round((np.elapsedS / np.durationS) * 100) : 0;
     const t = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -176,6 +188,15 @@ ${np.why ? `<p class="muted" style="margin:6px 0 0"><small>Why: ${e(np.why)}</sm
 ${v.next ? `<p class="muted" style="margin:4px 0 0"><small>Up next: <b>${e(v.next.title)}</b> · ${e(v.next.artist)}</small></p>` : ""}
 <div class="row" style="margin-top:12px;gap:6px">${np.isPaused ? `<button class="btn sm" data-st="play">${ic("play", "sm")}Play</button>` : `<button class="btn sm" data-st="pause">${ic("pause", "sm")}Pause</button>`}<button class="btn sm" data-st="skip" title="Another song for this scene; this one counts against itself for this mood">${ic("forward", "sm")}Skip</button><button class="btn sm${v.mode === "holding" ? " primary" : ""}" data-st="hold" data-on="${v.mode === "holding" ? "" : "1"}" title="Keep this song going until the scene changes">${v.mode === "holding" ? "Holding · release" : "Hold"}</button><span class="grow"></span><button class="btn sm ghost" data-st="never" data-id="${e(np.videoId)}" title="Never play this song again">Never this song</button><button class="btn sm danger" data-st="ban" data-name="${e(np.artist.split(/,| & | and | x | feat\.? /i)[0].trim())}" title="Add the artist to your banned list (and skip)">Ban artist</button></div>
 ${cueBlock}</div>`;
+  }
+
+  /** The music's mood: Auto (the scene decides) or one the player holds for this story. */
+  private moodPicker(v: any): string {
+    if (!v.chatId) return "";
+    const pick: string = v.moodPick ?? "";
+    const chip = (k: string, label: string, title: string) => `<button type="button" data-st="mood" data-mood="${e(k)}" aria-pressed="${k === pick}" title="${e(title)}">${e(label)}</button>`;
+    return `<div class="almx-lbl" style="margin-top:14px">Mood</div><p class="muted" style="margin:2px 0 6px"><small>${pick ? `The music stays ${e(moodName(pick))} in this story, whatever the scene does, until you choose Auto.` : "Auto: the scene decides. Choose a mood to hold it in this story; the song changes at once."}</small></p>
+<div class="almx-chips">${chip("", "Auto", "The scene decides")}${((v.moods ?? []) as string[]).map((m) => chip(m, moodName(m), MOOD_HINT[m] ?? "")).join("")}</div>`;
   }
 
   private tasteCard(v: any): string {
@@ -304,6 +325,11 @@ ${this.lastfm(v)}
         this.send(d.st);
         break;
       case "hold": this.send("hold", { on: !!d.on }); break;
+      case "mood":
+        this.send("mood", { mood: d.mood || null });
+        if (this.view) this.view.moodPick = d.mood || null;
+        this.rerender();
+        break;
       case "lfmSave": {
         const inp = t.closest(".card")?.querySelector("#almStLfm") as HTMLInputElement | null;
         const key = inp?.value.trim() ?? "";
