@@ -103,7 +103,8 @@ const BASE = `
 .alm-hudc__fc .now{color:var(--alm-accent);background:color-mix(in oklab,var(--alm-accent) 10%,transparent)}
 .alm-hudc__err{margin:0;padding:8px 12px;font-size:12px;line-height:1.4;border-bottom:1px solid color-mix(in oklab,var(--alm-warn) 45%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 14%,var(--alm-panel));overflow-wrap:anywhere;cursor:pointer}
 .alm-hudc__body{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:52px minmax(0,1fr)}
-.alm-hudc__fc,.alm-hudc__err,.alm-hudc__mu{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--alm-line);background:color-mix(in oklab,var(--alm-accent) 8%,var(--alm-panel));font:500 11px/1.25 var(--alm-font-body)}
+.alm-hudc__fc,.alm-hudc__err,.alm-hudc__mu{flex:none}
+.alm-hudc__mu{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--alm-line);background:color-mix(in oklab,var(--alm-accent) 8%,var(--alm-panel));font:500 11px/1.25 var(--alm-font-body)}
 .alm-hudc__mu.is-paused .alm-hudc__mut,.alm-hudc__mu.is-paused .alm-hudc__muart{opacity:.7}
 .alm-hudc .alm-hudc__muart{flex:none;display:grid;place-items:center;width:38px;height:38px;padding:0;border:0;border-radius:6px;overflow:hidden;cursor:pointer;color:var(--alm-accent);background:color-mix(in oklab,var(--alm-accent) 14%,transparent)}
 .alm-hudc .alm-hudc__muart img{width:100%;height:100%;object-fit:cover;display:block}
