@@ -103,7 +103,27 @@ const BASE = `
 .alm-hudc__fc .now{color:var(--alm-accent);background:color-mix(in oklab,var(--alm-accent) 10%,transparent)}
 .alm-hudc__err{margin:0;padding:8px 12px;font-size:12px;line-height:1.4;border-bottom:1px solid color-mix(in oklab,var(--alm-warn) 45%,var(--alm-line));background:color-mix(in oklab,var(--alm-warn) 14%,var(--alm-panel));overflow-wrap:anywhere;cursor:pointer}
 .alm-hudc__body{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:52px minmax(0,1fr)}
-.alm-hudc__fc,.alm-hudc__err{flex:none}
+.alm-hudc__fc,.alm-hudc__err,.alm-hudc__mu{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--alm-line);background:color-mix(in oklab,var(--alm-accent) 8%,var(--alm-panel));font:500 11px/1.25 var(--alm-font-body)}
+.alm-hudc__mu.is-paused .alm-hudc__mut,.alm-hudc__mu.is-paused .alm-hudc__muart{opacity:.7}
+.alm-hudc .alm-hudc__muart{flex:none;display:grid;place-items:center;width:38px;height:38px;padding:0;border:0;border-radius:6px;overflow:hidden;cursor:pointer;color:var(--alm-accent);background:color-mix(in oklab,var(--alm-accent) 14%,transparent)}
+.alm-hudc .alm-hudc__muart img{width:100%;height:100%;object-fit:cover;display:block}
+.alm-hudc__mut{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
+.alm-hudc__mut b,.alm-hudc__mut i,.alm-hudc__mut em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alm-hudc__mut b{font-weight:600;color:var(--alm-ink)}
+.alm-hudc__mut i{font-style:normal;color:var(--alm-muted);font-size:10.5px}
+.alm-hudc__mut em{font:500 9.5px/1.2 var(--alm-font-mono);font-style:normal;letter-spacing:.04em;color:color-mix(in oklab,var(--alm-accent) 80%,var(--alm-ink))}
+.alm-hudc__muc{flex:none;display:flex;align-items:center;gap:1px}
+.alm-hudc .alm-hudc__mub{flex:none;display:grid;place-items:center;min-width:24px;height:24px;padding:0 3px;border:0;border-radius:999px;background:transparent;color:var(--alm-ink);font-size:10px;cursor:pointer}
+.alm-hudc .alm-hudc__mub:hover{background:color-mix(in oklab,var(--alm-accent) 18%,transparent)}
+.alm-hudc .alm-hudc__mub.is-on{color:var(--alm-accent);background:color-mix(in oklab,var(--alm-accent) 14%,transparent)}
+.alm-hudc .alm-hudc__mub.is-dim{color:var(--alm-muted)}
+.alm-hudc .alm-hudc__mub.is-txt{padding:0 9px;font:600 10.5px/1 var(--alm-font-body);color:var(--alm-accent);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-accent) 45%,transparent)}
+.alm-hudw__mu{display:inline-flex;align-items:center;gap:4px;flex:0 1 auto!important;min-width:0;max-width:120px;color:var(--alm-accent)}
+.alm-hudw__mu svg{flex:none;animation:alm-mu 2.4s ease-in-out infinite}
+.alm-hudw__mu i{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--alm-muted)}
+.alm-hudt__mu{max-width:none}
+@keyframes alm-mu{50%{transform:translateY(-2px)}}
+@media (prefers-reduced-motion:reduce){.alm-hudw__mu svg{animation:none}}
 .alm-hudc__grip{position:absolute;right:0;bottom:0;z-index:3;width:18px;height:18px;cursor:nwse-resize;touch-action:none;
   background:linear-gradient(135deg,transparent 0 52%,var(--alm-muted) 52% 58%,transparent 58% 68%,var(--alm-muted) 68% 74%,transparent 74% 84%,var(--alm-muted) 84% 90%,transparent 90%);opacity:.55}
 .alm-hudc__grip:hover{opacity:1}

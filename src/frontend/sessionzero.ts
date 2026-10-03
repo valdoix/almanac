@@ -7,6 +7,7 @@ import { escapeHtml as e } from "../core/util";
 import { buildCalendar, dateFor, fmtDate } from "../core/engines/calendar";
 import { CALENDAR_PRESETS, presetFor } from "../core/engines/calendars";
 import { SKIN_LIST } from "./skins";
+import { suggestGenres } from "../core/soundtrack/moods";
 
 export const GENRES: [string, string][] = [
   ["slice_of_life", "Slice of life"], ["romance", "Romance"], ["drama", "Drama"], ["comedy", "Comedy"], ["mystery", "Mystery"],
@@ -41,7 +42,22 @@ export function calendarPreview(calendar: string, startPoint: string, climate: s
 
 const TRACKERS: [string, string][] = [["scene", "Scene"], ["cast", "Cast"], ["bonds", "Bonds"], ["thoughts", "Thoughts"], ["inventory", "Inventory"], ["threads", "Threads & clocks"], ["knowledge", "Knowledge"], ["consequences", "Consequences"], ["world", "World"]];
 
-export function openSessionZero(ctx: SpindleFrontendContext, chatId: string, current: any) {
+/**
+ * The Soundtrack's row: the player's usual taste, this story's own genres, or no music. `music` is
+ * the Soundtrack page's view (null before it has answered); with the Soundtrack off, a pointer to it.
+ */
+function musicRow(music: any, storyGenres: string[]): string {
+  if (!music?.enabled) return `<h4>Soundtrack</h4><p class="muted">YouTube Music can play music for each scene: set it up in the Almanac under Story › Soundtrack.</p>`;
+  const own: string[] = music.chatId && music.chatTaste?.genres?.length ? music.chatTaste.genres : [];
+  const mode = music.chatOff ? "off" : own.length ? "own" : "usual";
+  const usual = (music.taste?.genres ?? []).join(", ") || "the story's genres";
+  return `<h4>Soundtrack</h4><div class="grid">
+<label class="f">Music in this story<select id="szMusic"><option value="usual"${mode === "usual" ? " selected" : ""}>${e(`My usual taste (${usual})`)}</option><option value="own"${mode === "own" ? " selected" : ""}>Its own genres</option><option value="off"${mode === "off" ? " selected" : ""}>No music in this story</option></select></label>
+<label class="f" id="szMusicGenresF"${mode === "own" ? "" : ' style="display:none"'}>Genres for this story<input type="text" id="szMusicGenres" value="${e((own.length ? own : suggestGenres(storyGenres)).join(", "))}" placeholder="film score, celtic folk"></label>
+</div>`;
+}
+
+export function openSessionZero(ctx: SpindleFrontendContext, chatId: string, current: any, music: any = null) {
   let modal: ReturnType<SpindleFrontendContext["ui"]["showModal"]>;
   try {
     modal = ctx.ui.showModal({ title: "Session Zero · ALMANAC", width: 640, maxHeight: 760 });
@@ -72,6 +88,7 @@ export function openSessionZero(ctx: SpindleFrontendContext, chatId: string, cur
 </div>
 <label class="f">Calendar details<input type="text" id="szCalendar" value="${e(cfg.calendar ?? "")}" placeholder="months: Name (30), [Festival], …; weekdays: … or none; year: 1 AR; seasons: solar or story; moons: Name (days)"></label>
 <p class="muted" id="szCalPreview"></p>
+<div id="szMusicRow">${musicRow(music, cfg.genres ?? [])}</div>
 <h4>Trackers under each reply</h4><div id="almSzTrackers">${TRACKERS.map(([k, l]) => `<button type="button" class="pill${trackers.has(k) ? " on" : ""}" data-t="${k}">${e(l)}</button>`).join("")}</div>
 <label class="chk" style="margin-top:10px"><input type="checkbox" id="szSaveChar"> Use these as defaults for new chats with this character</label>
 <div class="row" style="margin-top:12px"><button class="btn primary" id="szSave">Begin the story</button><button class="btn" id="szSkip">Skip</button></div>
@@ -85,7 +102,18 @@ export function openSessionZero(ctx: SpindleFrontendContext, chatId: string, cur
   modal.root.addEventListener("input", (ev) => {
     if (/^sz(Calendar|Start|Climate|Latitude)$/.test((ev.target as HTMLElement).id)) preview();
   });
+  // The story's genres suggest its music until the player types their own.
+  let musicTyped = !!music?.chatTaste?.genres?.length;
+  const musicGenres = () => field("szMusicGenres") as HTMLInputElement | null;
+  modal.root.addEventListener("input", (ev) => {
+    if ((ev.target as HTMLElement).id === "szMusicGenres") musicTyped = true;
+  });
   modal.root.addEventListener("change", (ev) => {
+    if ((ev.target as HTMLElement).id === "szMusic") {
+      const f = modal.root.querySelector("#szMusicGenresF") as HTMLElement | null;
+      if (f) f.style.display = (ev.target as HTMLSelectElement).value === "own" ? "" : "none";
+      return;
+    }
     if ((ev.target as HTMLElement).id !== "szCalKind") return;
     const kind = (ev.target as HTMLSelectElement).value;
     const p = CALENDAR_PRESETS.find((x) => x.id === kind);
@@ -104,6 +132,8 @@ export function openSessionZero(ctx: SpindleFrontendContext, chatId: string, cur
       if (i >= 0) order.splice(i, 1);
       else order.push(k);
       g.classList.toggle("on", order.includes(k));
+      const mg = musicGenres();
+      if (mg && !musicTyped) mg.value = suggestGenres(order).join(", ");
       return;
     }
     const tr = t.closest("[data-t]") as HTMLElement | null;
@@ -124,6 +154,15 @@ export function openSessionZero(ctx: SpindleFrontendContext, chatId: string, cur
           trackers: [...trackers],
         },
       });
+      const mm = v("szMusic");
+      if (mm && music?.enabled) {
+        const was = music.chatOff ? "off" : music.chatTaste?.genres?.length ? "own" : "usual";
+        if ((mm === "off") !== (was === "off")) ctx.sendToBackend({ type: "soundtrack", action: "chatOff", chatId, off: mm === "off" });
+        if (mm === "own") {
+          const genres = (musicGenres()?.value ?? "").split(",").map((g) => g.trim()).filter(Boolean);
+          ctx.sendToBackend({ type: "soundtrack", action: "taste", scope: "chat", chatId, taste: { ...(music.chatTaste ?? {}), genres } });
+        } else if (was === "own") ctx.sendToBackend({ type: "soundtrack", action: "taste", scope: "chat", chatId, taste: { ...(music.chatTaste ?? {}), genres: [] } });
+      }
       modal.dismiss();
     } else if (t.id === "szSkip") {
       ctx.sendToBackend({ type: "config", chatId, patch: { sessionZeroDone: true } });

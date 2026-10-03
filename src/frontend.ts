@@ -159,6 +159,8 @@ export function setup(ctx: SpindleFrontendContext) {
     renderHud(app.view);
     if (!chatId) return;
     ctx.sendToBackend({ type: attempt === 0 ? "hello" : "getState", chatId });
+    // The Soundtrack's view too, for the HUD's song line and Session Zero's music row.
+    if (attempt === 0) app.soundtrack.send("get");
     const delays = [900, 2000, 4000, 8000, 15000, 30000];
     retry = setTimeout(() => {
       if (gotStateFor !== ctx.getActiveChat().chatId) requestState(attempt + 1);
@@ -321,6 +323,16 @@ export function setup(ctx: SpindleFrontendContext) {
     const live = v && v.chatId === ctx.getActiveChat().chatId && v.enabled;
     const act = el.dataset.hud;
     if (act === "dock") return toggleDock();
+    if (act === "music") {
+      const m = el.dataset.m;
+      if (m === "open") {
+        tab.activate();
+        app.go("soundtrack");
+      } else if (m === "pause" || m === "play" || m === "skip" || m === "start" || m === "stop") app.soundtrack.send(m);
+      else if (m === "hold" || m === "release") app.soundtrack.send("hold", { on: m === "hold" });
+      else if (m === "never") app.soundtrack.send("never", { videoId: app.soundtrack.view?.np?.videoId });
+      return;
+    }
     if (act === "toggle" && el.dataset.hudTab != null) return setHudOpen(true);
     if (act === "open" || !live) {
       tab.activate();
@@ -500,6 +512,7 @@ export function setup(ctx: SpindleFrontendContext) {
       syncThoughts(chatId, v);
     }
     hudUi.dock = dock?.edge ?? null;
+    hudUi.music = app.soundtrack.hudMusic();
     const note = !live ? (app.status === "stalled" ? "no answer yet" : "connecting…") : !v.enabled ? "off in this chat" : "";
     let mode: string;
     let size: { w: number; h: number };
@@ -593,6 +606,10 @@ export function setup(ctx: SpindleFrontendContext) {
       const m = raw as any;
       if (!m || typeof m.type !== "string") return;
       if (app.creator.handle(m)) return;
+      if (app.soundtrack.handle(m)) {
+        if (m.type === "soundtrack") renderHud(app.view);
+        return;
+      }
       switch (m.type) {
         case "state":
           applyView(m.view);
@@ -605,7 +622,7 @@ export function setup(ctx: SpindleFrontendContext) {
           if (m.chatId && active && m.chatId !== active) return;
           const cfg = app.view?.chatId === m.chatId ? app.view?.config : null;
           if (cfg?.sessionZeroDone && !m.force) return;
-          openSessionZero(ctx, m.chatId, cfg);
+          openSessionZero(ctx, m.chatId, cfg, app.soundtrack.viewFor(m.chatId));
           break;
         }
         case "toast":
@@ -625,7 +642,7 @@ export function setup(ctx: SpindleFrontendContext) {
 
   removers.push(ctx.events.on("almanac:sessionZero", (p: any) => {
     const chatId = p?.chatId ?? ctx.getActiveChat().chatId;
-    if (chatId) openSessionZero(ctx, chatId, app.view?.chatId === chatId ? app.view?.config : null);
+    if (chatId) openSessionZero(ctx, chatId, app.view?.chatId === chatId ? app.view?.config : null, app.soundtrack.viewFor(chatId));
   }));
   removers.push(ctx.events.on("almanac:retryState", () => requestState()));
   removers.push(ctx.events.on("almanac:grantPanels", async () => {

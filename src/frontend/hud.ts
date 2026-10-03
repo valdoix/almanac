@@ -25,6 +25,24 @@ export interface HudUi {
   thoughtsSeen?: boolean;
   /** The edge the widget is docked to: closed, it is a slim tab there. */
   dock?: "left" | "right" | null;
+  /** The Soundtrack's song (Story › Soundtrack), when one is playing. */
+  music?: HudMusic | null;
+}
+
+export interface HudMusic {
+  /** Empty when the player is connected but nothing is loaded. */
+  title: string;
+  artist: string;
+  thumb?: string;
+  videoId?: string;
+  paused: boolean;
+  mood: string;
+  /** The Almanac is choosing (Start pressed). */
+  running: boolean;
+  /** following · holding · yielded (the player's own song). */
+  mode: string;
+  /** Who started the song: ours, user, autoplay. */
+  origin: string;
 }
 
 export const HUD_SIZE = { w: 360, h: 540, minW: 250, minH: 320, maxW: 720, maxH: 960 };
@@ -110,6 +128,27 @@ function urgent(v: any): string[] {
   return out.sort((a, b) => a.w - b.w).slice(0, 3).map((x) => x.t);
 }
 
+const NOTE = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>`;
+const HOLD = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/><path d="M11 10h1.5v5"/></svg>`;
+const musicTip = (m: HudMusic) => `${m.paused ? "Paused" : "Playing"}: ${m.title} · ${m.artist}${m.mood ? ` (${m.mood})` : ""}`;
+
+/** The Soundtrack in the open window: what plays, why, and the controls. */
+function musicStrip(m: HudMusic | null | undefined): string {
+  if (!m) return "";
+  const b = (act: string, label: string, glyph: string, cls = "") => `<button class="alm-hudc__mub${cls}" data-hud="music" data-m="${act}" aria-label="${e(label)}" title="${e(label)}">${glyph}</button>`;
+  const run = m.running ? b("stop", "Stop: the Almanac stops choosing", "■", " is-on") : b("start", "Start: the Almanac chooses music for the scene", "Start", " is-txt");
+  if (!m.title) {
+    return `<div class="alm-hudc__mu is-idle"><button class="alm-hudc__muart" data-hud="music" data-m="open" aria-label="Open the Soundtrack" title="Open the Soundtrack">${NOTE}</button><span class="alm-hudc__mut"><b>Nothing playing</b><i>${m.running ? "music starts with the next reply" : "press Start to score the scene"}</i></span><span class="alm-hudc__muc">${run}</span></div>`;
+  }
+  const state = m.mode === "holding" ? "holding this song" : m.mode === "yielded" || m.origin === "user" ? "your pick" : m.origin === "autoplay" ? "autoplay" : m.running ? m.mood || "following the scene" : "not choosing";
+  const hold = m.mode === "holding" ? b("release", "Release: change with the scene again", HOLD, " is-on") : b("hold", "Hold this song until the scene changes", HOLD);
+  return `<div class="alm-hudc__mu${m.paused ? " is-paused" : ""}" title="${e(musicTip(m))}">
+<button class="alm-hudc__muart" data-hud="music" data-m="open" aria-label="Open the Soundtrack" title="Open the Soundtrack">${m.thumb ? `<img src="${e(m.thumb)}" alt="">` : NOTE}</button>
+<span class="alm-hudc__mut"><b>${e(m.title)}</b><i>${e(m.artist)}</i><em>${m.paused ? "paused · " : ""}${e(state)}</em></span>
+<span class="alm-hudc__muc">${b(m.paused ? "play" : "pause", m.paused ? "Play" : "Pause", m.paused ? "▶" : "❚❚")}${b("skip", "Skip: another song for this scene", "⏭")}${m.running ? hold : ""}${b("never", "Never play this song again", "⊘", " is-dim")}${run}</span>
+</div>`;
+}
+
 /** The collapsed pill. `note` replaces the scene when there is nothing to show yet. */
 export function hudPill(v: any, note?: string, ui?: HudUi): string {
   if (note || !v) {
@@ -122,7 +161,7 @@ export function hudPill(v: any, note?: string, ui?: HudUi): string {
   const night = NIGHT.test(n.band ?? "evening");
   const unseen = ui?.unseen ?? 0;
   return `<div class="alm-hudw" role="button" tabindex="0" data-hud="toggle" aria-expanded="false" title="Open the Now window">
-<span class="alm-hudw__dial" style="background:${skyOf(v)}"><b class="${night ? "moon" : "sun"}"></b></span><b class="alm-hudw__t">${e(n.time ?? "--:--")}</b>${n.weather ? `<span class="alm-hudw__wx">${e(n.weather.glyph)}${n.weather.tempC != null ? ` ${Math.round(n.weather.tempC)}°` : ` ${e(n.weather.condition)}`}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${e(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-hudw__who">${present.map((c: any) => med(c)).join("")}</span>` : ""}${chips.length ? `<span class="alm-hudw__chip"><span class="alm-hudw__rot" data-n="${chips.length}">${chips.map((c) => `<span>${e(c)}</span>`).join("")}</span></span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}${unseen ? `<span class="alm-hudw__badge" title="${unseen} change${unseen === 1 ? "" : "s"} since you last looked">${unseen > 9 ? "9+" : unseen}</span>` : ""}</div>`;
+<span class="alm-hudw__dial" style="background:${skyOf(v)}"><b class="${night ? "moon" : "sun"}"></b></span><b class="alm-hudw__t">${e(n.time ?? "--:--")}</b>${n.weather ? `<span class="alm-hudw__wx">${e(n.weather.glyph)}${n.weather.tempC != null ? ` ${Math.round(n.weather.tempC)}°` : ` ${e(n.weather.condition)}`}</span>` : ""}${place.length ? `<span class="alm-hudw__pl">${PIN}${e(place[place.length - 1])}</span>` : ""}${present.length ? `<span class="alm-hudw__who">${present.map((c: any) => med(c)).join("")}</span>` : ""}${ui?.music?.title && !ui.music.paused ? `<span class="alm-hudw__mu" title="${e(musicTip(ui.music))}">${NOTE}<i>${e(ui.music.title)}</i></span>` : ""}${chips.length ? `<span class="alm-hudw__chip"><span class="alm-hudw__rot" data-n="${chips.length}">${chips.map((c) => `<span>${e(c)}</span>`).join("")}</span></span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}${unseen ? `<span class="alm-hudw__badge" title="${unseen} change${unseen === 1 ? "" : "s"} since you last looked">${unseen > 9 ? "9+" : unseen}</span>` : ""}</div>`;
 }
 
 /** The docked tab: a slim bookmark against the screen edge. Drag it along the edge to move it, away from the edge to float the widget again. */
@@ -137,7 +176,7 @@ export function hudTab(v: any, edge: "left" | "right", note?: string, ui?: HudUi
   const night = NIGHT.test(n.band ?? "evening");
   const unseen = ui?.unseen ?? 0;
   const where = [n.time, place[place.length - 1]].filter(Boolean).join(" · ");
-  return `<div class="alm-hudt alm-hudt--${edge}" role="button" tabindex="0" data-hud="toggle" data-hud-tab aria-expanded="false" title="Open the Now window${where ? ` (${e(where)})` : ""} · ${tip}"><span class="alm-hudw__dial" style="background:${skyOf(v)}"><b class="${night ? "moon" : "sun"}"></b></span><b class="alm-hudt__t">${e(n.time ?? "--:--")}</b>${n.weather ? `<span class="alm-hudt__wx">${e(n.weather.glyph)}${n.weather.tempC != null ? `<small>${Math.round(n.weather.tempC)}°</small>` : ""}</span>` : ""}${present.length ? `<span class="alm-hudt__who">${present.map((c: any) => med(c)).join("")}</span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}<i class="alm-hudt__grab"></i>${unseen ? `<span class="alm-hudw__badge" title="${unseen} change${unseen === 1 ? "" : "s"} since you last looked">${unseen > 9 ? "9+" : unseen}</span>` : ""}</div>`;
+  return `<div class="alm-hudt alm-hudt--${edge}" role="button" tabindex="0" data-hud="toggle" data-hud-tab aria-expanded="false" title="Open the Now window${where ? ` (${e(where)})` : ""} · ${tip}"><span class="alm-hudw__dial" style="background:${skyOf(v)}"><b class="${night ? "moon" : "sun"}"></b></span><b class="alm-hudt__t">${e(n.time ?? "--:--")}</b>${n.weather ? `<span class="alm-hudt__wx">${e(n.weather.glyph)}${n.weather.tempC != null ? `<small>${Math.round(n.weather.tempC)}°</small>` : ""}</span>` : ""}${present.length ? `<span class="alm-hudt__who">${present.map((c: any) => med(c)).join("")}</span>` : ""}${v.planError ? `<span class="alm-hudw__err" title="The last turn went to the model without the Almanac. Open the Almanac for details.">!</span>` : ""}${ui?.music?.title && !ui.music.paused ? `<span class="alm-hudw__mu alm-hudt__mu" title="${e(musicTip(ui.music))}">${NOTE}</span>` : ""}<i class="alm-hudt__grab"></i>${unseen ? `<span class="alm-hudw__badge" title="${unseen} change${unseen === 1 ? "" : "s"} since you last looked">${unseen > 9 ? "9+" : unseen}</span>` : ""}</div>`;
 }
 
 /** Sun and moon on their arcs, from the rise and set times. */
@@ -337,6 +376,7 @@ export function hudCard(v: any, ui: HudUi = { tab: "changed", narr: false, unsee
   <div class="alm-hudc__side"><div class="alm-hudc__btns"><button class="alm-hudc__b" data-hud="dock" aria-label="${ui.dock ? "Float the widget again" : "Dock to the screen edge"}" title="${ui.dock ? "Float the widget again" : "Dock to the screen edge"}">${svg(ui.dock ? "undock" : "dock", 15)}</button><button class="alm-hudc__b alm-hudc__x" data-hud="toggle" aria-label="Close the Now window" title="Close">✕</button></div>${astro ? `<div class="alm-hudc__astro">${astro}</div>` : ""}</div>
   <div class="alm-hudc__chips">${astro ? `<span class="alm-hudc__astro2">${astro}</span>` : ""}${n.weather ? `<span>${e(n.weather.glyph)} ${e(n.weather.text ?? n.weather.condition)}</span>` : ""}${place.length ? `<span class="alm-hudc__plc" title="${e(place.join(" › "))}">${PIN}${place.map((p, i, a) => `<b class="${i === a.length - 1 ? "last" : ""}">${e(p)}</b>${i < a.length - 1 ? "<s>›</s>" : ""}`).join("")}</span>` : ""}</div>
 </header>
+${musicStrip(ui.music)}
 ${fc.length ? `<div class="alm-hudc__fc">${fc.map((h: any, i: number) => `<div class="${i === 0 ? "now" : ""}"><span>${i === 0 ? "now" : e(h.t)}</span><b>${e(h.glyph)}</b><i>${e(h.temp)}°</i></div>`).join("")}</div>` : ""}
 ${v.planError ? `<p class="alm-hudc__err alm-hudc__err--top" data-hud="tab" data-tab="backstage"><b>The last turn went out without the Almanac.</b> ${e(v.planError.message)}</p>` : ""}
 <div class="alm-hudc__body">

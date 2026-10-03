@@ -1,11 +1,11 @@
 {
-  "version": "1.21.4",
+  "version": "1.22.0",
   "name": "ALMANAC Ledger",
   "identifier": "almanac_ledger",
   "author": "valdoix",
   "github": "https://github.com/valdoix/almanac",
   "homepage": "https://github.com/valdoix/almanac",
-  "description": "Story memory for the ALMANAC preset: branch-safe world state, chapters that replace old turns, a Codex, knowledge-aware recall, computed weather and sky, a lore bridge, and a lorebook creator.",
+  "description": "Story memory for the ALMANAC preset: branch-safe world state, chapters that replace old turns, a Codex, knowledge-aware recall, computed weather and sky, a lore bridge, a lorebook creator, and a YouTube Music soundtrack that follows the scene.",
   "permissions": [
     "interceptor",
     "context_handler",
@@ -16,7 +16,8 @@
     "characters",
     "personas",
     "tools",
-    "ui_panels"
+    "ui_panels",
+    "cors_proxy"
   ],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js",

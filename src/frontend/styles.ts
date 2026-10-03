@@ -349,7 +349,7 @@ export const PANEL_CSS = `
 .almp .btn.primary{background:var(--alm-accent);color:var(--alm-on-accent);border-color:color-mix(in oklab,var(--alm-accent) 70%,#000)}
 .almp .btn.danger{color:var(--alm-danger)}
 .almp .btn[disabled]{opacity:.5;pointer-events:none}
-.almp input[type=text],.almp input[type=number],.almp textarea,.almp select{width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--alm-line);background:var(--alm-panel-2);color:var(--alm-ink);font:inherit}
+.almp input[type=text],.almp input[type=password],.almp input[type=number],.almp textarea,.almp select{width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--alm-line);background:var(--alm-panel-2);color:var(--alm-ink);font:inherit}
 .almp textarea{min-height:70px;resize:vertical}
 .almp label.f{display:grid;gap:4px;margin:0 0 10px;font:500 11px/1.3 var(--alm-font-mono);color:var(--alm-muted)}
 .almp label.chk{display:flex;gap:8px;align-items:center;margin:6px 0}

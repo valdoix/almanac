@@ -13,6 +13,7 @@ import { forget, loadChat, loadSettings } from "./store";
 import { pushState } from "./view";
 import { isEnabled } from "./turn";
 import { syncMirror } from "./mirror";
+import { soundtrackSwitch } from "./soundtrack";
 
 async function boot() {
   const settings = await loadSettings().catch(() => null);
@@ -51,6 +52,7 @@ async function onSwitch(chatId: string | null, userId?: string) {
     }
     await pushMacros(chatId, userId);
     pushState(chatId, userId);
+    soundtrackSwitch(chatId, userId).catch((err) => warn(`soundtrack: ${describe(err)}`));
   } catch (err) {
     warn(`switch: ${describe(err)}`);
   }

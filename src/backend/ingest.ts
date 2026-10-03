@@ -29,6 +29,7 @@ import { runCheck } from "./check";
 import { readPlayerFacts } from "./playerfacts";
 import { readSpeakers } from "./speakers";
 import { confirmElsewhere, runElsewhere } from "./elsewhere";
+import { soundtrackChanged } from "./soundtrack";
 
 const busy = new Set<string>();
 
@@ -104,6 +105,7 @@ function afterChange(chatId: string, userId: string | undefined, opts: { backgro
   pushMacros(chatId, userId);
   pushState(chatId, userId);
   debounce(`mirror:${chatId}`, 2000, () => syncMirror(chatId, userId));
+  debounce(`soundtrack:${chatId}`, 1200, () => soundtrackChanged(chatId, userId, 0));
   if (opts.background) {
     debounce(`bg:${chatId}`, 800, async () => {
       await runChronicle(chatId, userId).catch((err) => noteProblem(chatId, userId, "chapter summary", err));

@@ -4,6 +4,19 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.22.0 (2026-10-03)
+
+**Soundtrack: YouTube Music that follows the scene.** A new page under Story › Soundtrack plays music through **Pear Desktop** (the YouTube Music desktop app) and picks it to fit the scene. It reads the mood from what the Ledger has filed: the scene's mode, the hour, the weather, the place, wounds, deadlines, and fights or deaths in the latest reply. A tavern gets something warm, a fight gets something urgent, a dark hallway in the rain gets something low. Nothing about the story the player hasn't seen goes in, so the music can't give away what's coming.
+- **Setup:** install Pear Desktop, turn on Plugins → API Server, then press Connect on the page and choose Allow in the app. The Ledger asks for the new `cors_proxy` permission so it can reach the app and search YouTube Music.
+- **When it changes:** once per scene (a new spot, or an hour and a half later), when a new mood holds for two replies, or right away with a fade on a sharp turn (a fight breaks out, a death the reply filed). One song is kept queued, so YouTube Music's autoplay rarely gets a turn. **Hold** keeps a song going for the rest of the scene. **Skip** picks another song for the same mood, and the skipped song counts against itself next time.
+- **Your taste:** genres (chips suggested from the story's genres, or your own), with "Only mine" or "Blend with the story". Preferred artists are searched first. Also: banned artists, banned words, vocals (any, quiet under dialogue, instrumental only), variety, explicit songs and music videos. A story can have its own taste; its bans add to your global ones.
+- **Bans:** a banned artist is never chosen. If YouTube Music's autoplay plays one, it's skipped, and in a duet or a "feat." too. A song you choose yourself always plays, even a banned one, and the Almanac steps back until the next scene ("Take the music back" can turn that off). "Ban artist" and "Never this song" work on whatever is playing.
+- **Reading the scene:** the engine on its own (free), or the engine plus a short model call at each new scene. The model's reading can rename the mood, but it can't calm a fight or a death.
+- Played songs are listed per story, with why each one was picked. Searches are cached for a week and rate-limited.
+- **In the Now widget:** the open window has a song strip: cover, title, artist, and the mood or who chose the song. It has Pause/Play, Skip, Hold, Never this song, and Start/Stop. Tap the cover to open the Soundtrack page. While a song plays, the pill shows ♪ and the title, and the docked tab shows ♪.
+- **Session Zero** has a Soundtrack row: your usual taste, the story's own genres (suggested from the genres you tick), or no music in this story. If the Soundtrack isn't set up, the row says where to set it up.
+- **Listener tags (optional, Last.fm):** paste a free Last.fm API key; you don't need to scrobble or use Last.fm otherwise. Each pick then checks its best ten songs against how listeners tag them. A song tagged "sad" or "piano" moves up in a grief scene, and one tagged "party" moves down. Under "Only mine", well-tagged songs outside your genres drop too. The key is kept in the vault. Lookups are cached for a month and never hold a pick up for more than five seconds. A key Last.fm refuses turns the lookups off until you save a new one.
+
 ## 1.21.4 (2026-10-03) · preset 1.1.4
 
 **World texture and Initiative now change the story.** Before, each setting only swapped one sentence, and fixed rules elsewhere in the preset ("at most one unprompted environmental act", "invent no off-screen news") overrode it. World-led even read weaker than Collaborative.

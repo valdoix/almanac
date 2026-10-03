@@ -7,6 +7,7 @@ import { escapeHtml as e, estTokens, initials, kpNote } from "../core/util";
 import { PRESET_VERSION, olderThan } from "../core/version";
 import { renderGraph, type GEdge, type GNode } from "./graph";
 import { CreatorUI } from "./creator-ui";
+import { SoundtrackUI } from "./soundtrack";
 import { VERSION } from "../core/version";
 import { FONT_CHOICES, FONT_ROLES, FONT_SIZES, SIZE_MAX, SIZE_MIN, SKIN_COLORS, SKIN_LIST, cleanFontName, skinPalette } from "./skins";
 import { NOT_A_PERSON } from "../core/state";
@@ -97,6 +98,7 @@ export class AlmanacApp {
   editing: string | null = null;
   orbit = "";
   creator: CreatorUI;
+  soundtrack: SoundtrackUI;
   status: "nochat" | "waiting" | "stalled" | "ok" = "nochat";
   hudProblem = "";
   versionWarning = "";
@@ -112,6 +114,9 @@ export class AlmanacApp {
     this.root = root;
     this.root.classList.add("almp");
     this.creator = new CreatorUI(ctx, () => this.view, () => this.render());
+    this.soundtrack = new SoundtrackUI(ctx, () => this.view?.chatId, () => {
+      if (this.tab === "soundtrack") this.render();
+    });
     try {
       const t = localStorage.getItem("alm-tab") as Tab | null;
       if (t && (TABS as readonly string[]).includes(t)) this.tab = t;
@@ -129,6 +134,7 @@ export class AlmanacApp {
     this.root.addEventListener("input", (ev) => {
       const t = ev.target as HTMLInputElement;
       if (this.creator.onInput(t)) return;
+      if (this.soundtrack.onInput(t)) return;
       if (t?.dataset?.skinColor) this.ctx.events.emit("almanac:skinColors", this.withSkinColor(t.dataset.skinColor, t.value));
       if (t?.dataset?.skinSize) {
         this.ctx.events.emit("almanac:skinFonts", this.withSkinFont(t.dataset.skinSize, Number(t.value)));
@@ -141,6 +147,7 @@ export class AlmanacApp {
     this.root.addEventListener("focusout", (ev) => this.creator.onFocus(ev.target as HTMLElement, false));
     this.root.addEventListener("keydown", (ev) => {
       if (this.creator.onKeydown(ev as KeyboardEvent)) return;
+      if (this.tab === "soundtrack" && this.soundtrack.onKeydown(ev as KeyboardEvent)) return;
       if ((ev as KeyboardEvent).key === "Escape" && this.orbit) {
         this.orbit = "";
         this.render();
@@ -698,6 +705,10 @@ ${(v.playbooks ?? []).length ? `${sec("Playbooks", v.playbooks.length, "scenes t
 ${v.lore.review?.length ? `${sec("To review", v.lore.review.length)}<div class="card" style="padding:2px 16px">${v.lore.review.slice(0, 40).map((r: any) => `<div class="almx-conf"><div class="almx-row" style="font-size:14px"><b class="grow">${e(r.title)}</b><span class="muted">${e(r.kind)}?</span><b>${Math.round(r.confidence * 100)}%</b></div><div class="bar"><i style="width:${Math.round(r.confidence * 100)}%;background:${r.confidence < 0.5 ? "var(--alm-danger)" : "var(--alm-warn)"}"></i></div></div>`).join("")}</div><button class="btn wide" style="margin-top:10px" data-act="loreClassify">${ic("sparkle", "sm")}Let the model sort ${n(v.lore.review.length, "entry", "entries")}</button>` : ""}`;
   }
 
+  tab_soundtrack(_v: any): string {
+    return this.soundtrack.render();
+  }
+
   tab_creator(v: any): string {
     return this.creator.render(v);
   }
@@ -914,6 +925,7 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
       return;
     }
     if (this.creator.onClick(t)) return;
+    if (this.soundtrack.onClick(t, ev)) return;
     const act = (t.closest("[data-act]") as HTMLElement | null)?.dataset;
     if (!act) return;
     const id = act.id;
@@ -1200,6 +1212,7 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
   onChange(ev: Event) {
     const t = ev.target as HTMLInputElement;
     if (this.creator.onChange(t)) return;
+    if (this.soundtrack.onChange(t)) return;
     const d = t.dataset;
     if (d.setting) {
       const cur = this.view?.settings?.[d.setting];

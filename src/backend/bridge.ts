@@ -15,6 +15,7 @@ import type { ChatConfig } from "../core/types";
 import { clearRenderCache } from "./hooks";
 import { clerkWholeChat, stopClerk } from "./clerk";
 import { runCheck } from "./check";
+import { soundtrackAction } from "./soundtrack";
 
 type Msg = { type: string; [k: string]: any };
 
@@ -113,7 +114,7 @@ export function registerBridge() {
       warn(`frontend message ${m.type} for a chat this user doesn't own`);
       return;
     }
-    if (m.chatId == null && !["hello", "getState", "settings", "books", "bookHealth", "creator"].includes(m.type)) return;
+    if (m.chatId == null && !["hello", "getState", "settings", "books", "bookHealth", "creator", "soundtrack"].includes(m.type)) return;
     try {
       switch (m.type) {
         case "hello":
@@ -400,6 +401,10 @@ export function registerBridge() {
           }
           return;
         }
+        case "soundtrack":
+          // The Soundtrack page: every action answers with the whole view; searches answer by rid.
+          await soundtrackAction({ ...(m as any), chatId: m.chatId ?? undefined }, userId);
+          return;
         default:
           log(`unknown frontend message ${m.type}`);
       }

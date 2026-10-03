@@ -106,7 +106,7 @@ export const DRAWER_CSS = `
 .almo .btn.tile{flex-direction:column;min-height:88px;gap:7px;text-align:center;line-height:1.2;padding:10px 6px}
 .almo .btn.tile .almx-ic{width:26px;height:26px}
 .almo .row .btn.grow{flex:1 1 0}
-.almo input[type=text],.almo input[type=number],.almo textarea,.almo select{min-height:40px;padding:8px 12px;border-radius:12px;background:var(--alm-panel);font-size:14px}
+.almo input[type=text],.almo input[type=password],.almo input[type=number],.almo textarea,.almo select{min-height:40px;padding:8px 12px;border-radius:12px;background:var(--alm-panel);font-size:14px}
 .almo textarea{padding:10px 12px;line-height:1.45}
 .almo label.f{font:700 12px/1.3 var(--alm-font-body);gap:6px;letter-spacing:.02em}
 .almo label.chk{gap:10px;margin:10px 0;font-size:14px}
@@ -323,6 +323,9 @@ export const DRAWER_CSS = `
 .almo-orbit{width:312px;height:150px;bottom:92px}
 .almo-orbit.four .almo-moonb,.almo-moonb{width:78px}
 .almo-orbit:not(.four) .almo-moonb{width:100px}
+.almo-orbit.five .almo-moonb{width:64px}
+.almo-orbit.five .almo-moonb b{font-size:11.5px;padding:3px 4px}
+.almo-orbit.five .almo-moonb small{font-size:10px;padding:2px 4px}
 .almo-moonb{gap:5px}
 .almo-moonb b{font:800 13px/1.15 var(--almo-font);text-shadow:none;padding:3px 7px;border-radius:8px;background:color-mix(in oklab,var(--alm-panel) 88%,transparent)}
 .almo-moonb small{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;max-width:100%;padding:3px 6px;border-radius:8px;background:color-mix(in oklab,var(--alm-panel) 88%,transparent);font:600 11px/1.25 var(--alm-font-body);color:var(--alm-muted);overflow-wrap:anywhere}

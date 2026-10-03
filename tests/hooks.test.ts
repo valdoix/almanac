@@ -4,6 +4,7 @@
 // the render processor swaps the ledger for a compiled drawer with the desk.
 import { beforeAll, describe, expect, test } from "bun:test";
 import { OPENING, SAMPLE_REPLY, SAMPLE_USER } from "../preset/fixtures";
+import { MOOD_TAGS } from "../src/core/soundtrack/tags";
 
 const files = new Map<string, string>();
 const macros = new Map<string, string>();
@@ -902,4 +903,167 @@ describe("the Lorebook Creator updates a book (1.17)", () => {
       Object.assign(spindle, saved);
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// Soundtrack against a fake Pear Desktop (its API Server's routes and shapes)
+// ---------------------------------------------------------------------------
+
+describe("soundtrack with Pear Desktop", () => {
+  const artist = (name: string, id: string) => ({ text: name, navigationEndpoint: { browseEndpoint: { browseId: id, browseEndpointContextSupportedConfigs: { browseEndpointContextMusicConfig: { pageType: "MUSIC_PAGE_TYPE_ARTIST" } } } } });
+  const item = (videoId: string, title: string, who: any[]) => ({ musicResponsiveListItemRenderer: {
+    playlistItemData: { videoId },
+    overlay: { x: { watchEndpoint: { videoId, watchEndpointMusicSupportedConfigs: { watchEndpointMusicConfig: { musicVideoType: "MUSIC_VIDEO_TYPE_ATV" } } } } },
+    flexColumns: [{ musicResponsiveListItemFlexColumnRenderer: { text: { runs: [{ text: title }] } } }, { musicResponsiveListItemFlexColumnRenderer: { text: { runs: [...who, { text: " • " }, { text: "3:40" }] } } }],
+  } });
+  const CATALOG: Record<string, { title: string; artist: string }> = {};
+  const results = (q: string) => {
+    const k = q.replace(/\W+/g, "").slice(0, 6);
+    const rows = [
+      [`${k}${pear.gen}aaaa1`, `${q} one`, [artist("Banned Band", "UCbad")]],
+      [`${k}${pear.gen}aaaa2`, `${q} two`, [artist("Good Artist", "UCgood")]],
+      [`${k}${pear.gen}aaaa3`, `${q} three`, [artist("Other Artist", "UCother"), { text: " & " }, artist("Banned Band", "UCbad")]],
+      [`${k}${pear.gen}aaaa4`, `${q} four`, [artist("Fine Artist", "UCfine")]],
+    ] as const;
+    for (const [id, title, who] of rows) CATALOG[id] = { title, artist: who.map((w: any) => w.text).join("") };
+    return { contents: [{ musicShelfRenderer: { contents: rows.map(([id, title, who]) => item(id, title, who as any)) } }] };
+  };
+  const pear = { gen: "a", queue: [] as string[], at: -1, elapsed: 0, paused: false, volume: 60, searches: 0, auth: 0, nexts: 0 };
+  const song = (id: string) => ({ title: CATALOG[id]?.title ?? id, artist: CATALOG[id]?.artist ?? "Someone", videoId: id, isPaused: pear.paused, elapsedSeconds: pear.elapsed, songDuration: 220, imageSrc: "", album: null, mediaType: "AUDIO" });
+  const res = (status: number, body?: unknown) => ({ status, statusText: "", headers: {}, body: body === undefined ? "" : JSON.stringify(body) });
+  async function cors(url: string, init: any) {
+    const u = new URL(url);
+    const body = init?.body ? JSON.parse(init.body) : undefined;
+    const m = (init?.method ?? "GET").toUpperCase();
+    if (u.host === "ws.audioscrobbler.com") return lastfm(u);
+    if (u.host !== "127.0.0.1:26538") throw new Error(`unexpected request to ${u.host}`);
+    if (u.pathname.startsWith("/auth/")) return pear.auth++, res(200, { accessToken: "jwt-token" });
+    if (init?.headers?.Authorization !== "Bearer jwt-token") return res(401);
+    const p = u.pathname.replace("/api/v1", "");
+    if (p === "/song" && m === "GET") return pear.at < 0 ? res(204) : res(200, song(pear.queue[pear.at]));
+    if (p === "/queue" && m === "GET") return res(200, { items: pear.queue.map((videoId, i) => ({ playlistPanelVideoRenderer: { videoId, selected: i === pear.at } })) });
+    if (p === "/queue" && m === "POST") return pear.queue.splice(body.insertPosition === "INSERT_AFTER_CURRENT_VIDEO" ? pear.at + 1 : pear.queue.length, 0, body.videoId), res(204);
+    if (p === "/queue" && m === "PATCH") return (pear.at = body.index), (pear.elapsed = 0), res(204);
+    if (p.startsWith("/queue/") && m === "DELETE") return pear.queue.splice(Number(p.split("/")[2]), 1), res(204);
+    if (p === "/next") return pear.nexts++, (pear.at = Math.min(pear.at + 1, pear.queue.length - 1)), (pear.elapsed = 0), res(204);
+    if (p === "/play") return (pear.paused = false), res(204);
+    if (p === "/pause") return (pear.paused = true), res(204);
+    if (p === "/volume") return m === "GET" ? res(200, { state: pear.volume, isMuted: false }) : ((pear.volume = body.volume), res(204));
+    if (p === "/like-state") return res(200, { state: "INDIFFERENT" });
+    if (p === "/search") return pear.searches++, res(200, results(body.query));
+    return res(404);
+  }
+  // Last.fm: one good key; "Good Artist" is tagged against the current mood, "Fine Artist" with it.
+  const LFM_KEY = "0123456789abcdef0123456789abcdef";
+  const lfm = { calls: 0, mood: "calm" as keyof typeof MOOD_TAGS };
+  function lastfm(u: URL) {
+    lfm.calls++;
+    const q = u.searchParams;
+    if (q.get("api_key") !== LFM_KEY) return res(200, { error: 10, message: "Invalid API key - You must be granted a valid key by last.fm" });
+    if (q.get("method") === "tag.getinfo") return res(200, { tag: { name: "ambient" } });
+    const who = q.get("artist") ?? "";
+    const { fit, clash } = MOOD_TAGS[lfm.mood];
+    const tag = who === "Fine Artist" ? [{ name: fit[0], count: 100 }, { name: "darkwave", count: 80 }] : who === "Good Artist" ? [{ name: clash[0], count: 100 }, { name: "seen live", count: 90 }] : [];
+    return res(200, { toptags: { tag: [...tag, { name: "x1", count: 5 }, { name: "x2", count: 4 }, { name: "x3", count: 3 }, { name: "x4", count: 2 }] } });
+  }
+  const vault = new Map<string, string>();
+  const st = (action: string, extra: Record<string, unknown> = {}) => hooks.frontend({ type: "soundtrack", action, chatId: CHAT, ...extra }, USER);
+  const view = () => sent.filter((m) => m?.type === "soundtrack").pop()?.view;
+
+  test("connect, pick for the scene, skip a banned autoplay song, play the user's own pick", async () => {
+    Object.assign(spindle, {
+      cors,
+      enclave: { put: async (k: string, v: string) => void vault.set(k, v), get: async (k: string) => vault.get(k) ?? null, delete: async (k: string) => vault.delete(k) },
+    });
+    spindle.permissions.has = () => true;
+    await st("taste", { scope: "global", taste: { genres: ["darkwave"], genreMode: "strict", banned: [{ name: "Banned Band", id: "UCbad" }], bannedWords: [], fade: false } });
+    await st("config", { patch: { fade: false } });
+    await st("connect");
+    expect(pear.auth).toBe(1);
+    expect(vault.get("soundtrack_pear_token")).toBe("jwt-token");
+    expect(view().status).toBe("connected");
+    // The stored config never holds the token.
+    expect(files.get("soundtrack/config.json")).not.toContain("jwt-token");
+
+    await st("start");
+    expect(pear.searches).toBeGreaterThan(0);
+    const first = pear.queue[pear.at];
+    expect(first).toBeDefined();
+    // Never the banned band, alone or in a duet.
+    expect(CATALOG[first].artist).not.toContain("Banned Band");
+    await st("get");
+    expect(view().np.videoId).toBe(first);
+    expect(view().np.why).toMatch(/darkwave/);
+    expect(view().origin).toBe("ours");
+
+    // Near the end the next song is queued; then autoplay slips in a banned song after ours ends.
+    pear.elapsed = 210;
+    await st("get");
+    const queued = pear.queue[pear.at + 1];
+    expect(queued).toBeDefined();
+    expect(CATALOG[queued].artist).not.toContain("Banned Band");
+    const banned = Object.keys(CATALOG).find((id) => CATALOG[id].artist === "Banned Band")!;
+    pear.queue.splice(pear.at + 1, 0, banned);
+    pear.at += 1;
+    pear.elapsed = 2;
+    const nexts = pear.nexts;
+    await st("get");
+    expect(pear.nexts).toBe(nexts + 1);
+    expect(pear.queue[pear.at]).toBe(queued);
+    expect(view().plays.some((p: any) => p.how === "banned-skip" && p.videoId === banned)).toBe(true);
+
+    // The user plays the banned band themselves: it plays, and the Almanac steps back.
+    pear.elapsed = 40;
+    await st("get");
+    await st("playSong", { videoId: banned });
+    await st("get");
+    expect(pear.queue[pear.at]).toBe(banned);
+    expect(view().origin).toBe("user");
+    expect(view().mode).toBe("yielded");
+    const before = pear.nexts;
+    await st("get");
+    expect(pear.nexts).toBe(before);
+
+    // Artist search answers by rid; disconnect forgets the token.
+    await st("searchArtists", { q: "good", rid: 5 });
+    expect(sent.filter((m) => m?.type === "soundtrackResult" && m.rid === 5).length).toBe(1);
+    await st("disconnect");
+    expect(vault.has("soundtrack_pear_token")).toBe(false);
+    expect(view().status).toBe("off");
+  }, 30_000);
+
+  test("Last.fm tags: a refused key isn't kept; a good one checks the picks and stays in the vault", async () => {
+    await st("lastfmKey", { key: "ffffffffffffffffffffffffffffffff", rid: 11 });
+    expect(sent.filter((m) => m?.type === "soundtrackResult" && m.rid === 11).pop().error).toMatch(/refused/);
+    expect(vault.has("soundtrack_lastfm_key")).toBe(false);
+    await st("lastfmKey", { key: "not a key", rid: 12 });
+    expect(sent.filter((m) => m?.type === "soundtrackResult" && m.rid === 12).pop().error).toMatch(/32/);
+
+    await st("lastfmKey", { key: LFM_KEY, rid: 13 });
+    expect(sent.filter((m) => m?.type === "soundtrackResult" && m.rid === 13).pop().ok).toBe(true);
+    expect(vault.get("soundtrack_lastfm_key")).toBe(LFM_KEY);
+    expect(view().lastfm).toBe(true);
+    expect(files.get("soundtrack/config.json")).not.toContain(LFM_KEY);
+    expect(JSON.stringify(view())).not.toContain(LFM_KEY);
+
+    // A fresh catalog: everything the first test found was played lately.
+    pear.gen = "b";
+    await st("clearCache");
+    // Two genres and no same-artist rule: several songs survive the filters, so the tags have something to order.
+    await st("taste", { scope: "global", taste: { genres: ["darkwave", "coldwave"], variety: "focused" } });
+    await st("connect");
+    lfm.mood = (view().cue?.mood ?? "calm") as keyof typeof MOOD_TAGS;
+    const calls = lfm.calls;
+    await st("start");
+    expect(lfm.calls).toBeGreaterThan(calls);
+    await st("get");
+    const now = view().np;
+    // The why says what the tags heard (the order they give is in tests/soundtrack.test.ts).
+    expect(now.why).toMatch(CATALOG[now.videoId].artist === "Fine Artist" ? / · tagged / : / · but tagged /);
+
+    await st("lastfmClear");
+    expect(vault.has("soundtrack_lastfm_key")).toBe(false);
+    expect(view().lastfm).toBe(false);
+    await st("disconnect");
+  }, 30_000);
 });

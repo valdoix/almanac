@@ -1,0 +1,443 @@
+import { describe, expect, test } from "bun:test";
+import { cueDistance, placeKey, readCue, sameScene, type Cue } from "../src/core/soundtrack/cue";
+import { emptyDirector, step, type Action, type DirectorState, type Event, type NowPlaying } from "../src/core/soundtrack/director";
+import { parseArtists, parseDuration, parseTracks } from "../src/core/soundtrack/innertube";
+import { isMood, MOODS, MOOD_WORDS, MOOD_VEC, suggestGenres } from "../src/core/soundtrack/moods";
+import { draw, emptyHistory, excluded, genresFor, queriesFor, scoreAll, type Candidate } from "../src/core/soundtrack/picker";
+import { banReason, cleanTaste, creditsOf, DEFAULT_TASTE, mergeTaste, normName, preferredOf, type Taste, type Track } from "../src/core/soundtrack/taste";
+import { emptyState } from "../src/core/state";
+import { absMinutes } from "../src/core/util";
+import { cleanTags, lookupTitle, retag, tagFit } from "../src/core/soundtrack/tags";
+import type { WorldState } from "../src/core/types";
+
+// ---------------------------------------------------------------------------
+// Tables
+// ---------------------------------------------------------------------------
+
+test("every mood has search words and a place on the meter", () => {
+  for (const m of MOODS) {
+    expect(MOOD_WORDS[m].length).toBeGreaterThan(0);
+    expect(MOOD_VEC[m].length).toBe(4);
+  }
+  expect(isMood("dread")).toBe(true);
+  expect(isMood("spooky")).toBe(false);
+  expect(suggestGenres(["noir"]).length).toBeGreaterThan(0);
+});
+
+// ---------------------------------------------------------------------------
+// The cue
+// ---------------------------------------------------------------------------
+
+function state(over: Partial<WorldState> = {}): WorldState {
+  return { ...emptyState(), time: { day: 1, minute: 14 * 60 } as any, sceneNo: 3, place: ["Sunnydale", "Revello Drive", "kitchen"], ...over } as WorldState;
+}
+const T0 = absMinutes({ day: 1, minute: 14 * 60 } as any);
+
+test("the scene's mode sets the mood", () => {
+  expect(readCue({ state: state({ mode: "downtime" }), genres: [] }).mood).toBe("calm");
+  expect(readCue({ state: state({ mode: "social" }), genres: [] }).mood).toBe("warm");
+  expect(readCue({ state: state({ mode: "investigation" }), genres: [] }).mood).toBe("mysterious");
+  expect(readCue({ state: state({ mode: "crisis" }), genres: [] }).mood).toBe("dread");
+  expect(readCue({ state: state({ mode: "social" }), genres: ["comedy"] }).mood).toBe("playful");
+  expect(readCue({ state: state({ mode: "intimacy" }), genres: ["romance"] }).mood).toBe("romantic");
+});
+
+test("night, rain and a fight colour the cue", () => {
+  const night = readCue({ state: state({ mode: "downtime", time: { day: 1, minute: 23 * 60 } as any }), genres: [] });
+  expect(night.mood).toBe("dreamy");
+  expect(night.colour).toContain("night");
+  const rain = readCue({ state: state({ mode: "social", weather: { condition: "light rain" } as any }), genres: [] });
+  expect(rain.mood).toBe("melancholy");
+  expect(rain.colour).toContain("rain");
+  const fight = readCue({ state: state({ mode: "conflict" }), genres: [], reply: "Spike lunges, and the knife flashes." });
+  expect(fight.mood).toBe("combat");
+  expect(fight.sharp).toBe(true);
+  expect(fight.tension).toBeGreaterThan(0.8);
+});
+
+test("a death the reply filed turns the scene to grief, and it holds for that scene", () => {
+  const died = state({ mode: "conflict", lastReply: 12, milestones: [{ at: null, msgIndex: 12, kind: "death", text: "Ben dies" }] } as any);
+  const c = readCue({ state: died, genres: [] });
+  expect(c.death).toBe(true);
+  expect(c.mood).toBe("grief");
+  expect(c.sharp).toBe(true);
+  const grief = { place: c.place, at: c.at };
+  const later = readCue({ state: state({ mode: "social", time: { day: 1, minute: 14 * 60 + 30 } as any }), genres: [], grief });
+  expect(later.mood).toBe("grief");
+  const elsewhere = readCue({ state: state({ mode: "social", place: ["Sunnydale", "the Bronze"] }), genres: [], grief });
+  expect(elsewhere.mood).toBe("warm");
+  const hoursOn = readCue({ state: state({ mode: "social", time: { day: 1, minute: 17 * 60 } as any }), genres: [], grief });
+  expect(hoursOn.mood).toBe("warm");
+});
+
+test("the dead talked about in the prose are not a death", () => {
+  const c = readCue({ state: state({ mode: "intimacy", lastReply: 40, milestones: [{ at: null, msgIndex: 12, kind: "death", text: "Ben dies" }] } as any), genres: [], reply: "Buffy has been dead before. She died on a tower, and the girl she was died with her." });
+  expect(c.death).toBe(false);
+  expect(c.mood).toBe("tender");
+});
+
+test("places key the music scene: who is where, where it's headed and the building fall away", () => {
+  expect(placeKey(["Winters Residence", "guest room (Buffy) · hallway (Dawn) · kitchen (Gabriel ← returning)"])).toBe("guest room");
+  expect(placeKey(["Winters Residence", "living room → hallway (moving toward guest room)"])).toBe("hallway");
+  expect(placeKey(["kitchen, in Winters Residence"])).toBe("kitchen");
+  expect(placeKey(["The Bronze"])).toBe("bronze");
+  expect(placeKey([])).toBe("");
+  expect(sameScene({ place: "kitchen", at: 100 }, { place: "kitchen", at: 170 })).toBe(true);
+  expect(sameScene({ place: "kitchen", at: 100 }, { place: "kitchen", at: 200 })).toBe(false);
+  expect(sameScene({ place: "kitchen", at: 100 }, { place: "hallway", at: 101 })).toBe(false);
+  expect(sameScene(null, { place: "kitchen", at: 100 })).toBe(false);
+});
+
+test("a cozy story keeps tension low; the model's hint can't calm a fight", () => {
+  const cozy = readCue({ state: state({ mode: "crisis" }), genres: ["cozy"] });
+  expect(cozy.tension).toBeLessThanOrEqual(0.7);
+  const hinted = readCue({ state: state({ mode: "social" }), genres: [], hint: { place: "kitchen", at: T0, mood: "hopeful", colour: ["harbour"] } });
+  expect(hinted.mood).toBe("hopeful");
+  expect(hinted.colour[0]).toBe("harbour");
+  const stale = readCue({ state: state({ mode: "social" }), genres: [], hint: { place: "bronze", at: T0, mood: "hopeful", colour: [] } });
+  expect(stale.mood).toBe("warm");
+  const fight = readCue({ state: state({ mode: "conflict" }), genres: [], reply: "She draws her sword.", hint: { place: "kitchen", at: T0, mood: "calm", colour: [] } });
+  expect(fight.mood).toBe("combat");
+});
+
+test("cue distance: same scene ~0, a fight far from a tavern", () => {
+  const a = readCue({ state: state({ mode: "social" }), genres: [] });
+  const b = readCue({ state: state({ mode: "social" }), genres: [] });
+  const c = readCue({ state: state({ mode: "conflict" }), genres: [], reply: "He opens fire." });
+  expect(cueDistance(a, b)).toBe(0);
+  expect(cueDistance(a, c)).toBeGreaterThan(0.6);
+});
+
+// ---------------------------------------------------------------------------
+// Taste and bans
+// ---------------------------------------------------------------------------
+
+const track = (videoId: string, title: string, artists: string | string[], over: Partial<Track> = {}): Track => ({
+  videoId, title, artists: (Array.isArray(artists) ? artists : [artists]).map((name) => ({ name })), durationS: 200, explicit: false, kind: "song", ...over,
+});
+
+test("names normalise the way YouTube Music credits them", () => {
+  expect(normName("Beyoncé - Topic")).toBe("beyonce");
+  expect(normName("TaylorSwiftVEVO")).toBe("taylorswift");
+  expect(normName("AC/DC")).toBe("ac dc");
+});
+
+test("a ban catches the artist in every credit, never a prefix", () => {
+  const taste = { banned: [{ name: "Drake" }], bannedWords: ["nightcore"] };
+  expect(banReason(track("a", "Song", "Drake"), taste)).toContain("Drake");
+  expect(banReason(track("b", "Song", "Rihanna, Drake & Future"), taste)).toContain("Drake");
+  expect(banReason(track("c", "Song (feat. Drake)", "Rihanna"), taste)).toContain("Drake");
+  expect(banReason(track("d", "Song", "Nick Drake"), taste)).toBeNull();
+  expect(banReason(track("e", "Song", "Drakeo the Ruler"), taste)).toBeNull();
+  expect(banReason(track("f", "Song (Nightcore)", "Someone"), taste)).toContain("nightcore");
+  // A whole act stays bannable even though "&" splits credits.
+  expect(banReason(track("g", "The Boxer", "Simon & Garfunkel"), { banned: [{ name: "Simon & Garfunkel" }], bannedWords: [] })).not.toBeNull();
+  // Ids match even when the names differ; names match even when the ids differ.
+  expect(banReason({ title: "x", artists: [{ name: "Ye", id: "UC1" }] }, { banned: [{ name: "Kanye West", id: "UC1" }], bannedWords: [] })).not.toBeNull();
+  expect(banReason({ title: "x", artists: [{ name: "Drake", id: "UC2" }] }, { banned: [{ name: "Drake", id: "UC9" }], bannedWords: [] })).not.toBeNull();
+});
+
+test("credits include the whole line, its parts and feat. in the title", () => {
+  const names = creditsOf(track("a", "Song (ft. C)", "A & B")).map((a) => a.name);
+  expect(names).toEqual(["A & B", "A", "B", "C"]);
+});
+
+test("a story's taste replaces genres and favourites; bans add up", () => {
+  const global = cleanTaste({ genres: ["jazz"], preferred: [{ name: "Miles Davis" }], banned: [{ name: "X" }] });
+  const m = mergeTaste(global, { genres: ["synthwave"], banned: [{ name: "Y" }] });
+  expect(m.genres).toEqual(["synthwave"]);
+  expect(m.preferred.map((a) => a.name)).toEqual(["Miles Davis"]);
+  expect(m.banned.map((a) => a.name).sort()).toEqual(["X", "Y"]);
+  expect(cleanTaste({ variety: "bogus", vocals: "instrumental" }).variety).toBe("balanced");
+  expect(cleanTaste({ vocals: "instrumental" }).vocals).toBe("instrumental");
+  expect(preferredOf(track("a", "x", "Miles Davis & John Coltrane"), global)?.name).toBe("Miles Davis");
+});
+
+// ---------------------------------------------------------------------------
+// InnerTube
+// ---------------------------------------------------------------------------
+
+const artistRun = (name: string, id: string) => ({ text: name, navigationEndpoint: { browseEndpoint: { browseId: id, browseEndpointContextSupportedConfigs: { browseEndpointContextMusicConfig: { pageType: "MUSIC_PAGE_TYPE_ARTIST" } } } } });
+const albumRun = (name: string) => ({ text: name, navigationEndpoint: { browseEndpoint: { browseId: "MPRE1", browseEndpointContextSupportedConfigs: { browseEndpointContextMusicConfig: { pageType: "MUSIC_PAGE_TYPE_ALBUM" } } } } });
+const listItem = (videoId: string, title: string, runs: any[], mvt = "MUSIC_VIDEO_TYPE_ATV", explicit = false) => ({
+  musicResponsiveListItemRenderer: {
+    playlistItemData: { videoId },
+    overlay: { musicItemThumbnailOverlayRenderer: { content: { musicPlayButtonRenderer: { playNavigationEndpoint: { watchEndpoint: { videoId, watchEndpointMusicSupportedConfigs: { watchEndpointMusicConfig: { musicVideoType: mvt } } } } } } } },
+    flexColumns: [
+      { musicResponsiveListItemFlexColumnRenderer: { text: { runs: [{ text: title }] } } },
+      { musicResponsiveListItemFlexColumnRenderer: { text: { runs } } },
+    ],
+    ...(explicit ? { badges: [{ musicInlineBadgeRenderer: { icon: { iconType: "MUSIC_EXPLICIT_BADGE" } } }] } : {}),
+    thumbnail: { musicThumbnailRenderer: { thumbnail: { thumbnails: [{ url: "s" }, { url: "big" }] } } },
+  },
+});
+const SEARCH = {
+  contents: { tabbedSearchResultsRenderer: { tabs: [{ tabRenderer: { content: { sectionListRenderer: { contents: [{ musicShelfRenderer: { contents: [
+    listItem("vid00000001", "Nights", [artistRun("Frank Ocean", "UCfo"), { text: " • " }, albumRun("Blonde"), { text: " • " }, { text: "5:07" }], "MUSIC_VIDEO_TYPE_ATV", true),
+    listItem("vid00000002", "Midnight City", [{ text: "Song" }, { text: " • " }, artistRun("M83", "UCm83"), { text: " • " }, { text: "4:04" }]),
+    listItem("vid00000003", "Some Upload", [{ text: "Video" }, { text: " • " }, { text: "Random Uploader" }, { text: " • " }, { text: "1.2M views" }, { text: " • " }, { text: "3:00" }], "MUSIC_VIDEO_TYPE_UGC"),
+    listItem("vid00000001", "Nights (again)", [artistRun("Frank Ocean", "UCfo")]),
+  ] } }] } } } }] } },
+};
+
+test("search results parse into tracks with credits, album, length and kind", () => {
+  const tracks = parseTracks(SEARCH);
+  expect(tracks.map((t) => t.videoId)).toEqual(["vid00000001", "vid00000002", "vid00000003"]);
+  const [a, b, c] = tracks;
+  expect(a.artists).toEqual([{ name: "Frank Ocean", id: "UCfo" }]);
+  expect(a.album).toBe("Blonde");
+  expect(a.durationS).toBe(307);
+  expect(a.explicit).toBe(true);
+  expect(a.kind).toBe("song");
+  expect(a.thumb).toBe("big");
+  expect(b.artists[0].name).toBe("M83");
+  expect(c.kind).toBe("video");
+  expect(c.artists[0].name).toBe("Random Uploader");
+  expect(parseDuration("1:02:03")).toBe(3723);
+  expect(parseTracks({ nothing: [1, 2, { here: null }] })).toEqual([]);
+});
+
+test("artist search parses names and channel ids", () => {
+  const json = { a: [{ musicResponsiveListItemRenderer: {
+    navigationEndpoint: { browseEndpoint: { browseId: "UCabc", browseEndpointContextSupportedConfigs: { browseEndpointContextMusicConfig: { pageType: "MUSIC_PAGE_TYPE_ARTIST" } } } },
+    flexColumns: [{ musicResponsiveListItemFlexColumnRenderer: { text: { runs: [{ text: "Hozier" }] } } }, { musicResponsiveListItemFlexColumnRenderer: { text: { runs: [{ text: "Artist • 5M subscribers" }] } } }],
+  } }] };
+  expect(parseArtists(json)).toEqual([{ name: "Hozier", id: "UCabc", thumb: undefined, subtitle: "Artist • 5M subscribers" }]);
+});
+
+// ---------------------------------------------------------------------------
+// The picker
+// ---------------------------------------------------------------------------
+
+/** A cue; `sceneNo` picks the spot ("room1", "room2"…) so tests can move the scene. */
+const cueOf = (over: Partial<Cue> = {}): Cue => {
+  const sceneNo = over.sceneNo ?? 2;
+  return { mood: "tense", energy: 0.7, valence: -0.4, tension: 0.8, intimacy: 0.1, colour: ["rain"], sharp: false, death: false, sceneNo, place: `room${sceneNo}`, at: 1000, why: "tense", ...over };
+};
+
+test("genres: strict keeps mine; blend or none fills from the story", () => {
+  expect(genresFor({ ...DEFAULT_TASTE, genres: ["jazz"], genreMode: "strict" }, ["noir"])).toEqual(["jazz"]);
+  const blend = genresFor({ ...DEFAULT_TASTE, genres: ["jazz"] }, ["noir"]);
+  expect(blend[0]).toBe("jazz");
+  expect(blend.length).toBeGreaterThan(1);
+  expect(genresFor(DEFAULT_TASTE, ["noir"])).toEqual(suggestGenres(["noir"]));
+});
+
+test("queries: the lead genre with the mood word, colour in the others, favourites added", () => {
+  const taste: Taste = { ...DEFAULT_TASTE, genres: ["synthwave", "darkwave", "industrial", "ambient"], genreMode: "strict", preferred: [{ name: "Perturbator" }] };
+  const qs = queriesFor(cueOf(), taste, []);
+  expect(qs[0].q.startsWith("synthwave ")).toBe(true);
+  expect(qs[0].rank).toBe(0);
+  expect(qs.filter((q) => !q.artist).length).toBe(3);
+  expect(qs.some((q) => q.q.includes("rain"))).toBe(true);
+  expect(qs.some((q) => q.artist === "Perturbator")).toBe(true);
+  const inst = queriesFor(cueOf(), { ...taste, vocals: "instrumental" }, []);
+  expect(inst.every((q) => q.artist || q.q.endsWith("instrumental"))).toBe(true);
+});
+
+test("hard filters: bans, never, explicit, videos, length, repeats, same artist", () => {
+  const taste: Taste = { ...DEFAULT_TASTE, banned: [{ name: "Bad" }], explicit: false };
+  const h = { ...emptyHistory(), never: ["n"], chat: ["r"], recent: { z: 1000 }, lastArtist: "same" };
+  const now = 1000 + 60_000;
+  expect(excluded(track("a", "x", "Bad"), taste, h, now)).toContain("banned");
+  expect(excluded(track("n", "x", "Ok"), taste, h, now)).toBe("never this song");
+  expect(excluded(track("e", "x", "Ok", { explicit: true }), taste, h, now)).toBe("explicit");
+  expect(excluded(track("v", "x", "Ok", { kind: "video" }), taste, h, now)).toBe("music video");
+  expect(excluded(track("l", "x", "Ok", { durationS: 60 }), taste, h, now)).toBe("length");
+  expect(excluded(track("r", "x", "Ok"), taste, h, now)).toContain("this chat");
+  expect(excluded(track("z", "x", "Ok"), taste, h, now)).toContain("two hours");
+  expect(excluded(track("s", "x", "Same"), taste, h, now)).toContain("same artist");
+  expect(excluded(track("s", "x", "Same"), { ...taste, variety: "focused" }, h, now)).toBeNull();
+  expect(excluded(track("ok", "x", "Fine"), taste, h, now)).toBeNull();
+});
+
+test("scoring: favourites and the lead genre rise, skipped songs sink, the draw is seeded", () => {
+  const taste: Taste = { ...DEFAULT_TASTE, preferred: [{ name: "Fav" }] };
+  const lead = { q: "a", key: "a", genre: "jazz", rank: 0 };
+  const other = { q: "b", key: "b", genre: "funk", rank: 2 };
+  const cands: Candidate[] = [
+    { track: track("t1", "One", "Someone"), query: other, pos: 0 },
+    { track: track("t2", "Two", "Fav"), query: other, pos: 3 },
+    { track: track("t3", "Three", "Else"), query: lead, pos: 1 },
+    { track: track("t4", "Four", "Skipped"), query: lead, pos: 0 },
+  ];
+  const h = { ...emptyHistory(), skips: { "tense|t4": 2 } };
+  const scored = scoreAll(cands, cueOf(), taste, h, { now: Date.now(), seed: "" });
+  const order = scored.map((s) => s.track.videoId);
+  expect(order.indexOf("t3")).toBeLessThan(order.indexOf("t4"));
+  expect(scored.find((s) => s.track.videoId === "t2")!.reasons.join()).toContain("preferred Fav");
+  expect(draw(scored, "seed")!.track.videoId).toBe(draw(scored, "seed")!.track.videoId);
+  expect(draw([], "x")).toBeNull();
+  const picks = new Set(Array.from({ length: 40 }, (_, i) => draw(scored, `s${i}`)!.track.videoId));
+  expect(picks.size).toBeGreaterThan(1);
+});
+
+// ---------------------------------------------------------------------------
+// The director
+// ---------------------------------------------------------------------------
+
+const np = (videoId: string, elapsedS = 10, over: Partial<NowPlaying> = {}): NowPlaying => ({ videoId, title: videoId, artist: "A", isPaused: false, elapsedS, durationS: 200, ...over });
+const opts = { cutOnSharp: true, takeBack: true };
+
+function run(events: Event[], s0: DirectorState = emptyDirector()) {
+  let s = s0;
+  const all: Action[][] = [];
+  for (const ev of events) {
+    const r = step(s, ev);
+    s = r.state;
+    all.push(r.actions);
+  }
+  return { s, all };
+}
+
+test("start with nothing playing: the scene's music starts now", () => {
+  const cue = cueOf();
+  const { s, all } = run([{ type: "cue", cue, now: 0, ...opts }, { type: "start", now: 1 }]);
+  expect(all[1]).toEqual([{ type: "pick", when: "now", cue, reason: "start", fade: false }]);
+  expect(s.picking).toBe(1);
+  // A second request while the pick is out does nothing.
+  expect(step(s, { type: "user-skip", now: 2 }).actions.filter((a) => a.type === "pick")).toEqual([]);
+});
+
+test("our song arrives as ours; a scene change queues the next; the end of a song plays it", () => {
+  const c1 = cueOf({ mood: "calm", energy: 0.2, valence: 0.3, tension: 0.1, intimacy: 0.2, sceneNo: 1 });
+  let { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1"), now: 3, banned: null }]);
+  expect(s.origin).toBe("ours");
+  expect(s.playingCue).toBe(c1);
+  // Same scene, mood a little off: nothing.
+  const c1b = { ...c1, energy: 0.25 };
+  expect(step(s, { type: "cue", cue: c1b, now: 4, ...opts }).actions).toEqual([]);
+  // A new scene, a far mood: the next song is picked for it (not cut in).
+  const c2 = cueOf({ sceneNo: 2 });
+  const r = step(s, { type: "cue", cue: c2, now: 5, ...opts });
+  expect(r.actions).toEqual([{ type: "pick", when: "next", cue: c2, reason: "new scene", fade: false }]);
+  s = step(r.state, { type: "picked", videoId: "s2", when: "next", cue: c2, now: 6 }).state;
+  expect(s.next?.videoId).toBe("s2");
+  // s1 ends by itself, s2 plays: ours.
+  s = step(s, { type: "poll", np: np("s1", 195), now: 7, banned: null }).state;
+  s = step(s, { type: "poll", np: np("s2", 1), now: 8, banned: null }).state;
+  expect(s.origin).toBe("ours");
+  expect(s.playingCue).toBe(c2);
+  expect(s.next).toBeNull();
+});
+
+test("a new mood in the same scene waits for a second reply", () => {
+  const c1 = cueOf({ mood: "calm", energy: 0.2, valence: 0.3, tension: 0.1, intimacy: 0.2, sceneNo: 1 });
+  let { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1"), now: 3, banned: null }]);
+  const c2 = cueOf({ mood: "melancholy", energy: 0.25, valence: -0.4, tension: 0.25, intimacy: 0.4, sceneNo: 1 });
+  const r1 = step(s, { type: "cue", cue: c2, now: 4, ...opts });
+  expect(r1.actions).toEqual([]);
+  const r2 = step(r1.state, { type: "cue", cue: c2, now: 5, ...opts });
+  expect(r2.actions[0]).toMatchObject({ type: "pick", when: "next", reason: "the mood changed" });
+});
+
+test("a sharp turn cuts in with a fade, after the song has had 20 s", () => {
+  const c1 = cueOf({ mood: "warm", energy: 0.4, valence: 0.5, tension: 0.15, intimacy: 0.3, sceneNo: 1 });
+  let { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1"), now: 3, banned: null }]);
+  const fight = cueOf({ mood: "combat", tension: 0.95, sharp: true, sceneNo: 1 });
+  expect(step(s, { type: "cue", cue: fight, now: 10_000, ...opts }).actions[0]).toMatchObject({ when: "next" });
+  expect(step(s, { type: "cue", cue: fight, now: 30_000, ...opts }).actions).toEqual([{ type: "pick", when: "now", cue: fight, reason: "sharp turn", fade: true }]);
+  expect(step(s, { type: "cue", cue: fight, now: 30_000, cutOnSharp: false, takeBack: true }).actions[0]).toMatchObject({ when: "next" });
+});
+
+test("the guard: a banned autoplay song is replaced; the user's own pick plays", () => {
+  const c1 = cueOf({ sceneNo: 1 });
+  let { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1"), now: 3, banned: null }]);
+  // s1 ends; autoplay starts a banned song: the scene's music goes in its place (no skip on top).
+  const ending = step(s, { type: "poll", np: np("s1", 195), now: 4, banned: null });
+  // (The keep-ahead pick near the end found nothing.)
+  expect(ending.actions[0]).toMatchObject({ type: "pick", when: "next" });
+  s = step(ending.state, { type: "pick-failed", now: 4 }).state;
+  const r = step(s, { type: "poll", np: np("bad", 1), now: 5, banned: "banned artist Bad" });
+  expect(r.state.origin).toBe("autoplay");
+  expect(r.actions).toEqual([{ type: "pick", when: "now", cue: c1, reason: "skipped: banned artist Bad", fade: false }]);
+  // With our next song queued, the guard skips onto it instead.
+  const queued = { ...s, next: { videoId: "s2", cue: c1 } };
+  expect(step(queued, { type: "poll", np: np("bad", 1), now: 5, banned: "banned artist Bad" }).actions).toEqual([{ type: "skip", reason: "banned artist Bad", videoId: "bad" }]);
+  // The user jumps to a banned song mid-track: it plays, and the Almanac steps back.
+  const u = step(s, { type: "poll", np: np("bad2", 1), now: 6, banned: "banned artist Bad" });
+  // (s1 was at 195 of 200, which counts as its end: use a mid-song state for the jump.)
+  const mid = step(step(s, { type: "poll", np: np("s1", 60), now: 6, banned: null }).state, { type: "poll", np: np("bad3", 1), now: 7, banned: "banned artist Bad" });
+  expect(mid.state.origin).toBe("user");
+  expect(mid.state.mode).toBe("yielded");
+  expect(mid.actions).toEqual([]);
+  expect(u.state.origin).toBe("autoplay");
+});
+
+test("yielded: the user's music plays out; a new scene queues the scene's music after it", () => {
+  const c1 = cueOf({ sceneNo: 1 });
+  let { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1", 30), now: 3, banned: null }, { type: "poll", np: np("mine", 1), now: 4, banned: null }]);
+  expect(s.mode).toBe("yielded");
+  expect(step(s, { type: "cue", cue: { ...c1, mood: "calm" }, now: 5, ...opts }).actions).toEqual([]);
+  const c2 = cueOf({ sceneNo: 2 });
+  expect(step(s, { type: "cue", cue: c2, now: 6, ...opts }).actions).toEqual([{ type: "pick", when: "next", cue: c2, reason: "new scene: taking the music back", fade: false }]);
+  expect(step(s, { type: "cue", cue: c2, now: 6, cutOnSharp: true, takeBack: false }).actions).toEqual([]);
+});
+
+test("skipping our song early counts against it; hold replays until the scene changes", () => {
+  const c1 = cueOf({ sceneNo: 1 });
+  let { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1", 30), now: 3, banned: null }, { type: "picked", videoId: "s2", when: "next", cue: c1, now: 4 }]);
+  const skipped = step(s, { type: "poll", np: np("s2", 1), now: 5, banned: null });
+  expect(skipped.state.origin).toBe("ours-skip");
+  expect(skipped.actions).toContainEqual({ type: "penalise", videoId: "s1", mood: "tense" });
+  // Hold: near the end the same song is queued again.
+  s = step(s, { type: "hold", on: true }).state;
+  expect(s.mode).toBe("holding");
+  const near = step(s, { type: "poll", np: np("s1", 180), now: 6, banned: null });
+  expect(near.actions).toContainEqual({ type: "replay-next", videoId: "s1" });
+  // A new scene releases it.
+  const released = step(s, { type: "cue", cue: cueOf({ sceneNo: 2 }), now: 7, ...opts });
+  expect(released.state.mode).toBe("following");
+});
+
+test("near the end of a song one more is queued, so autoplay rarely gets a turn", () => {
+  const c1 = cueOf({ sceneNo: 1 });
+  const { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1", 30), now: 3, banned: null }]);
+  expect(step(s, { type: "poll", np: np("s1", 100), now: 4, banned: null }).actions).toEqual([]);
+  expect(step(s, { type: "poll", np: np("s1", 175), now: 4, banned: null }).actions).toEqual([{ type: "pick", when: "next", cue: c1, reason: "keeping the music going", fade: false }]);
+  expect(step(s, { type: "poll", np: np("s1", 175, { isPaused: true }), now: 4, banned: null }).actions).toEqual([]);
+  expect(step({ ...s, running: false }, { type: "poll", np: np("s1", 175), now: 4, banned: null }).actions).toEqual([]);
+});
+
+test("stop drops the queued song and picks nothing more", () => {
+  const c1 = cueOf({ sceneNo: 1 });
+  const { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "next", cue: c1, now: 2 }]);
+  const r = step(s, { type: "stop" });
+  expect(r.actions).toEqual([{ type: "drop-next", videoId: "s1" }]);
+  expect(step(r.state, { type: "cue", cue: cueOf({ sceneNo: 5 }), now: 3, ...opts }).actions).toEqual([]);
+});
+
+describe("soundtrack listener tags", () => {
+  test("cleanTags drops noise, lower-cases, keeps weights", () => {
+    const t = cleanTags([{ name: "Seen Live", count: 100 }, { name: "Sad", count: 90 }, { name: "2010s", count: 50 }, { name: "piano", count: "40" }, { name: "sad", count: 10 }, { name: "zero", count: 0 }]);
+    expect(t).toEqual([{ name: "sad", count: 90 }, { name: "piano", count: 40 }]);
+  });
+  test("tagFit: fitting tags lift, clashing tags sink, no tags change nothing", () => {
+    expect(tagFit([], "grief", []).delta).toBe(0);
+    const sad = tagFit([{ name: "sad", count: 100 }, { name: "piano", count: 60 }], "grief", ["piano"]);
+    const party = tagFit([{ name: "party", count: 100 }, { name: "dance", count: 80 }], "grief", ["piano"]);
+    expect(sad.delta).toBeGreaterThan(0.5);
+    expect(sad.reasons[0]).toBe("tagged sad");
+    expect(party.delta).toBeLessThan(-0.4);
+    expect(party.reasons).toContain("but tagged party");
+    // "dark" fits inside "dark ambient".
+    expect(tagFit([{ name: "dark ambient", count: 100 }], "dread", []).delta).toBeGreaterThan(0.4);
+  });
+  test("tagFit: strict genres sink a well-tagged song in none of them", () => {
+    const tags = ["pop", "dance", "catchy", "female", "2020"].map((name, i) => ({ name, count: 100 - i * 10 }));
+    expect(tagFit(tags, "calm", ["dark ambient"], true).reasons).toContain("not tagged with your genres");
+    expect(tagFit(tags, "calm", ["dark ambient"], false).reasons).not.toContain("not tagged with your genres");
+  });
+  test("retag reorders by tags and leaves untagged songs alone", () => {
+    const mk = (id: string, score: number) => ({ track: { videoId: id }, score, reasons: [] as string[] });
+    const out = retag([mk("a", 1), mk("b", 0.9), mk("c", 0.7)], new Map([["a", [{ name: "party", count: 100 }]], ["b", [{ name: "melancholy", count: 100 }]]]), "melancholy", []);
+    expect(out.map((x) => x.track.videoId)).toEqual(["b", "c", "a"]);
+    expect(out[0].reasons[0]).toBe("tagged melancholy");
+  });
+  test("lookupTitle strips video and remaster dressing", () => {
+    expect(lookupTitle("Hurt (Official Video) [Remastered 2011]")).toBe("Hurt");
+    expect(lookupTitle("Song - 2011 Remaster")).toBe("Song");
+    expect(lookupTitle("Duet feat. Someone")).toBe("Duet");
+    expect(lookupTitle("(Untitled)")).toBe("(Untitled)");
+  });
+});

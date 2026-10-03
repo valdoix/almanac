@@ -7818,7 +7818,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.21.4";
+var VERSION = "1.22.0";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -19738,6 +19738,2138 @@ var init_playerfacts = __esm(() => {
   ALLOWED = new Set(["trait", "item", "canon", "motif", "look"]);
 });
 
+// src/core/soundtrack/moods.ts
+function suggestGenres(storyGenres) {
+  const out = [];
+  for (const g of storyGenres.length ? storyGenres : ["drama"])
+    for (const m of GENRE_SUGGEST[g] ?? [])
+      if (!out.includes(m))
+        out.push(m);
+  return out.slice(0, 6);
+}
+function hourBand(minute) {
+  const h = Math.floor(minute / 60);
+  if (h < 5)
+    return "late";
+  if (h < 7)
+    return "dawn";
+  if (h < 18)
+    return "day";
+  if (h < 20)
+    return "dusk";
+  return "night";
+}
+var MOODS, isMood = (x) => typeof x === "string" && MOODS.includes(x), MOOD_WORDS, MOOD_VEC, MODE_BASE, GENRE_SUGGEST, GENRE_CHIPS, PLACE_COLOUR;
+var init_moods = __esm(() => {
+  MOODS = [
+    "calm",
+    "warm",
+    "playful",
+    "tender",
+    "romantic",
+    "hopeful",
+    "triumphant",
+    "adventurous",
+    "mysterious",
+    "eerie",
+    "tense",
+    "dread",
+    "combat",
+    "melancholy",
+    "grief",
+    "dreamy"
+  ];
+  MOOD_WORDS = {
+    calm: ["calm", "peaceful", "relaxing"],
+    warm: ["warm", "feel good", "cozy"],
+    playful: ["playful", "upbeat", "fun"],
+    tender: ["tender", "gentle", "soft"],
+    romantic: ["romantic", "love", "sensual"],
+    hopeful: ["hopeful", "uplifting", "inspiring"],
+    triumphant: ["triumphant", "epic", "victory"],
+    adventurous: ["adventure", "journey", "uplifting"],
+    mysterious: ["mysterious", "mystery", "enigmatic"],
+    eerie: ["eerie", "haunting", "unsettling"],
+    tense: ["tense", "suspense", "tension"],
+    dread: ["dark", "ominous", "dread"],
+    combat: ["battle", "intense", "action"],
+    melancholy: ["melancholy", "sad", "wistful"],
+    grief: ["grief", "mourning", "sorrow"],
+    dreamy: ["dreamy", "ethereal", "night"]
+  };
+  MOOD_VEC = {
+    calm: [0.2, 0.3, 0.1, 0.2],
+    warm: [0.4, 0.5, 0.15, 0.3],
+    playful: [0.6, 0.6, 0.15, 0.2],
+    tender: [0.25, 0.5, 0.2, 0.7],
+    romantic: [0.35, 0.6, 0.3, 0.85],
+    hopeful: [0.5, 0.6, 0.2, 0.3],
+    triumphant: [0.85, 0.7, 0.3, 0.2],
+    adventurous: [0.6, 0.4, 0.3, 0.1],
+    mysterious: [0.35, -0.1, 0.5, 0.1],
+    eerie: [0.25, -0.5, 0.65, 0.05],
+    tense: [0.6, -0.35, 0.8, 0.1],
+    dread: [0.5, -0.7, 0.9, 0.05],
+    combat: [0.95, -0.4, 0.9, 0.05],
+    melancholy: [0.25, -0.4, 0.25, 0.4],
+    grief: [0.2, -0.8, 0.3, 0.5],
+    dreamy: [0.2, 0.2, 0.1, 0.4]
+  };
+  MODE_BASE = {
+    downtime: { mood: "calm", energy: 0.25, valence: 0.3, tension: 0.1, intimacy: 0.2 },
+    social: { mood: "warm", energy: 0.45, valence: 0.5, tension: 0.2, intimacy: 0.3 },
+    intimacy: { mood: "tender", energy: 0.3, valence: 0.6, tension: 0.3, intimacy: 0.8 },
+    conflict: { mood: "tense", energy: 0.8, valence: -0.4, tension: 0.8, intimacy: 0.1 },
+    investigation: { mood: "mysterious", energy: 0.4, valence: -0.1, tension: 0.5, intimacy: 0.1 },
+    travel: { mood: "adventurous", energy: 0.55, valence: 0.3, tension: 0.3, intimacy: 0.1 },
+    stealth: { mood: "tense", energy: 0.35, valence: -0.3, tension: 0.7, intimacy: 0.05 },
+    crisis: { mood: "dread", energy: 0.9, valence: -0.6, tension: 0.95, intimacy: 0.05 }
+  };
+  GENRE_SUGGEST = {
+    fantasy: ["film score", "celtic folk", "orchestral"],
+    adventure: ["film score", "orchestral", "folk"],
+    dark_fantasy: ["dark ambient", "neoclassical", "dark folk"],
+    tragedy: ["neoclassical", "piano", "dark ambient"],
+    horror: ["dark ambient", "drone", "horror soundtrack"],
+    scifi: ["synthwave", "ambient electronic", "film score"],
+    noir: ["jazz", "noir jazz", "trip hop"],
+    mystery: ["jazz", "trip hop", "film score"],
+    thriller: ["film score", "industrial", "post-rock"],
+    action: ["film score", "post-rock", "industrial"],
+    survival: ["post-rock", "film score", "dark ambient"],
+    romance: ["indie", "neo soul", "piano"],
+    erotic: ["neo soul", "r&b", "downtempo"],
+    drama: ["indie", "piano", "post-rock"],
+    slice_of_life: ["lo-fi", "acoustic", "city pop"],
+    cozy: ["lo-fi", "acoustic", "folk"],
+    comedy: ["city pop", "indie pop", "lo-fi"],
+    intrigue: ["neoclassical", "baroque", "film score"]
+  };
+  GENRE_CHIPS = [...new Set(Object.values(GENRE_SUGGEST).flat().concat(["ambient", "classical", "rock", "metal", "pop", "hip hop", "electronic", "j-rock", "k-pop", "video game soundtrack", "anime soundtrack", "blues", "country", "chiptune"]))];
+  PLACE_COLOUR = {
+    space: "space",
+    graveyard: "gothic",
+    ruins: "ancient",
+    castle: "medieval",
+    deck: "sea",
+    underground: "underground",
+    swamp: "swamp",
+    jungle: "jungle",
+    tundra: "winter",
+    sea: "ocean",
+    coast: "ocean",
+    forest: "forest",
+    mountain: "mountain",
+    desert: "desert",
+    harbour: "harbor",
+    camp: "campfire",
+    village: "village",
+    r_tavern: "tavern",
+    r_club: "club",
+    r_cafe: "cafe",
+    r_diner: "diner",
+    r_casino: "casino",
+    r_arcade: "arcade",
+    r_chapel: "cathedral",
+    r_shrine: "temple",
+    r_lab: "laboratory",
+    r_hall: "royal",
+    r_theater: "theater",
+    r_library: "library",
+    r_car: "night drive",
+    r_train: "train",
+    r_observatory: "stars",
+    r_forge: "forge",
+    r_alchemy: "alchemy",
+    r_cell: "prison",
+    r_cellar: "dark",
+    r_submarine: "deep sea",
+    r_aquarium: "underwater"
+  };
+});
+
+// src/core/soundtrack/cue.ts
+function weatherWord(cond) {
+  const c = cond.toLowerCase();
+  if (/thunder|storm|gale|blizzard|hurricane|tempest/.test(c))
+    return "storm";
+  if (/snow|sleet|flurr/.test(c))
+    return "snow";
+  if (/rain|drizzle|shower|downpour/.test(c))
+    return "rain";
+  if (/fog|mist|haze/.test(c))
+    return "fog";
+  return "";
+}
+function readCue(inp) {
+  const { state } = inp;
+  const genres = inp.genres ?? [];
+  const has = (...g) => g.some((x) => genres.includes(x));
+  const mode = MODE_BASE[state.mode] ? state.mode : "social";
+  const base = MODE_BASE[mode];
+  let { mood } = base;
+  let { energy, valence, tension, intimacy } = base;
+  const why = [mode];
+  const recent = `${inp.playerMsg ?? ""}
+${inp.reply ?? ""}`;
+  const fight = FIGHT.test(recent);
+  const death = (state.milestones ?? []).some((m) => m.kind === "death" && m.msgIndex === state.lastReply);
+  if (mode === "social" && has("comedy"))
+    mood = "playful";
+  if (mode === "intimacy" && has("romance", "erotic"))
+    mood = "romantic";
+  if ((mode === "conflict" || mode === "crisis") && fight) {
+    mood = "combat";
+    energy = Math.max(energy, 0.9);
+    why.push("fight");
+  }
+  if (mode === "travel" && has("horror"))
+    mood = "mysterious";
+  const band = state.time ? hourBand(state.time.minute) : "day";
+  const colour = [];
+  if (band === "night" || band === "late") {
+    energy -= 0.15;
+    colour.push("night");
+    why.push("night");
+    if (mood === "calm")
+      mood = has("horror") ? "eerie" : "dreamy";
+    if (has("horror") && (mood === "warm" || mood === "mysterious"))
+      mood = "eerie";
+  } else if (band === "dawn" || band === "dusk") {
+    colour.push(band);
+    why.push(band);
+  }
+  const wx = weatherWord(state.weather?.condition ?? "");
+  if (wx) {
+    colour.push(wx);
+    why.push(wx);
+    if (wx === "storm")
+      tension += 0.15;
+    if ((wx === "rain" || wx === "fog") && (mood === "calm" || mood === "warm"))
+      mood = "melancholy";
+    if (wx === "snow" && mood === "calm")
+      mood = "dreamy";
+  }
+  const path = (state.place ?? []).join(" \u203A ");
+  if (path) {
+    const kind = placeKind(path, eraOf("", genres[0] ?? ""));
+    const word = PLACE_COLOUR[kind];
+    if (word && !colour.includes(word))
+      colour.push(word);
+  }
+  const now = state.time ? absMinutes(state.time) : null;
+  if (now != null && Object.values(state.deadlines ?? {}).some((d) => !d.done && d.at && absMinutes(d.at) - now >= 0 && absMinutes(d.at) - now <= 120)) {
+    tension += 0.15;
+    why.push("deadline");
+  }
+  const present = Object.values(state.chars ?? {}).filter((c) => c.tier === "spot" || c.tier === "peri");
+  if (present.some((c) => !c.dead && (c.injuries ?? []).some((i) => !i.treated && i.severity >= 2)))
+    tension += 0.1;
+  if (inp.tone === "melancholy" || has("tragedy"))
+    valence -= 0.2;
+  if (inp.tone === "tense")
+    tension += 0.1;
+  if (inp.tone === "warm")
+    valence += 0.1;
+  if (has("cozy"))
+    tension = Math.min(tension, 0.4);
+  if (has("cozy") && (mood === "dread" || mood === "eerie"))
+    mood = "tense";
+  const sceneNo = state.sceneNo ?? 0;
+  const here = { place: placeKey(state.place ?? []), at: now };
+  if (death || inp.grief && sameScene(inp.grief, here)) {
+    mood = "grief";
+    why.push("loss");
+  }
+  if (inp.hint && sameScene(inp.hint, here) && isMood(inp.hint.mood) && mood !== "grief" && mood !== "combat") {
+    mood = inp.hint.mood;
+    for (const c of inp.hint.colour)
+      if (c && !colour.includes(c))
+        colour.unshift(c);
+    why.push("director");
+  }
+  const [e, v, t, i] = MOOD_VEC[mood];
+  energy = clamp2((energy + e) / 2);
+  valence = clamp2((valence + v) / 2, -1, 1);
+  tension = clamp2((tension + t) / 2);
+  intimacy = clamp2((intimacy + i) / 2);
+  const tier = inp.playerMsg ? tierGuess(inp.playerMsg, state) : "routine";
+  const sharp = death || fight && (mode === "conflict" || mode === "crisis") || tier === "pivotal" && tension >= 0.7;
+  return { mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp, death, sceneNo, place: here.place, at: here.at, why: `${mood} \xB7 ${why.join(" \xB7 ")}` };
+}
+function cueDistance(a, b) {
+  if (!a || !b)
+    return 1;
+  const d = Math.hypot(a.energy - b.energy, (a.valence - b.valence) / 2, a.tension - b.tension, a.intimacy - b.intimacy);
+  return d + (a.mood === b.mood ? 0 : 0.3);
+}
+function placeKey(place) {
+  let p = place[place.length - 1] ?? "";
+  p = p.split(/\s+\u00B7\s+/)[0].replace(/\([^)]*\)/g, " ");
+  const legs = p.split(/\s*(?:\u2192|->)\s*/).filter((x) => x.trim());
+  p = (legs[legs.length - 1] ?? p).split(",")[0];
+  return p.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/^(?:the|a|an) /, "");
+}
+function sameScene(a, b) {
+  if (!a || !b || a.place !== b.place)
+    return false;
+  return a.at == null || b.at == null || Math.abs(b.at - a.at) < 90;
+}
+var FIGHT, clamp2 = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
+var init_cue = __esm(() => {
+  init_util();
+  init_plate();
+  init_recall();
+  init_moods();
+  FIGHT = /\b(attacks?|attacked|strikes?|struck|stabs?|stabbed|shoots?|shot|slash(?:es|ed)?|punch(?:es|ed)?|swings? (?:at|his|her|the)|lunges?|parr(?:y|ies|ied)|gunfire|blades? (?:clash|meet)|fight(?:s|ing)? (?:back|breaks out)|draws? (?:a |his |her |my )?(?:sword|gun|knife|blade|pistol)|opens? fire|charges? at)\b/i;
+});
+
+// src/core/soundtrack/director.ts
+function emptyDirector() {
+  return {
+    running: false,
+    mode: "following",
+    playingCue: null,
+    lastCue: null,
+    pending: null,
+    ours: [],
+    current: null,
+    origin: null,
+    lastElapsed: 0,
+    lastDuration: 0,
+    lastPaused: false,
+    next: null,
+    expect: null,
+    startedAt: 0,
+    holdScene: null,
+    scene: null,
+    sceneId: 0,
+    picking: 0
+  };
+}
+function step(prev, ev) {
+  const s = { ...prev };
+  const actions = [];
+  const busy = (now) => s.picking > 0 && now - s.picking < PICK_TIMEOUT_MS;
+  const pick = (when, cue, reason, now, fade = false) => {
+    if (busy(now))
+      return;
+    if (when === "next" && s.next)
+      actions.push({ type: "drop-next", videoId: s.next.videoId });
+    if (when === "next")
+      s.next = null;
+    s.picking = now;
+    actions.push({ type: "pick", when, cue, reason, fade });
+  };
+  switch (ev.type) {
+    case "start": {
+      s.running = true;
+      s.mode = "following";
+      s.pending = null;
+      s.picking = 0;
+      if (s.lastCue)
+        pick("now", s.lastCue, "start", ev.now);
+      break;
+    }
+    case "stop":
+      s.running = false;
+      s.picking = 0;
+      if (s.next)
+        actions.push({ type: "drop-next", videoId: s.next.videoId });
+      s.next = null;
+      break;
+    case "hold":
+      if (ev.on && s.current) {
+        s.mode = "holding";
+        s.holdScene = s.sceneId;
+        if (s.next)
+          actions.push({ type: "drop-next", videoId: s.next.videoId });
+        s.next = null;
+        s.ours = remember(s.ours, s.current);
+      } else if (!ev.on && s.mode === "holding") {
+        s.mode = "following";
+        s.holdScene = null;
+      }
+      break;
+    case "user-skip": {
+      if (s.current && s.lastCue && s.origin !== "user")
+        actions.push({ type: "penalise", videoId: s.current, mood: s.playingCue?.mood ?? s.lastCue.mood });
+      if (s.mode === "holding")
+        s.mode = "following";
+      if (s.lastCue)
+        pick("now", s.lastCue, "skipped", ev.now);
+      break;
+    }
+    case "picked":
+      s.picking = 0;
+      s.ours = remember(s.ours, ev.videoId);
+      if (ev.when === "now")
+        s.expect = { videoId: ev.videoId, cue: ev.cue, at: ev.now };
+      else
+        s.next = { videoId: ev.videoId, cue: ev.cue };
+      if (s.mode !== "holding" && ev.when === "now")
+        s.mode = "following";
+      break;
+    case "pick-failed":
+      s.picking = 0;
+      break;
+    case "poll": {
+      const np = ev.np;
+      if (!np || !np.videoId) {
+        s.current = null;
+        s.origin = null;
+        s.lastPaused = false;
+        break;
+      }
+      if (np.videoId !== s.current) {
+        const prevOurs = !!s.current && s.origin !== "user" && s.ours.includes(s.current);
+        const natural = !!s.current && !s.lastPaused && s.lastDuration > 0 && s.lastElapsed >= s.lastDuration - END_SLACK_S;
+        let origin;
+        if (s.expect?.videoId === np.videoId)
+          origin = "ours";
+        else if (s.next?.videoId === np.videoId || s.ours.includes(np.videoId))
+          origin = natural || !s.current ? "ours" : "ours-skip";
+        else if (!s.current)
+          origin = "user";
+        else
+          origin = natural ? "autoplay" : "user";
+        if (origin === "ours-skip" && prevOurs && s.playingCue)
+          actions.push({ type: "penalise", videoId: s.current, mood: s.playingCue.mood });
+        if (s.expect?.videoId === np.videoId) {
+          s.playingCue = s.expect.cue;
+          s.expect = null;
+        } else if (s.next?.videoId === np.videoId) {
+          s.playingCue = s.next.cue;
+          s.next = null;
+        }
+        s.current = np.videoId;
+        s.origin = origin;
+        s.startedAt = ev.now;
+        if (origin === "user") {
+          if (s.mode !== "holding" || !s.ours.includes(np.videoId))
+            s.mode = "yielded";
+        } else if (origin === "ours" || origin === "ours-skip") {
+          if (s.mode !== "holding")
+            s.mode = "following";
+        }
+        if (s.running && ev.banned && origin !== "user") {
+          if (!s.next && s.mode === "following" && s.lastCue && !busy(ev.now))
+            pick("now", s.lastCue, `skipped: ${ev.banned}`, ev.now);
+          else
+            actions.push({ type: "skip", reason: ev.banned, videoId: np.videoId });
+        } else if (s.running && origin === "autoplay" && s.mode === "following" && !np.isPaused && s.lastCue) {
+          pick("now", s.lastCue, "autoplay took over", ev.now);
+        }
+      }
+      s.lastElapsed = np.elapsedS;
+      s.lastDuration = np.durationS;
+      s.lastPaused = np.isPaused;
+      if (!s.running || np.isPaused)
+        break;
+      const left = np.durationS > 0 ? np.durationS - np.elapsedS : Infinity;
+      if (s.mode === "holding") {
+        if (s.holdScene != null && s.sceneId !== s.holdScene) {
+          s.mode = "following";
+          s.holdScene = null;
+        } else if (!s.next && left <= KEEP_AHEAD_S && s.current) {
+          actions.push({ type: "replay-next", videoId: s.current });
+          s.next = { videoId: s.current, cue: s.playingCue ?? s.lastCue };
+          break;
+        }
+      }
+      if (s.mode === "following" && !s.next && !s.expect && left <= KEEP_AHEAD_S && (s.lastCue ?? s.playingCue))
+        pick("next", s.lastCue ?? s.playingCue, "keeping the music going", ev.now);
+      break;
+    }
+    case "cue": {
+      const cue = ev.cue;
+      const newScene = !sameScene(s.scene, cue);
+      if (newScene) {
+        s.scene = { place: cue.place, at: cue.at };
+        s.sceneId++;
+      }
+      s.lastCue = cue;
+      if (!s.running)
+        break;
+      if (s.mode === "holding") {
+        if (s.sceneId === s.holdScene)
+          break;
+        s.mode = "following";
+        s.holdScene = null;
+      }
+      if (s.mode === "yielded") {
+        if (ev.takeBack && newScene && s.sceneId > 1 && !s.next)
+          pick("next", cue, "new scene: taking the music back", ev.now);
+        break;
+      }
+      if (!s.current) {
+        if (!s.lastPaused)
+          pick("now", cue, "nothing playing", ev.now);
+        break;
+      }
+      if (!s.playingCue) {
+        pick("next", cue, "first cue", ev.now);
+        break;
+      }
+      const d = cueDistance(s.playingCue, cue);
+      const sceneChanged = newScene || !sameScene(s.playingCue, cue);
+      const jump = cue.tension - s.playingCue.tension >= TENSION_JUMP || cue.death && s.playingCue.mood !== "grief";
+      if (cue.sharp && jump && ev.cutOnSharp && !s.lastPaused && ev.now - s.startedAt >= SHARP_DWELL_MS) {
+        s.pending = null;
+        pick("now", cue, "sharp turn", ev.now, true);
+        break;
+      }
+      if (d >= CHANGE_AT) {
+        const held = s.pending?.mood === cue.mood && s.pending.count >= 1;
+        if (sceneChanged || held || jump) {
+          s.pending = null;
+          if (!s.next || cueDistance(s.next.cue, cue) >= CHANGE_AT)
+            pick("next", cue, sceneChanged ? "new scene" : "the mood changed", ev.now);
+        } else {
+          s.pending = { mood: cue.mood, count: s.pending?.mood === cue.mood ? s.pending.count + 1 : 1 };
+        }
+        break;
+      }
+      s.pending = null;
+      if (s.next && cueDistance(s.next.cue, cue) >= CHANGE_AT)
+        pick("next", cue, "the mood went back", ev.now);
+      break;
+    }
+  }
+  return { state: s, actions };
+}
+var CHANGE_AT = 0.35, TENSION_JUMP = 0.4, KEEP_AHEAD_S = 30, END_SLACK_S = 12, SHARP_DWELL_MS = 20000, PICK_TIMEOUT_MS = 45000, remember = (ours, id) => [...ours.filter((x) => x !== id), id].slice(-40);
+var init_director = __esm(() => {
+  init_cue();
+});
+
+// src/core/soundtrack/taste.ts
+function refs(x) {
+  if (!Array.isArray(x))
+    return [];
+  const out = [];
+  for (const r of x) {
+    const name = typeof r === "string" ? r.trim() : str(r?.name).trim();
+    const id = typeof r === "string" ? undefined : str(r?.id).trim() || undefined;
+    if (name && !out.some((o) => id && o.id === id || normName(o.name) === normName(name)))
+      out.push(id ? { name, id } : { name });
+  }
+  return out.slice(0, 200);
+}
+function cleanTaste(x, base = DEFAULT_TASTE) {
+  const t = x ?? {};
+  const pick = (k, ok) => ok.includes(t[k]) ? t[k] : base[k];
+  return {
+    genres: "genres" in t ? words3(t.genres).slice(0, 12) : base.genres,
+    genreMode: pick("genreMode", ["strict", "blend"]),
+    preferred: "preferred" in t ? refs(t.preferred) : base.preferred,
+    banned: "banned" in t ? refs(t.banned) : base.banned,
+    bannedWords: "bannedWords" in t ? words3(t.bannedWords) : base.bannedWords,
+    vocals: pick("vocals", ["any", "quiet-in-dialogue", "instrumental"]),
+    explicit: typeof t.explicit === "boolean" ? t.explicit : base.explicit,
+    variety: pick("variety", ["focused", "balanced", "wide"]),
+    videos: typeof t.videos === "boolean" ? t.videos : base.videos
+  };
+}
+function mergeTaste(global, chat) {
+  if (!chat)
+    return global;
+  const c = cleanTaste(chat, global);
+  return {
+    ...c,
+    genres: chat.genres?.length ? c.genres : global.genres,
+    preferred: chat.preferred?.length ? c.preferred : global.preferred,
+    banned: refs([...global.banned, ...chat.banned ?? []]),
+    bannedWords: [...new Set([...global.bannedWords, ...chat.bannedWords ?? []])]
+  };
+}
+function normName(s) {
+  return s.normalize("NFKD").replace(/[\u0300-\u036F]/g, "").toLowerCase().replace(/\s*-\s*topic\s*$/, "").replace(/vevo\s*$/, "").replace(/\bofficial\b/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+function splitArtists(s) {
+  return s.split(/\s*(?:,|&|\+|\/|;|\bx\b|\u00D7|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\bvs\.?)\s*/i).map((x) => x.trim()).filter(Boolean);
+}
+function artistMatches(ref, a) {
+  if (ref.id && a.id && ref.id === a.id)
+    return true;
+  const r = normName(ref.name);
+  return !!r && r === normName(a.name);
+}
+function creditsOf(t) {
+  const out = [];
+  for (const a of t.artists) {
+    out.push(a);
+    const parts = splitArtists(a.name);
+    if (parts.length > 1)
+      for (const p of parts)
+        out.push({ name: p });
+  }
+  const feat = /[([]\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+)[)\]]/i.exec(t.title)?.[1];
+  if (feat)
+    for (const p of splitArtists(feat))
+      out.push({ name: p });
+  return out;
+}
+function banReason(t, taste) {
+  const credits = creditsOf(t);
+  for (const ref of taste.banned)
+    if (credits.some((a) => artistMatches(ref, a)))
+      return `banned artist ${ref.name}`;
+  const title = t.title.normalize("NFKD").replace(/[\u0300-\u036F]/g, "").toLowerCase();
+  for (const w of taste.bannedWords)
+    if (w.trim() && wordRe2(w.trim()).test(title))
+      return `banned word "${w}"`;
+  return null;
+}
+function preferredOf(t, taste) {
+  const credits = creditsOf(t);
+  return taste.preferred.find((ref) => credits.some((a) => artistMatches(ref, a))) ?? null;
+}
+var DEFAULT_TASTE, str = (x) => typeof x === "string" ? x : "", words3 = (x) => Array.isArray(x) ? [...new Set(x.map((w) => str(w).trim()).filter(Boolean))].slice(0, 60) : [], wordRe2 = (w) => new RegExp(`(?:^|[^\\p{L}\\p{N}])${w.normalize("NFKD").replace(/[\u0300-\u036F]/g, "").toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|[^\\p{L}\\p{N}])`, "u"), artistLine = (t) => t.artists.map((a) => a.name).join(", ");
+var init_taste = __esm(() => {
+  DEFAULT_TASTE = {
+    genres: [],
+    genreMode: "blend",
+    preferred: [],
+    banned: [],
+    bannedWords: ["nightcore", "sped up", "slowed", "8d audio", "karaoke"],
+    vocals: "any",
+    explicit: true,
+    variety: "balanced",
+    videos: false
+  };
+});
+
+// src/core/soundtrack/picker.ts
+function genresFor(taste, storyGenres) {
+  const own = taste.genres.slice(0, 8);
+  if (taste.genreMode === "strict" && own.length)
+    return own;
+  const fill = suggestGenres(storyGenres).filter((g) => !own.some((o) => normName(o) === normName(g)));
+  return own.length ? [...own, ...fill.slice(0, 2)] : fill;
+}
+function queriesFor(cue, taste, storyGenres, salt = 0) {
+  const genres = genresFor(taste, storyGenres);
+  const words = MOOD_WORDS[cue.mood];
+  const word = words[(cue.sceneNo + salt) % words.length];
+  const inst = taste.vocals === "instrumental" ? " instrumental" : "";
+  const out = [];
+  const pickGenres = genres.length <= 3 ? genres : [genres[0], ...rotate(genres.slice(1), cue.sceneNo + salt).slice(0, 2)];
+  pickGenres.forEach((g, i) => {
+    const colour = i === 0 ? "" : cue.colour[(i - 1) % Math.max(1, cue.colour.length)] ?? "";
+    const q = [g, word, colour].filter(Boolean).join(" ") + inst;
+    out.push({ q, key: `m:${q.toLowerCase()}`, genre: g, rank: genres.indexOf(g) });
+  });
+  if (!out.length)
+    out.push({ q: `${word} music${inst}`, key: `m:${word} music${inst}`, genre: "", rank: 9 });
+  const prefCount = taste.variety === "focused" ? 3 : taste.variety === "balanced" ? 2 : 1;
+  for (const a of rotate(taste.preferred, cue.sceneNo + salt).slice(0, prefCount)) {
+    const q = `${a.name} ${words[0]}`;
+    out.push({ q, key: `a:${a.id ?? normName(a.name)}:${words[0]}`, genre: "", rank: 0, artist: a.name });
+  }
+  return out;
+}
+function rotate(xs, n) {
+  if (!xs.length)
+    return xs;
+  const k = (n % xs.length + xs.length) % xs.length;
+  return [...xs.slice(k), ...xs.slice(0, k)];
+}
+function excluded(t, taste, h, now) {
+  const ban = banReason(t, taste);
+  if (ban)
+    return ban;
+  if (h.never.includes(t.videoId))
+    return "never this song";
+  if (!taste.explicit && t.explicit)
+    return "explicit";
+  if (!taste.videos && t.kind === "video")
+    return "music video";
+  if (t.durationS && (t.durationS < 90 || t.durationS > 480))
+    return "length";
+  if (h.chat.slice(-25).includes(t.videoId))
+    return "played lately in this chat";
+  const last = h.recent[t.videoId];
+  if (last && now - last < TWO_HOURS)
+    return "played in the last two hours";
+  if (taste.variety !== "focused" && h.lastArtist && creditsOf(t).some((a) => normName(a.name) === h.lastArtist))
+    return "same artist as the last song";
+  return null;
+}
+function scoreAll(cands, cue, taste, h, o) {
+  const byId = new Map;
+  for (const c of cands) {
+    const t = c.track;
+    if (excluded(t, taste, h, o.now))
+      continue;
+    const reasons = [];
+    let s = Math.max(0, 1 - c.pos / 20);
+    if (c.query.rank === 0 && c.query.genre) {
+      s += 0.3;
+      reasons.push(`lead genre ${c.query.genre}`);
+    } else if (c.query.genre && c.query.rank < 9)
+      s += 0.15;
+    const pref = preferredOf(t, taste);
+    if (pref) {
+      s += taste.variety === "focused" ? 0.5 : taste.variety === "balanced" ? 0.25 : 0.1;
+      reasons.push(`preferred ${pref.name}`);
+    }
+    if (o.liked?.has(t.videoId)) {
+      s += 0.15;
+      reasons.push("liked");
+    }
+    const skipT = h.skips[`${cue.mood}|${t.videoId}`] ?? 0;
+    const skipA = Math.max(0, ...creditsOf(t).map((a) => h.skips[`${cue.mood}|${normName(a.name)}`] ?? 0));
+    if (skipT)
+      s -= 0.4 * skipT;
+    if (skipA)
+      s -= 0.2 * skipA;
+    if (taste.vocals === "quiet-in-dialogue" && o.dialogue)
+      s += INSTRUMENTAL.test(`${t.title} ${t.album ?? ""}`) ? 0.2 : -0.1;
+    if (t.kind === "song")
+      s += 0.05;
+    const prev = byId.get(t.videoId);
+    if (prev) {
+      prev.score = Math.max(prev.score, s) + 0.1;
+      continue;
+    }
+    byId.set(t.videoId, { track: t, score: s, reasons, query: c.query });
+  }
+  return [...byId.values()].sort((a, b) => b.score - a.score);
+}
+function draw(scored, seed) {
+  const top = scored.slice(0, 5);
+  if (!top.length)
+    return null;
+  const min = Math.min(...top.map((x) => x.score));
+  const w = top.map((x) => x.score - min + 0.25);
+  const total = w.reduce((a, b) => a + b, 0);
+  let r = rng(seed)() * total;
+  for (let i = 0;i < top.length; i++) {
+    r -= w[i];
+    if (r <= 0)
+      return top[i];
+  }
+  return top[top.length - 1];
+}
+function emptyHistory() {
+  return { chat: [], recent: {}, skips: {}, never: [] };
+}
+var TWO_HOURS, INSTRUMENTAL;
+var init_picker = __esm(() => {
+  init_util();
+  init_moods();
+  init_taste();
+  TWO_HOURS = 2 * 3600000;
+  INSTRUMENTAL = /\b(instrumental|ost|score|theme|ambient|piano|orchestral|soundtrack|suite)\b/i;
+});
+
+// src/core/soundtrack/innertube.ts
+function parseDuration(s) {
+  const m = DURATION.exec(s.trim());
+  if (!m)
+    return 0;
+  return m[3] ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : Number(m[1]) * 60 + Number(m[2]);
+}
+function walk(root, visit) {
+  const stack = [["", root]];
+  let guard = 0;
+  while (stack.length && guard++ < 400000) {
+    const [k, v] = stack.pop();
+    if (!v || typeof v !== "object")
+      continue;
+    if (k)
+      visit(k, v);
+    if (Array.isArray(v))
+      for (let i = v.length - 1;i >= 0; i--)
+        stack.push(["", v[i]]);
+    else
+      for (const key of Object.keys(v).reverse())
+        stack.push([key, v[key]]);
+  }
+}
+function bylineArtists(runs) {
+  const artists = [];
+  let album;
+  let duration = 0;
+  for (const r of runs) {
+    const pt = pageType(r);
+    const text = String(r?.text ?? "").trim();
+    if (pt === "MUSIC_PAGE_TYPE_ARTIST" || pt === "MUSIC_PAGE_TYPE_USER_CHANNEL")
+      artists.push({ name: text, id: browseId(r) });
+    else if (pt === "MUSIC_PAGE_TYPE_ALBUM")
+      album = text;
+    else if (DURATION.test(text))
+      duration = parseDuration(text);
+  }
+  if (!artists.length) {
+    const segs = [];
+    let cur = "";
+    for (const r of runs) {
+      const t = String(r?.text ?? "");
+      if (SEP.test(t)) {
+        segs.push(cur.trim());
+        cur = "";
+      } else
+        cur += t;
+    }
+    segs.push(cur.trim());
+    const first = segs.find((s) => s && !KIND_LABEL.test(s) && !DURATION.test(s) && !/\b(views?|plays?)\b/i.test(s));
+    if (first)
+      artists.push({ name: first });
+  }
+  return { artists, album, duration };
+}
+function musicVideoType(x) {
+  let found = "";
+  walk(x, (k, v) => {
+    if (!found && k === "watchEndpointMusicConfig" && typeof v?.musicVideoType === "string")
+      found = v.musicVideoType;
+  });
+  return found;
+}
+function isExplicit(x) {
+  return (x?.badges ?? x?.subtitleBadges ?? []).some((b) => /EXPLICIT/.test(b?.musicInlineBadgeRenderer?.icon?.iconType ?? ""));
+}
+function thumbOf(x) {
+  const list = x?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails ?? x?.thumbnail?.thumbnails ?? [];
+  const best = list[list.length - 1]?.url;
+  return typeof best === "string" ? best : undefined;
+}
+function fromListItem(x) {
+  const cols = (x?.flexColumns ?? []).map((c) => c?.musicResponsiveListItemFlexColumnRenderer?.text);
+  const title = runsText(cols[0]).trim();
+  let videoId = x?.playlistItemData?.videoId;
+  if (!videoId)
+    walk(x?.overlay ?? x?.flexColumns?.[0] ?? {}, (k, v) => {
+      if (!videoId && k === "watchEndpoint" && typeof v?.videoId === "string")
+        videoId = v.videoId;
+    });
+  if (!videoId || !title)
+    return null;
+  const runs = cols.slice(1).flatMap((c, i) => i > 0 ? [{ text: " \u2022 " }, ...c?.runs ?? []] : c?.runs ?? []);
+  const { artists, album, duration } = bylineArtists(runs);
+  let durationS = duration;
+  if (!durationS)
+    for (const c of x?.fixedColumns ?? [])
+      durationS ||= parseDuration(runsText(c?.musicResponsiveListItemFixedColumnRenderer?.text));
+  const mvt = musicVideoType(x);
+  return { videoId, title, artists, album, durationS, explicit: isExplicit(x), kind: mvt ? kindOf(mvt) : runs.some((r) => /^video$/i.test(String(r?.text ?? "").trim())) ? "video" : "song", thumb: thumbOf(x) };
+}
+function fromPanelVideo(x) {
+  const videoId = x?.videoId;
+  const title = runsText(x?.title).trim();
+  if (!videoId || !title)
+    return null;
+  const { artists, album } = bylineArtists(x?.longBylineText?.runs ?? x?.shortBylineText?.runs ?? []);
+  const mvt = musicVideoType(x);
+  return { videoId, title, artists, album, durationS: parseDuration(runsText(x?.lengthText)), explicit: isExplicit(x), kind: mvt ? kindOf(mvt) : "song", thumb: thumbOf(x) };
+}
+function fromTwoRow(x) {
+  let videoId;
+  walk(x?.navigationEndpoint ?? {}, (k, v) => {
+    if (!videoId && k === "watchEndpoint" && typeof v?.videoId === "string")
+      videoId = v.videoId;
+  });
+  const title = runsText(x?.title).trim();
+  if (!videoId || !title)
+    return null;
+  const { artists } = bylineArtists(x?.subtitle?.runs ?? []);
+  const mvt = musicVideoType(x);
+  return { videoId, title, artists, durationS: 0, explicit: isExplicit(x), kind: mvt ? kindOf(mvt) : "song", thumb: thumbOf(x) };
+}
+function parseTracks(json) {
+  const out = [];
+  const seen = new Set;
+  const add = (t) => {
+    if (t && !seen.has(t.videoId)) {
+      seen.add(t.videoId);
+      out.push(t);
+    }
+  };
+  walk(json, (k, v) => {
+    if (k === "musicResponsiveListItemRenderer")
+      add(fromListItem(v));
+    else if (k === "playlistPanelVideoRenderer")
+      add(fromPanelVideo(v));
+    else if (k === "musicTwoRowItemRenderer")
+      add(fromTwoRow(v));
+  });
+  return out;
+}
+function parseArtists(json) {
+  const out = [];
+  const seen = new Set;
+  const add = (name, id, thumb, subtitle) => {
+    if (name && id && /^UC|^MP/.test(id) && !seen.has(id)) {
+      seen.add(id);
+      out.push({ name, id, thumb, subtitle });
+    }
+  };
+  walk(json, (k, v) => {
+    if (k === "musicResponsiveListItemRenderer" && pageType(v) === "MUSIC_PAGE_TYPE_ARTIST") {
+      const cols = (v.flexColumns ?? []).map((c) => c?.musicResponsiveListItemFlexColumnRenderer?.text);
+      add(runsText(cols[0]).trim(), browseId(v), thumbOf(v), runsText(cols[1]).trim());
+    } else if (k === "musicCardShelfRenderer") {
+      const r = v?.title?.runs?.[0];
+      if (pageType(r) === "MUSIC_PAGE_TYPE_ARTIST")
+        add(String(r.text ?? "").trim(), browseId(r), thumbOf(v), runsText(v?.subtitle).trim());
+    }
+  });
+  return out;
+}
+var SEARCH_PARAMS, runsText = (x) => Array.isArray(x?.runs) ? x.runs.map((r) => r?.text ?? "").join("") : typeof x?.simpleText === "string" ? x.simpleText : "", DURATION, pageType = (r) => r?.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType ?? "", browseId = (r) => r?.navigationEndpoint?.browseEndpoint?.browseId, SEP, KIND_LABEL, kindOf = (mvt) => mvt === "MUSIC_VIDEO_TYPE_ATV" ? "song" : "video";
+var init_innertube = __esm(() => {
+  SEARCH_PARAMS = {
+    songs: "EgWKAQIIAWoMEA4QChADEAQQCRAF",
+    videos: "EgWKAQIQAWoMEA4QChADEAQQCRAF",
+    artists: "EgWKAQIgAWoMEA4QChADEAQQCRAF",
+    playlists: "EgWKAQIoAWoMEA4QChADEAQQCRAF"
+  };
+  DURATION = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+  SEP = /^\s*[\u2022\u00B7]\s*$/;
+  KIND_LABEL = /^(song|video|episode|single|ep|album|playlist|artist|podcast|profile|station)$/i;
+});
+
+// src/backend/soundtrack/catalog.ts
+async function loadPools(userId) {
+  const hit = pools.get(userId);
+  if (hit)
+    return hit;
+  let p = {};
+  try {
+    if (await host.userStorage.exists(POOLS, userId || undefined))
+      p = await host.userStorage.getJson(POOLS, { fallback: {}, userId: userId || undefined }) ?? {};
+  } catch (err) {
+    warn(`soundtrack pools: ${describe(err)}`);
+    return {};
+  }
+  pools.set(userId, p);
+  return p;
+}
+function savePools(userId) {
+  if (saveTimer)
+    clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const p = pools.get(userId);
+    if (p)
+      host.userStorage.setJson(POOLS, p, { userId: userId || undefined }).catch((err) => warn(`soundtrack pools save: ${describe(err)}`));
+  }, 1500);
+}
+function slim(t) {
+  return { videoId: t.videoId, title: t.title.slice(0, 160), artists: t.artists.slice(0, 6), album: t.album?.slice(0, 100), durationS: t.durationS, explicit: t.explicit, kind: t.kind, thumb: t.thumb };
+}
+function clientVersion() {
+  const d = new Date(Date.now() - 3 * 86400000);
+  const ymd = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+  return `1.${ymd}.01.00`;
+}
+async function innertube(query, params) {
+  const version = clientVersion();
+  const res = await host.cors("https://music.youtube.com/youtubei/v1/search?prettyPrint=false", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "https://music.youtube.com",
+      Referer: "https://music.youtube.com/",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+      "X-Youtube-Client-Name": "67",
+      "X-Youtube-Client-Version": version
+    },
+    body: JSON.stringify({ context: { client: { clientName: "WEB_REMIX", clientVersion: version, hl: "en", gl: "US" } }, query, ...params ? { params } : {} })
+  });
+  const status = Number(res?.status ?? 0);
+  if (status === 429)
+    throw Object.assign(new Error("YouTube Music is limiting searches"), { rate: true });
+  if (status >= 400)
+    throw new Error(`YouTube Music search answered ${status}`);
+  return typeof res?.body === "string" ? JSON.parse(res.body) : res?.body;
+}
+async function rawSearch(userId, query, params, player) {
+  const until = coolUntil.get(userId) ?? 0;
+  if (Date.now() < until)
+    throw new Error("searches paused for a few minutes (YouTube Music asked to slow down)");
+  const now = Date.now();
+  const calls = (recentCalls.get(userId) ?? []).filter((t) => now - t < 600000);
+  if (calls.length >= 40)
+    throw new Error("too many searches in the last ten minutes");
+  calls.push(now);
+  recentCalls.set(userId, calls);
+  try {
+    if (player?.token) {
+      try {
+        const r = await player.search(query, params);
+        if (r)
+          return r;
+      } catch (err) {
+        warn(`soundtrack: the player's search failed, using the web search: ${describe(err)}`);
+      }
+    }
+    return await innertube(query, params);
+  } catch (err) {
+    if (err?.rate)
+      coolUntil.set(userId, Date.now() + 5 * 60000);
+    throw err;
+  }
+}
+async function poolFor(userId, key, query, player, opts = {}) {
+  const p = await loadPools(userId);
+  const hit = p[key];
+  if (hit && Date.now() - hit.at < TTL && hit.tracks.length)
+    return hit.tracks;
+  return serial(`st-search:${userId}`, async () => {
+    const again = p[key];
+    if (again && Date.now() - again.at < TTL && again.tracks.length)
+      return again.tracks;
+    const json = await rawSearch(userId, query, opts.videos ? "" : SEARCH_PARAMS.songs, player);
+    const tracks = parseTracks(json).slice(0, POOL_SIZE).map(slim);
+    delete p[key];
+    p[key] = { at: Date.now(), tracks };
+    const keys = Object.keys(p);
+    for (const k of keys.slice(0, Math.max(0, keys.length - MAX_POOLS)))
+      delete p[k];
+    savePools(userId);
+    return tracks;
+  });
+}
+async function searchArtists(userId, query, player) {
+  if (!query.trim())
+    return [];
+  const json = await rawSearch(userId, query.trim(), SEARCH_PARAMS.artists, player);
+  return parseArtists(json).slice(0, 8);
+}
+async function searchSongs(userId, query, player) {
+  if (!query.trim())
+    return [];
+  const json = await rawSearch(userId, query.trim(), SEARCH_PARAMS.songs, player);
+  return parseTracks(json).slice(0, 12).map(slim);
+}
+function forgetPools(userId) {
+  pools.set(userId, {});
+  savePools(userId);
+}
+var POOLS = "soundtrack/pools.json", TTL, MAX_POOLS = 150, POOL_SIZE = 25, pools, coolUntil, recentCalls, saveTimer = null;
+var init_catalog = __esm(() => {
+  init_innertube();
+  init_host();
+  TTL = 7 * 24 * 3600000;
+  pools = new Map;
+  coolUntil = new Map;
+  recentCalls = new Map;
+});
+
+// src/backend/soundtrack/pear.ts
+class PearPlayer {
+  base;
+  token;
+  clientId;
+  constructor(base, token, clientId) {
+    this.base = base;
+    this.token = token;
+    this.clientId = clientId;
+    this.base = base.replace(/\/+$/, "");
+  }
+  async raw(method, path, body, auth = true) {
+    const headers = { Accept: "application/json" };
+    if (body !== undefined)
+      headers["Content-Type"] = "application/json";
+    if (auth && this.token)
+      headers.Authorization = `Bearer ${this.token}`;
+    let res;
+    try {
+      res = await host.cors(`${this.base}${path}`, { method, headers, ...body !== undefined ? { body: JSON.stringify(body) } : {} });
+    } catch (err) {
+      const msg = describe(err);
+      if (/permission/i.test(msg))
+        throw new PlayerError("no-permission", "The cors_proxy permission isn't granted, so the Almanac can't reach the player.");
+      if (/ECONNREFUSED|refused|unable to connect|fetch failed|timed? ?out|ENOTFOUND|socket|network/i.test(msg))
+        throw new PlayerError("not-running", `YouTube Music (Pear Desktop) isn't answering at ${this.base}. Is it open, with the API Server plugin on?`);
+      throw new PlayerError("error", msg);
+    }
+    const status = Number(res?.status ?? 0);
+    const text = typeof res?.body === "string" ? res.body : res?.body == null ? "" : JSON.stringify(res.body);
+    if (status === 401 || status === 403)
+      throw new PlayerError("not-allowed", "YouTube Music didn't allow the Almanac. Press Connect and choose Allow in the app.");
+    if (status >= 400)
+      throw new PlayerError("error", `YouTube Music answered ${status} to ${method} ${path}${text ? `: ${text.slice(0, 200)}` : ""}`);
+    return { status, body: text };
+  }
+  async json(method, path, body) {
+    const r = await this.raw(method, path, body);
+    if (r.status === 204 || !r.body.trim())
+      return null;
+    try {
+      return JSON.parse(r.body);
+    } catch {
+      return null;
+    }
+  }
+  async connect() {
+    const r = await this.raw("POST", `/auth/${encodeURIComponent(this.clientId)}`, undefined, false);
+    let token = "";
+    try {
+      token = JSON.parse(r.body)?.accessToken ?? "";
+    } catch {}
+    if (!token)
+      throw new PlayerError("not-allowed", "YouTube Music didn't hand over a token.");
+    this.token = token;
+    return token;
+  }
+  async nowPlaying() {
+    const s = await this.json("GET", `${API}/song`);
+    if (!s?.videoId)
+      return null;
+    return {
+      videoId: String(s.videoId),
+      title: String(s.title ?? ""),
+      artist: String(s.artist ?? ""),
+      album: s.album ?? undefined,
+      thumb: s.imageSrc ?? undefined,
+      isPaused: !!s.isPaused,
+      elapsedS: Number(s.elapsedSeconds ?? 0),
+      durationS: Number(s.songDuration ?? 0)
+    };
+  }
+  async queue() {
+    const q = await this.json("GET", `${API}/queue`);
+    const items = q?.items ?? [];
+    return items.map((it) => {
+      const r = it?.playlistPanelVideoRenderer ?? it?.playlistPanelVideoWrapperRenderer?.primaryRenderer?.playlistPanelVideoRenderer;
+      return { videoId: String(r?.videoId ?? ""), selected: !!r?.selected };
+    });
+  }
+  async enqueue(videoId, afterCurrent) {
+    await this.raw("POST", `${API}/queue`, { videoId, insertPosition: afterCurrent ? "INSERT_AFTER_CURRENT_VIDEO" : "INSERT_AT_END" });
+  }
+  async indexAfterCurrent(videoId) {
+    const q = await this.queue();
+    const cur = q.findIndex((x) => x.selected);
+    for (let i = Math.max(0, cur + 1);i < q.length; i++)
+      if (q[i].videoId === videoId)
+        return i;
+    return -1;
+  }
+  async playNow(videoId) {
+    await this.enqueue(videoId, true);
+    for (let i = 0;i < 6; i++) {
+      await sleep(250);
+      const idx = await this.indexAfterCurrent(videoId).catch(() => -1);
+      if (idx >= 0) {
+        await this.raw("PATCH", `${API}/queue`, { index: idx });
+        await this.play().catch(() => {
+          return;
+        });
+        return;
+      }
+    }
+    await this.raw("POST", `${API}/next`);
+  }
+  async removeNext(videoId) {
+    const idx = await this.indexAfterCurrent(videoId);
+    if (idx < 0)
+      return false;
+    await this.raw("DELETE", `${API}/queue/${idx}`);
+    return true;
+  }
+  async next() {
+    await this.raw("POST", `${API}/next`);
+  }
+  async play() {
+    await this.raw("POST", `${API}/play`);
+  }
+  async pause() {
+    await this.raw("POST", `${API}/pause`);
+  }
+  async volume() {
+    const v = await this.json("GET", `${API}/volume`);
+    return typeof v?.state === "number" ? v.state : null;
+  }
+  async setVolume(volume) {
+    await this.raw("POST", `${API}/volume`, { volume: Math.max(0, Math.min(100, Math.round(volume))) });
+  }
+  async liked() {
+    const v = await this.json("GET", `${API}/like-state`);
+    return v?.state === "LIKE";
+  }
+  async search(query, params) {
+    return await this.json("POST", `${API}/search`, { query, ...params ? { params } : {} });
+  }
+  async fade(fn) {
+    const v0 = await this.volume().catch(() => null);
+    if (v0 == null || v0 <= 0)
+      return fn();
+    for (const k of [0.7, 0.45, 0.25, 0.1]) {
+      await this.setVolume(v0 * k).catch(() => {
+        return;
+      });
+      await sleep(350);
+    }
+    try {
+      await fn();
+    } finally {
+      await sleep(400);
+      for (const k of [0.35, 0.65, 1]) {
+        await this.setVolume(v0 * k).catch(() => {
+          return;
+        });
+        await sleep(250);
+      }
+    }
+  }
+}
+var PlayerError, API = "/api/v1", sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+var init_pear = __esm(() => {
+  init_host();
+  PlayerError = class PlayerError extends Error {
+    status;
+    constructor(status, message) {
+      super(message);
+      this.status = status;
+    }
+  };
+});
+
+// src/core/soundtrack/tags.ts
+function cleanTags(raw) {
+  if (!Array.isArray(raw))
+    return [];
+  const out = [];
+  for (const t of raw) {
+    const name = String(t?.name ?? "").toLowerCase().trim();
+    const count = Number(t?.count ?? 0);
+    if (!name || name.length > 40 || NOISE2.test(name) || !(count > 0))
+      continue;
+    if (!out.some((o) => o.name === name))
+      out.push({ name, count: Math.min(100, count) });
+  }
+  return out.slice(0, 30);
+}
+function tagFit(tags, mood, genres, strict = false) {
+  if (!tags.length)
+    return { delta: 0, reasons: [] };
+  const { fit, clash } = MOOD_TAGS[mood];
+  const f = has2(tags, fit);
+  const c = has2(tags, clash);
+  let delta = 0.45 * f.w - 0.45 * c.w;
+  const reasons = [];
+  if (f.hit)
+    reasons.push(`tagged ${f.hit}`);
+  if (c.hit && c.w >= 0.2)
+    reasons.push(`but tagged ${c.hit}`);
+  if (genres.length) {
+    const g = genres.map(normName);
+    const gw = Math.max(0, ...tags.filter((t) => g.some((x) => x === normName(t.name) || normName(t.name).includes(x))).map((t) => t.count / 100));
+    if (gw > 0) {
+      delta += 0.15 * gw;
+    } else if (strict && tags.length >= 5) {
+      delta -= 0.15;
+      reasons.push("not tagged with your genres");
+    }
+  }
+  return { delta, reasons };
+}
+function lookupTitle(title) {
+  return title.replace(/\s*[([][^)\]]*(official|video|audio|lyrics?|visuali[sz]er|remaster|hd|hq|4k|mv|m\/v|feat\.?|ft\.?|with)[^)\]]*[)\]]/gi, "").replace(/\s+-\s+(\d{4}\s+)?remaster(ed)?.*$/i, "").replace(/\s+(feat\.?|ft\.?)\s+.*$/i, "").trim() || title;
+}
+function retag(scored, tags, mood, genres, strict = false) {
+  const out = scored.map((s) => {
+    const t = tags.get(s.track.videoId);
+    if (!t)
+      return s;
+    const f = tagFit(t, mood, genres, strict);
+    return { ...s, score: s.score + f.delta, reasons: [...f.reasons, ...s.reasons] };
+  });
+  return out.sort((a, b) => b.score - a.score);
+}
+var MOOD_TAGS, NOISE2, has2 = (tags, words) => {
+  let best = 0;
+  let hit = "";
+  for (const t of tags) {
+    if (words.some((w) => t.name === w || t.name.split(/[\s-]+/).includes(w) || w.includes(" ") && t.name.includes(w))) {
+      if (t.count > best) {
+        best = t.count;
+        hit = t.name;
+      }
+    }
+  }
+  return { w: best / 100, hit };
+};
+var init_tags = __esm(() => {
+  init_taste();
+  MOOD_TAGS = {
+    calm: { fit: ["calm", "chill", "chillout", "relaxing", "peaceful", "mellow", "ambient", "soft", "soothing", "easy listening"], clash: ["aggressive", "energetic", "brutal", "party", "hardcore"] },
+    warm: { fit: ["feel good", "happy", "warm", "cozy", "mellow", "sunny", "chill", "summer", "upbeat"], clash: ["dark", "aggressive", "depressing", "creepy", "brutal"] },
+    playful: { fit: ["fun", "upbeat", "happy", "quirky", "playful", "catchy", "feel good", "party", "cute"], clash: ["sad", "dark", "depressing", "melancholic", "brutal"] },
+    tender: { fit: ["tender", "beautiful", "gentle", "soft", "love", "romantic", "intimate", "sweet", "lullaby"], clash: ["aggressive", "angry", "brutal", "party", "hardcore"] },
+    romantic: { fit: ["romantic", "love", "sensual", "sexy", "love songs", "beautiful", "intimate", "slow jams"], clash: ["aggressive", "angry", "brutal", "creepy"] },
+    hopeful: { fit: ["hopeful", "uplifting", "inspiring", "inspirational", "optimistic", "beautiful", "feel good"], clash: ["depressing", "dark", "nihilistic", "creepy"] },
+    triumphant: { fit: ["epic", "triumphant", "heroic", "powerful", "anthem", "uplifting", "victory", "orchestral"], clash: ["sad", "depressing", "sleepy", "lullaby"] },
+    adventurous: { fit: ["epic", "adventure", "journey", "uplifting", "cinematic", "travel", "road trip", "wanderlust"], clash: ["depressing", "sleepy", "lullaby"] },
+    mysterious: { fit: ["mysterious", "mystery", "atmospheric", "enigmatic", "dark", "noir", "moody", "ethereal"], clash: ["happy", "party", "fun", "feel good"] },
+    eerie: { fit: ["eerie", "creepy", "haunting", "dark", "unsettling", "spooky", "horror", "dark ambient", "disturbing"], clash: ["happy", "party", "fun", "feel good", "upbeat", "love"] },
+    tense: { fit: ["tense", "suspense", "intense", "dark", "thriller", "ominous", "driving", "cinematic"], clash: ["happy", "chill", "relaxing", "feel good", "lullaby", "party"] },
+    dread: { fit: ["dark", "ominous", "dread", "doom", "menacing", "sinister", "apocalyptic", "dark ambient", "heavy"], clash: ["happy", "fun", "feel good", "party", "love", "cute"] },
+    combat: { fit: ["epic", "intense", "aggressive", "battle", "energetic", "heavy", "action", "powerful", "fast"], clash: ["chill", "relaxing", "sleepy", "lullaby", "love", "mellow", "romantic"] },
+    melancholy: { fit: ["melancholy", "melancholic", "sad", "wistful", "bittersweet", "nostalgic", "rainy day", "lonely", "longing"], clash: ["party", "happy", "fun", "upbeat", "aggressive"] },
+    grief: { fit: ["sad", "grief", "mourning", "heartbreaking", "requiem", "depressing", "sorrow", "elegy", "melancholic", "funeral"], clash: ["party", "happy", "fun", "upbeat", "sexy", "feel good"] },
+    dreamy: { fit: ["dreamy", "ethereal", "dream pop", "atmospheric", "night", "spacey", "hazy", "shoegaze", "ambient"], clash: ["aggressive", "angry", "brutal", "hardcore", "party"] }
+  };
+  NOISE2 = /^(seen live|favou?rites?|favou?rite songs?|my favou?rites?|love at first listen|awesome|amazing|good|best|cool|beautiful voice|\d{2,4}s?|male vocalists?|female vocalists?|spotify|youtube|albums i own|under \d+ listeners)$/;
+});
+
+// src/backend/soundtrack/lastfm.ts
+async function cache2(userId) {
+  const hit = caches.get(userId);
+  if (hit)
+    return hit;
+  const inflight = loading2.get(userId);
+  if (inflight)
+    return inflight;
+  const p = (async () => {
+    try {
+      const exists = await host.userStorage.exists(TAGS, userId || undefined);
+      const c = exists ? await host.userStorage.getJson(TAGS, { fallback: {}, userId: userId || undefined }) ?? {} : {};
+      caches.set(userId, c);
+      return c;
+    } finally {
+      loading2.delete(userId);
+    }
+  })();
+  loading2.set(userId, p);
+  return p;
+}
+function save2(userId) {
+  if (saveTimer2)
+    clearTimeout(saveTimer2);
+  saveTimer2 = setTimeout(() => {
+    const c = caches.get(userId);
+    if (!c)
+      return;
+    const now = Date.now();
+    const keys = Object.keys(c).filter((k) => now - c[k].at < TTL2).sort((a, b) => c[b].at - c[a].at).slice(0, MAX);
+    const kept = {};
+    for (const k of keys)
+      kept[k] = c[k];
+    caches.set(userId, kept);
+    host.userStorage.setJson(TAGS, kept, { userId: userId || undefined }).catch((err) => warn(`soundtrack tags save: ${describe(err)}`));
+  }, 1500);
+}
+async function call(userId, key, params) {
+  const now = Date.now();
+  const recent = (calls.get(userId) ?? []).filter((t) => now - t < 1000);
+  if (recent.length >= 4)
+    await new Promise((r) => setTimeout(r, 1000 - (now - recent[0]) + 20));
+  calls.set(userId, [...recent, Date.now()].slice(-8));
+  const qs = new URLSearchParams({ ...params, api_key: key, format: "json", autocorrect: "1" }).toString();
+  const res = await host.cors(`${API2}?${qs}`, { method: "GET", headers: { "User-Agent": "ALMANAC-Lumiverse/1.0" } });
+  const status = Number(res?.status ?? 0);
+  let body;
+  try {
+    body = typeof res?.body === "string" ? JSON.parse(res.body) : res?.body;
+  } catch {
+    throw new LastfmError(`Last.fm answered ${status} without JSON`);
+  }
+  if (body?.error) {
+    if (body.error === 10 || body.error === 26)
+      throw new LastfmError(String(body.message ?? "Last.fm refused the API key"), true);
+    if (body.error === 6)
+      return null;
+    throw new LastfmError(String(body.message ?? `Last.fm error ${body.error}`));
+  }
+  if (status >= 400)
+    throw new LastfmError(`Last.fm answered ${status}`);
+  return body;
+}
+async function checkKey(userId, key) {
+  await call(userId, key, { method: "tag.getinfo", tag: "ambient" });
+  badKey.delete(userId);
+}
+async function tagsFor(userId, key, t) {
+  const artist = (t.artists[0]?.name ?? "").replace(/\s*-\s*topic\s*$/i, "").replace(/vevo$/i, "").trim();
+  if (!artist)
+    return [];
+  const title = lookupTitle(t.title);
+  const c = await cache2(userId);
+  const tk = trackKey(artist, title);
+  const fresh = (k) => c[k] && Date.now() - c[k].at < TTL2 ? c[k].tags : null;
+  let own = fresh(tk);
+  if (!own) {
+    const body = await call(userId, key, { method: "track.gettoptags", artist, track: title });
+    own = cleanTags(body?.toptags?.tag);
+    c[tk] = { at: Date.now(), tags: own };
+    save2(userId);
+  }
+  if (own.length >= 5)
+    return own;
+  const ak = artistKey(artist);
+  let art = fresh(ak);
+  if (!art) {
+    const body = await call(userId, key, { method: "artist.gettoptags", artist });
+    art = cleanTags(body?.toptags?.tag);
+    c[ak] = { at: Date.now(), tags: art };
+    save2(userId);
+  }
+  const merged = [...own];
+  for (const a of art)
+    if (!merged.some((m) => m.name === a.name))
+      merged.push({ name: a.name, count: Math.round(a.count * 0.7) });
+  return merged;
+}
+async function tagsForMany(userId, key, tracks, budgetMs = 5000) {
+  const out = new Map;
+  const deadline = Date.now() + budgetMs;
+  const queue = [...tracks];
+  const worker = async () => {
+    while (queue.length && Date.now() < deadline) {
+      const t = queue.shift();
+      try {
+        out.set(t.videoId, await tagsFor(userId, key, t));
+      } catch (err) {
+        if (err instanceof LastfmError && err.badKey) {
+          badKey.set(userId, err.message);
+          queue.length = 0;
+          return;
+        }
+        warn(`soundtrack tags "${t.title}": ${describe(err)}`);
+      }
+    }
+  };
+  await Promise.race([Promise.all([worker(), worker()]), new Promise((r) => setTimeout(r, budgetMs + 200))]);
+  return new Map(out);
+}
+function forgetTags(userId) {
+  caches.delete(userId);
+}
+var TAGS = "soundtrack/tags.json", TTL2, MAX = 4000, LASTFM_KEY = "soundtrack_lastfm_key", API2 = "https://ws.audioscrobbler.com/2.0/", caches, loading2, calls, badKey, saveTimer2 = null, LastfmError, artistKey = (a) => `a:${a.toLowerCase().trim()}`, trackKey = (a, t) => `t:${a.toLowerCase().trim()}|${t.toLowerCase().trim()}`;
+var init_lastfm = __esm(() => {
+  init_tags();
+  init_host();
+  TTL2 = 30 * 24 * 3600000;
+  caches = new Map;
+  loading2 = new Map;
+  calls = new Map;
+  badKey = new Map;
+  LastfmError = class LastfmError extends Error {
+    badKey;
+    constructor(message, badKey = false) {
+      super(message);
+      this.badKey = badKey;
+    }
+  };
+});
+
+// src/backend/soundtrack/index.ts
+async function readJson2(path, fallback, userId) {
+  if (!await host.userStorage.exists(path, userId))
+    return fallback;
+  return await host.userStorage.getJson(path, { fallback, userId }) ?? fallback;
+}
+async function session(userId) {
+  const key = userId ?? "";
+  const hit = sessions.get(key);
+  if (hit)
+    return hit;
+  const inflight = loadingSession.get(key);
+  if (inflight)
+    return inflight;
+  const p = (async () => {
+    try {
+      const stored = await readJson2(CONFIG, {}, userId);
+      const config = { ...DEFAULT_CONFIG, ...stored, taste: cleanTaste(stored.taste ?? {}) };
+      if (!config.clientId) {
+        config.clientId = `almanac-${Math.random().toString(36).slice(2, 10)}`;
+        await host.userStorage.setJson(CONFIG, config, { indent: 2, userId });
+      }
+      const history = { ...emptyHistory(), ...await readJson2(HISTORY, {}, userId) };
+      const token = await host.enclave.get(TOKEN, userId).catch(() => null);
+      const lastfmKey = await host.enclave.get(LASTFM_KEY, userId).catch(() => null);
+      const s = {
+        key,
+        userId,
+        config,
+        history,
+        player: new PearPlayer(config.playerUrl, token, config.clientId),
+        status: token ? "unknown" : "off",
+        statusMsg: "",
+        dir: { ...emptyDirector(), running: config.running },
+        chatId: null,
+        np: null,
+        cue: null,
+        cueKey: "",
+        picked: new Map,
+        timer: null,
+        pollGen: 0,
+        lastNote: "",
+        liked: new Set,
+        lastfmKey: lastfmKey || null
+      };
+      sessions.set(key, s);
+      return s;
+    } finally {
+      loadingSession.delete(key);
+    }
+  })();
+  loadingSession.set(key, p);
+  return p;
+}
+async function saveConfig(s) {
+  await host.userStorage.setJson(CONFIG, s.config, { indent: 2, userId: s.userId });
+}
+function saveHistory(s) {
+  if (historyTimer)
+    clearTimeout(historyTimer);
+  historyTimer = setTimeout(() => {
+    host.userStorage.setJson(HISTORY, s.history, { userId: s.userId }).catch((err) => warn(`soundtrack history: ${describe(err)}`));
+  }, 800);
+}
+async function chatStore(chatId, userId) {
+  const hit = chatCache.get(chatId);
+  if (hit)
+    return hit;
+  const c = { plays: [], ...await readJson2(chatPath(chatId), {}, userId) };
+  chatCache.set(chatId, c);
+  if (chatCache.size > 32)
+    chatCache.delete(chatCache.keys().next().value);
+  return c;
+}
+function saveChat(chatId, userId) {
+  const c = chatCache.get(chatId);
+  if (c)
+    host.userStorage.setJson(chatPath(chatId), c, { userId }).catch((err) => warn(`soundtrack chat save: ${describe(err)}`));
+}
+function note(s, text) {
+  s.lastNote = text;
+  log(`soundtrack: ${text}`);
+}
+async function directorHint(s, chatId, cs, reply, here) {
+  const L = ledgerFor(chatId, s.userId);
+  const st = L.state;
+  const sceneNo = st.sceneNo ?? 0;
+  const settings = await loadSettings(s.userId);
+  const files = await loadChat(chatId, s.userId);
+  const scene = [
+    `Scene ${sceneNo}${st.title ? `: ${st.title}` : ""}`,
+    `Mode: ${st.mode}`,
+    st.place?.length ? `Place: ${st.place.join(" \u203A ")}` : "",
+    st.weather?.condition ? `Weather: ${st.weather.condition}` : "",
+    files.meta.config.genres?.length ? `Story genres: ${files.meta.config.genres.join(", ")}` : ""
+  ].filter(Boolean).join(`
+`);
+  const text = await quiet([
+    sys(`You score scenes for a story's soundtrack. Read the scene and answer with JSON only: {"mood": one of ${MOODS.map((m) => `"${m}"`).join(", ")}, "colour": [up to two plain lower-case texture words for a music search, like "rain", "candlelit", "neon", "desert"]}. Judge only what has happened on the page; never anticipate what might come next.`),
+    usr(`${scene}
+
+The scene so far (latest reply):
+${reply.slice(0, 1600)}`)
+  ], { connectionId: s.config.connection || settings.summarizerConnection || undefined, userId: s.userId, reasoningOff: true, maxTokens: 80, timeoutMs: 15000, label: "soundtrack director" });
+  const m = /\{[\s\S]*\}/.exec(text);
+  if (!m)
+    return;
+  try {
+    const j = JSON.parse(m[0]);
+    if (!isMood(j.mood))
+      return;
+    const colour = (Array.isArray(j.colour) ? j.colour : []).map((c) => String(c).toLowerCase().trim()).filter((c) => VALID_COLOUR.test(c)).slice(0, 2);
+    cs.hint = { ...here, mood: j.mood, colour };
+    saveChat(chatId, s.userId);
+  } catch {}
+}
+async function cueFor(s, chatId) {
+  const files = await loadChat(chatId, s.userId);
+  const settings = await loadSettings(s.userId);
+  if (!isEnabled(files.meta, settings))
+    return null;
+  const L = ledgerFor(chatId, s.userId);
+  if (!L.state || !L.path.length)
+    await L.refresh();
+  const st = L.state;
+  if (!st)
+    return null;
+  const cs = await chatStore(chatId, s.userId);
+  if (cs.off)
+    return null;
+  const path = L.path;
+  const lastReply = [...path].reverse().find((m) => !m.isUser);
+  const lastUser = [...path].reverse().find((m) => m.isUser);
+  const here = { place: placeKey(st.place ?? []), at: st.time ? absMinutes(st.time) : null };
+  if (s.config.director === "model" && lastReply && !sameScene(cs.hint, here)) {
+    await directorHint(s, chatId, cs, lastReply.content, here).catch((err) => warn(`soundtrack director: ${describe(err)}`));
+  }
+  const hint = cs.hint && isMood(cs.hint.mood) ? { place: cs.hint.place, at: cs.hint.at, mood: cs.hint.mood, colour: cs.hint.colour ?? [] } : null;
+  const g = cs.grief;
+  const griefLive = g && path.some((m) => m.id === g.msgId && m.swipe === g.swipe) ? g : null;
+  const cue = readCue({
+    state: st,
+    genres: files.meta.config.genres ?? [],
+    tone: files.meta.config.tone,
+    playerMsg: lastUser?.content,
+    reply: lastReply?.content,
+    grief: griefLive,
+    hint: s.config.director === "model" ? hint : null
+  });
+  if (cue.death && lastReply && (g?.msgId !== lastReply.id || g?.swipe !== lastReply.swipe)) {
+    cs.grief = { place: cue.place, at: cue.at, msgId: lastReply.id, swipe: lastReply.swipe };
+    saveChat(chatId, s.userId);
+  }
+  return { cue, stamp: `${lastReply?.id ?? ""}:${lastReply?.swipe ?? 0}:${lastUser?.id ?? ""}` };
+}
+async function tasteFor(s, chatId) {
+  if (!chatId)
+    return { taste: s.config.taste, storyGenres: [] };
+  const cs = await chatStore(chatId, s.userId).catch(() => null);
+  const files = await loadChat(chatId, s.userId).catch(() => null);
+  return { taste: mergeTaste(s.config.taste, cs?.taste ?? null), storyGenres: files?.meta.config.genres ?? [] };
+}
+async function choose(s, cue) {
+  const { taste, storyGenres } = await tasteFor(s, s.chatId);
+  const dialogue = (() => {
+    const last = s.chatId ? [...ledgerFor(s.chatId, s.userId).path].reverse().find((m) => !m.isUser)?.content ?? "" : "";
+    const quoted = (last.match(/["\u201C][^"\u201D]{3,}["\u201D]/g) ?? []).join("").length;
+    return last.length > 0 && quoted / last.length > 0.3;
+  })();
+  const player = s.status === "connected" ? s.player : null;
+  const now = Date.now();
+  for (const salt of [0, 1, 2]) {
+    const qs = queriesFor(cue, taste, storyGenres, salt);
+    const cands = [];
+    for (const q of qs) {
+      try {
+        const tracks = await poolFor(s.userId ?? "", q.key, q.q, player, { videos: taste.videos });
+        tracks.forEach((track, pos) => cands.push({ track, query: q, pos }));
+      } catch (err) {
+        warn(`soundtrack search "${q.q}": ${describe(err)}`);
+      }
+    }
+    const history = { ...s.history, chat: (await chatStore(s.chatId ?? "", s.userId).catch(() => ({ plays: [] }))).plays.map((p) => p.videoId) };
+    let scored = scoreAll(cands, cue, taste, history, { now, seed: "", dialogue, liked: s.liked });
+    if (!scored.length && cands.length) {
+      scored = scoreAll(cands, cue, taste, { ...history, chat: history.chat.slice(-5), recent: {}, lastArtist: undefined }, { now, seed: "", dialogue, liked: s.liked });
+    }
+    if (s.lastfmKey && !badKey.has(s.userId ?? "") && scored.length > 1) {
+      const top = scored.slice(0, 10);
+      const tags = await tagsForMany(s.userId ?? "", s.lastfmKey, top.map((x) => x.track));
+      if (tags.size)
+        scored = [...retag(top, tags, cue.mood, genresFor(taste, storyGenres), taste.genreMode === "strict" && taste.genres.length > 0), ...scored.slice(10)];
+      if (badKey.has(s.userId ?? ""))
+        note(s, `Last.fm refused the API key: ${badKey.get(s.userId ?? "")}`);
+    }
+    const pick = draw(scored, `${s.chatId}|${cue.place}|${cue.mood}|${history.chat.length}|${salt}`);
+    if (pick)
+      return pick;
+  }
+  return null;
+}
+async function recordPlay(s, track, how, cue, reason) {
+  if (!s.chatId)
+    return;
+  const cs = await chatStore(s.chatId, s.userId);
+  const lastReply = [...ledgerFor(s.chatId, s.userId).path].reverse().find((m) => !m.isUser);
+  cs.plays = [...cs.plays, { at: Date.now(), videoId: track.videoId, title: track.title, artist: artistLine(track), mood: cue?.mood ?? "", why: cue?.why ?? "", how, reason, msgId: lastReply?.id }].slice(-50);
+  saveChat(s.chatId, s.userId);
+}
+async function apply(s, ev) {
+  const { state, actions } = step(s.dir, ev);
+  s.dir = state;
+  for (const a of actions)
+    await act(s, a);
+}
+async function act(s, a) {
+  const player = s.player;
+  if (!player || s.status !== "connected") {
+    if (a.type === "pick")
+      await apply(s, { type: "pick-failed", now: Date.now() });
+    return;
+  }
+  try {
+    switch (a.type) {
+      case "pick": {
+        const best = await choose(s, a.cue);
+        if (!best) {
+          note(s, `nothing found for "${a.cue.why}"`);
+          await apply(s, { type: "pick-failed", now: Date.now() });
+          return;
+        }
+        const t = best.track;
+        if (a.when === "now") {
+          if (a.fade && s.config.fade && s.np && !s.np.isPaused)
+            await player.fade(() => player.playNow(t.videoId));
+          else
+            await player.playNow(t.videoId);
+        } else
+          await player.enqueue(t.videoId, true);
+        const tagged = best.reasons.find((r) => r.startsWith("tagged ") || r.startsWith("but tagged "));
+        const why = `${a.cue.why}${best.query.q ? ` \u2014 from "${best.query.q}"` : ""}${tagged ? ` \xB7 ${tagged}` : ""}`;
+        s.picked.set(t.videoId, { track: t, why, reason: a.reason, query: best.query.q });
+        if (s.picked.size > 80)
+          s.picked.delete(s.picked.keys().next().value);
+        s.history.recent[t.videoId] = Date.now();
+        for (const [id, at] of Object.entries(s.history.recent))
+          if (Date.now() - at > 6 * 3600000)
+            delete s.history.recent[id];
+        s.history.lastArtist = normName(t.artists[0]?.name ?? "");
+        saveHistory(s);
+        await recordPlay(s, t, "picked", a.cue, a.reason);
+        note(s, `${a.when === "now" ? "playing" : "next up"}: ${t.title} \u2014 ${artistLine(t)} (${a.reason}; ${why})`);
+        await apply(s, { type: "picked", videoId: t.videoId, when: a.when, cue: a.cue, now: Date.now() });
+        if (a.when === "now")
+          schedulePoll(s, 1500);
+        break;
+      }
+      case "drop-next":
+        await player.removeNext(a.videoId).catch(() => false);
+        break;
+      case "skip":
+        note(s, `skipped ${s.np?.title ?? a.videoId}: ${a.reason}`);
+        if (s.np)
+          await recordPlay(s, { videoId: s.np.videoId, title: s.np.title, artists: [{ name: s.np.artist }], durationS: s.np.durationS, explicit: false, kind: "song" }, "banned-skip", null, a.reason);
+        await player.next();
+        schedulePoll(s, 1500);
+        break;
+      case "replay-next":
+        await player.enqueue(a.videoId, true);
+        break;
+      case "penalise": {
+        s.history.skips[`${a.mood}|${a.videoId}`] = (s.history.skips[`${a.mood}|${a.videoId}`] ?? 0) + 1;
+        const t = s.picked.get(a.videoId)?.track;
+        for (const c of t ? creditsOf(t) : []) {
+          const k = `${a.mood}|${normName(c.name)}`;
+          s.history.skips[k] = (s.history.skips[k] ?? 0) + 0.5;
+        }
+        const keys = Object.keys(s.history.skips);
+        for (const k of keys.slice(0, Math.max(0, keys.length - 600)))
+          delete s.history.skips[k];
+        saveHistory(s);
+        break;
+      }
+    }
+  } catch (err) {
+    onPlayerError(s, err);
+    if (a.type === "pick")
+      await apply(s, { type: "pick-failed", now: Date.now() }).catch(() => {
+        return;
+      });
+  }
+}
+function onPlayerError(s, err) {
+  if (err instanceof PlayerError) {
+    s.status = err.status;
+    s.statusMsg = err.message;
+  } else {
+    s.statusMsg = describe(err);
+  }
+  warn(`soundtrack: ${describe(err)}`);
+}
+function run(s, fn) {
+  return serial(`soundtrack:${s.key}`, fn).catch((err) => warn(`soundtrack: ${describe(err)}`));
+}
+function schedulePoll(s, ms) {
+  if (s.timer)
+    clearTimeout(s.timer);
+  s.timer = null;
+  if (!s.config.enabled || !s.player?.token)
+    return;
+  const gen = ++s.pollGen;
+  const delay = ms ?? (s.status === "not-running" || s.status === "error" ? 30000 : s.status === "not-allowed" ? 60000 : s.np && !s.np.isPaused ? 5000 : 15000);
+  s.timer = setTimeout(() => {
+    if (gen !== s.pollGen)
+      return;
+    run(s, () => poll(s)).finally(() => {
+      if (gen === s.pollGen)
+        schedulePoll(s);
+    });
+  }, delay);
+}
+async function poll(s) {
+  if (!s.player?.token)
+    return;
+  let np;
+  try {
+    np = await s.player.nowPlaying();
+    if (s.status !== "connected") {
+      s.status = "connected";
+      s.statusMsg = "";
+      push(s);
+    }
+  } catch (err) {
+    const was = s.status;
+    onPlayerError(s, err);
+    s.np = null;
+    if (was !== s.status)
+      push(s);
+    return;
+  }
+  const changed = np?.videoId !== s.np?.videoId || np?.isPaused !== s.np?.isPaused;
+  const known = np ? s.picked.get(np.videoId)?.track : undefined;
+  if (np && known) {
+    np.artists = known.artists;
+    np.album ??= known.album;
+  }
+  let banned = null;
+  if (np && np.videoId !== s.dir.current) {
+    const { taste } = await tasteFor(s, s.chatId);
+    banned = banReason({ title: np.title, artists: np.artists ?? [{ name: np.artist }] }, taste);
+    if (np.durationS)
+      s.liked.delete(np.videoId);
+  }
+  const prevOrigin = s.dir.origin;
+  const prevId = s.dir.current;
+  s.np = np;
+  await apply(s, { type: "poll", np, now: Date.now(), banned });
+  if (np && np.videoId !== prevId && s.dir.origin && s.dir.origin !== "ours" && s.dir.origin !== "ours-skip" && s.dir.current === np.videoId && !banned) {
+    await recordPlay(s, { videoId: np.videoId, title: np.title, artists: np.artists ?? [{ name: np.artist }], durationS: np.durationS, explicit: false, kind: "song" }, s.dir.origin === "user" ? "user" : "autoplay", null, "");
+  }
+  if (np && !np.isPaused && np.elapsedS > 20 && !s.liked.has(np.videoId) && prevOrigin !== null) {
+    if (await s.player.liked().catch(() => false))
+      s.liked.add(np.videoId);
+  }
+  if (changed)
+    push(s);
+}
+async function soundtrackSwitch(chatId, userId) {
+  const s = await session(userId).catch(() => null);
+  if (!s)
+    return;
+  if (s.chatId !== chatId) {
+    s.chatId = chatId;
+    s.cueKey = "";
+  }
+  if (s.config.enabled && s.player?.token && !s.timer)
+    schedulePoll(s, 500);
+  await soundtrackChanged(chatId, userId, 0);
+}
+async function soundtrackChanged(chatId, userId, delay = 1200) {
+  const s = sessions.get(userId ?? "") ?? await session(userId).catch(() => null);
+  if (!s || !s.config.enabled)
+    return;
+  if (s.chatId && s.chatId !== chatId)
+    return;
+  s.chatId = chatId;
+  if (delay)
+    await sleep(delay);
+  await run(s, async () => {
+    const r = await cueFor(s, chatId).catch((err) => {
+      warn(`soundtrack cue: ${describe(err)}`);
+      return null;
+    });
+    if (!r)
+      return;
+    const key = `${chatId}|${r.stamp}|${r.cue.mood}|${r.cue.place}|${Math.round(r.cue.tension * 10)}`;
+    if (key === s.cueKey)
+      return;
+    s.cueKey = key;
+    s.cue = r.cue;
+    await apply(s, { type: "cue", cue: r.cue, now: Date.now(), cutOnSharp: s.config.cutOnSharp, takeBack: s.config.takeBack });
+    push(s);
+  });
+}
+async function viewOf(s) {
+  const chatId = s.chatId;
+  const cs = chatId ? await chatStore(chatId, s.userId).catch(() => null) : null;
+  const files = chatId ? await loadChat(chatId, s.userId).catch(() => null) : null;
+  const storyGenres = files?.meta.config.genres ?? [];
+  const { taste } = await tasteFor(s, chatId);
+  const np = s.np;
+  const mine = np ? s.picked.get(np.videoId) : undefined;
+  const next = s.dir.next ? s.picked.get(s.dir.next.videoId) : undefined;
+  return {
+    hasCors: has("cors_proxy"),
+    enabled: s.config.enabled,
+    running: s.dir.running,
+    status: s.status,
+    statusMsg: s.statusMsg,
+    connected: !!s.player?.token,
+    playerUrl: s.config.playerUrl,
+    director: s.config.director,
+    connection: s.config.connection,
+    cutOnSharp: s.config.cutOnSharp,
+    takeBack: s.config.takeBack,
+    fade: s.config.fade,
+    taste: s.config.taste,
+    lastfm: !!s.lastfmKey,
+    lastfmBad: badKey.get(s.userId ?? "") ?? "",
+    chatId,
+    chatTaste: cs?.taste ?? null,
+    chatOff: !!cs?.off,
+    effectiveGenres: genresFor(taste, storyGenres),
+    suggestions: suggestGenres(storyGenres),
+    chips: GENRE_CHIPS,
+    mode: s.dir.mode,
+    origin: s.dir.origin,
+    np: np ? { videoId: np.videoId, title: np.title, artist: np.artist, thumb: np.thumb, album: np.album, isPaused: np.isPaused, elapsedS: np.elapsedS, durationS: np.durationS, why: mine?.why ?? "", reason: mine?.reason ?? "" } : null,
+    next: next ? { title: next.track.title, artist: artistLine(next.track), why: next.why } : null,
+    cue: s.cue ? { mood: s.cue.mood, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place } : null,
+    plays: (cs?.plays ?? []).slice(-15).reverse(),
+    note: s.lastNote
+  };
+}
+function push(s) {
+  pushChain = pushChain.then(() => viewOf(s).then((view) => host.sendToFrontend({ type: "soundtrack", view }, s.userId)).catch((err) => warn(`soundtrack view: ${describe(err)}`)));
+  return pushChain;
+}
+function reply(userId, payload) {
+  host.sendToFrontend(payload, userId);
+}
+async function soundtrackAction(m, userId) {
+  const s = await session(userId);
+  if (m.chatId && typeof m.chatId === "string" && s.chatId !== m.chatId) {
+    s.chatId = m.chatId;
+    s.cueKey = "";
+  }
+  const action = String(m.action ?? "");
+  switch (action) {
+    case "get":
+      if (s.config.enabled && s.player?.token)
+        await run(s, () => poll(s));
+      break;
+    case "config": {
+      const p = m.patch ?? {};
+      const was = { enabled: s.config.enabled, url: s.config.playerUrl };
+      if (typeof p.enabled === "boolean")
+        s.config.enabled = p.enabled;
+      if (typeof p.playerUrl === "string" && /^https?:\/\/[^\s/]+(?::\d+)?\/?$/i.test(p.playerUrl.trim()))
+        s.config.playerUrl = p.playerUrl.trim().replace(/\/+$/, "");
+      if (p.director === "engine" || p.director === "model")
+        s.config.director = p.director;
+      if (typeof p.connection === "string")
+        s.config.connection = p.connection;
+      for (const k of ["cutOnSharp", "takeBack", "fade"])
+        if (typeof p[k] === "boolean")
+          s.config[k] = p[k];
+      if (was.url !== s.config.playerUrl)
+        s.player = new PearPlayer(s.config.playerUrl, s.player?.token ?? null, s.config.clientId);
+      if (!s.config.enabled) {
+        s.dir = { ...s.dir, running: false };
+        s.config.running = false;
+        if (s.timer)
+          clearTimeout(s.timer);
+        s.timer = null;
+      }
+      await saveConfig(s);
+      if (s.config.enabled && (!was.enabled || was.url !== s.config.playerUrl))
+        schedulePoll(s, 200);
+      if (s.config.enabled && !was.enabled && s.chatId)
+        soundtrackChanged(s.chatId, userId, 0);
+      break;
+    }
+    case "taste": {
+      const scope = m.scope === "chat" ? "chat" : "global";
+      if (scope === "global") {
+        s.config.taste = cleanTaste(m.taste ?? {}, s.config.taste);
+        await saveConfig(s);
+      } else if (s.chatId) {
+        const cs = await chatStore(s.chatId, userId);
+        cs.taste = m.taste === null ? null : cleanTaste(m.taste ?? {}, { ...s.config.taste, genres: [], preferred: [], banned: [], bannedWords: [] });
+        saveChat(s.chatId, userId);
+      }
+      forgetCueKey(s);
+      break;
+    }
+    case "chatOff": {
+      if (!s.chatId)
+        break;
+      const cs = await chatStore(s.chatId, userId);
+      cs.off = !!m.off;
+      saveChat(s.chatId, userId);
+      forgetCueKey(s);
+      if (!cs.off)
+        soundtrackChanged(s.chatId, userId, 0);
+      break;
+    }
+    case "connect": {
+      if (!s.player)
+        s.player = new PearPlayer(s.config.playerUrl, null, s.config.clientId);
+      try {
+        s.statusMsg = "Waiting for you to press Allow in YouTube Music\u2026";
+        push(s);
+        const token = await s.player.connect();
+        await host.enclave.put(TOKEN, token, userId);
+        s.status = "unknown";
+        s.statusMsg = "";
+        if (!s.config.enabled) {
+          s.config.enabled = true;
+          await saveConfig(s);
+        }
+        await run(s, () => poll(s));
+        schedulePoll(s);
+        if (s.chatId)
+          soundtrackChanged(s.chatId, userId, 0);
+      } catch (err) {
+        onPlayerError(s, err);
+      }
+      break;
+    }
+    case "disconnect":
+      await host.enclave.delete(TOKEN, userId).catch(() => false);
+      if (s.player)
+        s.player.token = null;
+      s.status = "off";
+      s.statusMsg = "";
+      s.dir = { ...s.dir, running: false };
+      s.config.running = false;
+      await saveConfig(s);
+      if (s.timer)
+        clearTimeout(s.timer);
+      s.timer = null;
+      break;
+    case "start":
+    case "stop": {
+      s.config.running = action === "start";
+      await saveConfig(s);
+      await run(s, async () => {
+        if (action === "start" && s.chatId) {
+          const r = await cueFor(s, s.chatId).catch(() => null);
+          if (r) {
+            s.cue = r.cue;
+            s.cueKey = "";
+            await apply(s, { type: "cue", cue: r.cue, now: Date.now(), cutOnSharp: s.config.cutOnSharp, takeBack: s.config.takeBack });
+          }
+        }
+        await apply(s, action === "start" ? { type: "start", now: Date.now() } : { type: "stop" });
+      });
+      if (action === "start" && !s.cue)
+        note(s, "started: the music begins with the next reply in an ALMANAC chat");
+      break;
+    }
+    case "skip":
+      await run(s, () => apply(s, { type: "user-skip", now: Date.now() }));
+      break;
+    case "hold":
+      await run(s, () => apply(s, { type: "hold", on: !!m.on }));
+      break;
+    case "pause":
+    case "play":
+      await (action === "pause" ? s.player?.pause() : s.player?.play())?.catch((err) => onPlayerError(s, err));
+      schedulePoll(s, 800);
+      break;
+    case "ban":
+    case "prefer": {
+      const ref = refList([{ name: String(m.name ?? ""), id: m.id ? String(m.id) : undefined }])[0];
+      if (!ref)
+        break;
+      const list = action === "ban" ? "banned" : "preferred";
+      s.config.taste = cleanTaste({ ...s.config.taste, [list]: [...s.config.taste[list], ref] });
+      await saveConfig(s);
+      if (action === "ban" && s.np && creditsOf({ title: s.np.title, artists: s.np.artists ?? [{ name: s.np.artist }] }).some((a) => normName(a.name) === normName(ref.name) || !!ref.id && a.id === ref.id)) {
+        await run(s, () => apply(s, { type: "user-skip", now: Date.now() }));
+      }
+      break;
+    }
+    case "never": {
+      const id = String(m.videoId ?? s.np?.videoId ?? "");
+      if (!id)
+        break;
+      s.history.never = [...new Set([...s.history.never, id])].slice(-500);
+      saveHistory(s);
+      if (s.np?.videoId === id)
+        await run(s, () => apply(s, { type: "user-skip", now: Date.now() }));
+      break;
+    }
+    case "searchArtists": {
+      try {
+        const hits = await searchArtists(userId ?? "", String(m.q ?? ""), s.status === "connected" ? s.player : null);
+        reply(userId, { type: "soundtrackResult", rid: m.rid, hits });
+      } catch (err) {
+        reply(userId, { type: "soundtrackResult", rid: m.rid, error: describe(err) });
+      }
+      return;
+    }
+    case "searchSongs": {
+      try {
+        const { taste } = await tasteFor(s, s.chatId);
+        const songs = (await searchSongs(userId ?? "", String(m.q ?? ""), s.status === "connected" ? s.player : null)).map((t) => ({ ...t, artist: artistLine(t), banned: !!excluded(t, { ...taste, explicit: true, videos: true }, emptyHistory(), Date.now()) }));
+        reply(userId, { type: "soundtrackResult", rid: m.rid, songs });
+      } catch (err) {
+        reply(userId, { type: "soundtrackResult", rid: m.rid, error: describe(err) });
+      }
+      return;
+    }
+    case "playSong": {
+      const id = String(m.videoId ?? "");
+      if (!/^[\w-]{6,20}$/.test(id) || !s.player)
+        break;
+      await run(s, async () => {
+        try {
+          await s.player.playNow(id);
+        } catch (err) {
+          onPlayerError(s, err);
+        }
+      });
+      schedulePoll(s, 1500);
+      break;
+    }
+    case "lastfmKey": {
+      const key = String(m.key ?? "").trim();
+      if (!/^[0-9a-f]{32}$/i.test(key)) {
+        reply(userId, { type: "soundtrackResult", rid: m.rid, error: "A Last.fm API key is 32 letters and digits (0-9, a-f)." });
+        return;
+      }
+      try {
+        await checkKey(userId ?? "", key);
+        await host.enclave.put(LASTFM_KEY, key, userId);
+        s.lastfmKey = key;
+        note(s, "Last.fm tags on");
+        reply(userId, { type: "soundtrackResult", rid: m.rid, ok: true });
+      } catch (err) {
+        reply(userId, { type: "soundtrackResult", rid: m.rid, error: err instanceof LastfmError && err.badKey ? `Last.fm refused the key: ${err.message}` : `Couldn't reach Last.fm: ${describe(err)}` });
+      }
+      await push(s);
+      return;
+    }
+    case "lastfmClear":
+      await host.enclave.delete(LASTFM_KEY, userId).catch(() => false);
+      s.lastfmKey = null;
+      badKey.delete(userId ?? "");
+      forgetTags(userId ?? "");
+      note(s, "Last.fm tags off");
+      break;
+    case "clearCache":
+      forgetPools(userId ?? "");
+      note(s, "search cache cleared");
+      break;
+  }
+  await push(s);
+}
+function forgetCueKey(s) {
+  s.cueKey = "";
+  if (s.chatId)
+    soundtrackChanged(s.chatId, s.userId, 0);
+}
+var DEFAULT_CONFIG, CONFIG = "soundtrack/config.json", HISTORY = "soundtrack/history.json", chatPath = (chatId) => `chats/${chatId.replace(/[^\w-]/g, "_")}/soundtrack.json`, TOKEN = "soundtrack_pear_token", sessions, loadingSession, historyTimer = null, chatCache, VALID_COLOUR, pushChain, refList = (x) => cleanTaste({ preferred: x }).preferred;
+var init_soundtrack = __esm(() => {
+  init_cue();
+  init_util();
+  init_director();
+  init_moods();
+  init_picker();
+  init_taste();
+  init_host();
+  init_ledger();
+  init_llm();
+  init_store();
+  init_turn();
+  init_catalog();
+  init_pear();
+  init_lastfm();
+  init_tags();
+  DEFAULT_CONFIG = {
+    enabled: false,
+    running: false,
+    playerUrl: "http://127.0.0.1:26538",
+    clientId: "",
+    director: "engine",
+    connection: "",
+    cutOnSharp: true,
+    takeBack: true,
+    fade: true,
+    taste: DEFAULT_TASTE
+  };
+  sessions = new Map;
+  loadingSession = new Map;
+  chatCache = new Map;
+  VALID_COLOUR = /^[a-z][a-z \-]{1,20}$/;
+  pushChain = Promise.resolve();
+});
+
 // src/backend/ingest.ts
 async function onReply(chatId, messageId, content, genType, userId) {
   const files = await loadChat(chatId, userId);
@@ -19812,6 +21944,7 @@ function afterChange(chatId, userId, opts) {
   pushMacros(chatId, userId);
   pushState(chatId, userId);
   debounce(`mirror:${chatId}`, 2000, () => syncMirror(chatId, userId));
+  debounce(`soundtrack:${chatId}`, 1200, () => soundtrackChanged(chatId, userId, 0));
   if (opts.background) {
     debounce(`bg:${chatId}`, 800, async () => {
       await runChronicle(chatId, userId).catch((err) => noteProblem(chatId, userId, "chapter summary", err));
@@ -20207,6 +22340,7 @@ var init_ingest = __esm(() => {
   init_playerfacts();
   init_speakers2();
   init_elsewhere();
+  init_soundtrack();
   busy = new Set;
 });
 
@@ -23219,7 +25353,7 @@ init_store();
 var MAX_SESSIONS = 12;
 var indexPath = "creator/index.json";
 var sessionPath = (id) => `creator/${id}.json`;
-var sessions = new Map;
+var sessions2 = new Map;
 var indexes = new Map;
 var key = (userId, id) => `${userId ?? ""}:${id}`;
 async function loadIndex(userId) {
@@ -23236,7 +25370,7 @@ async function saveIndex(idx, userId) {
   await host.userStorage.setJson(indexPath, idx, { userId });
 }
 async function loadSession(id, userId) {
-  const hit = sessions.get(key(userId, id));
+  const hit = sessions2.get(key(userId, id));
   if (hit)
     return hit;
   if (!await host.userStorage.exists(sessionPath(id), userId))
@@ -23250,7 +25384,7 @@ async function loadSession(id, userId) {
     if (s.phase === "generating")
       s.phase = s.draft ? "review" : "discuss";
   }
-  sessions.set(key(userId, id), s);
+  sessions2.set(key(userId, id), s);
   return s;
 }
 async function persist(s, userId) {
@@ -23260,13 +25394,13 @@ async function persist(s, userId) {
   idx.list = [{ id: s.id, title: s.title, updatedAt: s.updatedAt, task: s.task }, ...idx.list.filter((x) => x.id !== s.id)];
   idx.current = s.id;
   for (const old of idx.list.slice(MAX_SESSIONS)) {
-    sessions.delete(key(userId, old.id));
+    sessions2.delete(key(userId, old.id));
     await host.userStorage.delete(sessionPath(old.id), userId).catch(() => {});
   }
   idx.list = idx.list.slice(0, MAX_SESSIONS);
   await saveIndex(idx, userId);
 }
-function push(s, userId) {
+function push2(s, userId) {
   host.sendToFrontend({ type: "creatorSession", session: s }, userId);
 }
 var seq = 0;
@@ -23432,11 +25566,11 @@ async function modelTurn(s, userId) {
     ...changed ? { card: "proposal", version: s.proposal.version } : needsBook ? { card: "books" } : {}
   });
 }
-async function step(s, userId, label, fn) {
+async function step2(s, userId, label, fn) {
   if (s.busy)
     throw new Error(`still ${s.busy.toLowerCase()}`);
   s.busy = label;
-  push(s, userId);
+  push2(s, userId);
   try {
     await fn();
   } catch (err) {
@@ -23446,7 +25580,7 @@ async function step(s, userId, label, fn) {
     s.busy = undefined;
     s.progress = undefined;
     await persist(s, userId).catch((err) => warn(`creator save: ${describe(err)}`));
-    push(s, userId);
+    push2(s, userId);
   }
 }
 async function setTask(s, task, userId, quietly = false) {
@@ -23636,7 +25770,7 @@ async function write(s, userId) {
         warn(`creator openings: ${describe(err)}`);
       }
       s.progress = { done: Math.min(rewrites.length, i + 10), total: rewrites.length };
-      push(s, userId);
+      push2(s, userId);
     }
     for (const it of todo) {
       const e = it.entryId ? byId.get(it.entryId) : undefined;
@@ -23697,7 +25831,7 @@ ${x.text}`).join(`
         add({ ...v.entry, item: it.id, op: e ? "update" : "create", ...e ? { entryId: e.id } : {} }, v.reask, v.fixes);
       });
       s.progress = { done: Math.min(writeItems.length, i + size), total: writeItems.length };
-      push(s, userId);
+      push2(s, userId);
     }
     const redo = entries.filter((e) => issues[e.uid]?.length && e.content && e.op !== "retire").slice(0, 20);
     if (redo.length) {
@@ -23748,7 +25882,7 @@ function changedFields(e, was) {
   }
   return out;
 }
-async function save2(s, req, userId) {
+async function save3(s, req, userId) {
   if (!has("world_books"))
     throw new Error("the world_books permission is not granted");
   const d = s.draft;
@@ -23871,12 +26005,12 @@ async function creatorAction(req, userId) {
     return { list: idx.list };
   if (req.action === "new") {
     const s = newSession(req.chatId);
-    sessions.set(key(userId, s.id), s);
+    sessions2.set(key(userId, s.id), s);
     await persist(s, userId);
     return { session: s, list: (await loadIndex(userId)).list };
   }
   if (req.action === "delete" && req.id) {
-    sessions.delete(key(userId, req.id));
+    sessions2.delete(key(userId, req.id));
     await host.userStorage.delete(sessionPath(req.id), userId).catch(() => {});
     idx.list = idx.list.filter((x) => x.id !== req.id);
     if (idx.current === req.id)
@@ -23890,7 +26024,7 @@ async function creatorAction(req, userId) {
   if (req.action === "open" || !s) {
     if (!s) {
       s = newSession(req.chatId);
-      sessions.set(key(userId, s.id), s);
+      sessions2.set(key(userId, s.id), s);
       await persist(s, userId);
     } else if (idx.current !== s.id) {
       idx.current = s.id;
@@ -23911,12 +26045,12 @@ async function creatorAction(req, userId) {
       if (!S.proposal.items.some((i) => i.op !== "keep")) {
         say(S, "Every entry in the plan is kept as it is, so there's nothing to write.");
         await persist(S, userId);
-        push(S, userId);
+        push2(S, userId);
         return;
       }
       S.messages.push({ id: newId("m"), role: "user", text: `Accept the plan (version ${S.proposal.version}).`, at: Date.now() });
       S.phase = "generating";
-      await step(S, userId, S.task === "convert" ? "Converting the entries" : "Writing the entries", async () => {
+      await step2(S, userId, S.task === "convert" ? "Converting the entries" : "Writing the entries", async () => {
         await write(S, userId);
         S.phase = "review";
         const d = S.draft;
@@ -23926,7 +26060,7 @@ async function creatorAction(req, userId) {
       if (S.phase === "generating") {
         S.phase = S.draft ? "review" : "discuss";
         await persist(S, userId);
-        push(S, userId);
+        push2(S, userId);
       }
     };
     switch (req.action) {
@@ -23935,7 +26069,7 @@ async function creatorAction(req, userId) {
         if (!text)
           return {};
         if (/^try again$/i.test(text) && S.messages[S.messages.length - 1]?.card === "error") {
-          await step(S, userId, "Thinking", () => modelTurn(S, userId));
+          await step2(S, userId, "Thinking", () => modelTurn(S, userId));
           return {};
         }
         if (/^accept$/i.test(text) && S.proposal && S.phase !== "generating") {
@@ -23951,7 +26085,7 @@ async function creatorAction(req, userId) {
           S.messages.push({ id: newId("m"), role: "user", text, at: Date.now() });
         }
         if (/^use this chat'?s character card$/i.test(text)) {
-          await step(S, userId, "Reading the card", async () => {
+          await step2(S, userId, "Reading the card", async () => {
             const c = await cardSource(S.chatId, userId);
             if (c) {
               S.sources.push(c);
@@ -23963,7 +26097,7 @@ async function creatorAction(req, userId) {
           return {};
         }
         if (/^use my persona( too)?$/i.test(text)) {
-          await step(S, userId, "Reading your persona", async () => {
+          await step2(S, userId, "Reading your persona", async () => {
             const c = await personaSource(S.chatId, userId);
             if (c)
               S.sources.push(c);
@@ -23972,16 +26106,16 @@ async function creatorAction(req, userId) {
           return {};
         }
         if (/^make it almanac-compatible$/i.test(text) && S.book) {
-          await step(S, userId, "Reading the book", () => setTask(S, "convert", userId));
+          await step2(S, userId, "Reading the book", () => setTask(S, "convert", userId));
           return {};
         }
         if (/^check it( again)?$/i.test(text) && (S.book || S.saved)) {
           if (!S.book && S.saved)
             S.book = { id: S.saved.bookId, name: S.saved.bookName, count: 0 };
-          await step(S, userId, "Checking the book", () => setTask(S, "check", userId));
+          await step2(S, userId, "Checking the book", () => setTask(S, "check", userId));
           return {};
         }
-        await step(S, userId, "Thinking", () => modelTurn(S, userId));
+        await step2(S, userId, "Thinking", () => modelTurn(S, userId));
         return {};
       }
       case "task": {
@@ -23989,17 +26123,17 @@ async function creatorAction(req, userId) {
         if (!t)
           throw new Error("unknown task");
         S.messages.push({ id: newId("m"), role: "user", text: t.label, at: Date.now() });
-        await step(S, userId, t.id === "convert" ? "Reading the book" : "Getting ready", () => setTask(S, t.id, userId));
+        await step2(S, userId, t.id === "convert" ? "Reading the book" : "Getting ready", () => setTask(S, t.id, userId));
         return {};
       }
       case "book": {
         if (!req.bookId)
           throw new Error("no book chosen");
-        await step(S, userId, S.task === "convert" ? "Reading every entry" : "Reading the book", () => chooseBook(S, req.bookId, userId));
+        await step2(S, userId, S.task === "convert" ? "Reading every entry" : "Reading the book", () => chooseBook(S, req.bookId, userId));
         return {};
       }
       case "source": {
-        await step(S, userId, "Adding the source", async () => {
+        await step2(S, userId, "Adding the source", async () => {
           const c = req.source === "persona" ? await personaSource(S.chatId, userId) : await cardSource(S.chatId, userId);
           if (!c) {
             say(S, req.source === "persona" ? "I couldn't find your persona." : "This chat has no character card I can read.");
@@ -24013,7 +26147,7 @@ async function creatorAction(req, userId) {
       case "dropSource": {
         S.sources = S.sources.filter((x) => x.id !== req.sourceId);
         await persist(S, userId);
-        push(S, userId);
+        push2(S, userId);
         return {};
       }
       case "edit": {
@@ -24030,7 +26164,7 @@ async function creatorAction(req, userId) {
         next.dropped = [...S.proposal.dropped ?? [], ...next.dropped ?? []];
         S.proposal = next;
         await persist(S, userId);
-        push(S, userId);
+        push2(S, userId);
         return {};
       }
       case "accept":
@@ -24041,7 +26175,7 @@ async function creatorAction(req, userId) {
         const e = d?.entries.find((x) => x.uid === req.uid);
         if (!d || !e)
           throw new Error("that entry is gone");
-        await step(S, userId, "Rewriting", async () => {
+        await step2(S, userId, "Rewriting", async () => {
           const it = S.proposal?.items.find((i) => i.id === e.item);
           const prompt = writePrompt([{ title: e.comment, category: it?.category, existing: { comment: e.comment, content: e.content, key: e.key }, note: req.note || (d.issues[e.uid] ?? []).join("; ") || "make it better" }], d.entries.map((x) => x.comment), S.sources.map((x) => x.text).join(`
 
@@ -24073,7 +26207,7 @@ async function creatorAction(req, userId) {
           delete d.issues[e.uid];
         d.report = creatorReport(d.entries);
         await persist(S, userId);
-        push(S, userId);
+        push2(S, userId);
         return {};
       }
       case "dropEntry": {
@@ -24084,7 +26218,7 @@ async function creatorAction(req, userId) {
         delete d.issues[req.uid];
         d.report = creatorReport(d.entries);
         await persist(S, userId);
-        push(S, userId);
+        push2(S, userId);
         return {};
       }
       case "simulate":
@@ -24094,11 +26228,11 @@ async function creatorAction(req, userId) {
       case "save": {
         if (!S.draft)
           throw new Error("nothing is written yet");
-        await step(S, userId, "Saving", () => save2(S, req.save ?? { target: "new" }, userId));
+        await step2(S, userId, "Saving", () => save3(S, req.save ?? { target: "new" }, userId));
         return {};
       }
       case "retry": {
-        await step(S, userId, "Thinking", () => modelTurn(S, userId));
+        await step2(S, userId, "Thinking", () => modelTurn(S, userId));
         return {};
       }
       default:
@@ -24112,7 +26246,8 @@ init_macros();
 init_hooks();
 init_clerk2();
 init_check();
-function reply(userId, payload) {
+init_soundtrack();
+function reply2(userId, payload) {
   host.sendToFrontend(payload, userId);
 }
 var owned = new Map;
@@ -24143,7 +26278,7 @@ function toast(userId, tone, text) {
   try {
     host.toast[tone](text, { title: "ALMANAC", userId });
   } catch {
-    reply(userId, { type: "toast", tone, text });
+    reply2(userId, { type: "toast", tone, text });
   }
 }
 async function applyChatConfig(chatId, patch, userId) {
@@ -24205,7 +26340,7 @@ function registerBridge() {
       warn(`frontend message ${m.type} for a chat this user doesn't own`);
       return;
     }
-    if (m.chatId == null && !["hello", "getState", "settings", "books", "bookHealth", "creator"].includes(m.type))
+    if (m.chatId == null && !["hello", "getState", "settings", "books", "bookHealth", "creator", "soundtrack"].includes(m.type))
       return;
     try {
       switch (m.type) {
@@ -24213,9 +26348,9 @@ function registerBridge() {
         case "getState": {
           const chatId = m.chatId ?? (await host.chats.getActive(userId).catch(() => null))?.id;
           if (!chatId)
-            return reply(userId, { type: "state", view: null });
+            return reply2(userId, { type: "state", view: null });
           const view = await buildView(chatId, userId);
-          reply(userId, { type: "state", view });
+          reply2(userId, { type: "state", view });
           return;
         }
         case "settings": {
@@ -24500,21 +26635,24 @@ function registerBridge() {
           toast(userId, "success", "Mirror book synced.");
           return;
         case "books":
-          reply(userId, { type: "books", books: await listBooks(userId), rid: m.rid });
+          reply2(userId, { type: "books", books: await listBooks(userId), rid: m.rid });
           return;
         case "bookHealth":
-          reply(userId, { type: "bookHealth", result: await bookHealth(m.bookId, userId), rid: m.rid });
+          reply2(userId, { type: "bookHealth", result: await bookHealth(m.bookId, userId), rid: m.rid });
           return;
         case "creator": {
           const rid = m.rid;
           try {
             const res = await creatorAction({ ...m.req ?? {}, action: String(m.action ?? ""), chatId: m.chatId ?? undefined }, userId);
-            reply(userId, { type: "creator", rid, ...res });
+            reply2(userId, { type: "creator", rid, ...res });
           } catch (err) {
-            reply(userId, { type: "creator", rid, error: describe(err) });
+            reply2(userId, { type: "creator", rid, error: describe(err) });
           }
           return;
         }
+        case "soundtrack":
+          await soundtrackAction({ ...m, chatId: m.chatId ?? undefined }, userId);
+          return;
         default:
           log(`unknown frontend message ${m.type}`);
       }
@@ -24532,6 +26670,7 @@ init_store();
 init_view();
 init_turn();
 init_mirror();
+init_soundtrack();
 async function boot() {
   const settings = await loadSettings().catch(() => null);
   if (settings)
@@ -24573,6 +26712,7 @@ async function onSwitch(chatId, userId) {
     }
     await pushMacros(chatId, userId);
     pushState(chatId, userId);
+    soundtrackSwitch(chatId, userId).catch((err) => warn(`soundtrack: ${describe(err)}`));
   } catch (err) {
     warn(`switch: ${describe(err)}`);
   }

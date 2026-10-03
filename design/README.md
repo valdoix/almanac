@@ -33,6 +33,7 @@ The set has two parts that work together:
 | 08 | [Release audit](08-release-audit.md) | The 1.12.4 audit: findings by severity, and what 1.13.0 fixed |
 | 09 | [Elsewhere](09-elsewhere.md) | The world off the page (built in 1.14): the whole cast as a roster, subplot arcs, a seeded storyteller with dice, an MKAMT gate, news that travels person to person, one validated telling call, and the routes by which it reaches the scene. Replaces the off-screen simulator |
 | 10 | [Lorebook format and Creator](10-lorebook-format.md) | ALMANAC's own lorebook format (16 categories, metadata, tiers), read from an analysis of the players' books; the reader for free-form books; the Creator as a conversation (ask, propose, revise, write, save) |
+| 11 | [Soundtrack](11-soundtrack.md) | YouTube Music scored by the scene (design, not built): a mood cue read from the Ledger, the player's genres plus preferred and banned artists, a director that changes music on story beats, and the YouTube Music desktop app as the player, since Lumiverse extensions can't embed one |
 | — | [Visual mockup](mockups/almanac-visuals.html) | Static HTML with a skin switcher (6 themes) and light/dark toggle: animated scene plates for five genres, voice cards and ten tones, sealed-envelope thoughts, call-sheet Director's notes, trading-card trackers, HUD strip, VTKs, relationship graph. Open it in a browser |
 
 ---
