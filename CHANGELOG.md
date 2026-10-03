@@ -4,6 +4,16 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.26.0 (2026-10-03)
+
+**Subplots bear on each other.** Two subplots in Elsewhere are tied when one is about someone the other has in it.
+- **What is taken stays taken.** A step that takes something from someone ("took Willow's magic", "Willow's magic is gone", "stripped of her powers") holds for every subplot with that person in it, until a step gives it back. What is only meant or nearly done ("sent to take away", "stopped short") doesn't count.
+- **The telling keeps in step.** Each step is told knowing what the tied subplots did last and what stands about its people, and follows from anything new since its own last step. A telling where someone uses magic that was taken is set aside.
+- **Subplots pull on each other's dice**, by one at most: one working against someone makes that person's next step harder when it goes its way; one on their side helps when it goes well, and suffers with that person's own setbacks.
+- **An ending shakes the subplots tied to it:** their next step comes sooner, with the stakes raised.
+- **The engine's own words follow:** a decline whose means were taken is the want of them ("Willow went looking for a way to get the magic back").
+- **Tied to** on each subplot card in Elsewhere: what stands, each tied subplot (which side it's on, its latest step) and what it does to the next roll.
+
 ## 1.25.0 (2026-10-03)
 
 **Factions are yours to edit, like the cast.**

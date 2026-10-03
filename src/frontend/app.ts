@@ -692,6 +692,14 @@ ${w.canon.length ? `${sec("Minted canon", w.canon.length)}<div class="card"><ul 
 <p class="muted"><small>${n(x.arcs.filter((a: any) => a.status === "running").length, "subplot")} moving where you can't see. Switch to Director to look.</small></p>`;
     }
     const fates = x.arcs.filter((a: any) => a.status === "fate");
+    // Subplots sharing a person: what stands about them, what the others did, and how that turns this one's next roll.
+    const tiesHtml = (a: any) => {
+      const ties = a.ties ?? [];
+      const stands = a.stands ?? [];
+      if (!ties.length && !stands.length) return "";
+      const way = (t: any) => (t.dir === "theirs" ? (t.stance === "for" ? `on ${t.person}'s side` : `against ${t.person}`) : t.dir === "mine" ? (t.stance === "for" ? `this one is on ${t.person}'s side` : `this one is against ${t.person}`) : `shares ${t.person}`);
+      return `<div class="almx-lbl" style="margin-top:14px" title="Subplots that share a person happen in one world: each step of one is news to the other">Tied to</div><div class="almx-stack" style="margin-top:8px;gap:6px">${stands.map((c: any) => `<div class="almx-inset">${ic("info", "sm")} <b>${e(c.text)}</b> <small class="muted">since ${e(c.from)} · ${KIND[c.kind] ?? e(c.kind)}, ${e(c.at)}. Its next steps keep to it.</small></div>`).join("")}${ties.map((t: any) => `<div class="almx-row" style="align-items:flex-start"><span class="grow"><b>${e(t.lead)} · ${KIND[t.kind] ?? e(t.kind)}</b> <small class="muted">${e(way(t))}${t.ending ? " · ended" : ""} · ${e(t.at)}</small><br><small>${e(t.text)}</small></span>${t.mod ? stk(`${t.mod > 0 ? "+" : ""}${t.mod}`, t.mod > 0 ? "good" : "bad", `Its next roll: ${t.pull}`) : t.fresh ? stk("new", "acc", "Since this subplot's last step: its next step answers it") : ""}</div>`).join("")}</div>${a.pull ? `<p class="muted" style="margin:6px 0 0"><small>Next roll ${a.pull.mod > 0 ? "+" : ""}${a.pull.mod}: ${e(a.pull.why.join("; "))}</small></p>` : ""}`;
+    };
     const arcCard = (a: any) => {
       const live = a.status === "running" || a.status === "held";
       const editing = this.editing === `ew:${a.id}`;
@@ -707,6 +715,7 @@ ${w.canon.length ? `${sec("Minted canon", w.canon.length)}<div class="card"><ul 
       return `<article class="card"><div class="almx-row" style="align-items:flex-start">${ring(a.clock.cur, a.clock.max, color)}<div class="grow"><b style="font:800 17px/1.2 var(--almo-font)">${e(a.lead)} · ${KIND[a.kind] ?? e(a.kind)}</b><div class="row" style="gap:6px;margin-top:6px">${stk(a.status === "running" ? a.stage : a.status, a.status === "running" ? "g" : "")}${stk(a.secrecy, "ghost", "Who could learn of it")}${a.crossed ? stk("crossed", "warn", "It has reached the story") : ""}${a.by === "player" ? stk("yours", "acc") : ""}</div></div></div>
 <p style="margin:12px 0 0">${e(a.premise)}</p>${wf(a.want, a.fear)}${a.cast.length ? `<p class="muted" style="margin:8px 0 0"><small>With ${e(a.cast.join(", "))}</small></p>` : ""}
 ${beats}
+${tiesHtml(a)}
 ${live && a.status === "running" && (a.wait || a.next) ? `<div class="almx-inset" style="margin-top:10px"><b>Next:</b> ${a.wait ? `${e(a.wait)}; ` : ""}${a.next ? `not before ${e(a.next)}` : "any time now"}${a.wait ? ` <small class="muted">Nudge to make it happen now.</small>` : ""}</div>` : ""}
 ${reach}
 ${a.ending ? `<div class="almx-inset" style="margin-top:10px"><b>Ended:</b> ${e(a.ending.text)} <small class="muted">${e(a.ending.at)}</small></div>` : ""}${a.note ? `<p class="muted" style="margin:8px 0 0"><small>${e(a.note)}</small></p>` : ""}

@@ -7,9 +7,10 @@ import type { CharacterState, FactState, WorldState } from "../src/core/types";
 import { buildRoster, readStanding, storyTown } from "../src/core/elsewhere/roster";
 import { spreadNews } from "../src/core/elsewhere/news";
 import { asWant, gate, seedCandidates, threadLatest } from "../src/core/elsewhere/arcs";
-import { authorArc, tick } from "../src/core/elsewhere/storyteller";
+import { authorArc, tick, tieCard } from "../src/core/elsewhere/storyteller";
+import { bearingsOn, conditionsFor, settled, webMod } from "../src/core/elsewhere/web";
 import { collapseMessages, confirmArrivals, coverage, elsewhereLane, expireArrivals, retellArrival, routeFor, soughtOf, upgradeArrival, type Arrival } from "../src/core/elsewhere/crossings";
-import { validateProfile, validateTold } from "../src/core/elsewhere/telling";
+import { usesGone, validateProfile, validateTold } from "../src/core/elsewhere/telling";
 import { beatTemplate, endTemplate, kindForStory, kindFromText, stageOf, wantFromStory } from "../src/core/elsewhere/grammar";
 import { rng } from "../src/core/util";
 
@@ -543,5 +544,89 @@ describe("the player's own stories", () => {
 
   test("a decline's engine words name what is leaned on; a win is headway", () => {
     expect(beatTemplate({ kind: "decline", lead: "Willow", want: "to stay in control", stage: "setup", result: "win", premise: "Willow is drawn deeper into dark magic" })).toBe("Willow leaned on dark magic a little. Nobody has noticed yet.");
+  });
+});
+
+describe("subplots that share a person bear on each other", () => {
+  const witches = () => {
+    const { st, records } = world();
+    st.chars.tara = char("tara", "Tara", { tier: "off", place: "Sunnydale" });
+    st.chars.valeria = char("valeria", "Valeria", { tier: "off", place: "Sunnydale" });
+    records.push(person("char:tara", "Tara", "Tara Maclay is a witch and Willow's girlfriend."), person("char:valeria", "Valeria", "Valeria is a witch of the Witches' Circle."));
+    return { st, records, r: buildRoster({ state: st, records, userName: "Gabriel" }) };
+  };
+  const mk = (o: any) => ({ kind: "decline", cast: [], premise: "", want: "to stay in control", fear: "she hits bottom", grounds: ["x"], secrecy: "secret", clock: { cur: 1, max: 6 }, tally: { win: 0, cost: 0, loss: 0 }, heat: 1, stage: "rising", beats: [], nextAbs: 0, status: "running", by: "engine", startedAbs: 2 * DAY, startedMsg: 0, ...o }) as any;
+  const beat = (atAbs: number, result: string, text: string) => ({ atAbs, roll: [3, 3], mod: 0, result, text, told: "model", msgIndex: 5 });
+
+  test("what a step takes from someone stands, until a step gives it back; what is only meant or nearly done doesn't", () => {
+    const { r } = witches();
+    expect(settled("Valeria completed the stripping ritual and took Willow's magic as the Circle commanded.", r).map((s) => [s.person.name, s.thing, s.gone])).toEqual([["Willow", "magic", true]]);
+    expect(settled("The ritual held, Willow's magic is gone, and the Circle is satisfied.", r)[0]?.gone).toBe(true);
+    expect(settled("Willow is now without her powers.", r)[0]?.thing).toBe("powers");
+    expect(settled("The Circle sent Valeria to take away Willow's magic.", r)).toEqual([]);
+    expect(settled("Valeria began stripping Willow's magic, but stopped short of finishing.", r)).toEqual([]);
+    expect(settled("Willow got her magic back at last.", r)[0]?.gone).toBe(false);
+    const ev = (atAbs: number, text: string) => ({ arcId: "v", lead: "Valeria", kind: "duty" as const, result: "met", text, atAbs });
+    const willow = [r.find("Willow")!];
+    expect(conditionsFor(willow, [ev(100, "Valeria took Willow's magic.")], 200).map((c) => c.text)).toEqual(["Willow's magic is gone"]);
+    expect(conditionsFor(willow, [ev(100, "Valeria took Willow's magic."), ev(150, "Willow regained her magic.")], 200)).toEqual([]);
+    // Only as of the step's own time.
+    expect(conditionsFor(willow, [ev(300, "Valeria took Willow's magic.")], 200)).toEqual([]);
+  });
+
+  test("a subplot out against someone turns their next roll by how it went; one on their side, the other way", () => {
+    const { r } = witches();
+    const duty = mk({ id: "valeria_duty", kind: "duty", lead: "Valeria", cast: ["Willow", "Tara"], want: "to take away Willow's magic as the Circle commanded", beats: [beat(2 * DAY + 600, "win", "Valeria took Willow's magic.")] });
+    const decline = mk({ id: "willow_decline", lead: "Willow", cast: ["Tara"], beats: [beat(2 * DAY + 300, "loss", "Willow reached for dark magic again.")] });
+    const help = mk({ id: "tara_help", kind: "pursuit", lead: "Tara", cast: ["Willow"], want: "to help Willow without enabling her", beats: [beat(2 * DAY + 100, "cost", "Tara asked Willow to stop.")] });
+    const bs = bearingsOn(decline, [duty, decline, help], r, 3 * DAY);
+    expect(bs.find((b) => b.arcId === "valeria_duty")).toMatchObject({ stance: "against", dir: "theirs", person: "Willow", fresh: true, mod: -1 });
+    // Tara's step came before Willow's last one: it's context, not a pull.
+    expect(bs.find((b) => b.arcId === "tara_help")).toMatchObject({ stance: "for", fresh: false, mod: 0 });
+    expect(webMod(bs)).toEqual({ mod: -1, why: ["Valeria's duty went against Willow"] });
+    // Tara's own subplot is on Willow's side: Willow's setback after Tara's last step is Tara's setback too.
+    const tb = bearingsOn(help, [duty, decline, help], r, 3 * DAY);
+    expect(tb.find((b) => b.arcId === "willow_decline")).toMatchObject({ stance: "for", dir: "mine", mod: -1 });
+    // Someone in two casts is no tie; a dropped subplot no longer moves anyone.
+    const other = mk({ id: "x", kind: "pursuit", lead: "Dawn", cast: ["Tara"], beats: [beat(2 * DAY + 900, "win", "Dawn found the book.")] });
+    expect(bearingsOn(mk({ id: "y", lead: "Willow", cast: ["Tara"] }), [other], r, 3 * DAY)).toEqual([]);
+    expect(bearingsOn(decline, [{ ...duty, status: "dropped" }], r, 3 * DAY)).toEqual([]);
+  });
+
+  test("an ending shakes the subplots tied to it; their cards carry what stands and what the others did", () => {
+    const { st, records } = witches();
+    st.time = { day: 3, minute: 14 * 60 };
+    st.arcs = {
+      valeria_duty: mk({ id: "valeria_duty", kind: "duty", lead: "Valeria", cast: ["Willow", "Tara"], want: "to take away Willow's magic as the Circle commanded", clock: { cur: 5, max: 6 }, stage: "crisis", force: "win", push: true, beats: [beat(3 * DAY + 300, "cost", "Valeria began the ritual, but stopped short.")] }),
+      willow_decline: mk({ id: "willow_decline", lead: "Willow", cast: ["Tara"], premise: "Willow is drawn deeper into dark magic.", nextAbs: 5 * DAY, beats: [beat(3 * DAY + 200, "loss", "Willow reached for dark magic again.")] }),
+    };
+    const t = tick({ chatId: "c", tickId: "w9", state: st, records, userName: "Gabriel", mode: "living", canonGravity: "light", fates: "allow", genres: [], from: 3 * DAY + 600, now: 3 * DAY + 840, anchorIndex: 11, offPage: [], recentArrivals: [], seeding: "off" });
+    expect(t.lines.some((l) => l.startsWith("arc end #valeria_duty:"))).toBe(true);
+    // Willow's decline is pulled forward with its stakes raised.
+    const shake = t.lines.find((l) => l.startsWith("arc set #willow_decline:"))!;
+    expect(shake).toMatch(/next: \d+ \| heat: 2/);
+    expect(Number(/next: (\d+)/.exec(shake)![1])).toBeLessThan(5 * DAY);
+    // The ending's card knows Willow's own subplot.
+    expect(t.cards.find((c) => c.arcId === "valeria_duty" && c.ending)!.meanwhile!.join(" ")).toContain("Willow's decline");
+    // A step of Willow's after the stripping gets what stands, as new.
+    const taken = { ...st.arcs.valeria_duty, status: "resolved", ending: { result: "met", text: "Valeria completed the stripping ritual and took Willow's magic.", atAbs: 3 * DAY + 700 } } as any;
+    const card = tieCard({ arcId: "willow_decline", atAbs: 3 * DAY + 900 } as any, st.arcs.willow_decline, [taken, st.arcs.willow_decline], buildRoster({ state: st, records, userName: "Gabriel" }));
+    expect(card.stands).toEqual(["Willow's magic is gone (from Valeria's duty) [new since this subplot's last step: this step follows from it]"]);
+    expect(card.meanwhile![0]).toMatch(/^Valeria's duty \(against Willow\), ended: .* \[since this subplot's last step\]$/);
+    expect(card.gone).toEqual([{ person: "Willow", thing: "magic" }]);
+  });
+
+  test("a telling where someone uses what was taken is set aside; missing it is fine", () => {
+    const c = { gone: [{ person: "Willow", thing: "magic" }] };
+    expect(usesGone(c, "Willow cast a ward over the house anyway.")).toContain("Willow uses the magic");
+    expect(usesGone(c, "Willow tried to cast and nothing came.")).toBeNull();
+    expect(usesGone(c, "Willow craved the magic she no longer has.")).toBeNull();
+    expect(usesGone(c, "Tara cast a ward over the house.")).toBeNull();
+  });
+
+  test("the engine's words for a decline whose means were taken are the want of it", () => {
+    const w = { kind: "decline" as const, lead: "Willow", want: "to stay in control", stage: "rising" as const, result: "win" as const, premise: "Willow is drawn into dark magic." };
+    expect(beatTemplate({ ...w, without: { person: "Willow", thing: "magic" } })).toBe("Willow went looking for a way to get the magic back. Nobody has seen how bad it is yet.");
+    expect(beatTemplate({ ...w, kind: "rift", lead: "Tara", cast: "Willow", without: { person: "Willow", thing: "magic" } })).toMatch(/^With Willow's magic gone, Tara /);
   });
 });

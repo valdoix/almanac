@@ -8166,7 +8166,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.25.0";
+var VERSION = "1.26.0";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -15812,6 +15812,15 @@ function beatTemplate(o) {
   const where = o.place && !want.toLowerCase().includes(placeWord) && placeWord !== town.toLowerCase() ? `${cap3(atPlace(o.place))}, ` : "";
   let first = `${where}${where ? lead : cap3(lead)} ${fill(spec.moves[i])}.`;
   let state = fill(spec.state);
+  if (o.without) {
+    const mine = o.without.person.toLowerCase() === o.lead.toLowerCase();
+    if (o.kind === "decline" && mine) {
+      const thing = `the ${o.without.thing.replace(/^dark\s+/, "")}`;
+      first = `${where}${where ? lead : cap3(lead)} ${["felt the loss of " + thing + " and hid how much it hurt", "went looking for a way to get " + thing + " back", "came close to something desperate to get " + thing + " back"][i]}.`;
+      state = "Nobody has seen how bad it is yet.";
+    } else
+      first = `With ${o.without.person}'s ${o.without.thing} gone, ${where ? `${where.charAt(0).toLowerCase()}${where.slice(1)}` : ""}${lead} ${fill(spec.moves[i])}.`;
+  }
   if (o.kind === "return") {
     if (i === 0) {
       first = o.news ? `${cap3(lead)} heard that ${o.news.replace(/[.!]+$/, "")}.` : first;
@@ -17421,6 +17430,159 @@ var init_arcs = __esm(() => {
   FAMILY_TIE = /\b(mother|father|mom|mum|dad|parent|son|daughter|sister|brother|sibling|aunt|uncle|niece|nephew|cousin|grand\w*|step\w*|in-law|guardian|ward)\b/i;
 });
 
+// src/core/elsewhere/web.ts
+function peopleOf(arc, r) {
+  const out = [];
+  for (const n of [arc.lead, ...arc.cast]) {
+    const a = r.find(n);
+    if (a && !a.group && !out.includes(a))
+      out.push(a);
+  }
+  return out;
+}
+function shared(a, b, r) {
+  const pb = peopleOf(b, r);
+  return peopleOf(a, r).filter((x) => pb.includes(x));
+}
+function tied(a, b, r) {
+  const leads = [r.find(a.lead), r.find(b.lead)];
+  return shared(a, b, r).filter((x) => leads.includes(x));
+}
+function eventsOf(arc) {
+  const ev = arc.beats.map((b) => ({ arcId: arc.id, lead: arc.lead, kind: arc.kind, result: b.result, text: b.text, atAbs: b.atAbs }));
+  if (arc.ending && (arc.status === "resolved" || arc.status === "dropped"))
+    ev.push({ arcId: arc.id, lead: arc.lead, kind: arc.kind, result: arc.ending.result, text: arc.ending.text, atAbs: arc.ending.atAbs, ending: true });
+  return ev;
+}
+function aimAt(arc, person) {
+  if (person.names.some((n) => low3(n) === low3(arc.lead)))
+    return "shared";
+  const names = [...new Set(person.names.flatMap((n) => [n, n.split(/\s+/)[0]]))].filter((n) => n.length >= 3).map(esc7).join("|");
+  if (!names)
+    return "shared";
+  for (const text of [arc.want, arc.premise]) {
+    const near = (verbs) => new RegExp(`\\b(?:${verbs})\\b(?:\\s+[\\w'\u2019-]+){0,4}?\\s+(?:${names})\\b`, "i").test(text);
+    if (near(AGAINST))
+      return "against";
+    if (near(FOR))
+      return "for";
+  }
+  return "shared";
+}
+function settled(text, r) {
+  const out = [];
+  const people = r.actors.filter((a) => !a.group);
+  for (const s of text.split(/(?<=[.!?;])\s+|\s+[\u2014\u2013]\s+/)) {
+    if (/\b(?:stopped short|not yet|isn't|wasn't|didn't|did not|hasn't|failed to)\b/i.test(s))
+      continue;
+    for (const a of people) {
+      const names = [...new Set(a.names.flatMap((n) => [n, n.split(/\s+/)[0]]))].filter((n) => n.length >= 3).map(esc7).join("|");
+      if (!names)
+        continue;
+      const N = `(?:${names})`;
+      const T = `(?:\\w+\\s+)?(${THING})`;
+      const POSS = `(?:her|his|their|its)`;
+      const tests = [
+        [new RegExp(`\\b(?:took|taken|stripped|stole|stolen|drained|bound|sealed|removed|ripped (?:out|away)|burned out|cut off)\\s+(?:away\\s+)?${N}['\u2019]s\\s+${T}`, "i"), true],
+        [new RegExp(`\\b${N}['\u2019]s\\s+${T}\\s+(?:is|was|were|are|has been|had been|now)?\\s*(?:now\\s+|all\\s+)?(?:gone|taken|stripped|bound|drained|sealed|removed|lost)\\b`, "i"), true],
+        [new RegExp(`\\b(?:stripped|drained|robbed|emptied)\\s+${N}\\s+of\\s+(?:${POSS}\\s+)?${T}`, "i"), true],
+        [new RegExp(`\\b${N}\\s+(?:is|was)\\s+(?:now\\s+)?(?:left\\s+)?without\\s+(?:${POSS}\\s+)?${T}`, "i"), true],
+        [new RegExp(`\\b${N}\\s+(?:has\\s+)?(?:lost|no longer has)\\s+${POSS}\\s+${T}`, "i"), true],
+        [new RegExp(`\\b${N}['\u2019]s\\s+${T}\\s+(?:is|was|were|are|has|have|came|come)\\s+(?:now\\s+)?(?:back|restored|returned|come back)\\b`, "i"), false],
+        [new RegExp(`\\b${N}\\s+(?:got|gets|won|has|took)\\s+${POSS}\\s+${T}\\s+back\\b`, "i"), false],
+        [new RegExp(`\\b${N}\\s+(?:regained|recovered)\\s+${POSS}\\s+${T}`, "i"), false],
+        [new RegExp(`\\b(?:restored|returned|gave back)\\s+${N}['\u2019]s\\s+${T}`, "i"), false]
+      ];
+      for (const [re, gone] of tests) {
+        const m = re.exec(s);
+        if (!m || NOT_DONE.test(s.slice(0, m.index)))
+          continue;
+        const thing = low3(m[1]);
+        if (!out.some((x) => x.person === a && kin(x.thing).includes(thing)))
+          out.push({ person: a, thing, gone });
+        break;
+      }
+    }
+  }
+  return out;
+}
+function conditionsFor(people, all, before) {
+  const latest = new Map;
+  const r = { actors: people };
+  for (const ev of [...all].filter((e) => e.atAbs <= before).sort((a, b) => a.atAbs - b.atAbs)) {
+    for (const s of settled(ev.text, r)) {
+      const k = `${s.person.key}|${kin(s.thing)[0]}`;
+      latest.set(k, s.gone ? { person: s.person.name, thing: s.thing, text: `${s.person.name}'s ${s.thing} ${/(?:s|ies)$/.test(s.thing) ? "are" : "is"} gone`, arcId: ev.arcId, lead: ev.lead, kind: ev.kind, atAbs: ev.atAbs } : null);
+    }
+  }
+  return [...latest.values()].filter((c) => !!c);
+}
+function touches(arc, thing) {
+  const words = kin(thing);
+  const text = low3(`${arc.premise} ${arc.want} ${arc.fear} ${arc.beats.at(-1)?.text ?? ""}`);
+  return words.some((w) => new RegExp(`\\b${esc7(w)}\\b`).test(text));
+}
+function bearingsOn(arc, arcs, r, atAbs, extra = []) {
+  const mine = peopleOf(arc, r);
+  if (!mine.length)
+    return [];
+  const since = arc.beats.filter((b) => b.atAbs < atAbs).at(-1)?.atAbs ?? arc.startedAbs;
+  const lead = r.find(arc.lead);
+  const out = [];
+  for (const o of arcs) {
+    if (o.id === arc.id || o.status === "dropped")
+      continue;
+    const both = tied(arc, o, r);
+    if (!both.length)
+      continue;
+    const ev = [...eventsOf(o), ...extra.filter((e) => e.arcId === o.id)].filter((e) => e.atAbs <= atAbs).sort((a, b) => a.atAbs - b.atAbs).at(-1);
+    if (!ev || atAbs - ev.atAbs > WINDOW && !ev.ending || atAbs - ev.atAbs > 3 * WINDOW)
+      continue;
+    const fresh = arc.beats.some((b) => b.atAbs < atAbs) ? ev.atAbs > since : ev.atAbs >= since;
+    const oLead = r.find(o.lead);
+    let stance = "shared";
+    let dir;
+    let person = both[0];
+    let mod = 0;
+    const g = swing(ev.result);
+    if (lead && !lead.group && both.includes(lead)) {
+      const s = aimAt(o, lead);
+      if (s !== "shared")
+        stance = s, dir = "theirs", person = lead, mod = s === "for" ? Math.max(0, g) : -g;
+    }
+    if (stance === "shared" && oLead && !oLead.group && both.includes(oLead)) {
+      const s = aimAt(arc, oLead);
+      if (s !== "shared")
+        stance = s, dir = "mine", person = oLead, mod = s === "for" ? g : -g;
+    }
+    out.push({ arcId: o.id, lead: o.lead, kind: o.kind, person: person.name, stance, dir, text: ev.text, atAbs: ev.atAbs, ending: !!ev.ending, fresh, mod: fresh ? mod : 0 });
+  }
+  return out.sort((a, b) => Number(b.fresh) - Number(a.fresh) || b.atAbs - a.atAbs);
+}
+function webMod(bs) {
+  const pulls = bs.filter((b) => b.mod);
+  const mod = Math.max(-1, Math.min(1, pulls.reduce((s, b) => s + b.mod, 0)));
+  return { mod, why: mod ? pulls.filter((b) => Math.sign(b.mod) === Math.sign(mod)).map(pullWords) : [] };
+}
+function pullWords(b) {
+  if (b.dir === "theirs")
+    return `${b.lead}'s ${b.kind} ${b.stance === "for" ? `helped ${b.person}` : `went against ${b.person}`}`;
+  return `${b.person}'s own ${b.kind} went ${b.mod > 0 === (b.stance === "for") ? "well" : "badly"}`;
+}
+function meanwhileLines(bs) {
+  const label = (b) => b.dir === "theirs" ? b.stance === "for" ? ` (on ${b.person}'s side)` : ` (against ${b.person})` : b.dir === "mine" ? ` (${b.person}'s own story; this subplot is ${b.stance === "for" ? `on ${b.person}'s side` : `against ${b.person}`})` : "";
+  return bs.slice(0, 3).map((b) => `${b.lead}'s ${b.kind}${label(b)}${b.ending ? ", ended" : ""}: ${clip2(b.text, 220)}${b.fresh ? " [since this subplot's last step]" : ""}`);
+}
+function standsLines(cs, since, first = false) {
+  return cs.slice(0, 3).map((c) => `${c.text} (from ${c.lead}'s ${c.kind})${c.atAbs > since || first && c.atAbs >= since ? " [new since this subplot's last step: this step follows from it]" : ""}`);
+}
+var esc7 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), low3 = (s) => s.toLowerCase(), WINDOW, AGAINST = "take(?:s|n)? away|takes?|took|strip(?:s|ped)?|bind(?:s)?|bound|stop(?:s|ped)?|expose(?:s|d)?|punish(?:es|ed)?|kill(?:s|ed)?|destroy(?:s|ed)?|defeat(?:s|ed)?|ruin(?:s|ed)?|hunt(?:s|ed)?(?: down)?|capture(?:s|d)?|arrest(?:s|ed)?|banish(?:es|ed)?|curse(?:s|d)?|betray(?:s|ed)?|undermine(?:s|d)?|discredit(?:s|ed)?|get rid of|be rid of|drive out|turn (?:\\w+ )?against", FOR = "help(?:s|ed)?|protect(?:s|ed)?|save(?:s|d)?|rescue(?:s|d)?|steer(?:s|ed)?|support(?:s|ed)?|heal(?:s|ed)?|guard(?:s|ed)?|shield(?:s|ed)?|warn(?:s|ed)?|comfort(?:s|ed)?|free(?:s|d)?|look after|stand by|keep (?:\\w+ )?safe|bring (?:\\w+ )?back|reach(?:es)?|win (?:\\w+ )?back", swing = (result) => ["win", "cost", "met", "price"].includes(result) ? 1 : ["loss", "lost"].includes(result) ? -1 : 0, THING = "dark magic|magic|magick|powers?|abilities|strength|memor(?:y|ies)|soul|sight|voice|wings|immortality|slayer powers", KIN, kin = (thing) => KIN.find((k) => k.includes(low3(thing))) ?? [low3(thing)], NOT_DONE, clip2 = (s, n) => s.length > n ? `${s.slice(0, n - 1).replace(/\s+\S*$/, "")}\u2026` : s;
+var init_web = __esm(() => {
+  WINDOW = 2 * 1440;
+  KIN = [["magic", "magick", "dark magic", "power", "powers", "abilities", "spell", "spells", "spellwork", "witchcraft", "slayer powers"], ["memory", "memories"], ["sight", "eyes"]];
+  NOT_DONE = /\b(?:to|would|will|could|might|n't|not|never|almost|nearly|about to|set to|means? to|plans? to|going to|tried to|try to|before|until|if|whether)\s+$/i;
+});
+
 // src/core/elsewhere/storyteller.ts
 function tick(inp) {
   const st = inp.state;
@@ -17664,6 +17826,8 @@ function tick(inp) {
       perKind.set(c.arc.kind, (perKind.get(c.arc.kind) ?? 0) + 1);
     }
   }
+  const tickEvents = [];
+  const allEvents = () => [...arcs.flatMap(eventsOf), ...tickEvents];
   const collided = new Set;
   let moved = 0;
   const tried = new Set;
@@ -17682,6 +17846,9 @@ function tick(inp) {
       return;
     }
     moved++;
+    const tie = webMod(bearingsOn(arc, arcs, roster, g.atAbs ?? inp.now, tickEvents));
+    if (tie.mod)
+      g = { ...g, mod: Math.max(-2, Math.min(2, g.mod + tie.mod)), why: [...g.why, ...tie.why] };
     const spec = SPECS[arc.kind];
     const resultOf = (t) => t >= 10 ? "win" : t >= 7 ? "cost" : "loss";
     let roll = [d6(rand), d6(rand)];
@@ -17729,6 +17896,7 @@ function tick(inp) {
     const shownPlace = place && place.toLowerCase() !== (town ?? "").toLowerCase() && !arc.want.toLowerCase().includes(place.toLowerCase()) ? place : undefined;
     const newsKey = arc.grounds.find((x) => x.startsWith("#"))?.slice(1);
     const newsFact = newsKey && !offKeys.has(newsKey) && lead && hasFact(lead, newsKey) ? st.facts?.[newsKey] : undefined;
+    const gone = conditionsFor(peopleOf(arc, roster), allEvents(), atAbs).find((x) => touches(arc, x.thing));
     const text = beatTemplate({
       kind: arc.kind,
       lead: arc.lead,
@@ -17742,7 +17910,8 @@ function tick(inp) {
       group: !!lead?.group,
       cast: otherOf(arc),
       town,
-      news: newsFact?.statement
+      news: newsFact?.statement,
+      without: gone ? { person: gone.person, thing: gone.thing } : undefined
     });
     const next = atAbs + Math.round(120 + rand() * 240 / M.factor);
     const twistLine = twistText ? sentence2(/^ran into\b/.test(twistText) ? `${lead?.group ? groupName(arc.lead) : arc.lead} ${twistText}` : twistText) : "";
@@ -17750,7 +17919,8 @@ function tick(inp) {
     const beatIdx = lines.length - 1;
     if (stage !== arc.stage && stage !== "aftermath")
       lines.push(`arc stage #${arc.id}: ${stage}`);
-    log.push(`${arc.id}: ${roll[0]}+${roll[1]}${g.mod ? (g.mod > 0 ? "+" : "") + g.mod : ""} = ${total} \u2192 ${result}${twistText ? ` (twist: ${twistText})` : ""}${chosenOutcome ? ` (forced ${chosenOutcome})` : ""}`);
+    log.push(`${arc.id}: ${roll[0]}+${roll[1]}${g.mod ? (g.mod > 0 ? "+" : "") + g.mod : ""} = ${total} \u2192 ${result}${twistText ? ` (twist: ${twistText})` : ""}${chosenOutcome ? ` (forced ${chosenOutcome})` : ""}${tie.mod ? ` (tied: ${tie.why.join(", ")} ${tie.mod > 0 ? "+" : ""}${tie.mod})` : ""}`);
+    tickEvents.push({ arcId: arc.id, lead: arc.lead, kind: arc.kind, result, text, atAbs });
     if (arc.faction)
       lines.push(`clockf ${arc.faction.name}: ${arc.faction.project} ${cur}/${arc.clock.max} \u2014 ${cleanVal(text.slice(0, 80))}`);
     if (arc.kind === "return" && lead && town) {
@@ -17780,6 +17950,16 @@ function tick(inp) {
         for (const l of consequences(arc, end, roster))
           lines.push(l);
         log.push(`${arc.id}: ends (${end})`);
+        tickEvents.push({ arcId: arc.id, lead: arc.lead, kind: arc.kind, result: end, text: endText, atAbs, ending: true });
+        for (const o of running) {
+          if (o.id === arc.id || tried.has(o.id) || chosen.some((c) => c.arc.id === o.id) || o.fate || o.clock.cur >= o.clock.max || leadOf(o)?.ring === "onstage" || !tied(arc, o, roster).length)
+            continue;
+          if (lines.some((l) => l.startsWith(`arc drop #${o.id}:`) || l.startsWith(`arc end #${o.id}:`)))
+            continue;
+          const soon = atAbs + 30 + Math.round(rand() * 90);
+          lines.push(`arc set #${o.id}: next: ${Math.min(o.nextAbs, soon)} | heat: ${Math.min(3, o.heat + 1)}`);
+          log.push(`${o.id}: shaken by ${arc.id}'s ending (heat ${Math.min(3, o.heat + 1)})`);
+        }
       }
     }
     cards.push(card);
@@ -17819,11 +17999,51 @@ function tick(inp) {
     arrivals.push({ id: id("incident"), kind: "ambient", text: inc, template: inc, place: town ? [town] : [], atAbs: inp.now, untilAbs: inp.now + 480, tick: inp.tickId, status: "pending", offered: [] });
     log.push(`incident: ${inc}`);
   }
+  const fresh = new Map;
+  for (const c of cards) {
+    const arc = st.arcs?.[c.arcId] ?? fresh.get(c.arcId) ?? arcOfCard(c, inp.now);
+    fresh.set(c.arcId, arc);
+    tieCard(c, arc, arcs, roster, tickEvents);
+  }
   return { tickId: inp.tickId, hours, lines, cards, arrivals, awake: awake.map((a) => a.name), hops, seeded, proposals, log, roster };
+}
+function arcOfCard(c, now) {
+  return {
+    id: c.arcId,
+    kind: c.kind,
+    lead: c.lead,
+    cast: c.cast,
+    premise: c.premise,
+    want: c.want,
+    fear: c.fear,
+    grounds: c.grounds,
+    secrecy: "private",
+    clock: { cur: 0, max: 6 },
+    tally: { win: 0, cost: 0, loss: 0 },
+    heat: 1,
+    stage: "setup",
+    beats: [],
+    nextAbs: now,
+    status: "running",
+    by: "engine",
+    startedAbs: c.atAbs,
+    startedMsg: 0
+  };
+}
+function tieCard(c, arc, arcs, roster, extra = []) {
+  const before = extra.filter((e) => e.arcId !== arc.id && e.atAbs <= c.atAbs);
+  const bs = bearingsOn(arc, arcs, roster, c.atAbs, before);
+  const since = arc.beats.filter((b) => b.atAbs < c.atAbs).at(-1)?.atAbs ?? arc.startedAbs;
+  const evs = [...arcs.flatMap(eventsOf).filter((e) => !(e.arcId === arc.id && e.atAbs >= c.atAbs)), ...before];
+  const cs = conditionsFor(peopleOf(arc, roster), evs, c.atAbs);
+  c.meanwhile = meanwhileLines(bs);
+  c.stands = standsLines(cs, since, !arc.beats.some((b) => b.atAbs < c.atAbs));
+  c.gone = cs.map((x) => ({ person: x.person, thing: x.thing }));
+  return c;
 }
 function cardForBeat(arc, beat, roster, st, offPage, records) {
   const before = { ...arc, beats: arc.beats.filter((b) => b.atAbs < beat.atAbs) };
-  return cardFor(before, roster.find(arc.lead), roster, st, {
+  const card = cardFor(before, roster.find(arc.lead), roster, st, {
     result: beat.result,
     roll: beat.roll,
     mod: beat.mod,
@@ -17836,6 +18056,7 @@ function cardForBeat(arc, beat, roster, st, offPage, records) {
     offPage,
     records
   });
+  return tieCard(card, before, Object.values(st.arcs ?? {}), roster);
 }
 function cardFor(arc, lead, r, st, o) {
   const off = new Set(o.offPage.map((x) => x.key));
@@ -17922,7 +18143,7 @@ function twist(t, arc, lead, c) {
     case "slip":
       return arc.secrecy !== "public" ? { text: "word of it slipped out", slip: true } : null;
     case "collide": {
-      const other = c.running.filter((o) => o.id !== arc.id && !c.collided.has(o.id) && o.clock.cur < o.clock.max && (arc.place && o.place && arc.place.toLowerCase() === o.place.toLowerCase() || o.cast.includes(arc.lead) || arc.cast.includes(o.lead) || o.faction && arc.place && o.place && arc.place === o.place));
+      const other = c.running.filter((o) => o.id !== arc.id && !c.collided.has(o.id) && o.clock.cur < o.clock.max && (arc.place && o.place && arc.place.toLowerCase() === o.place.toLowerCase() || o.cast.includes(arc.lead) || arc.cast.includes(o.lead) || tied(arc, o, c.roster).length > 0 || o.faction && arc.place && o.place && arc.place === o.place));
       const o = other.length ? other[Math.floor(c.rand() * other.length)] : undefined;
       return o ? { text: `ran into ${o.lead}'s business`, collide: o } : null;
     }
@@ -17996,6 +18217,7 @@ var init_storyteller = __esm(() => {
   init_grammar();
   init_news();
   init_roster();
+  init_web();
   MODES = {
     quiet: { awake: 6, arcs: 3, perTick: 2, factor: 0.5, twist: 1 / 12, seeds: 1, incidentsPerDay: 0, arrivalChance: 0.5 },
     living: { awake: 10, arcs: 6, perTick: 4, factor: 1, twist: 1 / 6, seeds: 2, incidentsPerDay: 0.6, arrivalChance: 0.75 },
@@ -18006,11 +18228,16 @@ var init_storyteller = __esm(() => {
 });
 
 // src/core/elsewhere/telling.ts
+function tiesText(c) {
+  return `${c.stands?.length ? `
+  STANDS ${c.stands.join(" \xB7 ")}` : ""}${c.meanwhile?.length ? `
+  MEANWHILE ${c.meanwhile.join(" \xB7 ")}` : ""}`;
+}
 function cardText(c, ctx) {
   if (c.seed) {
     return `SEED ${c.id} \xB7 new subplot \xB7 ${c.kind} \xB7 lead ${c.lead}${c.cast.length ? ` \xB7 with ${c.cast.join(", ")}` : ""}
   WHO ${c.lead}: ${c.leadText.slice(0, 220) || "\u2014"}
-  GROUNDS ${c.grounds.join(" \xB7 ")}
+  GROUNDS ${c.grounds.join(" \xB7 ")}${tiesText(c)}
   DRAFT premise: ${c.premise} | want: ${c.want} | fear: ${c.fear}
   WRITE a premise (one or two plain, specific sentences, \u2264 45 words) from the grounds only, a want ("to \u2026", \u2264 12 words) and a fear (\u2264 12 words).`;
   }
@@ -18022,7 +18249,7 @@ function cardText(c, ctx) {
   SO FAR (this is its first step: begin what the SUBPLOT describes)`}
   CAST ${c.cast.join(", ") || "\u2014"} \xB7 WHERE ${c.where ?? "\u2014"} \xB7 WHEN ${fmtTime(fromAbs(c.atAbs))}${c.offHours ? ` (${c.offHours}: tell it so that fits)` : ""}
   KNOWS ${c.knows.join("; ") || "\u2014"}${c.noRoute.length ? ` \xB7 NO ROUTE TO ${c.noRoute.join(", ")} (can't act on it)` : ""}${c.established?.length ? `
-  ESTABLISHED ${c.established.join(" \xB7 ")}` : ""}${c.sought?.length ? `
+  ESTABLISHED ${c.established.join(" \xB7 ")}` : ""}${tiesText(c)}${c.sought?.length ? `
   SOUGHT ${c.sought.join(", ")}: ${c.lead} doesn't know where they are and doesn't find them${c.ending ? " unless the ending is met" : " in this step (only an ending can)"}; no call, letter or visit reaches them` : ""}
   ENGINE DRAFT ${c.template}${c.arrival ? `
   REACHES THE SCENE AS (${c.arrivalKind}) ${c.arrival}` : ""}`;
@@ -18033,7 +18260,8 @@ function tellingPrompt(cards, ctx) {
 Also PROFILE each person listed under PROFILES from their text only: {"key","standing","where","reach","want","fear","nocturnal"}. standing is one of: "here" (about town, free to act), "away" (gone somewhere far), "captive" (imprisoned or held), "changed" (transformed or cursed out of their own shape), "dead", "companion" (only an animal, pet or mount that belongs to someone, never a person who is someone's ally or friend), "construct" (a robot, golem or the like). where is the place they are now, or empty; reach is "town", "region" or "far"; want is what they want now, starting "to", and fear what they fear, both in their own specific words (never empty or "\u2026"); nocturnal is true or false.` : "";
   return {
     system: `You tell what happened off the page in a roleplay, between two story times. ${SAFETY_DATA}
-Each CARD is already decided: who, where, when, and how it turned out. Tell it in two short, plain sentences (at most 50 words), like news of someone the reader knows. First, what happened, in the past tense: the next concrete step of the SUBPLOT, continuing SO FAR, and specific, naming the actual people, news, places and things from the card (SUBPLOT, GROUNDS, KNOWS, ESTABLISHED). Then where that leaves things now, in the present tense: what the lead is about to do, or what is now set to happen. Write "heard that Buffy is back", never "received news"; "voted to strip her magic", never "reached a decision". The register, from other stories: "Marta heard that the mill had burned down. She's thinking of writing to her brother and going home." / "The guild finished its inquiry into the forged seals. Tomas is set to lose his licence." No scenery for its own sake, no semicolon chains, no vague summary ("made progress", "at a price", "it went well", "things moved along"); a price or a setback is said as the concrete thing it was. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, people named in its ESTABLISHED facts, and places it names. The lead acts only on what they KNOW; ESTABLISHED is for getting the names and facts right. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
+Each CARD is already decided: who, where, when, and how it turned out. Tell it in two short, plain sentences (at most 50 words), like news of someone the reader knows. First, what happened, in the past tense: the next concrete step of the SUBPLOT, continuing SO FAR, and specific, naming the actual people, news, places and things from the card (SUBPLOT, GROUNDS, KNOWS, ESTABLISHED). Then where that leaves things now, in the present tense: what the lead is about to do, or what is now set to happen. Write "heard that Buffy is back", never "received news"; "voted to strip her magic", never "reached a decision". The register, from other stories: "Marta heard that the mill had burned down. She's thinking of writing to her brother and going home." / "The guild finished its inquiry into the forged seals. Tomas is set to lose his licence." No scenery for its own sake, no semicolon chains, no vague summary ("made progress", "at a price", "it went well", "things moved along"); a price or a setback is said as the concrete thing it was. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, people named in its ESTABLISHED facts, STANDS and MEANWHILE, and places it names. The lead acts only on what they KNOW; ESTABLISHED is for getting the names and facts right.
+Subplots that share a person happen in one world. STANDS is what other steps have settled about the card's people (something taken, something given back): it holds in this step, and nothing in it is undone, used or forgotten (if her magic is gone, she casts nothing; she can miss it, crave it, or seek a way back). MEANWHILE is what the subplots tied to this one did last: never contradict it, and where it is marked as since this subplot's last step, let this step follow from it (react to it, or be changed by it), naming it plainly. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
 For a card with REACHES THE SCENE, also write "arrival": the moment it reaches the scene as the scene would meet it (what is heard, seen, read or said, and by whom), specific about the news it carries, at most 40 words, in-world.
 You may add up to two ledger "lines" per card for the LEAD and CAST only: "know Name: #key fact | how they learned it \xB7 knows/believes", "bond A>B: trust +1 \u2014 cause", "journal Name: their own words".
 Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only. The premise is one or two plain, specific sentences: who, what they've learned or what has happened to them (naming the actual news, people and places in the grounds), and what they mean to do about it (at most 45 words, no labels or lists). The want is "to \u2026" and the fear a plain clause, both specific and in natural words.${cards.some((c) => c.kind === "world") ? `
@@ -18067,6 +18295,17 @@ function capNames(text) {
   }
   return out;
 }
+function usesGone(c, text) {
+  for (const g of c.gone ?? []) {
+    if (!MAGICAL.test(g.thing))
+      continue;
+    const n = g.person.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = new RegExp(`\\b${n}\\b([^.;!?]{0,40}?)\\b(?:cast(?:s|ing)?|channel(?:l)?ed|conjured|summoned|hexed|levitated|teleported|warded|scried|worked (?:a |the |another )?(?:spell|ward|charm)|used (?:her|his|their) (?:magic|powers)|did (?:a |another )?spell)\\b`, "i").exec(text);
+    if (m && !/\b(?:tried|try|couldn't|could not|can't|cannot|failed|unable|no longer|wanted|wants|itched|craved|longed|reached for nothing|without)\b/i.test(m[1]))
+      return `${g.person} uses the ${g.thing} that is gone`;
+  }
+  return null;
+}
 function validateTold(c, raw, ctx) {
   const fail = (why) => ({ lines: [], rejected: why });
   const text = String(raw.text ?? "").trim();
@@ -18090,7 +18329,7 @@ function validateTold(c, raw, ctx) {
       a.names.forEach(addNames);
   }
   addNames(ctx.userName);
-  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...c.established ?? [], ...c.groundText ?? [], ...c.sofar ?? [], c.arrival ?? ""])
+  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...c.established ?? [], ...c.groundText ?? [], ...c.sofar ?? [], ...c.stands ?? [], ...c.meanwhile ?? [], c.arrival ?? ""])
     addNames(p);
   const others = new Set(ctx.roster.actors.flatMap((a) => a.names.flatMap((n) => n.split(/\s+/))).map((w) => w.toLowerCase()));
   const lore = new Set([c.leadText, ...c.cast.map((n) => ctx.roster.find(n)?.text ?? "")].join(" ").match(/\p{Lu}[\p{L}'\u2019-]+/gu)?.map((w) => w.toLowerCase().replace(/['\u2019]s$/, "")) ?? []);
@@ -18108,6 +18347,9 @@ function validateTold(c, raw, ctx) {
   }
   if (!c.fateOk && IRREVERSIBLE.test(`${text} ${arrival ?? ""}`))
     return fail("an irreversible outcome");
+  const usedUp = usesGone(c, `${text} ${arrival ?? ""}`);
+  if (usedUp)
+    return fail(usedUp);
   const finds = c.result !== "met" && c.result !== "price" && (c.sought ?? []).find((n) => {
     const names = [n, ...ctx.roster.find(n)?.names ?? []].map((x) => x.split(/\s+/)[0]).filter((x) => x.length >= 3).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
     return new RegExp(`\\b(?:(?:found|finds)(?! no\\b| nothing\\b| neither\\b| only\\b)|located|locates|tracked (?:\\w+ )?down|caught up with|learned where|found out where|knows where|knew where)\\b[^.;]{0,40}?\\b(?:${names.join("|")})\\b|\\btracked (?:${names.join("|")}) down\\b`, "i").test(`${text} ${arrival ?? ""}`);
@@ -18214,7 +18456,7 @@ function validateShape(raw, roster, lead) {
     out.place = place;
   return Object.keys(out).length ? out : null;
 }
-var RESULT_WORD, OPPOSITE, IRREVERSIBLE, VERBISH, PLACE_WORD, STANDINGS, REACHES, KIND_MEANING, KIND_NAMES;
+var RESULT_WORD, OPPOSITE, IRREVERSIBLE, VERBISH, PLACE_WORD, MAGICAL, STANDINGS, REACHES, KIND_MEANING, KIND_NAMES;
 var init_telling = __esm(() => {
   init_dsl();
   init_state();
@@ -18242,6 +18484,7 @@ var init_telling = __esm(() => {
   IRREVERSIBLE = /\b(died|dies|killed|dead|murdered|suicide|overdosed|married|wedding vows|pregnan\w*|gave birth|left (?:town|for good) forever|maimed|paralys\w*|lost (?:an? )?(?:arm|leg|eye|hand))\b/i;
   VERBISH = /^(?:\w+ly\s+)?(?:said|says|did|does|went|goes|decided|decides|felt|feels|thought|thinks|knew|knows|asked|asks|told|tells|agreed|agrees|refused|refuses|took|takes|gave|gives|kissed|kisses|walked|walks|ran|runs|looked|looks|smiled|smiles|called|calls|answered|answers|replied|replies|promised|promises|wanted|wants|chose|chooses|left|leaves|came|comes|met|meets|found|finds|saw|sees|heard|hears|realized|realised|learned|learnt|was|is|had|has|would|will|could|can|should|must|might)\b/i;
   PLACE_WORD = /^(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Boulevard|Blvd|Drive|Dr|Way|Place|Pl|Square|Sq|Court|Ct|Terrace|Alley|Row|Highway|Hwy|Parkway|Park|Bridge|Hill|Heights|Plaza|Market|Mall|Station|Cemetery|Center|Centre)$/;
+  MAGICAL = /\b(?:magic|magick|powers?|abilities|spells?|witchcraft)\b/i;
   STANDINGS = ["here", "away", "captive", "changed", "dead", "companion", "construct"];
   REACHES = ["house", "town", "region", "far"];
   KIND_MEANING = {
@@ -18731,7 +18974,7 @@ function anchorLines(content) {
   }
   return out;
 }
-function clip2(s, n) {
+function clip3(s, n) {
   if (s.length <= n)
     return s;
   const cut = s.slice(0, n);
@@ -18755,17 +18998,17 @@ function classifyWeaverEntry(e, part, book) {
     const l = anchorLines(e.content ?? "");
     const who = (e.key ?? []).find((k) => k.trim())?.trim() || book?.subject || "";
     if (who && (book?.world || l.tension || l.stance)) {
-      return { ...base, kind: "place", name: who, summary: clip2(l.core ?? firstSentence2(e.content ?? ""), 400), tension: l.tension ? clip2(l.tension, 240) : undefined };
+      return { ...base, kind: "place", name: who, summary: clip3(l.core ?? firstSentence2(e.content ?? ""), 400), tension: l.tension ? clip3(l.tension, 240) : undefined };
     }
     if (who) {
       return {
         ...base,
         kind: "person",
         name: who,
-        summary: clip2(l.core ?? firstSentence2(e.content ?? ""), 240),
-        role: l.core ? clip2(l.core.split(/\s*(?:;|\.\s|,\s*(?:who|which|whose)\b)/)[0], 90) : undefined,
-        want: l.drives ? clip2(l.drives, 220) : undefined,
-        voice: l.voice ? clip2(l.voice, 220) : undefined
+        summary: clip3(l.core ?? firstSentence2(e.content ?? ""), 240),
+        role: l.core ? clip3(l.core.split(/\s*(?:;|\.\s|,\s*(?:who|which|whose)\b)/)[0], 90) : undefined,
+        want: l.drives ? clip3(l.drives, 220) : undefined,
+        voice: l.voice ? clip3(l.voice, 220) : undefined
       };
     }
     return { ...base, name: `${who || "World"} anchor`, summary: l.core ?? firstSentence2(e.content ?? "") };
@@ -18777,7 +19020,7 @@ function classifyWeaverEntry(e, part, book) {
   return {
     ...base,
     name: title || tag || "Weaver rule",
-    summary: clip2(inner.split(/\n/)[0] ?? "", 200),
+    summary: clip3(inner.split(/\n/)[0] ?? "", 200),
     ...agency ? { agenda: agency.agenda, holds: agency.holds } : {}
   };
 }
@@ -18908,7 +19151,7 @@ function classify(e, book = null) {
     if (book.role === "npc" && unlabelled) {
       Object.assign(base, { kind: "person", tense: "timeless", name: titleName || base.name, confidence: 0.9, via: "weaver" });
     } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess" && isScene(e.comment || titleName, content, book.role)) {
-      Object.assign(base, { kind: "playbook", tense: "future", subject: book.subject, confidence: 0.8, via: "weaver", name: (e.comment ?? titleName).trim(), aliases: [], keys: e.key ?? [], summary: clip2(content.replace(/\s+/g, " ").trim(), 700) });
+      Object.assign(base, { kind: "playbook", tense: "future", subject: book.subject, confidence: 0.8, via: "weaver", name: (e.comment ?? titleName).trim(), aliases: [], keys: e.key ?? [], summary: clip3(content.replace(/\s+/g, " ").trim(), 700) });
     } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess") {
       const past = /\b(history|past|childhood|upbringing|backstory|origins?|before|years ago|used to)\b/i.test(`${titleName} ${(e.key ?? []).join(" ")}`);
       Object.assign(base, { kind: past ? "history" : "texture", tense: past ? "past" : "timeless", subject: book.subject, confidence: 0.6, via: "weaver" });
@@ -18981,7 +19224,7 @@ function classify(e, book = null) {
     }
     case "playbook": {
       const who = base.subject ?? base.participants?.[0] ?? namesIn2(titleName.replace(/^(?:when|if|once|after|the first time|the moment)\s+/i, "").split(/\s+/).slice(0, 2).join(" "))[0];
-      Object.assign(base, { subject: who, aliases: [], keys: e.key ?? [], name: base.via === "metadata" ? base.name : titleName, summary: clip2(content.replace(/\s+/g, " ").trim(), 700) });
+      Object.assign(base, { subject: who, aliases: [], keys: e.key ?? [], name: base.via === "metadata" ? base.name : titleName, summary: clip3(content.replace(/\s+/g, " ").trim(), 700) });
       break;
     }
     case "situation":
@@ -19003,7 +19246,7 @@ function classify(e, book = null) {
     case "texture": {
       if (base.category === "voice") {
         base.subject ??= base.participants?.[0] ?? base.name;
-        base.voice = clip2(content.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim(), 240);
+        base.voice = clip3(content.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim(), 240);
       } else if (base.category === "secret" || SECRET.test(content)) {
         const sign = SIGN.exec(content.replace(firstSentence2(content), ""))?.[0]?.trim();
         base.secret = { fact: firstSentence2(content), sign };
@@ -24066,7 +24309,22 @@ function elsewhereView(o) {
   const order = { fate: 0, running: 1, held: 2, resolved: 3, dropped: 4 };
   const now = st.time ? absMinutes(st.time) : null;
   const telling = new Set(E.order.filter((id) => E.ticks[id]?.status === "telling"));
-  const arcs = Object.values(st.arcs ?? {}).sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5) || Number(b.by === "player") - Number(a.by === "player") || (b.lastBeatAbs ?? b.startedAbs) - (a.lastBeatAbs ?? a.startedAbs)).slice(0, 30).map((a) => ({
+  const allArcs = Object.values(st.arcs ?? {});
+  const allEvents = allArcs.flatMap(eventsOf);
+  const latest = Math.max(0, ...allEvents.map((x) => x.atAbs));
+  const tiesOf = (a) => {
+    if (a.status !== "running" && a.status !== "held")
+      return null;
+    const at = now ?? latest;
+    const bs = bearingsOn(a, allArcs, roster, at);
+    const pull = webMod(bs);
+    return {
+      ties: bs.slice(0, 4).map((b) => ({ id: b.arcId, lead: b.lead, kind: b.kind, stance: b.stance, dir: b.dir ?? "", person: b.person, ending: b.ending, fresh: b.fresh, at: o.fmt(b.atAbs), text: b.text, pull: b.mod ? pullWords(b) : "", mod: b.mod })),
+      stands: conditionsFor(peopleOf(a, roster), allEvents, at).map((c) => ({ text: c.text, from: `${c.lead}`, kind: c.kind, at: o.fmt(c.atAbs) })),
+      pull: pull.mod ? { mod: pull.mod, why: pull.why } : null
+    };
+  };
+  const arcs = allArcs.sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5) || Number(b.by === "player") - Number(a.by === "player") || (b.lastBeatAbs ?? b.startedAbs) - (a.lastBeatAbs ?? a.startedAbs)).slice(0, 30).map((a) => ({
     id: a.id,
     kind: a.kind,
     lead: a.lead,
@@ -24107,7 +24365,8 @@ function elsewhereView(o) {
     wait: a.status === "running" ? a.wait ?? "" : "",
     pushed: !!a.push,
     reached: list.filter((x) => x.arc === a.id && x.status === "used").slice(-3).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "" })),
-    reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered") && callFits(x, st, roster)).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" }))
+    reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered") && callFits(x, st, roster)).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" })),
+    ...tiesOf(a) ?? { ties: [], stands: [], pull: null }
   }));
   const ticks = E.order.map((id) => E.ticks[id]).filter(Boolean).reverse().map((t) => ({ id: t.id, at: t.at, from: o.fmt(t.from), to: o.fmt(t.to), hours: t.hours, beats: t.beats, seeds: t.seeds, proposed: t.proposed ?? 0, hops: t.hops, arrivals: t.arrivals, status: t.status, tokens: t.tokens ?? 0, log: t.log, rejected: t.rejected ?? [], awake: t.awake }));
   const awake = new Set(ticks[0]?.awake ?? []);
@@ -24164,6 +24423,7 @@ var init_elsewhere = __esm(() => {
   init_crossings();
   init_roster();
   init_arcs();
+  init_web();
   init_storyteller();
   init_telling();
   init_host();
@@ -25498,7 +25758,7 @@ function validateEntry(e0, opts = {}) {
 function firstSentence3(s) {
   return (/^[\s\S]*?[.!?](\s|$)/.exec(s.trim())?.[0] ?? s).trim();
 }
-var esc7 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var esc8 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 function linkEntries(entries) {
   const edges = [];
   const live = entries.filter((e) => e.op !== "retire");
@@ -25507,7 +25767,7 @@ function linkEntries(entries) {
     for (const b of live) {
       if (a.uid === b.uid)
         continue;
-      const hit = b.key.find((k) => k.length > 2 && new RegExp(`\\b${esc7(k.toLowerCase())}\\b`).test(text));
+      const hit = b.key.find((k) => k.length > 2 && new RegExp(`\\b${esc8(k.toLowerCase())}\\b`).test(text));
       if (hit)
         edges.push({ from: a.uid, to: b.uid, via: hit });
     }
@@ -25562,7 +25822,7 @@ function simulateActivation(entries, scene, maxPasses = 3) {
         continue;
       if (pass === 0 && e.delayUntilRecursion)
         continue;
-      const hit = e.key.find((k) => new RegExp(`\\b${esc7(k.toLowerCase())}\\b`).test(text));
+      const hit = e.key.find((k) => new RegExp(`\\b${esc8(k.toLowerCase())}\\b`).test(text));
       if (!hit)
         continue;
       if (e.selective && e.keysecondary.length) {

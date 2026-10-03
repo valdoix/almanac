@@ -228,6 +228,8 @@ export interface BeatWords {
   town?: string;
   /** News the lead holds that the subplot rests on ("Buffy is alive again"): what a return begins with. */
   news?: string;
+  /** Something another subplot took from someone in this one, that this one is about (Willow's magic). */
+  without?: { person: string; thing: string };
 }
 
 /**
@@ -249,6 +251,15 @@ export function beatTemplate(o: BeatWords): string {
   const where = o.place && !want.toLowerCase().includes(placeWord) && placeWord !== town.toLowerCase() ? `${cap(atPlace(o.place))}, ` : "";
   let first = `${where}${where ? lead : cap(lead)} ${fill(spec.moves[i])}.`;
   let state = fill(spec.state);
+  // What was taken changes the step: a decline without its means is the want of it; anyone else goes on without it.
+  if (o.without) {
+    const mine = o.without.person.toLowerCase() === o.lead.toLowerCase();
+    if (o.kind === "decline" && mine) {
+      const thing = `the ${o.without.thing.replace(/^dark\s+/, "")}`;
+      first = `${where}${where ? lead : cap(lead)} ${["felt the loss of " + thing + " and hid how much it hurt", "went looking for a way to get " + thing + " back", "came close to something desperate to get " + thing + " back"][i]}.`;
+      state = "Nobody has seen how bad it is yet.";
+    } else first = `With ${o.without.person}'s ${o.without.thing} gone, ${where ? `${where.charAt(0).toLowerCase()}${where.slice(1)}` : ""}${lead} ${fill(spec.moves[i])}.`;
+  }
   // A return begins with the news that brings them back.
   if (o.kind === "return") {
     if (i === 0) {

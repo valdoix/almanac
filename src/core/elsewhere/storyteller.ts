@@ -13,6 +13,7 @@ import { routeFor, soughtOf, type Arrival } from "./crossings";
 import { beatTemplate, endTemplate, groupName, kindForStory, SPECS, stageOf, wantFromStory, type RouteKind } from "./grammar";
 import { spreadNews, type Hop } from "./news";
 import { awakeSet, buildRoster, canAct, hasFact, type Actor, type Profile, type Roster } from "./roster";
+import { bearingsOn, conditionsFor, eventsOf, meanwhileLines, peopleOf, standsLines, tied, touches, webMod, type ArcEvent } from "./web";
 
 export type Mode = "quiet" | "living" | "restless";
 
@@ -115,6 +116,12 @@ export interface BeatCard {
   sought?: string[];
   /** Facts the story has established about the lead and cast (names and specifics for the telling; not what the lead knows). */
   established?: string[];
+  /** What the subplots tied to this one (sharing a person) did last: the telling keeps in step with them. */
+  meanwhile?: string[];
+  /** What other steps settled about its people ("Willow's magic is gone"): nothing in this step undoes it. */
+  stands?: string[];
+  /** The same, as what was taken from whom: a telling where they still use it is set aside. */
+  gone?: { person: string; thing: string }[];
   grounds: string[];
   template: string;
   /** Index of the line the telling rewrites (the beat, or the arc's opening for a seed). */
@@ -343,6 +350,9 @@ export function tick(inp: TickInput): TickResult {
   }
 
   // 8. The beats: gate, dice, twist, clock, ending, route.
+  // Steps taken this tick, so a later step in it (and every card) sees them: subplots bear on each other.
+  const tickEvents: ArcEvent[] = [];
+  const allEvents = () => [...arcs.flatMap(eventsOf), ...tickEvents];
   const collided = new Set<string>();
   let moved = 0;
   const tried = new Set<string>();
@@ -359,6 +369,9 @@ export function tick(inp: TickInput): TickResult {
       return;
     }
     moved++;
+    // The subplots tied to this one: one out to help its lead turns the dice their way, one against them the other way.
+    const tie = webMod(bearingsOn(arc, arcs, roster, g.atAbs ?? inp.now, tickEvents));
+    if (tie.mod) g = { ...g, mod: Math.max(-2, Math.min(2, g.mod + tie.mod)), why: [...g.why, ...tie.why] };
     const spec = SPECS[arc.kind];
     const resultOf = (t: number): BeatResult => (t >= 10 ? "win" : t >= 7 ? "cost" : "loss");
     let roll: [number, number] = [d6(rand), d6(rand)];
@@ -404,16 +417,19 @@ export function tick(inp: TickInput): TickResult {
     // The news a subplot rests on, when the lead holds it (what a return begins with).
     const newsKey = arc.grounds.find((x) => x.startsWith("#"))?.slice(1);
     const newsFact = newsKey && !offKeys.has(newsKey) && lead && hasFact(lead, newsKey) ? st.facts?.[newsKey] : undefined;
+    // Something another step took from someone in it, that this subplot is about ("dark magic", and her magic is gone).
+    const gone = conditionsFor(peopleOf(arc, roster), allEvents(), atAbs).find((x) => touches(arc, x.thing));
     const text = beatTemplate({
       kind: arc.kind, lead: arc.lead, want: arc.want, stage: stage === "aftermath" ? "crisis" : stage, result, price, worse, place: shownPlace, premise: arc.premise, group: !!lead?.group,
-      cast: otherOf(arc), town, news: newsFact?.statement,
+      cast: otherOf(arc), town, news: newsFact?.statement, without: gone ? { person: gone.person, thing: gone.thing } : undefined,
     });
     const next = atAbs + Math.round(120 + rand() * 240 / M.factor);
     const twistLine = twistText ? sentence(/^ran into\b/.test(twistText) ? `${lead?.group ? groupName(arc.lead) : arc.lead} ${twistText}` : twistText) : "";
     lines.push(beatLine(arc.id, { result, roll, mod: g.mod, at: atAbs, text: twistLine ? `${text} ${twistLine}` : text, told: "template", twist: twistText, place, tick: inp.tickId, next, forced: !!chosenOutcome }));
     const beatIdx = lines.length - 1;
     if (stage !== arc.stage && stage !== "aftermath") lines.push(`arc stage #${arc.id}: ${stage}`);
-    log.push(`${arc.id}: ${roll[0]}+${roll[1]}${g.mod ? (g.mod > 0 ? "+" : "") + g.mod : ""} = ${total} → ${result}${twistText ? ` (twist: ${twistText})` : ""}${chosenOutcome ? ` (forced ${chosenOutcome})` : ""}`);
+    log.push(`${arc.id}: ${roll[0]}+${roll[1]}${g.mod ? (g.mod > 0 ? "+" : "") + g.mod : ""} = ${total} → ${result}${twistText ? ` (twist: ${twistText})` : ""}${chosenOutcome ? ` (forced ${chosenOutcome})` : ""}${tie.mod ? ` (tied: ${tie.why.join(", ")} ${tie.mod > 0 ? "+" : ""}${tie.mod})` : ""}`);
+    tickEvents.push({ arcId: arc.id, lead: arc.lead, kind: arc.kind, result, text, atAbs });
     // A faction's clock is the subplot's clock.
     if (arc.faction) lines.push(`clockf ${arc.faction.name}: ${arc.faction.project} ${cur}/${arc.clock.max} — ${cleanVal(text.slice(0, 80))}`);
     // Whereabouts: someone coming back is on the way, then here.
@@ -442,6 +458,15 @@ export function tick(inp: TickInput): TickResult {
         cards.push(cardFor(arc, lead, roster, st, { result: end, roll: [0, 0], mod: final - tally.win + tally.loss, stage: "aftermath", atAbs, template: endText, line: lines.length - 1, ending: true, fateOk: inp.fates === "allow", offPage: inp.offPage, records: inp.records }));
         for (const l of consequences(arc, end, roster)) lines.push(l);
         log.push(`${arc.id}: ends (${end})`);
+        tickEvents.push({ arcId: arc.id, lead: arc.lead, kind: arc.kind, result: end, text: endText, atAbs, ending: true });
+        // An ending shakes the subplots tied to it: they raise their stakes and answer it soon.
+        for (const o of running) {
+          if (o.id === arc.id || tried.has(o.id) || chosen.some((c) => c.arc.id === o.id) || o.fate || o.clock.cur >= o.clock.max || leadOf(o)?.ring === "onstage" || !tied(arc, o, roster).length) continue;
+          if (lines.some((l) => l.startsWith(`arc drop #${o.id}:`) || l.startsWith(`arc end #${o.id}:`))) continue;
+          const soon = atAbs + 30 + Math.round(rand() * 90);
+          lines.push(`arc set #${o.id}: next: ${Math.min(o.nextAbs, soon)} | heat: ${Math.min(3, o.heat + 1)}`);
+          log.push(`${o.id}: shaken by ${arc.id}'s ending (heat ${Math.min(3, o.heat + 1)})`);
+        }
       }
     }
     cards.push(card);
@@ -485,7 +510,37 @@ export function tick(inp: TickInput): TickResult {
     log.push(`incident: ${inc}`);
   }
 
+  // 11. Every card learns what the subplots tied to it did, and what stands about its people.
+  const fresh = new Map<string, ArcState>();
+  for (const c of cards) {
+    const arc = st.arcs?.[c.arcId] ?? fresh.get(c.arcId) ?? arcOfCard(c, inp.now);
+    fresh.set(c.arcId, arc);
+    tieCard(c, arc, arcs, roster, tickEvents);
+  }
+
   return { tickId: inp.tickId, hours, lines, cards, arrivals, awake: awake.map((a) => a.name), hops, seeded, proposals, log, roster };
+}
+
+/** A new subplot's bare state, from its seed card (it isn't in the state yet). */
+function arcOfCard(c: BeatCard, now: number): ArcState {
+  return {
+    id: c.arcId, kind: c.kind, lead: c.lead, cast: c.cast, premise: c.premise, want: c.want, fear: c.fear, grounds: c.grounds, secrecy: "private",
+    clock: { cur: 0, max: 6 }, tally: { win: 0, cost: 0, loss: 0 }, heat: 1, stage: "setup", beats: [], nextAbs: now, status: "running", by: "engine", startedAbs: c.atAbs, startedMsg: 0,
+  };
+}
+
+/** A card's ties: MEANWHILE (what tied subplots did last) and STANDS (what is settled about its people), as of its own time. */
+export function tieCard(c: BeatCard, arc: ArcState, arcs: ArcState[], roster: Roster, extra: ArcEvent[] = []): BeatCard {
+  // A step sees what came before it, never itself or what the same tick does after it.
+  const before = extra.filter((e) => e.arcId !== arc.id && e.atAbs <= c.atAbs);
+  const bs = bearingsOn(arc, arcs, roster, c.atAbs, before);
+  const since = arc.beats.filter((b) => b.atAbs < c.atAbs).at(-1)?.atAbs ?? arc.startedAbs;
+  const evs = [...arcs.flatMap(eventsOf).filter((e) => !(e.arcId === arc.id && e.atAbs >= c.atAbs)), ...before];
+  const cs = conditionsFor(peopleOf(arc, roster), evs, c.atAbs);
+  c.meanwhile = meanwhileLines(bs);
+  c.stands = standsLines(cs, since, !arc.beats.some((b) => b.atAbs < c.atAbs));
+  c.gone = cs.map((x) => ({ person: x.person, thing: x.thing }));
+  return c;
 }
 
 /**
@@ -494,9 +549,10 @@ export function tick(inp: TickInput): TickResult {
  */
 export function cardForBeat(arc: ArcState, beat: ArcBeat, roster: Roster, st: WorldState, offPage: OffPage[], records: CodexRecord[]): BeatCard {
   const before = { ...arc, beats: arc.beats.filter((b) => b.atAbs < beat.atAbs) };
-  return cardFor(before, roster.find(arc.lead), roster, st, {
+  const card = cardFor(before, roster.find(arc.lead), roster, st, {
     result: beat.result, roll: beat.roll, mod: beat.mod, stage: arc.stage, atAbs: beat.atAbs, template: beat.text, line: 0, twist: beat.twist, place: beat.place, offPage, records,
   });
+  return tieCard(card, before, Object.values(st.arcs ?? {}), roster);
 }
 
 function cardFor(arc: ArcState, lead: Actor | undefined, r: Roster, st: WorldState, o: { result: BeatCard["result"]; roll: [number, number]; mod: number; stage: ArcStage; atAbs: number; template: string; line: number; twist?: string; price?: string; worse?: string; place?: string; ending?: boolean; seed?: boolean; fateOk?: boolean; offPage: OffPage[]; records: CodexRecord[]; offHours?: string }): BeatCard {
@@ -566,7 +622,7 @@ function twist(t: Twist, arc: ArcState, lead: Actor | undefined, c: { roster: Ro
     case "slip":
       return arc.secrecy !== "public" ? { text: "word of it slipped out", slip: true } : null;
     case "collide": {
-      const other = c.running.filter((o) => o.id !== arc.id && !c.collided.has(o.id) && o.clock.cur < o.clock.max && ((arc.place && o.place && arc.place.toLowerCase() === o.place.toLowerCase()) || o.cast.includes(arc.lead) || arc.cast.includes(o.lead) || (o.faction && arc.place && o.place && arc.place === o.place)));
+      const other = c.running.filter((o) => o.id !== arc.id && !c.collided.has(o.id) && o.clock.cur < o.clock.max && ((arc.place && o.place && arc.place.toLowerCase() === o.place.toLowerCase()) || o.cast.includes(arc.lead) || arc.cast.includes(o.lead) || tied(arc, o, c.roster).length > 0 || (o.faction && arc.place && o.place && arc.place === o.place)));
       const o = other.length ? other[Math.floor(c.rand() * other.length)] : undefined;
       return o ? { text: `ran into ${o.lead}'s business`, collide: o } : null;
     }

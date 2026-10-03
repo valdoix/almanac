@@ -14,6 +14,7 @@ import { absMinutes, estTokens, hash, plainProse } from "../core/util";
 import { callFits, collapseMessages, confirmArrivals, elsewhereLane, retellArrival, upgradeArrival, type Arrival } from "../core/elsewhere/crossings";
 import { buildRoster, type Actor, type Profile, type Roster } from "../core/elsewhere/roster";
 import { isLight } from "../core/elsewhere/arcs";
+import { bearingsOn, conditionsFor, eventsOf, peopleOf, pullWords, webMod } from "../core/elsewhere/web";
 import { authorArc, cardForBeat, tick, type BeatCard, type Mode, type Proposal } from "../core/elsewhere/storyteller";
 import { shapePrompt, tellingPrompt, validateProfile, validateSeed, validateShape, validateTold, type TellingCtx } from "../core/elsewhere/telling";
 import { debug, describe, serial, warn } from "./host";
@@ -607,7 +608,22 @@ export function elsewhereView(o: { state: WorldState; records: ReturnType<typeof
   const order: Record<string, number> = { fate: 0, running: 1, held: 2, resolved: 3, dropped: 4 };
   const now = st.time ? absMinutes(st.time) : null;
   const telling = new Set(E.order.filter((id) => E.ticks[id]?.status === "telling"));
-  const arcs = Object.values(st.arcs ?? {})
+  const allArcs = Object.values(st.arcs ?? {});
+  const allEvents = allArcs.flatMap(eventsOf);
+  const latest = Math.max(0, ...allEvents.map((x) => x.atAbs));
+  // How a live subplot is tied to the others now: what they did, what stands, and how its next roll is turned.
+  const tiesOf = (a: ArcState) => {
+    if (a.status !== "running" && a.status !== "held") return null;
+    const at = now ?? latest;
+    const bs = bearingsOn(a, allArcs, roster, at);
+    const pull = webMod(bs);
+    return {
+      ties: bs.slice(0, 4).map((b) => ({ id: b.arcId, lead: b.lead, kind: b.kind, stance: b.stance, dir: b.dir ?? "", person: b.person, ending: b.ending, fresh: b.fresh, at: o.fmt(b.atAbs), text: b.text, pull: b.mod ? pullWords(b) : "", mod: b.mod })),
+      stands: conditionsFor(peopleOf(a, roster), allEvents, at).map((c) => ({ text: c.text, from: `${c.lead}`, kind: c.kind, at: o.fmt(c.atAbs) })),
+      pull: pull.mod ? { mod: pull.mod, why: pull.why } : null,
+    };
+  };
+  const arcs = allArcs
     // The player's own stories first, then the liveliest.
     .sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5) || Number(b.by === "player") - Number(a.by === "player") || (b.lastBeatAbs ?? b.startedAbs) - (a.lastBeatAbs ?? a.startedAbs))
     .slice(0, 30)
@@ -621,6 +637,7 @@ export function elsewhereView(o: { state: WorldState; records: ReturnType<typeof
       next: a.status === "running" && now != null && a.nextAbs > now ? o.fmt(a.nextAbs) : "", wait: a.status === "running" ? a.wait ?? "" : "", pushed: !!a.push,
       reached: list.filter((x) => x.arc === a.id && x.status === "used").slice(-3).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "" })),
       reaches: list.filter((x) => x.arc === a.id && (x.status === "pending" || x.status === "offered") && callFits(x, st, roster)).map((x) => ({ kind: x.kind, text: x.text, at: x.atAbs != null ? o.fmt(x.atAbs) : "", carrier: x.carrier ?? "" })),
+      ...(tiesOf(a) ?? { ties: [], stands: [], pull: null }),
     }));
   const ticks = E.order.map((id) => E.ticks[id]).filter(Boolean).reverse().map((t) => ({ id: t.id, at: t.at, from: o.fmt(t.from), to: o.fmt(t.to), hours: t.hours, beats: t.beats, seeds: t.seeds, proposed: t.proposed ?? 0, hops: t.hops, arrivals: t.arrivals, status: t.status, tokens: t.tokens ?? 0, log: t.log, rejected: t.rejected ?? [], awake: t.awake }));
   const awake = new Set(ticks[0]?.awake ?? []);

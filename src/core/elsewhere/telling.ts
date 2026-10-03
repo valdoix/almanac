@@ -35,11 +35,16 @@ const RESULT_WORD: Record<string, string> = {
   met: "ENDING: MET (the want is met)", price: "ENDING: AT A PRICE (met, but it cost)", lost: "ENDING: LOST (the fear came true)", softened: "ENDING: SOFTENED (it nearly went badly, but not quite)",
 };
 
+/** The card's ties to other subplots: what they did, and what stands about its people. */
+function tiesText(c: BeatCard): string {
+  return `${c.stands?.length ? `\n  STANDS ${c.stands.join(" · ")}` : ""}${c.meanwhile?.length ? `\n  MEANWHILE ${c.meanwhile.join(" · ")}` : ""}`;
+}
+
 function cardText(c: BeatCard, ctx: TellingCtx): string {
   if (c.seed) {
     return `SEED ${c.id} · new subplot · ${c.kind} · lead ${c.lead}${c.cast.length ? ` · with ${c.cast.join(", ")}` : ""}
   WHO ${c.lead}: ${c.leadText.slice(0, 220) || "—"}
-  GROUNDS ${c.grounds.join(" · ")}
+  GROUNDS ${c.grounds.join(" · ")}${tiesText(c)}
   DRAFT premise: ${c.premise} | want: ${c.want} | fear: ${c.fear}
   WRITE a premise (one or two plain, specific sentences, ≤ 45 words) from the grounds only, a want ("to …", ≤ 12 words) and a fear (≤ 12 words).`;
   }
@@ -47,7 +52,7 @@ function cardText(c: BeatCard, ctx: TellingCtx): string {
   LEAD ${c.lead}: ${c.leadText.slice(0, 200) || "—"}
   SUBPLOT ${c.premise} · wants ${c.want} · fears ${c.fear}${c.groundText?.length ? `\n  GROUNDS ${c.groundText.join(" · ")}` : ""}${c.sofar?.length ? `\n  SO FAR ${c.sofar.join(" → ")}` : "\n  SO FAR (this is its first step: begin what the SUBPLOT describes)"}
   CAST ${c.cast.join(", ") || "—"} · WHERE ${c.where ?? "—"} · WHEN ${fmtTime(fromAbs(c.atAbs))}${c.offHours ? ` (${c.offHours}: tell it so that fits)` : ""}
-  KNOWS ${c.knows.join("; ") || "—"}${c.noRoute.length ? ` · NO ROUTE TO ${c.noRoute.join(", ")} (can't act on it)` : ""}${c.established?.length ? `\n  ESTABLISHED ${c.established.join(" · ")}` : ""}${c.sought?.length ? `
+  KNOWS ${c.knows.join("; ") || "—"}${c.noRoute.length ? ` · NO ROUTE TO ${c.noRoute.join(", ")} (can't act on it)` : ""}${c.established?.length ? `\n  ESTABLISHED ${c.established.join(" · ")}` : ""}${tiesText(c)}${c.sought?.length ? `
   SOUGHT ${c.sought.join(", ")}: ${c.lead} doesn't know where they are and doesn't find them${c.ending ? " unless the ending is met" : " in this step (only an ending can)"}; no call, letter or visit reaches them` : ""}
   ENGINE DRAFT ${c.template}${c.arrival ? `\n  REACHES THE SCENE AS (${c.arrivalKind}) ${c.arrival}` : ""}`;
 }
@@ -59,7 +64,8 @@ export function tellingPrompt(cards: BeatCard[], ctx: TellingCtx): { system: str
     : "";
   return {
     system: `You tell what happened off the page in a roleplay, between two story times. ${SAFETY_DATA}
-Each CARD is already decided: who, where, when, and how it turned out. Tell it in two short, plain sentences (at most 50 words), like news of someone the reader knows. First, what happened, in the past tense: the next concrete step of the SUBPLOT, continuing SO FAR, and specific, naming the actual people, news, places and things from the card (SUBPLOT, GROUNDS, KNOWS, ESTABLISHED). Then where that leaves things now, in the present tense: what the lead is about to do, or what is now set to happen. Write "heard that Buffy is back", never "received news"; "voted to strip her magic", never "reached a decision". The register, from other stories: "Marta heard that the mill had burned down. She's thinking of writing to her brother and going home." / "The guild finished its inquiry into the forged seals. Tomas is set to lose his licence." No scenery for its own sake, no semicolon chains, no vague summary ("made progress", "at a price", "it went well", "things moved along"); a price or a setback is said as the concrete thing it was. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, people named in its ESTABLISHED facts, and places it names. The lead acts only on what they KNOW; ESTABLISHED is for getting the names and facts right. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
+Each CARD is already decided: who, where, when, and how it turned out. Tell it in two short, plain sentences (at most 50 words), like news of someone the reader knows. First, what happened, in the past tense: the next concrete step of the SUBPLOT, continuing SO FAR, and specific, naming the actual people, news, places and things from the card (SUBPLOT, GROUNDS, KNOWS, ESTABLISHED). Then where that leaves things now, in the present tense: what the lead is about to do, or what is now set to happen. Write "heard that Buffy is back", never "received news"; "voted to strip her magic", never "reached a decision". The register, from other stories: "Marta heard that the mill had burned down. She's thinking of writing to her brother and going home." / "The guild finished its inquiry into the forged seals. Tomas is set to lose his licence." No scenery for its own sake, no semicolon chains, no vague summary ("made progress", "at a price", "it went well", "things moved along"); a price or a setback is said as the concrete thing it was. Keep the outcome exactly, and echo it in "result". The ENGINE DRAFT is only a fallback; don't copy its wording. Use only what the card gives; add no events, no past history, no new named people (anyone else is unnamed: "a clerk", "a neighbour"). Name only the card's LEAD and CAST, people named in its ESTABLISHED facts, STANDS and MEANWHILE, and places it names. The lead acts only on what they KNOW; ESTABLISHED is for getting the names and facts right.
+Subplots that share a person happen in one world. STANDS is what other steps have settled about the card's people (something taken, something given back): it holds in this step, and nothing in it is undone, used or forgotten (if her magic is gone, she casts nothing; she can miss it, crave it, or seek a way back). MEANWHILE is what the subplots tied to this one did last: never contradict it, and where it is marked as since this subplot's last step, let this step follow from it (react to it, or be changed by it), naming it plainly. Never decide anything ${ctx.userName} does, says, thinks or knows; ${ctx.userName} may only receive something (a call, a letter), and is never the subject of a sentence. Nothing irreversible (a death, a permanent departure, a marriage, a child, a lasting injury) unless the card is an ENDING marked "may be told".${never.length ? ` Never write these words: ${never.join(", ")}.` : ""}
 For a card with REACHES THE SCENE, also write "arrival": the moment it reaches the scene as the scene would meet it (what is heard, seen, read or said, and by whom), specific about the news it carries, at most 40 words, in-world.
 You may add up to two ledger "lines" per card for the LEAD and CAST only: "know Name: #key fact | how they learned it · knows/believes", "bond A>B: trust +1 — cause", "journal Name: their own words".
 Each SEED asks for a premise, want and fear for a new subplot, from its GROUNDS only. The premise is one or two plain, specific sentences: who, what they've learned or what has happened to them (naming the actual news, people and places in the grounds), and what they mean to do about it (at most 45 words, no labels or lists). The want is "to …" and the fear a plain clause, both specific and in natural words.${cards.some((c) => c.kind === "world") ? `\nA "world" card is the setting's own agenda, an actor too: tell it through consequences in the world (a move, a cost, a changed place), never by announcing it. Lines under HOLDS never break; pressure may strain them, nothing breaks them.${ctx.holds?.length ? ` HOLDS: ${ctx.holds.join(" / ")}` : ""}` : ""}${prof}
@@ -105,6 +111,18 @@ function capNames(text: string): string[] {
   return out;
 }
 
+const MAGICAL = /\b(?:magic|magick|powers?|abilities|spells?|witchcraft)\b/i;
+/** A telling where someone still uses what another step took from them ("Willow cast a ward", her magic gone). */
+export function usesGone(c: Pick<BeatCard, "gone">, text: string): string | null {
+  for (const g of c.gone ?? []) {
+    if (!MAGICAL.test(g.thing)) continue;
+    const n = g.person.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = new RegExp(`\\b${n}\\b([^.;!?]{0,40}?)\\b(?:cast(?:s|ing)?|channel(?:l)?ed|conjured|summoned|hexed|levitated|teleported|warded|scried|worked (?:a |the |another )?(?:spell|ward|charm)|used (?:her|his|their) (?:magic|powers)|did (?:a |another )?spell)\\b`, "i").exec(text);
+    if (m && !/\b(?:tried|try|couldn't|could not|can't|cannot|failed|unable|no longer|wanted|wants|itched|craved|longed|reached for nothing|without)\b/i.test(m[1])) return `${g.person} uses the ${g.thing} that is gone`;
+  }
+  return null;
+}
+
 export function validateTold(c: BeatCard, raw: { text?: string; result?: string; arrival?: string; lines?: unknown }, ctx: TellingCtx): Told {
   const fail = (why: string): Told => ({ lines: [], rejected: why });
   const text = String(raw.text ?? "").trim();
@@ -124,7 +142,7 @@ export function validateTold(c: BeatCard, raw: { text?: string; result?: string;
     if (a) a.names.forEach(addNames);
   }
   addNames(ctx.userName);
-  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...(c.established ?? []), ...(c.groundText ?? []), ...(c.sofar ?? []), c.arrival ?? ""]) addNames(p);
+  for (const p of [...ctx.places, ...ctx.objects, c.where ?? "", c.premise, c.want, c.fear, c.template, c.twist ?? "", ...(c.established ?? []), ...(c.groundText ?? []), ...(c.sofar ?? []), ...(c.stands ?? []), ...(c.meanwhile ?? []), c.arrival ?? ""]) addNames(p);
   const others = new Set(ctx.roster.actors.flatMap((a) => a.names.flatMap((n) => n.split(/\s+/))).map((w) => w.toLowerCase()));
   // What the lead's and cast's own lore names ("Harvard Law") is theirs to use; the people it names still need the card.
   const lore = new Set([c.leadText, ...c.cast.map((n) => ctx.roster.find(n)?.text ?? "")].join(" ").match(/\p{Lu}[\p{L}'’-]+/gu)?.map((w) => w.toLowerCase().replace(/['’]s$/, "")) ?? []);
@@ -140,6 +158,9 @@ export function validateTold(c: BeatCard, raw: { text?: string; result?: string;
     if (m && VERBISH.test(m[1])) return fail(`decides for ${ctx.userName}`);
   }
   if (!c.fateOk && IRREVERSIBLE.test(`${text} ${arrival ?? ""}`)) return fail("an irreversible outcome");
+  // What another subplot took stays taken: she can miss her magic, not cast with it.
+  const usedUp = usesGone(c, `${text} ${arrival ?? ""}`);
+  if (usedUp) return fail(usedUp);
   // A search doesn't find its quarry before it ends (or at all, if it ends badly).
   const finds = c.result !== "met" && c.result !== "price" && (c.sought ?? []).find((n) => {
     const names = [n, ...(ctx.roster.find(n)?.names ?? [])].map((x) => x.split(/\s+/)[0]).filter((x) => x.length >= 3).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
