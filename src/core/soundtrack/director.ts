@@ -81,7 +81,8 @@ export type Event =
   | { type: "hold"; on: boolean }
   /** The player chose a mood (or Auto) on the page: the cue for it, played at once. */
   | { type: "mood"; cue: Cue; now: number }
-  | { type: "user-skip"; now: number };
+  /** `quiet`: the skip's verdict was recorded elsewhere (a thumbs down), so no skip penalty. */
+  | { type: "user-skip"; now: number; quiet?: boolean };
 
 export const CHANGE_AT = 0.35;
 const TENSION_JUMP = 0.4;
@@ -165,7 +166,7 @@ export function step(prev: DirectorState, ev: Event): { state: DirectorState; ac
 
     case "user-skip": {
       // Skip pressed on the Almanac's page: the next song for the same mood, and this one counts against itself.
-      if (s.current && s.lastCue && s.origin !== "user") actions.push({ type: "penalise", videoId: s.current, mood: s.playingCue?.mood ?? s.lastCue.mood });
+      if (s.current && s.lastCue && s.origin !== "user" && !ev.quiet) actions.push({ type: "penalise", videoId: s.current, mood: s.playingCue?.mood ?? s.lastCue.mood });
       if (s.mode === "holding") s.mode = "following";
       if (s.lastCue) pick("now", s.lastCue, "skipped", ev.now);
       break;

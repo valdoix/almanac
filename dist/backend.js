@@ -7818,7 +7818,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.22.2";
+var VERSION = "1.23.0";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -20255,7 +20255,7 @@ function step(prev, ev) {
       break;
     }
     case "user-skip": {
-      if (s.current && s.lastCue && s.origin !== "user")
+      if (s.current && s.lastCue && s.origin !== "user" && !ev.quiet)
         actions.push({ type: "penalise", videoId: s.current, mood: s.playingCue?.mood ?? s.lastCue.mood });
       if (s.mode === "holding")
         s.mode = "following";
@@ -20506,6 +20506,96 @@ var init_taste = __esm(() => {
   };
 });
 
+// src/core/soundtrack/ratings.ts
+function rate(list, r) {
+  const same = list.find((x) => x.track.videoId === r.track.videoId && x.mood === r.mood);
+  const rest = list.filter((x) => x !== same);
+  if (same && same.vote === r.vote)
+    return rest;
+  return [...rest, r].slice(-MAX);
+}
+function voteOf(list, videoId, mood) {
+  return list.find((x) => x.track.videoId === videoId && x.mood === mood)?.vote ?? 0;
+}
+function moodNear(a, b) {
+  if (a === b)
+    return 1;
+  const [e1, v1, t1, i1] = MOOD_VEC[a];
+  const [e2, v2, t2, i2] = MOOD_VEC[b];
+  return Math.hypot(e1 - e2, (v1 - v2) / 2, t1 - t2, i1 - i2) < 0.3 ? 0.5 : 0;
+}
+function learnedFor(list, mood) {
+  const L = { mood, track: new Map, out: new Set, artist: new Map, genre: new Map, query: new Map };
+  for (const r of list) {
+    if (!isMood(r.mood))
+      continue;
+    const w = moodNear(r.mood, mood);
+    if (!w)
+      continue;
+    const x = r.vote > 0 ? w : w === 1 ? -1 : -0.25;
+    if (r.vote < 0 && w === 1)
+      L.out.add(r.track.videoId);
+    add(L.track, r.track.videoId, x);
+    for (const a of creditsOf(r.track))
+      add(L.artist, normName(a.name), x);
+    add(L.genre, r.genre, x);
+    if (w === 1)
+      add(L.query, r.qkey, x);
+  }
+  return L;
+}
+function ratingBonus(L, t, genre, qkey) {
+  if (!L)
+    return { delta: 0, reasons: [] };
+  const reasons = [];
+  let delta = 0;
+  const tv = L.track.get(t.videoId) ?? 0;
+  if (tv) {
+    delta += cap4(tv * 0.6, -1.2, 1);
+    reasons.push(tv > 0 ? `you rated it up for ${L.mood}` : `you rated it down near ${L.mood}`);
+  }
+  const av = creditsOf(t).map((a) => L.artist.get(normName(a.name)) ?? 0).reduce((m, x) => Math.abs(x) > Math.abs(m) ? x : m, 0);
+  if (av && !tv) {
+    delta += cap4(av * 0.25, -0.75, 0.6);
+    reasons.push(av > 0 ? `you like this artist for ${L.mood}` : `this artist missed for ${L.mood}`);
+  }
+  const gv = genre ? L.genre.get(genre) ?? 0 : 0;
+  if (gv) {
+    delta += cap4(gv * 0.06, -0.3, 0.3);
+    if (Math.abs(gv) >= 2)
+      reasons.push(gv > 0 ? `${genre} works for ${L.mood}` : `${genre} misses for ${L.mood}`);
+  }
+  const qv = qkey ? L.query.get(qkey) ?? 0 : 0;
+  if (qv)
+    delta += cap4(qv * 0.08, -0.3, 0.3);
+  return { delta, reasons };
+}
+function ratedPool(list, mood, max = 12) {
+  const L = learnedFor(list, mood);
+  const seen = new Map;
+  for (const r of list)
+    if (r.vote > 0)
+      seen.set(r.track.videoId, r.track);
+  return [...seen.values()].filter((t) => (L.track.get(t.videoId) ?? 0) > 0).sort((a, b) => (L.track.get(b.videoId) ?? 0) - (L.track.get(a.videoId) ?? 0)).slice(0, max);
+}
+function ratingSummary(list) {
+  const by = new Map;
+  for (const r of list) {
+    const x = by.get(r.mood) ?? { mood: r.mood, up: 0, down: 0 };
+    if (r.vote > 0)
+      x.up++;
+    else
+      x.down++;
+    by.set(r.mood, x);
+  }
+  return [...by.values()].sort((a, b) => b.up + b.down - (a.up + a.down));
+}
+var MAX = 600, add = (m, k, x) => k && m.set(k, (m.get(k) ?? 0) + x), cap4 = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+var init_ratings = __esm(() => {
+  init_moods();
+  init_taste();
+});
+
 // src/core/soundtrack/tags.ts
 function cleanTags(raw) {
   if (!Array.isArray(raw))
@@ -20671,7 +20761,7 @@ function scoreAll(cands, cue, taste, h, o) {
   const byId = new Map;
   for (const c of cands) {
     const t = c.track;
-    if (excluded(t, taste, h, o.now))
+    if (excluded(t, taste, h, o.now) || o.learned?.out.has(t.videoId))
       continue;
     const reasons = [];
     let s = Math.max(0, 1 - c.pos / 20);
@@ -20703,6 +20793,9 @@ function scoreAll(cands, cue, taste, h, o) {
     s += tf.delta;
     if (tf.reason)
       reasons.push(tf.reason);
+    const rb = ratingBonus(o.learned, t, c.query.genre, c.query.key);
+    s += rb.delta;
+    reasons.push(...rb.reasons);
     if (cue.explicit && t.explicit) {
       s += 0.2;
       reasons.push("explicit");
@@ -20738,6 +20831,7 @@ var TWO_HOURS, INSTRUMENTAL;
 var init_picker = __esm(() => {
   init_util();
   init_moods();
+  init_ratings();
   init_tags();
   init_taste();
   TWO_HOURS = 2 * 3600000;
@@ -21238,7 +21332,7 @@ function save2(userId) {
     if (!c)
       return;
     const now = Date.now();
-    const keys = Object.keys(c).filter((k) => now - c[k].at < TTL2).sort((a, b) => c[b].at - c[a].at).slice(0, MAX);
+    const keys = Object.keys(c).filter((k) => now - c[k].at < TTL2).sort((a, b) => c[b].at - c[a].at).slice(0, MAX2);
     const kept = {};
     for (const k of keys)
       kept[k] = c[k];
@@ -21332,7 +21426,7 @@ async function tagsForMany(userId, key, tracks, budgetMs = 5000) {
 function forgetTags(userId) {
   caches.delete(userId);
 }
-var TAGS = "soundtrack/tags.json", TTL2, MAX = 4000, LASTFM_KEY = "soundtrack_lastfm_key", API2 = "https://ws.audioscrobbler.com/2.0/", caches, loading2, calls, badKey, saveTimer2 = null, LastfmError, artistKey = (a) => `a:${a.toLowerCase().trim()}`, trackKey = (a, t) => `t:${a.toLowerCase().trim()}|${t.toLowerCase().trim()}`;
+var TAGS = "soundtrack/tags.json", TTL2, MAX2 = 4000, LASTFM_KEY = "soundtrack_lastfm_key", API2 = "https://ws.audioscrobbler.com/2.0/", caches, loading2, calls, badKey, saveTimer2 = null, LastfmError, artistKey = (a) => `a:${a.toLowerCase().trim()}`, trackKey = (a, t) => `t:${a.toLowerCase().trim()}|${t.toLowerCase().trim()}`;
 var init_lastfm = __esm(() => {
   init_tags();
   init_host();
@@ -21529,9 +21623,12 @@ async function choose(s, cue) {
   })();
   const player = s.status === "connected" ? s.player : null;
   const now = Date.now();
+  const rated = s.history.rated ?? [];
+  const learned = rated.length ? learnedFor(rated, cue.mood) : undefined;
+  const pool = rated.length ? ratedPool(rated, cue.mood) : [];
   for (const salt of [0, 1, 2]) {
     const qs = queriesFor(cue, taste, storyGenres, salt);
-    const cands = [];
+    const cands = pool.map((track, pos) => ({ track, query: { q: "", key: "rated", genre: "", rank: 1 }, pos: pos + 2 }));
     for (const q of qs) {
       try {
         const tracks = await poolFor(s.userId ?? "", q.key, q.q, player, { videos: taste.videos });
@@ -21541,9 +21638,9 @@ async function choose(s, cue) {
       }
     }
     const history = { ...s.history, chat: (await chatStore(s.chatId ?? "", s.userId).catch(() => ({ plays: [] }))).plays.map((p) => p.videoId) };
-    let scored = scoreAll(cands, cue, taste, history, { now, seed: "", dialogue, liked: s.liked });
+    let scored = scoreAll(cands, cue, taste, history, { now, seed: "", dialogue, liked: s.liked, learned });
     if (!scored.length && cands.length) {
-      scored = scoreAll(cands, cue, taste, { ...history, chat: history.chat.slice(-5), recent: {}, lastArtist: undefined }, { now, seed: "", dialogue, liked: s.liked });
+      scored = scoreAll(cands, cue, taste, { ...history, chat: history.chat.slice(-5), recent: {}, lastArtist: undefined }, { now, seed: "", dialogue, liked: s.liked, learned });
     }
     if (s.lastfmKey && !badKey.has(s.userId ?? "") && scored.length > 1) {
       const top = scored.slice(0, 10);
@@ -21598,8 +21695,9 @@ async function act(s, a) {
         } else
           await player.enqueue(t.videoId, true);
         const tagged = best.reasons.find((r) => r.startsWith("tagged ") || r.startsWith("but tagged "));
-        const why = `${a.cue.why}${best.query.q ? ` \u2014 from "${best.query.q}"` : ""}${tagged ? ` \xB7 ${tagged}` : ""}`;
-        s.picked.set(t.videoId, { track: t, why, reason: a.reason, query: best.query.q });
+        const thumbs = best.reasons.find((r) => r.startsWith("you "));
+        const why = `${a.cue.why}${best.query.q ? ` \u2014 from "${best.query.q}"` : ""}${tagged ? ` \xB7 ${tagged}` : ""}${thumbs ? ` \xB7 ${thumbs}` : ""}`;
+        s.picked.set(t.videoId, { track: t, why, reason: a.reason, query: best.query.q, genre: best.query.genre, key: best.query.key });
         if (s.picked.size > 80)
           s.picked.delete(s.picked.keys().next().value);
         s.history.recent[t.videoId] = Date.now();
@@ -21716,7 +21814,7 @@ async function poll(s) {
   s.np = np;
   await apply(s, { type: "poll", np, now: Date.now(), banned });
   if (np && np.videoId !== prevId && s.dir.origin && s.dir.origin !== "ours" && s.dir.origin !== "ours-skip" && s.dir.current === np.videoId && !banned) {
-    await recordPlay(s, { videoId: np.videoId, title: np.title, artists: np.artists ?? [{ name: np.artist }], durationS: np.durationS, explicit: false, kind: "song" }, s.dir.origin === "user" ? "user" : "autoplay", null, "");
+    await recordPlay(s, { videoId: np.videoId, title: np.title, artists: np.artists ?? [{ name: np.artist }], durationS: np.durationS, explicit: false, kind: "song", thumb: np.thumb }, s.dir.origin === "user" ? "user" : "autoplay", s.dir.lastCue ? { ...s.dir.lastCue, why: "" } : null, "");
   }
   if (np && !np.isPaused && np.elapsedS > 20 && !s.liked.has(np.videoId) && prevOrigin !== null) {
     if (await s.player.liked().catch(() => false))
@@ -21771,6 +21869,8 @@ async function viewOf(s) {
   const np = s.np;
   const mine = np ? s.picked.get(np.videoId) : undefined;
   const next = s.dir.next ? s.picked.get(s.dir.next.videoId) : undefined;
+  const rated = s.history.rated ?? [];
+  const npMood = np ? moodPlaying(s) : "";
   return {
     hasCors: has("cors_proxy"),
     enabled: s.config.enabled,
@@ -21797,10 +21897,11 @@ async function viewOf(s) {
     chips: GENRE_CHIPS,
     mode: s.dir.mode,
     origin: s.dir.origin,
-    np: np ? { videoId: np.videoId, title: np.title, artist: np.artist, thumb: np.thumb, album: np.album, isPaused: np.isPaused, elapsedS: np.elapsedS, durationS: np.durationS, why: mine?.why ?? "", reason: mine?.reason ?? "" } : null,
+    np: np ? { videoId: np.videoId, title: np.title, artist: np.artist, thumb: np.thumb, album: np.album, isPaused: np.isPaused, elapsedS: np.elapsedS, durationS: np.durationS, why: mine?.why ?? "", reason: mine?.reason ?? "", mood: npMood, vote: npMood ? voteOf(rated, np.videoId, npMood) : 0 } : null,
     next: next ? { title: next.track.title, artist: artistLine(next.track), why: next.why } : null,
     cue: s.cue ? { mood: s.cue.mood, chosen: !!s.cue.chosen, read: s.cue.read ?? null, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place } : null,
-    plays: (cs?.plays ?? []).slice(-15).reverse(),
+    plays: (cs?.plays ?? []).slice(-15).reverse().map((p) => ({ ...p, vote: p.mood ? voteOf(rated, p.videoId, p.mood) : 0 })),
+    ratings: { summary: ratingSummary(rated), recent: rated.slice(-12).reverse().map((r) => ({ videoId: r.track.videoId, title: r.track.title, artist: artistLine(r.track), mood: r.mood, vote: r.vote })), total: rated.length },
     note: s.lastNote
   };
 }
@@ -21976,6 +22077,44 @@ async function soundtrackAction(m, userId) {
       }
       break;
     }
+    case "rate": {
+      const vote = m.vote === -1 ? -1 : m.vote === 1 ? 1 : 0;
+      const id = String(m.videoId ?? s.np?.videoId ?? "");
+      if (!vote || !id)
+        break;
+      const playing = s.np?.videoId === id;
+      const play = s.chatId ? [...(await chatStore(s.chatId, userId)).plays].reverse().find((p) => p.videoId === id) : undefined;
+      const mood = isMood(m.mood) ? m.mood : playing && isMood(moodPlaying(s)) ? moodPlaying(s) : isMood(play?.mood) ? play.mood : null;
+      if (!mood) {
+        note(s, "no mood to rate the song for yet");
+        break;
+      }
+      const known = s.picked.get(id);
+      const track = known?.track ?? (playing && s.np ? { videoId: id, title: s.np.title, artists: s.np.artists ?? [{ name: s.np.artist }], album: s.np.album, durationS: s.np.durationS, explicit: false, kind: "song", thumb: s.np.thumb } : play ? { videoId: id, title: play.title, artists: play.artist.split(/, | & /).map((name) => ({ name })), durationS: 0, explicit: false, kind: "song" } : null);
+      if (!track)
+        break;
+      const before = voteOf(s.history.rated ?? [], id, mood);
+      const r = { track, mood, genre: known?.genre ?? "", qkey: known?.key && known.key !== "rated" ? known.key : "", vote, at: Date.now() };
+      s.history.rated = rate(s.history.rated ?? [], r);
+      saveHistory(s);
+      const now = voteOf(s.history.rated, id, mood);
+      note(s, now === 0 ? `rating taken back: ${track.title}` : `${now > 0 ? "\uD83D\uDC4D" : "\uD83D\uDC4E"} ${track.title} for ${mood}`);
+      if (now < 0 && before >= 0 && playing) {
+        if (s.dir.running)
+          await run(s, () => apply(s, { type: "user-skip", now: Date.now(), quiet: true }));
+        else
+          await s.player?.next().catch((err) => onPlayerError(s, err));
+      }
+      break;
+    }
+    case "rateForget": {
+      if (m.videoId && isMood(m.mood))
+        s.history.rated = (s.history.rated ?? []).filter((r) => !(r.track.videoId === m.videoId && r.mood === m.mood));
+      else
+        s.history.rated = [];
+      saveHistory(s);
+      break;
+    }
     case "never": {
       const id = String(m.videoId ?? s.np?.videoId ?? "");
       if (!id)
@@ -22051,6 +22190,9 @@ async function soundtrackAction(m, userId) {
   }
   await push(s);
 }
+function moodPlaying(s) {
+  return s.dir.current === s.np?.videoId && s.dir.playingCue && s.dir.origin !== "user" && s.dir.origin !== "autoplay" ? s.dir.playingCue.mood : s.dir.lastCue?.mood ?? s.cue?.mood ?? "";
+}
 function forgetCueKey(s) {
   s.cueKey = "";
   if (s.chatId)
@@ -22073,6 +22215,7 @@ var init_soundtrack = __esm(() => {
   init_pear();
   init_lastfm();
   init_tags();
+  init_ratings();
   DEFAULT_CONFIG = {
     enabled: false,
     running: false,

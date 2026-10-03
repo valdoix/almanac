@@ -49,6 +49,9 @@ export interface HudMusic {
   menu: [string, string][] | null;
   /** The mood the player chose, or "" for Auto. */
   pick: string;
+  /** The player's thumb for the song (1, -1, 0) and the mood it's rated for ("" when none yet). */
+  vote: number;
+  rateFor: string;
 }
 
 export const HUD_SIZE = { w: 360, h: 540, minW: 250, minH: 320, maxW: 720, maxH: 960 };
@@ -155,7 +158,7 @@ function musicStrip(m: HudMusic | null | undefined): string {
   return `<div class="alm-hudc__mu${m.paused ? " is-paused" : ""}" title="${e(musicTip(m))}">
 <button class="alm-hudc__muart" data-hud="music" data-m="open" aria-label="Open the Soundtrack" title="Open the Soundtrack">${m.thumb ? `<img src="${e(m.thumb)}" alt="">` : NOTE}</button>
 <span class="alm-hudc__mut"><b>${e(m.title)}</b><i>${e(m.artist)}</i>${moodBtn}</span>
-<span class="alm-hudc__muc">${b(m.paused ? "play" : "pause", m.paused ? "Play" : "Pause", m.paused ? "▶" : "❚❚")}${b("skip", "Skip: another song for this scene", "⏭")}${m.running ? hold : ""}${b("never", "Never play this song again", "⊘", " is-dim")}${run}</span>
+<span class="alm-hudc__muc">${m.rateFor ? `${b("up", m.vote > 0 ? "Take the 👍 back" : `Fits ${m.rateFor}: more like this`, "👍", m.vote > 0 ? " is-thumb is-on" : " is-thumb")}${b("down", m.vote < 0 ? "Take the 👎 back" : `Doesn't fit ${m.rateFor}: skip it, less like it`, "👎", m.vote < 0 ? " is-thumb is-on" : " is-thumb")}` : ""}${b(m.paused ? "play" : "pause", m.paused ? "Play" : "Pause", m.paused ? "▶" : "❚❚")}${b("skip", "Skip: another song for this scene", "⏭")}${m.running ? hold : ""}${b("never", "Never play this song again", "⊘", " is-dim")}${run}</span>
 </div>${menu}`;
 }
 

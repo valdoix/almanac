@@ -4,6 +4,18 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.23.0 (2026-10-03)
+
+**Thumbs up and down teach the Soundtrack.** Every song has 👍 and 👎: on the Soundtrack page, in the Now window, and next to each song in "Played in this story". A thumb says whether the song fits the mood it played for, and later picks learn from it:
+- **The song:**
+  - A 👍 song comes back for that mood (and moods close to it, such as sensual and erotic or melancholy and grief), even when no search finds it.
+  - A 👎 song never plays for that mood again, and it's skipped at once (without the usual skip penalty).
+- **Its artist, its genre and the search that found it** rise or sink for that mood. One 👍 for an artist in erotic scenes is enough to lift a new song of theirs over the top search result there.
+- **Close moods:** they share half a 👍. A 👎 counts for only a quarter there, since a song wrong for erotic may still suit romantic.
+- **Why a pick was made:** the "Why" line says "you rated it up for erotic" or "you like this artist for erotic" when your thumbs chose it.
+- **Changing your mind:** the same thumb again takes the rating back, and the other thumb replaces it. "What your thumbs taught it" lists your ratings by mood and lets you forget one or all.
+- **Ratings count in every story.** Songs you played yourself or that autoplay started can be rated too: they're filed under the scene's mood at the time.
+
 ## 1.22.2 (2026-10-03)
 
 **Choose the music's mood yourself.** The Soundtrack page has a new **Mood** row under the scene: **Auto** (the scene decides, as before) or any of the 18 moods.

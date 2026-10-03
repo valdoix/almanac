@@ -331,7 +331,10 @@ export function setup(ctx: SpindleFrontendContext) {
       } else if (m === "pause" || m === "play" || m === "skip" || m === "start" || m === "stop") app.soundtrack.send(m);
       else if (m === "hold" || m === "release") app.soundtrack.send("hold", { on: m === "hold" });
       else if (m === "never") app.soundtrack.send("never", { videoId: app.soundtrack.view?.np?.videoId });
-      else if (m === "moods") {
+      else if (m === "up" || m === "down") {
+        app.soundtrack.rate(m === "up" ? 1 : -1);
+        renderHud(app.view);
+      } else if (m === "moods") {
         app.soundtrack.moodMenu = !app.soundtrack.moodMenu;
         renderHud(app.view);
       } else if (m === "mood") {

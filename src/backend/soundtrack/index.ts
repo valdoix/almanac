@@ -17,6 +17,7 @@ import { forgetPools, poolFor, searchArtists, searchSongs } from "./catalog";
 import { PearPlayer, PlayerError, sleep, type PlayerStatus } from "./pear";
 import { badKey, checkKey, forgetTags, LASTFM_KEY, LastfmError, tagsForMany } from "./lastfm";
 import { retag } from "../../core/soundtrack/tags";
+import { learnedFor, rate, ratedPool, ratingSummary, voteOf, type Rating } from "../../core/soundtrack/ratings";
 
 // ---------------------------------------------------------------------------
 // Storage
@@ -111,7 +112,7 @@ interface Session {
   cue: Cue | null;
   cueKey: string;
   /** Songs the Almanac picked, by id (for credits with ids, and the "why"). */
-  picked: Map<string, { track: Track; why: string; reason: string; query: string }>;
+  picked: Map<string, { track: Track; why: string; reason: string; query: string; genre: string; key: string }>;
   timer: ReturnType<typeof setTimeout> | null;
   pollGen: number;
   lastNote: string;
@@ -294,9 +295,13 @@ async function choose(s: Session, cue: Cue): Promise<Scored | null> {
   })();
   const player = s.status === "connected" ? s.player : null;
   const now = Date.now();
+  // The player's thumbs for this mood: what they teach, and the songs rated up as candidates of their own.
+  const rated = s.history.rated ?? [];
+  const learned = rated.length ? learnedFor(rated, cue.mood) : undefined;
+  const pool = rated.length ? ratedPool(rated, cue.mood) : [];
   for (const salt of [0, 1, 2]) {
     const qs = queriesFor(cue, taste, storyGenres, salt);
-    const cands: Candidate[] = [];
+    const cands: Candidate[] = pool.map((track, pos) => ({ track, query: { q: "", key: "rated", genre: "", rank: 1 }, pos: pos + 2 }));
     for (const q of qs) {
       try {
         const tracks = await poolFor(s.userId ?? "", q.key, q.q, player, { videos: taste.videos });
@@ -306,10 +311,10 @@ async function choose(s: Session, cue: Cue): Promise<Scored | null> {
       }
     }
     const history: History = { ...s.history, chat: (await chatStore(s.chatId ?? "", s.userId).catch(() => ({ plays: [] as Play[] }))).plays.map((p) => p.videoId) };
-    let scored = scoreAll(cands, cue, taste, history, { now, seed: "", dialogue, liked: s.liked });
+    let scored = scoreAll(cands, cue, taste, history, { now, seed: "", dialogue, liked: s.liked, learned });
     if (!scored.length && cands.length) {
       // Everything good was played lately: allow repeats from more than a few songs ago, never bans.
-      scored = scoreAll(cands, cue, taste, { ...history, chat: history.chat.slice(-5), recent: {}, lastArtist: undefined }, { now, seed: "", dialogue, liked: s.liked });
+      scored = scoreAll(cands, cue, taste, { ...history, chat: history.chat.slice(-5), recent: {}, lastArtist: undefined }, { now, seed: "", dialogue, liked: s.liked, learned });
     }
     // Listener tags (Last.fm), when the player gave a key: the best ten, checked against the mood.
     if (s.lastfmKey && !badKey.has(s.userId ?? "") && scored.length > 1) {
@@ -363,8 +368,9 @@ async function act(s: Session, a: Action): Promise<void> {
           else await player.playNow(t.videoId);
         } else await player.enqueue(t.videoId, true);
         const tagged = best.reasons.find((r) => r.startsWith("tagged ") || r.startsWith("but tagged "));
-        const why = `${a.cue.why}${best.query.q ? ` — from "${best.query.q}"` : ""}${tagged ? ` · ${tagged}` : ""}`;
-        s.picked.set(t.videoId, { track: t, why, reason: a.reason, query: best.query.q });
+        const thumbs = best.reasons.find((r) => r.startsWith("you "));
+        const why = `${a.cue.why}${best.query.q ? ` — from "${best.query.q}"` : ""}${tagged ? ` · ${tagged}` : ""}${thumbs ? ` · ${thumbs}` : ""}`;
+        s.picked.set(t.videoId, { track: t, why, reason: a.reason, query: best.query.q, genre: best.query.genre, key: best.query.key });
         if (s.picked.size > 80) s.picked.delete(s.picked.keys().next().value!);
         s.history.recent[t.videoId] = Date.now();
         for (const [id, at] of Object.entries(s.history.recent)) if (Date.now() - at > 6 * 3600_000) delete s.history.recent[id];
@@ -474,7 +480,8 @@ async function poll(s: Session): Promise<void> {
   s.np = np;
   await apply(s, { type: "poll", np, now: Date.now(), banned });
   if (np && np.videoId !== prevId && s.dir.origin && s.dir.origin !== "ours" && s.dir.origin !== "ours-skip" && s.dir.current === np.videoId && !banned) {
-    await recordPlay(s, { videoId: np.videoId, title: np.title, artists: np.artists ?? [{ name: np.artist }], durationS: np.durationS, explicit: false, kind: "song" }, s.dir.origin === "user" ? "user" : "autoplay", null, "");
+    // The scene's mood at the time, so the song can be rated for it later.
+    await recordPlay(s, { videoId: np.videoId, title: np.title, artists: np.artists ?? [{ name: np.artist }], durationS: np.durationS, explicit: false, kind: "song", thumb: np.thumb }, s.dir.origin === "user" ? "user" : "autoplay", s.dir.lastCue ? { ...s.dir.lastCue, why: "" } : null, "");
   }
   // A song the player liked in YouTube Music counts in its favour next time.
   if (np && !np.isPaused && np.elapsedS > 20 && !s.liked.has(np.videoId) && prevOrigin !== null) {
@@ -536,6 +543,8 @@ async function viewOf(s: Session): Promise<Record<string, unknown>> {
   const np = s.np;
   const mine = np ? s.picked.get(np.videoId) : undefined;
   const next = s.dir.next ? s.picked.get(s.dir.next.videoId) : undefined;
+  const rated = s.history.rated ?? [];
+  const npMood = np ? moodPlaying(s) : "";
   return {
     hasCors: has("cors_proxy"),
     enabled: s.config.enabled,
@@ -562,10 +571,11 @@ async function viewOf(s: Session): Promise<Record<string, unknown>> {
     chips: GENRE_CHIPS,
     mode: s.dir.mode,
     origin: s.dir.origin,
-    np: np ? { videoId: np.videoId, title: np.title, artist: np.artist, thumb: np.thumb, album: np.album, isPaused: np.isPaused, elapsedS: np.elapsedS, durationS: np.durationS, why: mine?.why ?? "", reason: mine?.reason ?? "" } : null,
+    np: np ? { videoId: np.videoId, title: np.title, artist: np.artist, thumb: np.thumb, album: np.album, isPaused: np.isPaused, elapsedS: np.elapsedS, durationS: np.durationS, why: mine?.why ?? "", reason: mine?.reason ?? "", mood: npMood, vote: npMood ? voteOf(rated, np.videoId, npMood) : 0 } : null,
     next: next ? { title: next.track.title, artist: artistLine(next.track), why: next.why } : null,
     cue: s.cue ? { mood: s.cue.mood, chosen: !!s.cue.chosen, read: s.cue.read ?? null, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place } : null,
-    plays: (cs?.plays ?? []).slice(-15).reverse(),
+    plays: (cs?.plays ?? []).slice(-15).reverse().map((p) => ({ ...p, vote: p.mood ? voteOf(rated, p.videoId, p.mood) : 0 })),
+    ratings: { summary: ratingSummary(rated), recent: rated.slice(-12).reverse().map((r) => ({ videoId: r.track.videoId, title: r.track.title, artist: artistLine(r.track), mood: r.mood, vote: r.vote })), total: rated.length },
     note: s.lastNote,
   };
 }
@@ -735,6 +745,42 @@ export async function soundtrackAction(m: Record<string, any>, userId?: string):
       }
       break;
     }
+    case "rate": {
+      // Thumbs up or down: does the song fit the mood it played for? The same thumb again takes it back.
+      const vote = m.vote === -1 ? -1 : m.vote === 1 ? 1 : 0;
+      const id = String(m.videoId ?? s.np?.videoId ?? "");
+      if (!vote || !id) break;
+      const playing = s.np?.videoId === id;
+      const play = s.chatId ? [...(await chatStore(s.chatId, userId)).plays].reverse().find((p) => p.videoId === id) : undefined;
+      const mood = isMood(m.mood) ? m.mood : playing && isMood(moodPlaying(s)) ? (moodPlaying(s) as Mood) : isMood(play?.mood) ? (play!.mood as Mood) : null;
+      if (!mood) {
+        note(s, "no mood to rate the song for yet");
+        break;
+      }
+      const known = s.picked.get(id);
+      const track: Track | null = known?.track ?? (playing && s.np
+        ? { videoId: id, title: s.np.title, artists: s.np.artists ?? [{ name: s.np.artist }], album: s.np.album, durationS: s.np.durationS, explicit: false, kind: "song", thumb: s.np.thumb }
+        : play ? { videoId: id, title: play.title, artists: play.artist.split(/, | & /).map((name: string) => ({ name })), durationS: 0, explicit: false, kind: "song" } : null);
+      if (!track) break;
+      const before = voteOf(s.history.rated ?? [], id, mood);
+      const r: Rating = { track, mood, genre: known?.genre ?? "", qkey: known?.key && known.key !== "rated" ? known.key : "", vote, at: Date.now() };
+      s.history.rated = rate(s.history.rated ?? [], r);
+      saveHistory(s);
+      const now = voteOf(s.history.rated, id, mood);
+      note(s, now === 0 ? `rating taken back: ${track.title}` : `${now > 0 ? "👍" : "👎"} ${track.title} for ${mood}`);
+      // A song that doesn't fit goes now (the thumb is the verdict: no skip penalty on top).
+      if (now < 0 && before >= 0 && playing) {
+        if (s.dir.running) await run(s, () => apply(s, { type: "user-skip", now: Date.now(), quiet: true }));
+        else await s.player?.next().catch((err) => onPlayerError(s, err));
+      }
+      break;
+    }
+    case "rateForget": {
+      if (m.videoId && isMood(m.mood)) s.history.rated = (s.history.rated ?? []).filter((r) => !(r.track.videoId === m.videoId && r.mood === m.mood));
+      else s.history.rated = [];
+      saveHistory(s);
+      break;
+    }
     case "never": {
       const id = String(m.videoId ?? s.np?.videoId ?? "");
       if (!id) break;
@@ -808,6 +854,11 @@ export async function soundtrackAction(m: Record<string, any>, userId?: string):
       break;
   }
   await push(s);
+}
+
+/** The mood the song now playing is for: the cue it was picked for, else the scene's. */
+function moodPlaying(s: Session): string {
+  return s.dir.current === s.np?.videoId && s.dir.playingCue && s.dir.origin !== "user" && s.dir.origin !== "autoplay" ? s.dir.playingCue.mood : s.dir.lastCue?.mood ?? s.cue?.mood ?? "";
 }
 
 function forgetCueKey(s: Session) {

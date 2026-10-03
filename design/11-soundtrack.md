@@ -389,3 +389,23 @@ Every `intimacy` scene used to read as `tender`, or as `romantic` in a romance o
   - With the model director, `directorHint` isn't called while a mood is chosen.
 - **Director:** a `mood` event sets `lastCue` and, when running, ends a hold or a yield and picks now with a fade, unless the song playing was already picked for that mood. After that every cue has the chosen mood, so the song changes only when the numbers drift past `CHANGE_AT` at a new scene, which rarely happens.
 - **UI:** the Soundtrack page's Mood chips (Auto plus `MOODS`, with hints) and the Now window's mood menu (`SoundtrackUI.moodMenu`, opened from the line under the song).
+
+## 22. Thumbs (1.23.0)
+
+- **Storage:** `History.rated` (global `soundtrack/history.json`, at most 600) holds `Rating {track, mood, genre, qkey, vote, at}`, one per song and mood. `rate()` adds a rating: the same vote again takes it back and the other vote replaces it. Learning is derived from the list on every pick (`learnedFor(list, mood)`), so taking a vote back undoes exactly what it taught.
+- **Mood weight:** `moodNear` is 1 for the same mood, .5 when the `MOOD_VEC` distance is under .3, and 0 otherwise. Close moods include calm–warm–dreamy, tender–romantic–sensual–erotic, mysterious–eerie, tense–dread and melancholy–grief; combat has none.
+  - A 👎 counts −1 for its own mood and −.25 for a close one. It excludes the song (`out`) only for its own mood.
+  - The search key learns only from the same mood.
+- **Score** (`ratingBonus`, in `scoreAll`):
+  - the song itself: ±.6 per vote, capped at −1.2/+1;
+  - else its credited artist with the strongest vote: .25 per vote, capped at −.75/+.6;
+  - the genre it was found under: .06 per vote (±.3);
+  - the search key: .08 per vote (±.3).
+- **Candidates:** `ratedPool` adds up to 12 songs rated up for the mood or a close one, as rank-1 candidates at positions 2+. The usual filters (played lately, bans, never) still apply.
+- **Backend:**
+  - `picked` now keeps the query's genre and key, so a rating records where the song came from.
+  - User and autoplay plays are filed with the scene's mood (`lastCue`), so they can be rated.
+  - The `rate` action takes the vote, plus the videoId and mood (from the play) or the song playing (`moodPlaying`: the cue it was picked for, else the scene's).
+  - A new 👎 on the song playing sends `user-skip {quiet}` (no penalise) when running, else `next()`.
+  - `rateForget` removes one rating or all of them.
+- **View:** `np.mood`/`np.vote`, `plays[].vote`, and `ratings {summary, recent, total}`.

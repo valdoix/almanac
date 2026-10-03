@@ -18,6 +18,13 @@ const MOOD_HINT: Record<string, string> = {
   combat: "the fight", melancholy: "wistful, sad", grief: "mourning", dreamy: "hazy, floating",
 };
 const moodName = (m: string) => MOOD_LABEL[m] ?? m;
+
+/** Thumbs for a song: does it fit the mood it played for? `vote` is the one given (1, -1 or 0). */
+function thumbs(videoId: string, mood: string, vote: number, sm = true): string {
+  const fit = moodName(mood);
+  const b = (v: 1 | -1, glyph: string, title: string) => `<button class="btn ${sm ? "sm " : ""}${vote === v ? (v > 0 ? "primary" : "danger") : "ghost"}" data-st="rate" data-vote="${v}" data-id="${e(videoId)}" data-mood="${e(mood)}" aria-pressed="${vote === v}" title="${e(vote === v ? "Take the rating back" : title)}">${glyph}</button>`;
+  return b(1, "👍", `Fits ${fit}: more like this for ${fit}`) + b(-1, "👎", `Doesn't fit ${fit}: skip it, and less like it for ${fit}`);
+}
 const STATUS: Record<string, [string, string]> = {
   connected: ["connected", "good"],
   unknown: ["checking…", ""],
@@ -95,9 +102,21 @@ export class SoundtrackUI {
     return {
       title: np?.title ?? "", artist: np?.artist ?? "", thumb: np?.thumb, videoId: np?.videoId, paused: !!np?.isPaused,
       mood: MOOD_LABEL[v.cue?.mood] ?? v.cue?.mood ?? "", running: !!v.running, mode: String(v.mode ?? ""), origin: String(v.origin ?? ""),
-      chosen: !!v.moodPick, pick: v.moodPick ?? "",
+      chosen: !!v.moodPick, pick: v.moodPick ?? "", vote: np?.vote ?? 0, rateFor: np?.mood ? moodName(np.mood) : "",
       menu: this.moodMenu && v.chatId ? [["", "Auto"], ...((v.moods ?? []) as string[]).map((m): [string, string] => [m, moodName(m)])] : null,
     };
+  }
+
+  /** A thumb: shown at once (the Ledger's view follows), the same thumb again takes it back. */
+  rate(vote: number, videoId?: string, mood?: string) {
+    const v = this.view;
+    const id = videoId || v?.np?.videoId;
+    if (!id || (vote !== 1 && vote !== -1)) return;
+    this.send("rate", { vote, videoId: id, mood: mood || v?.np?.mood || undefined });
+    const flip = (x: any) => x && x.videoId === id && (!mood || x.mood === mood) && (x.vote = x.vote === vote ? 0 : vote);
+    flip(v?.np);
+    for (const p of v?.plays ?? []) flip(p);
+    this.rerender();
   }
 
   send(action: string, extra: Record<string, unknown> = {}) {
@@ -186,7 +205,8 @@ ${v.note ? `<p class="muted" style="margin:8px 0 0"><small>${e(v.note)}</small><
 <div class="bar" style="height:4px;margin-top:10px"><i style="display:block;height:100%;border-radius:inherit;width:${pct}%;background:var(--g)"></i></div><div class="row" style="margin-top:2px"><small class="muted grow">${t(np.elapsedS)}</small><small class="muted">${t(np.durationS)}</small></div>
 ${np.why ? `<p class="muted" style="margin:6px 0 0"><small>Why: ${e(np.why)}</small></p>` : ""}
 ${v.next ? `<p class="muted" style="margin:4px 0 0"><small>Up next: <b>${e(v.next.title)}</b> · ${e(v.next.artist)}</small></p>` : ""}
-<div class="row" style="margin-top:12px;gap:6px">${np.isPaused ? `<button class="btn sm" data-st="play">${ic("play", "sm")}Play</button>` : `<button class="btn sm" data-st="pause">${ic("pause", "sm")}Pause</button>`}<button class="btn sm" data-st="skip" title="Another song for this scene; this one counts against itself for this mood">${ic("forward", "sm")}Skip</button><button class="btn sm${v.mode === "holding" ? " primary" : ""}" data-st="hold" data-on="${v.mode === "holding" ? "" : "1"}" title="Keep this song going until the scene changes">${v.mode === "holding" ? "Holding · release" : "Hold"}</button><span class="grow"></span><button class="btn sm ghost" data-st="never" data-id="${e(np.videoId)}" title="Never play this song again">Never this song</button><button class="btn sm danger" data-st="ban" data-name="${e(np.artist.split(/,| & | and | x | feat\.? /i)[0].trim())}" title="Add the artist to your banned list (and skip)">Ban artist</button></div>
+${np.mood ? `<div class="row" style="margin-top:12px;gap:6px;align-items:center"><small class="muted grow">Does it fit ${e(moodName(np.mood))}?${np.vote ? ` You said ${np.vote > 0 ? "yes" : "no"}.` : ""}</small>${thumbs(np.videoId, np.mood, np.vote ?? 0)}</div>` : ""}
+<div class="row" style="margin-top:8px;gap:6px">${np.isPaused ? `<button class="btn sm" data-st="play">${ic("play", "sm")}Play</button>` : `<button class="btn sm" data-st="pause">${ic("pause", "sm")}Pause</button>`}<button class="btn sm" data-st="skip" title="Another song for this scene; this one counts against itself for this mood">${ic("forward", "sm")}Skip</button><button class="btn sm${v.mode === "holding" ? " primary" : ""}" data-st="hold" data-on="${v.mode === "holding" ? "" : "1"}" title="Keep this song going until the scene changes">${v.mode === "holding" ? "Holding · release" : "Hold"}</button><span class="grow"></span><button class="btn sm ghost" data-st="never" data-id="${e(np.videoId)}" title="Never play this song again">Never this song</button><button class="btn sm danger" data-st="ban" data-name="${e(np.artist.split(/,| & | and | x | feat\.? /i)[0].trim())}" title="Add the artist to your banned list (and skip)">Ban artist</button></div>
 ${cueBlock}</div>`;
   }
 
@@ -239,7 +259,18 @@ ${this.searching === "songs" ? `<small class="muted">searching…</small>` : ""}
   private history(v: any): string {
     const plays: any[] = v.plays ?? [];
     if (!plays.length) return "";
-    return `${sec("Played in this story", plays.length)}<div class="card almx-rows" style="padding:2px 16px">${plays.map((p) => `<div class="almx-row" style="align-items:flex-start"><span title="${e(HOW_TITLE[p.how] ?? "")}" style="width:16px;text-align:center">${HOW[p.how] ?? "·"}</span><div class="grow" style="min-width:0"><b>${e(p.title)}</b> <small class="muted">· ${e(p.artist)}</small><div><small class="muted">${e(new Date(p.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}${p.mood ? ` · ${e(MOOD_LABEL[p.mood] ?? p.mood)}` : ""}${p.how === "banned-skip" ? ` · skipped: ${e(p.reason ?? "")}` : p.reason ? ` · ${e(p.reason)}` : ""}</small></div></div></div>`).join("")}</div>`;
+    return `${sec("Played in this story", plays.length)}<div class="card almx-rows" style="padding:2px 16px">${plays.map((p) => `<div class="almx-row" style="align-items:flex-start"><span title="${e(HOW_TITLE[p.how] ?? "")}" style="width:16px;text-align:center">${HOW[p.how] ?? "·"}</span><div class="grow" style="min-width:0"><b>${e(p.title)}</b> <small class="muted">· ${e(p.artist)}</small><div><small class="muted">${e(new Date(p.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}${p.mood ? ` · ${e(MOOD_LABEL[p.mood] ?? p.mood)}` : ""}${p.how === "banned-skip" ? ` · skipped: ${e(p.reason ?? "")}` : p.reason ? ` · ${e(p.reason)}` : ""}</small></div></div>${p.mood && p.how !== "banned-skip" ? `<span class="row" style="gap:2px;flex:none">${thumbs(p.videoId, p.mood, p.vote ?? 0)}</span>` : ""}</div>`).join("")}</div>${this.learned(v)}`;
+  }
+
+  /** What the thumbs taught: per mood, and the latest ratings (each can be taken back). */
+  private learned(v: any): string {
+    const r = v.ratings;
+    if (!r?.total) return `<p class="muted" style="margin:8px 2px 0"><small>👍 a song that fits the scene and 👎 one that doesn't: the Almanac learns the songs, artists and genres you like for each mood.</small></p>`;
+    return `<details class="card tight" style="margin-top:12px"><summary><b>What your thumbs taught it</b> <small class="muted">· ${r.total} rating${r.total === 1 ? "" : "s"}</small></summary><div style="margin-top:10px">
+<p class="muted" style="margin:0 0 8px"><small>Songs you rated up come back for that mood (and moods close to it); songs rated down never play for it again. Their artists and genres rise or sink for the mood too. Ratings count in every story.</small></p>
+<div class="row" style="gap:6px">${r.summary.map((x: any) => `<span class="pill">${e(moodName(x.mood))} <small class="muted">${x.up ? `👍${x.up}` : ""}${x.up && x.down ? " " : ""}${x.down ? `👎${x.down}` : ""}</small></span>`).join("")}</div>
+<div class="almx-rows" style="margin-top:8px">${r.recent.map((x: any) => `<div class="almx-row"><span style="width:18px;text-align:center">${x.vote > 0 ? "👍" : "👎"}</span><div class="grow" style="min-width:0"><b>${e(x.title)}</b> <small class="muted">· ${e(x.artist)} · ${e(moodName(x.mood))}</small></div><button class="btn sm ghost" data-st="unrate" data-id="${e(x.videoId)}" data-mood="${e(x.mood)}" title="Forget this rating">×</button></div>`).join("")}</div>
+<div class="row" style="margin-top:8px"><span class="grow"></span><button class="btn sm ghost" data-st="forgetRatings" title="Forget every rating">Forget all ratings</button></div></div></details>`;
   }
 
   private options(v: any): string {
@@ -325,6 +356,9 @@ ${this.lastfm(v)}
         this.send(d.st);
         break;
       case "hold": this.send("hold", { on: !!d.on }); break;
+      case "rate": this.rate(Number(d.vote), d.id, d.mood); break;
+      case "unrate": this.send("rateForget", { videoId: d.id, mood: d.mood }); break;
+      case "forgetRatings": if (confirm("Forget every song rating? The Almanac stops using what they taught.")) this.send("rateForget", {}); break;
       case "mood":
         this.send("mood", { mood: d.mood || null });
         if (this.view) this.view.moodPick = d.mood || null;

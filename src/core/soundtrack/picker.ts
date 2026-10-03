@@ -3,6 +3,7 @@
 import { rng } from "../util";
 import type { Cue } from "./cue";
 import { MOOD_GENRES, MOOD_WORDS, suggestGenres } from "./moods";
+import { ratingBonus, type Learned, type Rating } from "./ratings";
 import { MOOD_TAGS } from "./tags";
 import { banReason, creditsOf, normName, preferredOf, type Taste, type Track } from "./taste";
 
@@ -82,6 +83,8 @@ export interface History {
   skips: Record<string, number>;
   /** Tracks the player said never to play again. */
   never: string[];
+  /** The player's thumbs: whether a song fitted the mood it played for (see ratings.ts). */
+  rated?: Rating[];
 }
 
 export interface Scored {
@@ -98,6 +101,8 @@ export interface PickOptions {
   dialogue?: boolean;
   /** Liked tracks (from the player). */
   liked?: Set<string>;
+  /** What the player's thumbs taught about this cue's mood. */
+  learned?: Learned;
 }
 
 const TWO_HOURS = 2 * 3600_000;
@@ -134,7 +139,7 @@ export function scoreAll(cands: Candidate[], cue: Cue, taste: Taste, h: History,
   const byId = new Map<string, Scored>();
   for (const c of cands) {
     const t = c.track;
-    if (excluded(t, taste, h, o.now)) continue;
+    if (excluded(t, taste, h, o.now) || o.learned?.out.has(t.videoId)) continue;
     const reasons: string[] = [];
     let s = Math.max(0, 1 - c.pos / 20); // search rank carries the mood
     if (c.query.rank === 0 && c.query.genre) {
@@ -159,6 +164,9 @@ export function scoreAll(cands: Candidate[], cue: Cue, taste: Taste, h: History,
     const tf = titleFit(t.title, cue.mood);
     s += tf.delta;
     if (tf.reason) reasons.push(tf.reason);
+    const rb = ratingBonus(o.learned, t, c.query.genre, c.query.key);
+    s += rb.delta;
+    reasons.push(...rb.reasons);
     // Sex on the page in an explicit story: songs that say it out loud come first.
     if (cue.explicit && t.explicit) {
       s += 0.2;

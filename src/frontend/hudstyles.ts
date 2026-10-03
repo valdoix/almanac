@@ -124,6 +124,8 @@ const BASE = `
 .alm-hudc .alm-hudc__mub:hover{background:color-mix(in oklab,var(--alm-accent) 18%,transparent)}
 .alm-hudc .alm-hudc__mub.is-on{color:var(--alm-accent);background:color-mix(in oklab,var(--alm-accent) 14%,transparent)}
 .alm-hudc .alm-hudc__mub.is-dim{color:var(--alm-muted)}
+.alm-hudc .alm-hudc__mub.is-thumb{font-size:11px;filter:grayscale(1);opacity:.6}
+.alm-hudc .alm-hudc__mub.is-thumb:hover,.alm-hudc .alm-hudc__mub.is-thumb.is-on{filter:none;opacity:1}
 .alm-hudc .alm-hudc__mub.is-txt{padding:0 9px;font:600 10.5px/1 var(--alm-font-body);color:var(--alm-accent);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--alm-accent) 45%,transparent)}
 .alm-hudw__mu{display:inline-flex;align-items:center;gap:4px;flex:0 1 auto!important;min-width:0;max-width:120px;color:var(--alm-accent)}
 .alm-hudw__mu svg{flex:none;animation:alm-mu 2.4s ease-in-out infinite}

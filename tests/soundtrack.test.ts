@@ -8,6 +8,7 @@ import { banReason, cleanTaste, creditsOf, DEFAULT_TASTE, mergeTaste, normName, 
 import { emptyState } from "../src/core/state";
 import { absMinutes } from "../src/core/util";
 import { cleanTags, lookupTitle, retag, tagFit } from "../src/core/soundtrack/tags";
+import { learnedFor, moodNear, rate, ratedPool, ratingBonus, ratingSummary, voteOf, type Rating } from "../src/core/soundtrack/ratings";
 import type { WorldState } from "../src/core/types";
 
 // ---------------------------------------------------------------------------
@@ -605,5 +606,75 @@ describe("soundtrack mood chosen by the player", () => {
     const off = step({ ...s, running: false }, { type: "mood", cue: calm, now: 5 });
     expect(off.actions).toEqual([]);
     expect(off.state.lastCue).toBe(calm);
+  });
+});
+
+describe("soundtrack thumbs", () => {
+  const r = (id: string, artist: string, mood: any, vote: 1 | -1, genre = "r&b", qkey = "erotic|r&b"): Rating => ({ track: track(id, id, artist), mood, genre, qkey, vote, at: 0 });
+
+  test("a thumb again takes it back, the other thumb replaces it; one vote per song and mood", () => {
+    let list = rate([], r("a", "A", "erotic", 1));
+    expect(voteOf(list, "a", "erotic")).toBe(1);
+    list = rate(list, r("a", "A", "erotic", -1));
+    expect(list.length).toBe(1);
+    expect(voteOf(list, "a", "erotic")).toBe(-1);
+    list = rate(list, r("a", "A", "erotic", -1));
+    expect(list.length).toBe(0);
+    list = rate(rate([], r("a", "A", "erotic", 1)), r("a", "A", "calm", -1));
+    expect(voteOf(list, "a", "erotic")).toBe(1);
+    expect(voteOf(list, "a", "calm")).toBe(-1);
+    expect(ratingSummary(list).map((x) => x.mood).sort()).toEqual(["calm", "erotic"]);
+  });
+
+  test("close moods share half a vote; far ones none", () => {
+    expect(moodNear("sensual", "sensual")).toBe(1);
+    expect(moodNear("sensual", "romantic")).toBe(0.5);
+    expect(moodNear("melancholy", "grief")).toBe(0.5);
+    expect(moodNear("erotic", "combat")).toBe(0);
+    const L = learnedFor([r("a", "A", "sensual", 1), r("b", "B", "sensual", -1)], "romantic");
+    expect(L.track.get("a")).toBe(0.5);
+    expect(L.track.get("b")).toBe(-0.25);
+    // Down for a nearby mood doesn't rule a song out here.
+    expect(L.out.has("b")).toBe(false);
+    expect(learnedFor([r("b", "B", "sensual", -1)], "sensual").out.has("b")).toBe(true);
+  });
+
+  test("the song, its artist, its genre and its search rise with thumbs up and sink with thumbs down", () => {
+    const L = learnedFor([r("a", "Sade", "erotic", 1), r("b", "Sade", "erotic", 1), r("c", "Nickel", "erotic", -1, "rock", "erotic|rock")], "erotic");
+    expect(ratingBonus(L, track("a", "x", "Sade"), "r&b", "erotic|r&b").delta).toBeGreaterThan(0.6);
+    const sameArtist = ratingBonus(L, track("new", "x", "Sade"), "", "");
+    expect(sameArtist.delta).toBeGreaterThan(0.2);
+    expect(sameArtist.reasons.join()).toContain("you like this artist");
+    expect(ratingBonus(L, track("new2", "x", "Nickel"), "rock", "erotic|rock").delta).toBeLessThan(-0.2);
+    expect(ratingBonus(L, track("new3", "x", "Other"), "r&b", "erotic|r&b").delta).toBeGreaterThan(0);
+    expect(ratingBonus(undefined, track("a", "x", "Sade"), "", "").delta).toBe(0);
+  });
+
+  test("picks learn: a song rated down is out for that mood, rated up comes back, liked artists win", () => {
+    const sex = cueOf({ mood: "erotic" });
+    const q = { q: "r&b sexy", key: "erotic|r&b", genre: "r&b", rank: 0 };
+    const cands: Candidate[] = [
+      { track: track("top", "One", "Search Top"), query: q, pos: 0 },
+      { track: track("fav", "Two", "Sade"), query: q, pos: 4 },
+      { track: track("bad", "Three", "Nope"), query: q, pos: 1 },
+    ];
+    const rated = [r("bad", "Nope", "erotic", -1), r("old", "Sade", "erotic", 1)];
+    const learned = learnedFor(rated, "erotic");
+    const order = scoreAll(cands, sex, DEFAULT_TASTE, emptyHistory(), { now: Date.now(), seed: "", learned }).map((x) => x.track.videoId);
+    expect(order).not.toContain("bad");
+    expect(order[0]).toBe("fav");
+    // Rated-up songs are candidates of their own, for that mood and close ones, not for far ones.
+    expect(ratedPool(rated, "erotic").map((t) => t.videoId)).toEqual(["old"]);
+    expect(ratedPool(rated, "sensual").map((t) => t.videoId)).toEqual(["old"]);
+    expect(ratedPool(rated, "combat")).toEqual([]);
+  });
+
+  test("a thumbs-down skip carries no skip penalty on top", () => {
+    const c1 = cueOf({ sceneNo: 1 });
+    const { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1"), now: 3, banned: null }]);
+    const quiet = step(s, { type: "user-skip", now: 5, quiet: true }).actions;
+    expect(quiet.some((a) => a.type === "penalise")).toBe(false);
+    expect(quiet.some((a) => a.type === "pick" && a.when === "now")).toBe(true);
+    expect(step(s, { type: "user-skip", now: 5 }).actions.some((a) => a.type === "penalise")).toBe(true);
   });
 });
