@@ -8050,7 +8050,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.24.0";
+var VERSION = "1.24.1";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -20507,6 +20507,7 @@ function step(prev, ev) {
     }
     case "picked":
       s.picking = 0;
+      s.failedAt = 0;
       s.ours = remember(s.ours, ev.videoId);
       if (ev.when === "now")
         s.expect = { videoId: ev.videoId, cue: ev.cue, at: ev.now };
@@ -20517,13 +20518,38 @@ function step(prev, ev) {
       break;
     case "pick-failed":
       s.picking = 0;
+      s.failedAt = ev.now;
       break;
     case "poll": {
       const np = ev.np;
+      const refill = (reason) => {
+        if (!s.running || !s.lastCue || busy(ev.now) || s.failedAt && ev.now - s.failedAt < RETRY_MS || s.expect && ev.now - s.expect.at < ARRIVE_MS)
+          return;
+        if (s.mode === "holding" && s.current) {
+          actions.push({ type: "replay-now", videoId: s.current });
+          return;
+        }
+        s.mode = "following";
+        s.holdScene = null;
+        if (s.next)
+          actions.push({ type: "drop-next", videoId: s.next.videoId });
+        s.next = null;
+        pick("now", s.lastCue, reason, ev.now);
+      };
+      s.ended = false;
       if (!np || !np.videoId) {
         s.current = null;
         s.origin = null;
         s.lastPaused = false;
+        refill("nothing playing");
+        break;
+      }
+      if (np.videoId === s.current && ended(np)) {
+        s.lastElapsed = np.elapsedS;
+        s.lastDuration = np.durationS;
+        s.lastPaused = false;
+        s.ended = true;
+        refill("the song ended");
         break;
       }
       if (np.videoId !== s.current) {
@@ -20562,8 +20588,8 @@ function step(prev, ev) {
             pick("now", s.lastCue, `skipped: ${ev.banned}`, ev.now);
           else
             actions.push({ type: "skip", reason: ev.banned, videoId: np.videoId });
-        } else if (s.running && origin === "autoplay" && s.mode === "following" && !np.isPaused && s.lastCue) {
-          pick("now", s.lastCue, "autoplay took over", ev.now);
+        } else if (s.running && origin === "autoplay" && (s.mode === "following" || s.mode === "yielded" && ev.onlyPicks) && !np.isPaused && s.lastCue) {
+          pick("now", s.lastCue, s.mode === "yielded" ? "your song ended" : "autoplay took over", ev.now);
         }
       }
       s.lastElapsed = np.elapsedS;
@@ -20582,7 +20608,7 @@ function step(prev, ev) {
           break;
         }
       }
-      if (s.mode === "following" && !s.next && !s.expect && left <= KEEP_AHEAD_S && (s.lastCue ?? s.playingCue))
+      if ((s.mode === "following" || s.mode === "yielded" && ev.onlyPicks) && !s.next && !s.expect && left <= KEEP_AHEAD_S && (s.lastCue ?? s.playingCue))
         pick("next", s.lastCue ?? s.playingCue, "keeping the music going", ev.now);
       break;
     }
@@ -20602,14 +20628,16 @@ function step(prev, ev) {
         s.mode = "following";
         s.holdScene = null;
       }
+      if (!s.current || s.ended) {
+        if (!s.lastPaused) {
+          s.mode = "following";
+          pick("now", cue, "nothing playing", ev.now);
+        }
+        break;
+      }
       if (s.mode === "yielded") {
         if (ev.takeBack && newScene && s.sceneId > 1 && !s.next)
           pick("next", cue, "new scene: taking the music back", ev.now);
-        break;
-      }
-      if (!s.current) {
-        if (!s.lastPaused)
-          pick("now", cue, "nothing playing", ev.now);
         break;
       }
       if (!s.playingCue) {
@@ -20646,7 +20674,7 @@ function step(prev, ev) {
   }
   return { state: s, actions };
 }
-var CHANGE_AT = 0.35, TENSION_JUMP = 0.4, KEEP_AHEAD_S = 30, END_SLACK_S = 12, SHARP_DWELL_MS = 20000, PICK_TIMEOUT_MS = 45000, remember = (ours, id) => [...ours.filter((x) => x !== id), id].slice(-40);
+var CHANGE_AT = 0.35, TENSION_JUMP = 0.4, KEEP_AHEAD_S = 30, END_SLACK_S = 12, SHARP_DWELL_MS = 20000, PICK_TIMEOUT_MS = 45000, ENDED_SLACK_S = 3, RETRY_MS = 60000, ARRIVE_MS = 15000, ended = (np) => np.isPaused && np.durationS > 0 && np.elapsedS >= np.durationS - ENDED_SLACK_S, remember = (ours, id) => [...ours.filter((x) => x !== id), id].slice(-40);
 var init_director = __esm(() => {
   init_cue();
 });
@@ -21968,6 +21996,10 @@ async function act(s, a) {
       case "replay-next":
         await player.enqueue(a.videoId, true);
         break;
+      case "replay-now":
+        await player.playNow(a.videoId);
+        schedulePoll(s, 1500);
+        break;
       case "penalise": {
         s.history.skips[`${a.mood}|${a.videoId}`] = (s.history.skips[`${a.mood}|${a.videoId}`] ?? 0) + 1;
         const t = s.picked.get(a.videoId)?.track;
@@ -22009,7 +22041,8 @@ function schedulePoll(s, ms) {
   if (!s.config.enabled || !s.player?.token)
     return;
   const gen = ++s.pollGen;
-  const delay = ms ?? (s.status === "not-running" || s.status === "error" ? 30000 : s.status === "not-allowed" ? 60000 : s.np && !s.np.isPaused ? 5000 : 15000);
+  const left = s.np && !s.np.isPaused && s.np.durationS > 0 ? s.np.durationS - s.np.elapsedS : Infinity;
+  const delay = ms ?? (s.status === "not-running" || s.status === "error" ? 30000 : s.status === "not-allowed" ? 60000 : s.np && !s.np.isPaused ? Math.max(1000, Math.min(5000, left * 1000 + 1200)) : s.dir.running ? 1e4 : 15000);
   s.timer = setTimeout(() => {
     if (gen !== s.pollGen)
       return;
@@ -22053,8 +22086,13 @@ async function poll(s) {
   }
   const prevOrigin = s.dir.origin;
   const prevId = s.dir.current;
+  if (np && !s.dir.current && !s.dir.ours.includes(np.videoId) && s.chatId) {
+    const plays = (await chatStore(s.chatId, s.userId).catch(() => null))?.plays ?? [];
+    if (plays.slice(-10).some((p) => p.videoId === np.videoId && p.how === "picked"))
+      s.dir = { ...s.dir, ours: [...s.dir.ours, np.videoId].slice(-40) };
+  }
   s.np = np;
-  await apply(s, { type: "poll", np, now: Date.now(), banned });
+  await apply(s, { type: "poll", np, now: Date.now(), banned, onlyPicks: s.config.onlyPicks });
   if (np && np.videoId !== prevId && s.dir.origin && s.dir.origin !== "ours" && s.dir.origin !== "ours-skip" && s.dir.current === np.videoId && !banned) {
     await recordPlay(s, { videoId: np.videoId, title: np.title, artists: np.artists ?? [{ name: np.artist }], durationS: np.durationS, explicit: false, kind: "song", thumb: np.thumb }, s.dir.origin === "user" ? "user" : "autoplay", s.dir.lastCue ? { ...s.dir.lastCue, why: "" } : null, "");
   }
@@ -22126,6 +22164,7 @@ async function viewOf(s) {
     cutOnSharp: s.config.cutOnSharp,
     takeBack: s.config.takeBack,
     fade: s.config.fade,
+    onlyPicks: s.config.onlyPicks,
     taste: s.config.taste,
     lastfm: !!s.lastfmKey,
     lastfmBad: badKey.get(s.userId ?? "") ?? "",
@@ -22177,7 +22216,7 @@ async function soundtrackAction(m, userId) {
         s.config.director = p.director;
       if (typeof p.connection === "string")
         s.config.connection = p.connection;
-      for (const k of ["cutOnSharp", "takeBack", "fade"])
+      for (const k of ["cutOnSharp", "takeBack", "fade", "onlyPicks"])
         if (typeof p[k] === "boolean")
           s.config[k] = p[k];
       if (was.url !== s.config.playerUrl)
@@ -22468,6 +22507,7 @@ var init_soundtrack = __esm(() => {
     cutOnSharp: true,
     takeBack: true,
     fade: true,
+    onlyPicks: false,
     taste: DEFAULT_TASTE
   };
   sessions = new Map;

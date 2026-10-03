@@ -38,6 +38,8 @@ export interface SoundtrackConfig {
   cutOnSharp: boolean;
   takeBack: boolean;
   fade: boolean;
+  /** Only the Almanac's picks (and songs the player chooses): YouTube Music's autoplay and mixes never play on. */
+  onlyPicks: boolean;
   taste: Taste;
 }
 
@@ -51,6 +53,7 @@ const DEFAULT_CONFIG: SoundtrackConfig = {
   cutOnSharp: true,
   takeBack: true,
   fade: true,
+  onlyPicks: false,
   taste: DEFAULT_TASTE,
 };
 
@@ -394,6 +397,10 @@ async function act(s: Session, a: Action): Promise<void> {
       case "replay-next":
         await player.enqueue(a.videoId, true);
         break;
+      case "replay-now":
+        await player.playNow(a.videoId);
+        schedulePoll(s, 1500);
+        break;
       case "penalise": {
         s.history.skips[`${a.mood}|${a.videoId}`] = (s.history.skips[`${a.mood}|${a.videoId}`] ?? 0) + 1;
         const t = s.picked.get(a.videoId)?.track;
@@ -437,7 +444,9 @@ function schedulePoll(s: Session, ms?: number) {
   s.timer = null;
   if (!s.config.enabled || !s.player?.token) return;
   const gen = ++s.pollGen;
-  const delay = ms ?? (s.status === "not-running" || s.status === "error" ? 30_000 : s.status === "not-allowed" ? 60_000 : s.np && !s.np.isPaused ? 5_000 : 15_000);
+  // A song about to end is looked at just after it does, so the next one follows with little silence.
+  const left = s.np && !s.np.isPaused && s.np.durationS > 0 ? s.np.durationS - s.np.elapsedS : Infinity;
+  const delay = ms ?? (s.status === "not-running" || s.status === "error" ? 30_000 : s.status === "not-allowed" ? 60_000 : s.np && !s.np.isPaused ? Math.max(1_000, Math.min(5_000, left * 1000 + 1_200)) : s.dir.running ? 10_000 : 15_000);
   s.timer = setTimeout(() => {
     if (gen !== s.pollGen) return;
     void run(s, () => poll(s)).finally(() => {
@@ -477,8 +486,13 @@ async function poll(s: Session): Promise<void> {
   }
   const prevOrigin = s.dir.origin;
   const prevId = s.dir.current;
+  // The first song seen (after a restart, say): one the Almanac picked in this story is still its own.
+  if (np && !s.dir.current && !s.dir.ours.includes(np.videoId) && s.chatId) {
+    const plays = (await chatStore(s.chatId, s.userId).catch(() => null))?.plays ?? [];
+    if (plays.slice(-10).some((p) => p.videoId === np.videoId && p.how === "picked")) s.dir = { ...s.dir, ours: [...s.dir.ours, np.videoId].slice(-40) };
+  }
   s.np = np;
-  await apply(s, { type: "poll", np, now: Date.now(), banned });
+  await apply(s, { type: "poll", np, now: Date.now(), banned, onlyPicks: s.config.onlyPicks });
   if (np && np.videoId !== prevId && s.dir.origin && s.dir.origin !== "ours" && s.dir.origin !== "ours-skip" && s.dir.current === np.videoId && !banned) {
     // The scene's mood at the time, so the song can be rated for it later.
     await recordPlay(s, { videoId: np.videoId, title: np.title, artists: np.artists ?? [{ name: np.artist }], durationS: np.durationS, explicit: false, kind: "song", thumb: np.thumb }, s.dir.origin === "user" ? "user" : "autoplay", s.dir.lastCue ? { ...s.dir.lastCue, why: "" } : null, "");
@@ -558,6 +572,7 @@ async function viewOf(s: Session): Promise<Record<string, unknown>> {
     cutOnSharp: s.config.cutOnSharp,
     takeBack: s.config.takeBack,
     fade: s.config.fade,
+    onlyPicks: s.config.onlyPicks,
     taste: s.config.taste,
     lastfm: !!s.lastfmKey,
     lastfmBad: badKey.get(s.userId ?? "") ?? "",
@@ -617,7 +632,7 @@ export async function soundtrackAction(m: Record<string, any>, userId?: string):
       if (typeof p.playerUrl === "string" && /^https?:\/\/[^\s/]+(?::\d+)?\/?$/i.test(p.playerUrl.trim())) s.config.playerUrl = p.playerUrl.trim().replace(/\/+$/, "");
       if (p.director === "engine" || p.director === "model") s.config.director = p.director;
       if (typeof p.connection === "string") s.config.connection = p.connection;
-      for (const k of ["cutOnSharp", "takeBack", "fade"] as const) if (typeof p[k] === "boolean") s.config[k] = p[k];
+      for (const k of ["cutOnSharp", "takeBack", "fade", "onlyPicks"] as const) if (typeof p[k] === "boolean") s.config[k] = p[k];
       if (was.url !== s.config.playerUrl) s.player = new PearPlayer(s.config.playerUrl, s.player?.token ?? null, s.config.clientId);
       if (!s.config.enabled) {
         s.dir = { ...s.dir, running: false };

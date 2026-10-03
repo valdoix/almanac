@@ -375,6 +375,52 @@ test("yielded: the user's music plays out; a new scene queues the scene's music 
   expect(step(s, { type: "cue", cue: c2, now: 6, cutOnSharp: true, takeBack: false }).actions).toEqual([]);
 });
 
+test("the music never stops on its own: a song that ends with nothing after it is followed by another", () => {
+  const c1 = cueOf({ sceneNo: 1 });
+  const { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1", 30), now: 3, banned: null }]);
+  // The queue ran out: the player stopped at the end of the song.
+  const end = step(s, { type: "poll", np: np("s1", 199, { isPaused: true }), now: 40_000, banned: null });
+  expect(end.actions).toEqual([{ type: "pick", when: "now", cue: c1, reason: "the song ended", fade: false }]);
+  // A pause mid-song stays paused.
+  expect(step(s, { type: "poll", np: np("s1", 120, { isPaused: true }), now: 40_000, banned: null }).actions).toEqual([]);
+  // Nothing loaded at all.
+  expect(step(s, { type: "poll", np: null, now: 40_000, banned: null }).actions).toEqual([{ type: "pick", when: "now", cue: c1, reason: "nothing playing", fade: false }]);
+  // Stopped: quiet.
+  expect(step({ ...s, running: false }, { type: "poll", np: np("s1", 199, { isPaused: true }), now: 40_000, banned: null }).actions).toEqual([]);
+  // A pick that found nothing isn't retried every poll.
+  const failed = step(step(end.state, { type: "pick-failed", now: 41_000 }).state, { type: "poll", np: np("s1", 199, { isPaused: true }), now: 50_000, banned: null });
+  expect(failed.actions).toEqual([]);
+  expect(step(failed.state, { type: "poll", np: np("s1", 199, { isPaused: true }), now: 110_000, banned: null }).actions).toHaveLength(1);
+  // The user's own song ran out too: the scene's music follows it.
+  const mine = step(s, { type: "poll", np: np("mine", 1), now: 30_000, banned: null }).state;
+  expect(mine.mode).toBe("yielded");
+  const after = step(mine, { type: "poll", np: np("mine", 200, { isPaused: true }), now: 300_000, banned: null });
+  expect(after.actions).toEqual([{ type: "pick", when: "now", cue: c1, reason: "the song ended", fade: false }]);
+  expect(after.state.mode).toBe("following");
+  // A reply while it's stopped at the end starts the music now, not after the dead song.
+  const c2 = { ...c1, mood: "calm" as const };
+  expect(step({ ...end.state, picking: 0 }, { type: "cue", cue: c2, now: 41_000, ...opts }).actions).toEqual([{ type: "pick", when: "now", cue: c2, reason: "nothing playing", fade: false }]);
+});
+
+test("only the Almanac's picks: the user's song plays out, then the scene's music, never YouTube Music's mix", () => {
+  const c1 = cueOf({ sceneNo: 1 });
+  const { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1", 30), now: 3, banned: null }, { type: "poll", np: np("mine", 1), now: 4, banned: null }]);
+  expect(s.mode).toBe("yielded");
+  // Near the end of the user's song: by default YouTube Music carries on; with onlyPicks one of ours is queued behind it.
+  expect(step(s, { type: "poll", np: np("mine", 180), now: 5, banned: null }).actions).toEqual([]);
+  expect(step(s, { type: "poll", np: np("mine", 180), now: 5, banned: null, onlyPicks: true }).actions).toEqual([{ type: "pick", when: "next", cue: c1, reason: "keeping the music going", fade: false }]);
+  // The mix got in anyway (the user's song ended naturally): it's replaced at once.
+  const ending = step(s, { type: "poll", np: np("mine", 195), now: 6, banned: null }).state;
+  expect(step(ending, { type: "poll", np: np("mix", 1), now: 7, banned: null }).actions).toEqual([]);
+  const strict = step({ ...ending, picking: 0 }, { type: "poll", np: np("mix", 1), now: 7, banned: null, onlyPicks: true });
+  expect(strict.state.origin).toBe("autoplay");
+  expect(strict.actions).toEqual([{ type: "pick", when: "now", cue: c1, reason: "your song ended", fade: false }]);
+  // A song the user jumps to in YouTube Music still plays.
+  const jumped = step(s, { type: "poll", np: np("mine2", 1), now: 8, banned: null, onlyPicks: true });
+  expect(jumped.state.origin).toBe("user");
+  expect(jumped.actions).toEqual([]);
+});
+
 test("skipping our song early counts against it; hold replays until the scene changes", () => {
   const c1 = cueOf({ sceneNo: 1 });
   let { s } = run([{ type: "cue", cue: c1, now: 0, ...opts }, { type: "start", now: 1 }, { type: "picked", videoId: "s1", when: "now", cue: c1, now: 2 }, { type: "poll", np: np("s1", 30), now: 3, banned: null }, { type: "picked", videoId: "s2", when: "next", cue: c1, now: 4 }]);

@@ -4,6 +4,13 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.24.1 (2026-10-03)
+
+**The Soundtrack keeps playing.**
+- **It never stops on its own.** While the Almanac is choosing, a song that ends with nothing after it (the queue ran out, or nothing is loaded) is followed by another for the scene. That includes a song you played yourself. A pause mid-song stays paused, and Stop choosing stays quiet. The player is checked just after a song is due to end, so the gap is short. A search that finds nothing waits a minute before it tries again.
+- **Only the Almanac's picks** (How it plays). YouTube Music's autoplay and its auto-made mixes never get a turn. A song you choose in YouTube Music still plays to its end. Then the scene's music follows it: it's queued behind your song, and replaced at once if the mix gets in first. Without the option, your song's mix plays on until the next scene, as before.
+- After a restart, a song the Almanac picked in this story counts as its own again, not as yours.
+
 ## 1.24.0 (2026-10-03) · preset 1.1.5
 
 **Stamina: needs follow what someone is.** Hunger, thirst and tiredness build at each person's own speed, and wounds heal at their own pace too.

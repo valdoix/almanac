@@ -3,7 +3,9 @@
 //
 // The player belongs to the user. A song the user picked plays to the end; a pause stays paused.
 // Bans hold for every song the Almanac or YouTube Music starts on its own (autoplay after a song
-// ends), never for a song the user chose themselves.
+// ends), never for a song the user chose themselves. While it runs the music never stops on its own:
+// a song that ends with nothing after it is followed by another for the scene. With `onlyPicks`
+// YouTube Music's own mixes never get a turn: only the Almanac's picks and the user's own songs play.
 
 import { cueDistance, sameScene, type Cue, type SceneMark } from "./cue";
 import type { Mood } from "./moods";
@@ -56,6 +58,10 @@ export interface DirectorState {
   picking: number;
   /** The music scene that last turned to sex: only the first turn in a scene cuts in. */
   eroticScene?: number | null;
+  /** When the last pick found nothing (the silence isn't refilled every poll). */
+  failedAt?: number;
+  /** The current song played to its end and the player stopped there. */
+  ended?: boolean;
 }
 
 export type Action =
@@ -63,6 +69,8 @@ export type Action =
   | { type: "drop-next"; videoId: string }
   | { type: "skip"; reason: string; videoId: string }
   | { type: "replay-next"; videoId: string }
+  /** A held song ran out: play it again now. */
+  | { type: "replay-now"; videoId: string }
   | { type: "penalise"; videoId: string; mood: Mood };
 
 export interface CueOptions {
@@ -70,10 +78,15 @@ export interface CueOptions {
   takeBack: boolean;
 }
 
+export interface PollOptions {
+  /** Only the Almanac's picks and the user's own songs: YouTube Music's autoplay and mixes are replaced. */
+  onlyPicks?: boolean;
+}
+
 export type Event =
   | ({ type: "cue"; cue: Cue; now: number } & CueOptions)
   /** `banned`: why the song now playing may not play (the caller checks it against the taste), or null. */
-  | { type: "poll"; np: NowPlaying | null; now: number; banned: string | null }
+  | ({ type: "poll"; np: NowPlaying | null; now: number; banned: string | null } & PollOptions)
   | { type: "picked"; videoId: string; when: "now" | "next"; cue: Cue; now: number }
   | { type: "pick-failed"; now: number }
   | { type: "start"; now: number }
@@ -91,6 +104,15 @@ const KEEP_AHEAD_S = 30;
 const END_SLACK_S = 12;
 const SHARP_DWELL_MS = 20_000;
 const PICK_TIMEOUT_MS = 45_000;
+/** A song paused this close to its end has ended (the queue ran out), not been paused. */
+const ENDED_SLACK_S = 3;
+/** After a pick found nothing, the silence waits this long before another try. */
+const RETRY_MS = 60_000;
+/** A song just started may not show yet: no refill on top of it. */
+const ARRIVE_MS = 15_000;
+
+/** The player stopped at the end of a song: the queue ran out (not the user's pause). */
+export const ended = (np: NowPlaying) => np.isPaused && np.durationS > 0 && np.elapsedS >= np.durationS - ENDED_SLACK_S;
 
 export function emptyDirector(): DirectorState {
   return {
@@ -174,6 +196,7 @@ export function step(prev: DirectorState, ev: Event): { state: DirectorState; ac
 
     case "picked":
       s.picking = 0;
+      s.failedAt = 0;
       s.ours = remember(s.ours, ev.videoId);
       if (ev.when === "now") s.expect = { videoId: ev.videoId, cue: ev.cue, at: ev.now };
       else s.next = { videoId: ev.videoId, cue: ev.cue };
@@ -182,14 +205,38 @@ export function step(prev: DirectorState, ev: Event): { state: DirectorState; ac
 
     case "pick-failed":
       s.picking = 0;
+      s.failedAt = ev.now;
       break;
 
     case "poll": {
       const np = ev.np;
+      // Nothing playing, or the queue ran out at the end of a song: the music goes on with the scene's.
+      const refill = (reason: string) => {
+        if (!s.running || !s.lastCue || busy(ev.now) || (s.failedAt && ev.now - s.failedAt < RETRY_MS) || (s.expect && ev.now - s.expect.at < ARRIVE_MS)) return;
+        if (s.mode === "holding" && s.current) {
+          actions.push({ type: "replay-now", videoId: s.current });
+          return;
+        }
+        s.mode = "following";
+        s.holdScene = null;
+        if (s.next) actions.push({ type: "drop-next", videoId: s.next.videoId });
+        s.next = null;
+        pick("now", s.lastCue, reason, ev.now);
+      };
+      s.ended = false;
       if (!np || !np.videoId) {
         s.current = null;
         s.origin = null;
         s.lastPaused = false;
+        refill("nothing playing");
+        break;
+      }
+      if (np.videoId === s.current && ended(np)) {
+        s.lastElapsed = np.elapsedS;
+        s.lastDuration = np.durationS;
+        s.lastPaused = false; // it ended; the user didn't pause it
+        s.ended = true;
+        refill("the song ended");
         break;
       }
       if (np.videoId !== s.current) {
@@ -223,9 +270,9 @@ export function step(prev: DirectorState, ev: Event): { state: DirectorState; ac
           // Our next song is queued: skipping lands on it. Otherwise play the scene's music in its place.
           if (!s.next && s.mode === "following" && s.lastCue && !busy(ev.now)) pick("now", s.lastCue, `skipped: ${ev.banned}`, ev.now);
           else actions.push({ type: "skip", reason: ev.banned, videoId: np.videoId });
-        } else if (s.running && origin === "autoplay" && s.mode === "following" && !np.isPaused && s.lastCue) {
-          // Our queue ran dry and YouTube Music filled it: put the scene's music back.
-          pick("now", s.lastCue, "autoplay took over", ev.now);
+        } else if (s.running && origin === "autoplay" && (s.mode === "following" || (s.mode === "yielded" && ev.onlyPicks)) && !np.isPaused && s.lastCue) {
+          // Our queue ran dry (or the user's song ended) and YouTube Music filled it: put the scene's music back.
+          pick("now", s.lastCue, s.mode === "yielded" ? "your song ended" : "autoplay took over", ev.now);
         }
       }
       s.lastElapsed = np.elapsedS;
@@ -244,8 +291,8 @@ export function step(prev: DirectorState, ev: Event): { state: DirectorState; ac
           break;
         }
       }
-      // Keep one song ahead, so YouTube Music's autoplay rarely gets a turn.
-      if (s.mode === "following" && !s.next && !s.expect && left <= KEEP_AHEAD_S && (s.lastCue ?? s.playingCue)) pick("next", (s.lastCue ?? s.playingCue)!, "keeping the music going", ev.now);
+      // Keep one song ahead, so YouTube Music's autoplay rarely gets a turn (with onlyPicks, after the user's own song too).
+      if ((s.mode === "following" || (s.mode === "yielded" && ev.onlyPicks)) && !s.next && !s.expect && left <= KEEP_AHEAD_S && (s.lastCue ?? s.playingCue)) pick("next", (s.lastCue ?? s.playingCue)!, "keeping the music going", ev.now);
       break;
     }
 
@@ -263,13 +310,17 @@ export function step(prev: DirectorState, ev: Event): { state: DirectorState; ac
         s.mode = "following";
         s.holdScene = null;
       }
+      if (!s.current || s.ended) {
+        // Silence (the user's own music included, once it ran out): the scene's music starts.
+        if (!s.lastPaused) {
+          s.mode = "following";
+          pick("now", cue, "nothing playing", ev.now);
+        }
+        break;
+      }
       if (s.mode === "yielded") {
         // The user's own music plays out; with "take back", the scene's music follows it at a new scene.
         if (ev.takeBack && newScene && s.sceneId > 1 && !s.next) pick("next", cue, "new scene: taking the music back", ev.now);
-        break;
-      }
-      if (!s.current) {
-        if (!s.lastPaused) pick("now", cue, "nothing playing", ev.now);
         break;
       }
       if (!s.playingCue) {
