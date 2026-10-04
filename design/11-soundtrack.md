@@ -409,3 +409,25 @@ Every `intimacy` scene used to read as `tender`, or as `romantic` in a romance o
   - A new 👎 on the song playing sends `user-skip {quiet}` (no penalise) when running, else `next()`.
   - `rateForget` removes one rating or all of them.
 - **View:** `np.mood`/`np.vote`, `plays[].vote`, and `ratings {summary, recent, total}`.
+
+## 23. Lyrics that fit the scene (1.27.0)
+
+- **Themes** (`core/soundtrack/lyrics.ts`): 20 `THEMES`, each with a lyric word list (`LYRIC`) and, for most, a narrower story-prose list (`SCENE`: "home" and "dark" are in every reply). Bump `LEXICON` when a list changes; cached profiles are then read again.
+- **The scene** (`sceneThemes`, called at the end of `readCue`; `Cue.themes`, `Cue.images`):
+  - `MOOD_THEMES[mood]` (weights sum to 1).
+  - The last exchange, off-page blocks stripped: a theme needs two hits (each term counted up to twice) and adds `.6 × min(1, hits/4)`, or `.3` for moods that are their own subject (sensual, erotic, combat).
+  - The top filed feeling (`FEELING_THEME`) adds `.3 × score`.
+  - With the model director, `directorHint` also asks for one to three themes (`hint.themes`), which share `.8`.
+  - Prose and feelings never add a theme `OPPOSED` to a mood theme of weight ≥ .5 (replay 6170f171: a sex scene with "burial dress", "grave dirt" and "your parents are coming" had read as loss and family).
+  - The result is normalised, top four. `sceneImages`: `IMAGERY` words in the cue's colour or named twice in the exchange.
+- **A song** (`profileLyrics`): hits per theme (each term at most three times, so a chorus counts), plus the `IMAGERY` it names. `plainLyrics` drops `[Chorus]` marks and turns "dancin'" into "dancing". Only the profile is stored.
+- **Fit** (`lyricFit`): with `share = hits/total` and `conf = min(1, total/8)` (fewer than three hits is unknown): `conf × (1.4 × Σ w·share(t) − .8 × Σ w·share(opposed(t)))`, where an opposed theme the scene itself carries (w ≥ .15) doesn't count, plus `.05` per shared image (≤ .15). The reasons are "lyrics about X", "but lyrics about Y" and "lyrics say rain".
+- **Rerank** (`relyric`): each song moves by `fit − median` of the songs whose lyrics were found (0 with fewer than three), clamped ±.45, so an unknown song or an instrumental stays mid-pack. It runs in `choose` after Last.fm, on the best twelve, then everything is re-sorted.
+- **Search** (`queriesFor`): `‹lead genre› ‹THEME_SEARCH[top theme]›`, and every second preferred artist uses the theme word instead of the mood word. Neither runs for an instrumental taste.
+- **Backend** (`backend/soundtrack/lyrics.ts`): LRCLIB is queried with `/api/get` (artist, `lookupTitle`, duration), then `/api/search` with the same title by the same artist (closest length first), then again with the bracketed parts removed. The cache is `soundtrack/lyrics.json` by videoId: `{at, v, st: ok|none|inst, p}`, kept 180 days (14 for none), 5000 entries at most. Failures aren't cached. `lyricsForMany` uses three workers with a 6 s budget and returns a copy, so stragglers finish in the background.
+- **Config:** `lyrics` (default on; How it plays). The view has `lyrics` and `cue.themes` (labels), and the Now card shows "About …".
+- **Validation** (6170f171, the player's pop taste, live searches):
+  - Tender #92: "Love You Anyway" (comfort) moved to the top; "Hush" and "This Circle" (heartbreak) sank.
+  - Erotic #80: the desire songs led.
+  - Melancholy #152: "Motion Sickness" and a "pop missing you" find rose.
+  - On the 25 songs actually played in tender and erotic scenes: in tender, "Is It Over Now?", "Hall of Fame" and "Know No Better" score lowest and "When Emma Falls in Love" highest; in erotic, the "Sexy …" songs score highest.

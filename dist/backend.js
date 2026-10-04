@@ -8166,7 +8166,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.26.0";
+var VERSION = "1.27.0";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -20352,6 +20352,343 @@ var init_playerfacts = __esm(() => {
   ALLOWED = new Set(["trait", "item", "canon", "motif", "look"]);
 });
 
+// src/core/soundtrack/lyrics.ts
+function plainLyrics(text) {
+  return text.replace(/^\s*\[[^\]\n]*\]\s*/gm, "").replace(/[\u2018\u2019\u02BC]/g, "'").toLowerCase().replace(/(\p{L})in'(?![\p{L}])/gu, "$1ing");
+}
+function profileLyrics(text) {
+  const t = plainLyrics(text);
+  const themes = {};
+  for (const th of THEMES) {
+    let hits = 0;
+    for (const re of LYRIC_RE[th])
+      hits += Math.min(3, count(re, t));
+    if (hits)
+      themes[th] = hits;
+  }
+  const images = IMAGERY_RE.filter(([, re]) => count(re, t) > 0).map(([w]) => w);
+  return { themes, images };
+}
+function sceneThemes(inp) {
+  const w = {};
+  const add = (t, x) => w[t] = (w[t] ?? 0) + x;
+  const own = MOOD_THEMES[inp.mood];
+  for (const [t, x] of Object.entries(own))
+    add(t, x);
+  const against = new Set(Object.entries(own).filter(([, x]) => x >= 0.5).flatMap(([t]) => opposite(t)));
+  const text = inp.text.replace(/[\u2018\u2019]/g, "'").toLowerCase();
+  for (const [t, res] of Object.entries(SCENE_RE)) {
+    if (against.has(t))
+      continue;
+    let hits = 0;
+    for (const re of res)
+      hits += Math.min(2, count(re, text));
+    if (hits >= 2)
+      add(t, (OWN_SUBJECT.has(inp.mood) ? 0.3 : 0.6) * Math.min(1, hits / 4));
+  }
+  const f = inp.feeling?.top ? FEELING_THEME[inp.feeling.top] : undefined;
+  if (f && !against.has(f))
+    add(f, 0.3 * Math.min(1, inp.feeling.score));
+  const hint = (inp.hint ?? []).filter(isTheme).slice(0, 3);
+  for (const t of hint)
+    add(t, 0.8 / hint.length);
+  const list = Object.entries(w).filter(([, x]) => x > 0).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const total = list.reduce((s, [, x]) => s + x, 0) || 1;
+  return list.map(([t, x]) => ({ t, w: Math.round(x / total * 100) / 100 }));
+}
+function sceneImages(text, colour) {
+  const out = new Set;
+  const t = text.toLowerCase();
+  for (const [w, re] of IMAGERY_RE)
+    if (colour.includes(w) || count(re, t) >= 2)
+      out.add(w);
+  return [...out].slice(0, 8);
+}
+function lyricFit(p, themes, images = []) {
+  if (!p || !themes.length)
+    return { fit: 0, known: false, reasons: [] };
+  const total = Object.values(p.themes).reduce((s, x) => s + (x ?? 0), 0);
+  if (total < 3)
+    return { fit: 0, known: false, reasons: [] };
+  const share = (t) => (p.themes[t] ?? 0) / total;
+  const inScene = new Set(themes.filter((x) => x.w >= 0.15).map((x) => x.t));
+  let fit = 0;
+  let best = null;
+  let bestC = 0;
+  let clash = 0;
+  let worst = null;
+  let worstC = 0;
+  for (const { t, w } of themes) {
+    const c = w * share(t);
+    fit += c;
+    if (c > bestC)
+      [best, bestC] = [t, c];
+    for (const o of opposite(t)) {
+      if (inScene.has(o))
+        continue;
+      const k = w * share(o);
+      clash += k;
+      if (k > worstC)
+        [worst, worstC] = [o, k];
+    }
+  }
+  const conf = Math.min(1, total / 8);
+  let score = conf * (1.4 * fit - 0.8 * clash);
+  const reasons = [];
+  if (best && bestC >= 0.06)
+    reasons.push(`lyrics about ${THEME_LABEL[best]}`);
+  if (worst && worstC >= 0.06)
+    reasons.push(`but lyrics about ${THEME_LABEL[worst]}`);
+  const shared = images.filter((i) => p.images.includes(i));
+  if (shared.length) {
+    score += Math.min(0.15, 0.05 * shared.length);
+    reasons.push(`lyrics say ${shared.slice(0, 2).join(", ")}`);
+  }
+  return { fit: score, known: true, reasons };
+}
+function relyric(scored, profiles, themes, images = []) {
+  const fits = new Map(scored.map((s) => [s.track.videoId, lyricFit(profiles.get(s.track.videoId), themes, images)]));
+  const known = [...fits.values()].filter((f) => f.known).map((f) => f.fit).sort((a, b) => a - b);
+  const mid = known.length >= 3 ? known[Math.floor(known.length / 2)] : 0;
+  const out = scored.map((s) => {
+    const f = fits.get(s.track.videoId);
+    if (!f.known)
+      return s;
+    const delta = Math.max(-0.45, Math.min(0.45, f.fit - mid));
+    return { ...s, score: s.score + delta, reasons: [...f.reasons, ...s.reasons] };
+  });
+  return out.sort((a, b) => b.score - a.score);
+}
+var LEXICON = 1, THEMES, isTheme = (x) => typeof x === "string" && THEMES.includes(x), THEME_LABEL, THEME_SEARCH, LYRIC, SCENE2, compile = (terms) => terms.map((t) => new RegExp(`(?<![\\p{L}\\p{N}'])(?:${t})(?![\\p{L}\\p{N}])`, "giu")), LYRIC_RE, SCENE_RE, IMAGERY, IMAGERY_RE, count = (re, text) => {
+  re.lastIndex = 0;
+  let n = 0;
+  while (re.exec(text) && n < 50)
+    n++;
+  return n;
+}, MOOD_THEMES, OPPOSED, opposite = (t) => OPPOSED.flatMap(([a, b]) => a === t ? [b] : b === t ? [a] : []), OWN_SUBJECT, FEELING_THEME;
+var init_lyrics = __esm(() => {
+  THEMES = [
+    "love",
+    "desire",
+    "comfort",
+    "heartbreak",
+    "longing",
+    "grief",
+    "lonely",
+    "fear",
+    "fight",
+    "power",
+    "party",
+    "hope",
+    "secrets",
+    "regret",
+    "escape",
+    "night",
+    "family",
+    "magic",
+    "nostalgia",
+    "doubt"
+  ];
+  THEME_LABEL = {
+    love: "love",
+    desire: "desire",
+    comfort: "comfort",
+    heartbreak: "heartbreak",
+    longing: "missing someone",
+    grief: "loss",
+    lonely: "loneliness",
+    fear: "fear",
+    fight: "fighting",
+    power: "winning",
+    party: "partying",
+    hope: "hope",
+    secrets: "secrets",
+    regret: "regret",
+    escape: "getting away",
+    night: "night",
+    family: "family",
+    magic: "magic",
+    nostalgia: "the past",
+    doubt: "self-doubt"
+  };
+  THEME_SEARCH = {
+    love: "love song",
+    desire: "seductive",
+    comfort: "comfort",
+    heartbreak: "heartbreak",
+    longing: "missing you",
+    grief: "losing someone",
+    lonely: "lonely",
+    fear: "scared",
+    fight: "fight",
+    power: "empowerment",
+    party: "party",
+    hope: "hope",
+    secrets: "secrets",
+    regret: "sorry",
+    escape: "run away",
+    night: "midnight",
+    family: "family",
+    magic: "witchy",
+    nostalgia: "nostalgia",
+    doubt: "anxiety"
+  };
+  LYRIC = {
+    love: ["love[sd]?", "lover", "in love", "my heart", "adore", "darling", "forever", "kiss(?:es|ed|ing)?", "together", "sweetheart", "soulmate", "my person", "be mine", "i'm yours", "only you", "fall(?:ing)? for"],
+    desire: ["want you", "need you", "body", "skin", "touch(?:ing)?", "lips", "bed", "sheets", "sexy", "naked", "come over", "your hands", "desire", "lust", "sweat(?:y|ing)?", "undress\\w*", "ride", "feel you", "taste", "heat", "moan(?:ing)?", "breathless"],
+    comfort: ["home", "safe", "stay", "hold me", "warm(?:th)?", "with you", "gentle", "it's (?:ok|okay|alright|all right)", "i(?:'ve| have)? got you", "shelter", "soft(?:ly)?", "calm", "peace(?:ful)?", "lullaby", "don't worry", "by my side", "you're here", "rest", "cozy"],
+    heartbreak: ["goodbye", "it's over", "over now", "break(?:s|ing)? my heart", "broken?", "heartbreak", "heartbroken", "tears?", "cry(?:ing)?", "cried", "without you", "walk(?:ed)? away", "left me", "leave me", "moved? on", "cheat(?:ed|ing|er)?", "you're gone", "let (?:me|you) go", "over you", "the end", "break up", "ex"],
+    longing: ["miss(?:ing|ed)? you", "miss", "wish(?:ed)?", "waiting", "far away", "come back", "someday", "distance", "where are you", "think(?:ing)? (?:of|about) you", "long for", "ache", "yearn(?:ing)?", "i'll wait", "one day"],
+    grief: ["die[sd]?", "dead", "death", "dying", "grave", "funeral", "heaven", "buried", "mourn(?:ing)?", "rest in peace", "ashes", "gone forever", "lost you", "eulogy", "casket", "coffin", "afterlife", "six feet", "suicidw*"],
+    lonely: ["alone", "lonely", "loneliness", "nobody", "no one", "empty", "on my own", "by myself", "silence", "isolat\\w+", "nowhere", "invisible", "all by myself"],
+    fear: ["afraid", "scared", "fear", "terrified", "hide", "hiding", "monsters?", "nightmares?", "panic", "shaking", "trembl\\w+", "danger(?:ous)?", "can't breathe", "creep(?:ing|y)?", "scream(?:ing)?", "run for (?:my|your) life"],
+    fight: ["fight(?:ing)?", "war", "rage", "burn it down", "enem(?:y|ies)", "blood", "battle", "revenge", "kill(?:ed|ing)?", "fists?", "hate you", "destroy", "weapons?", "guns?", "knife", "swords?", "bullets?", "attack", "violence", "riot", "bleed(?:ing)?"],
+    power: ["win(?:ning)?", "crown", "queen", "king", "champion", "on top", "unstoppable", "rise", "glory", "victory", "strong(?:er)?", "legend", "boss", "power(?:ful)?", "fearless", "invincible", "hall of fame", "the best", "conquer", "fame", "famous", "greatest", "superstar"],
+    party: ["party", "dance", "dancing", "drink(?:s|ing)?", "club", "shots?", "celebrate", "fun", "wild", "dj", "champagne", "dance ?floor", "turn (?:it )?up", "let's go", "bottles?", "vodka", "tequila", "drunk"],
+    hope: ["hope", "tomorrow", "new day", "begin(?:ning)?", "sunrise", "better days", "believe", "heal(?:ing)?", "start (?:again|over)", "brighter", "shine", "rise up", "keep going", "the sun will", "it gets better"],
+    secrets: ["secrets?", "lies", "lied", "lying", "liar", "betray\\w*", "trust", "masks?", "truth", "behind my back", "nobody knows", "hidden", "whisper(?:s|ed)?", "confess\\w*", "pretend(?:ing)?", "two-faced", "don't tell"],
+    regret: ["sorry", "regret\\w*", "mistakes?", "forgive(?:n|ness)?", "my fault", "shame", "apolog\\w+", "take it back", "should(?:'ve| have)", "if only", "guilt(?:y)?", "blame"],
+    escape: ["run away", "escape", "road", "drive", "driving", "highway", "free(?:dom)?", "fly(?:ing)?", "wings", "get out", "leave this town", "far from here", "train", "miles", "horizon", "wander\\w*"],
+    night: ["night", "midnight", "moon(?:light)?", "stars?", "dreams?", "dreaming", "sleep(?:ing|less)?", "3 ?am", "dark", "darkness", "after dark"],
+    family: ["mother", "mom(?:ma|my)?", "mama", "father", "dad", "sister", "brother", "family", "kids?", "child(?:hood)?", "daughter", "son", "best friend", "friends?"],
+    magic: ["magic(?:al)?", "spells?", "witch(?:es|craft)?", "curse[sd]?", "vampires?", "demons?", "devil", "ghosts?", "haunt\\w*", "angels?", "potion", "sorcer\\w+", "fairy", "supernatural", "enchant\\w*"],
+    nostalgia: ["remember when", "used to", "back then", "old days", "growing up", "young(?:er)?", "summer", "school", "years ago", "nostalgi\\w+", "when we were", "memories", "photographs?"],
+    doubt: ["who am i", "mirror", "not enough", "anxious", "anxiety", "crazy", "insane", "in my head", "my mind", "overthink\\w*", "insecure", "losing my mind", "what's wrong with me", "fake"]
+  };
+  SCENE2 = {
+    love: ["i love you", "loves? (?:her|him|you|them)", "in love", "fell for", "falling for", "confess(?:es|ed)? (?:his|her|their|my) feelings"],
+    comfort: ["hold(?:s|ing)? (?:her|him|me|them) close", "safe", "comfort\\w*", "reassur\\w+", "i(?:'ve| have)? got you", "it's (?:ok|okay)", "you're (?:ok|okay|safe)", "blanket", "cocoa", "curl(?:s|ed)? up", "lean(?:s|ed)? (?:into|against)", "snuggl\\w+", "cuddl\\w+"],
+    heartbreak: ["break(?:s|ing)? up", "broke up", "breakup", "dumped", "it's over", "we're done", "cheat(?:s|ed|ing)?", "heartbr\\w+", "leav(?:e|es|ing) (?:you|her|him|me) for"],
+    longing: ["miss(?:es|ed)? (?:her|him|you|them)", "homesick", "far away", "wish(?:es|ed)? (?:she|he|they|you|i) (?:were|was|could|had)", "longing"],
+    grief: ["funeral", "grave", "mourn\\w*", "died", "death", "buried", "burial", "memorial", "ashes", "the body", "passed away", "grief", "griev\\w+"],
+    lonely: ["alone", "lonely", "loneliness", "empty (?:house|room|apartment|bed)", "no one (?:else|left)", "by (?:her|him|my|them)self", "isolat\\w+"],
+    fear: ["afraid", "scared", "terrif\\w+", "fear", "nightmares?", "panic\\w*", "trembl\\w+", "monsters?", "danger(?:ous)?"],
+    power: ["won", "victory", "triumph\\w*", "champion", "promot\\w+", "crowned", "defeated"],
+    party: ["party", "dance", "dancing", "drinks", "bar", "club", "celebrat\\w+", "birthday", "toast", "shots"],
+    hope: ["hope\\w*", "fresh start", "new start", "heal\\w*", "start over", "a future"],
+    secrets: ["secrets?", "lie", "lied", "lying", "liar", "truth", "hide", "hiding", "hidden", "betray\\w*", "confess\\w*", "don't tell", "pretend\\w*"],
+    regret: ["sorry", "apolog\\w+", "forgive\\w*", "my fault", "guilt\\w*", "regret\\w*", "ashamed", "shame", "mistake"],
+    escape: ["run away", "ran away", "escap\\w+", "road trip", "leave town", "get out of here", "highway", "drive away"],
+    family: ["mom", "mother", "dad", "father", "sister", "brother", "family", "daughter", "parents", "mum"],
+    magic: ["magic(?:al|k)?", "spells?", "witch\\w*", "curse[sd]?", "vampires?", "demons?", "slayer", "ritual", "hex(?:es|ed)?", "potion", "sorcer\\w+", "supernatural", "enchant\\w*"],
+    nostalgia: ["remember when", "used to", "years ago", "childhood", "back when", "old photos?", "when we were (?:kids|young|little)"],
+    doubt: ["not enough", "who am i", "insecur\\w+", "anxious", "anxiety", "overthink\\w*", "worthless", "self-doubt", "good enough"]
+  };
+  LYRIC_RE = Object.fromEntries(THEMES.map((t) => [t, compile(LYRIC[t])]));
+  SCENE_RE = Object.fromEntries(THEMES.filter((t) => SCENE2[t]).map((t) => [t, compile(SCENE2[t])]));
+  IMAGERY = [
+    "rain",
+    "storm",
+    "thunder",
+    "lightning",
+    "snow",
+    "fire",
+    "flames",
+    "smoke",
+    "ashes",
+    "moon",
+    "moonlight",
+    "stars",
+    "sunrise",
+    "sunset",
+    "midnight",
+    "ocean",
+    "sea",
+    "river",
+    "waves",
+    "beach",
+    "highway",
+    "train",
+    "city",
+    "streets",
+    "rooftop",
+    "bridge",
+    "sheets",
+    "couch",
+    "kitchen",
+    "mirror",
+    "candle",
+    "ghost",
+    "blood",
+    "knife",
+    "gun",
+    "sword",
+    "bones",
+    "grave",
+    "cemetery",
+    "church",
+    "heaven",
+    "hell",
+    "angel",
+    "devil",
+    "wolf",
+    "crown",
+    "wine",
+    "whiskey",
+    "cigarette",
+    "coffee",
+    "dress",
+    "ring",
+    "wedding",
+    "flowers",
+    "roses",
+    "garden",
+    "forest",
+    "woods",
+    "mountain",
+    "desert",
+    "phone",
+    "letter",
+    "car",
+    "bath",
+    "shower",
+    "ice",
+    "gold",
+    "diamond",
+    "cherry",
+    "lipstick"
+  ];
+  IMAGERY_RE = IMAGERY.map((w) => [w, new RegExp(`(?<![\\p{L}\\p{N}])${w}(?:s|es)?(?![\\p{L}\\p{N}])`, "giu")]);
+  MOOD_THEMES = {
+    calm: { comfort: 0.6, night: 0.2, hope: 0.2 },
+    warm: { comfort: 0.5, family: 0.3, hope: 0.2 },
+    playful: { party: 0.5, love: 0.2, hope: 0.3 },
+    tender: { comfort: 0.5, love: 0.5 },
+    romantic: { love: 0.7, desire: 0.3 },
+    sensual: { desire: 0.7, love: 0.3 },
+    erotic: { desire: 1 },
+    hopeful: { hope: 0.7, escape: 0.3 },
+    triumphant: { power: 0.8, hope: 0.2 },
+    adventurous: { escape: 0.7, power: 0.3 },
+    mysterious: { secrets: 0.6, night: 0.2, magic: 0.2 },
+    eerie: { fear: 0.5, magic: 0.3, night: 0.2 },
+    tense: { fear: 0.5, fight: 0.3, secrets: 0.2 },
+    dread: { fear: 0.7, fight: 0.3 },
+    combat: { fight: 0.8, power: 0.2 },
+    melancholy: { longing: 0.4, lonely: 0.3, regret: 0.3 },
+    grief: { grief: 0.7, longing: 0.3 },
+    dreamy: { night: 0.5, comfort: 0.3, love: 0.2 }
+  };
+  OPPOSED = [
+    ["love", "heartbreak"],
+    ["comfort", "heartbreak"],
+    ["comfort", "fear"],
+    ["comfort", "fight"],
+    ["comfort", "party"],
+    ["love", "fight"],
+    ["love", "lonely"],
+    ["party", "grief"],
+    ["party", "lonely"],
+    ["fight", "party"],
+    ["desire", "grief"],
+    ["desire", "family"],
+    ["grief", "power"],
+    ["hope", "doubt"]
+  ];
+  OWN_SUBJECT = new Set(["sensual", "erotic", "combat"]);
+  FEELING_THEME = { fear: "fear", anger: "fight", sad: "longing", desire: "desire", joy: "party", warm: "comfort" };
+});
+
 // src/core/soundtrack/moods.ts
 function suggestGenres(storyGenres) {
   const out = [];
@@ -20669,7 +21006,8 @@ ${inp.reply ?? ""}`.replace(OFF_PAGE2, " ");
     mood = "grief";
     why.push("loss");
   }
-  if (inp.hint && sameScene(inp.hint, here) && isMood(inp.hint.mood) && mood !== "grief" && mood !== "combat" && mood !== "erotic" && !(mood === "sensual" && inp.hint.mood !== "erotic")) {
+  const hintHere = !!inp.hint && sameScene(inp.hint, here);
+  if (inp.hint && hintHere && isMood(inp.hint.mood) && mood !== "grief" && mood !== "combat" && mood !== "erotic" && !(mood === "sensual" && inp.hint.mood !== "erotic")) {
     mood = inp.hint.mood;
     for (const c of inp.hint.colour)
       if (c && !colour.includes(c))
@@ -20689,6 +21027,8 @@ ${inp.reply ?? ""}`.replace(OFF_PAGE2, " ");
   const tier = inp.playerMsg ? tierGuess(inp.playerMsg, state) : "routine";
   const sharp = death || fight && (mode === "conflict" || mode === "crisis") || tier === "pivotal" && tension >= 0.7 || mood === "erotic";
   const explicit = mood === "erotic" && (nsfw === "" || nsfw === "explicit");
+  const themes = sceneThemes({ mood, text: recent, feeling: feel, hint: hintHere ? inp.hint.themes : undefined });
+  const images = sceneImages(recent, colour);
   if (chosen) {
     return {
       mood,
@@ -20703,13 +21043,15 @@ ${inp.reply ?? ""}`.replace(OFF_PAGE2, " ");
       explicit,
       chosen: true,
       read,
+      themes,
+      images,
       sceneNo,
       place: here.place,
       at: here.at,
       why: `${mood} \xB7 chosen by you${read !== mood ? ` (the scene reads ${read})` : ""}`
     };
   }
-  return { mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp, death, heat, explicit, sceneNo, place: here.place, at: here.at, why: `${mood} \xB7 ${why.join(" \xB7 ")}` };
+  return { mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp, death, heat, explicit, themes, images, sceneNo, place: here.place, at: here.at, why: `${mood} \xB7 ${why.join(" \xB7 ")}` };
 }
 function cueDistance(a, b) {
   if (!a || !b)
@@ -20734,6 +21076,7 @@ var init_cue = __esm(() => {
   init_util();
   init_plate();
   init_recall();
+  init_lyrics();
   init_moods();
   FIGHT = /\b(attacks?|attacked|strikes?|struck|stabs?|stabbed|shoots?|shot|slash(?:es|ed)?|punch(?:es|ed)?|swings? (?:at|his|her|the)|lunges?|parr(?:y|ies|ied)|gunfire|blades? (?:clash|meet)|fight(?:s|ing)? (?:back|breaks out)|draws? (?:a |his |her |my )?(?:sword|gun|knife|blade|pistol)|opens? fire|charges? at)\b/i;
   EXPLICIT = [
@@ -21354,13 +21697,18 @@ function queriesFor(cue, taste, storyGenres, salt = 0) {
     const q = `${g} ${word}${inst}`;
     out.push({ q, key: `m:${q.toLowerCase()}`, genre: g, rank: 0 });
   }
+  const theme = taste.vocals !== "instrumental" && cue.themes?.length ? THEME_SEARCH[cue.themes[0].t] : "";
+  if (theme && pickGenres.length) {
+    const q = `${pickGenres[0]} ${theme}`;
+    out.push({ q, key: `m:${q.toLowerCase()}`, genre: pickGenres[0], rank: genres.indexOf(pickGenres[0]) });
+  }
   if (!out.length)
     out.push({ q: `${word} music${inst}`, key: `m:${word} music${inst}`, genre: "", rank: 9 });
   const prefCount = taste.variety === "focused" ? 3 : taste.variety === "balanced" ? 2 : 1;
-  for (const a of rotate(taste.preferred, cue.sceneNo + salt).slice(0, prefCount)) {
-    const q = `${a.name} ${words[0]}`;
-    out.push({ q, key: `a:${a.id ?? normName(a.name)}:${words[0]}`, genre: "", rank: 0, artist: a.name });
-  }
+  rotate(taste.preferred, cue.sceneNo + salt).slice(0, prefCount).forEach((a, i) => {
+    const w = theme && i % 2 === 1 ? theme : words[0];
+    out.push({ q: `${a.name} ${w}`, key: `a:${a.id ?? normName(a.name)}:${w}`, genre: "", rank: 0, artist: a.name });
+  });
   return out;
 }
 function rotate(xs, n) {
@@ -21472,6 +21820,7 @@ function emptyHistory() {
 var TWO_HOURS, INSTRUMENTAL;
 var init_picker = __esm(() => {
   init_util();
+  init_lyrics();
   init_moods();
   init_ratings();
   init_tags();
@@ -22086,6 +22435,133 @@ var init_lastfm = __esm(() => {
   };
 });
 
+// src/backend/soundtrack/lyrics.ts
+async function cache3(userId) {
+  const hit = caches2.get(userId);
+  if (hit)
+    return hit;
+  const inflight = loading3.get(userId);
+  if (inflight)
+    return inflight;
+  const p = (async () => {
+    try {
+      const exists = await host.userStorage.exists(FILE, userId || undefined);
+      const c = exists ? await host.userStorage.getJson(FILE, { fallback: {}, userId: userId || undefined }) ?? {} : {};
+      caches2.set(userId, c);
+      return c;
+    } finally {
+      loading3.delete(userId);
+    }
+  })();
+  loading3.set(userId, p);
+  return p;
+}
+function save3(userId) {
+  if (saveTimer3)
+    clearTimeout(saveTimer3);
+  saveTimer3 = setTimeout(() => {
+    const c = caches2.get(userId);
+    if (!c)
+      return;
+    const keys = Object.keys(c).filter((k) => fresh(c[k])).sort((a, b) => c[b].at - c[a].at).slice(0, MAX3);
+    const kept = {};
+    for (const k of keys)
+      kept[k] = c[k];
+    caches2.set(userId, kept);
+    host.userStorage.setJson(FILE, kept, { userId: userId || undefined }).catch((err) => warn(`soundtrack lyrics save: ${describe(err)}`));
+  }, 1500);
+}
+async function get(path, params) {
+  const qs = new URLSearchParams(params).toString();
+  const res = await host.cors(`${API3}/${path}?${qs}`, { method: "GET", headers: { "User-Agent": "ALMANAC-Lumiverse/1.0 (https://github.com/valdoix/almanac)" } });
+  const status = Number(res?.status ?? 0);
+  if (status === 404)
+    return null;
+  if (status >= 400)
+    throw new Error(`LRCLIB answered ${status}`);
+  return typeof res?.body === "string" ? JSON.parse(res.body) : res?.body;
+}
+function bestHit(hits, t) {
+  const title = bare2(t.title);
+  const artist = normName(artistOf(t));
+  const same = hits.filter((h) => {
+    const ht = bare2(h.trackName ?? "");
+    const ha = normName(h.artistName ?? "");
+    return ht && (ht === title || ht.startsWith(title) || title.startsWith(ht)) && (!artist || ha.includes(artist) || artist.includes(ha));
+  });
+  const usable = same.filter((h) => h.instrumental || h.plainLyrics);
+  if (!usable.length)
+    return null;
+  const off = (h) => t.durationS && h.duration ? Math.abs(h.duration - t.durationS) : 30;
+  return usable.sort((a, b) => off(a) - off(b))[0];
+}
+async function lookup(t) {
+  const artist = artistOf(t);
+  const title = lookupTitle(t.title);
+  const now = Date.now();
+  const done = (h) => {
+    if (!h)
+      return null;
+    if (h.instrumental)
+      return { at: now, v: LEXICON, st: "inst" };
+    if (h.plainLyrics)
+      return { at: now, v: LEXICON, st: "ok", p: profileLyrics(h.plainLyrics) };
+    return null;
+  };
+  if (!artist)
+    return { at: now, v: LEXICON, st: "none" };
+  if (t.durationS) {
+    const exact = done(await get("get", { artist_name: artist, track_name: title, duration: String(t.durationS) }));
+    if (exact)
+      return exact;
+  }
+  const hits = await get("search", { track_name: title, artist_name: artist }) ?? [];
+  let e = done(bestHit(Array.isArray(hits) ? hits : [], t));
+  if (!e && bare2(title) !== normName(title)) {
+    const more = await get("search", { track_name: bare2(title), artist_name: artist }) ?? [];
+    e = done(bestHit(Array.isArray(more) ? more : [], t));
+  }
+  return e ?? { at: now, v: LEXICON, st: "none" };
+}
+async function lyricsFor(userId, t) {
+  const c = await cache3(userId);
+  let e = c[t.videoId];
+  if (!fresh(e)) {
+    e = await lookup(t);
+    c[t.videoId] = e;
+    save3(userId);
+  }
+  return e.st === "ok" ? e.p ?? null : null;
+}
+async function lyricsForMany(userId, tracks, budgetMs = 6000) {
+  const out = new Map;
+  const deadline = Date.now() + budgetMs;
+  const queue = [...tracks];
+  const worker = async () => {
+    while (queue.length && Date.now() < deadline) {
+      const t = queue.shift();
+      try {
+        out.set(t.videoId, await lyricsFor(userId, t));
+      } catch (err) {
+        warn(`soundtrack lyrics "${t.title}": ${describe(err)}`);
+      }
+    }
+  };
+  await Promise.race([Promise.all([worker(), worker(), worker()]), new Promise((r) => setTimeout(r, budgetMs + 200))]);
+  return new Map(out);
+}
+var FILE = "soundtrack/lyrics.json", TTL_FOUND, TTL_MISS, MAX3 = 5000, API3 = "https://lrclib.net/api", caches2, loading3, saveTimer3 = null, fresh = (e) => !!e && e.v === LEXICON && Date.now() - e.at < (e.st === "none" ? TTL_MISS : TTL_FOUND), bare2 = (title) => normName(title.replace(/\s*[([][^)\]]*[)\]]/g, " ").replace(/\s+-\s+.*$/, "")), artistOf = (t) => (t.artists[0]?.name ?? "").replace(/\s*-\s*topic\s*$/i, "").replace(/vevo$/i, "").trim();
+var init_lyrics2 = __esm(() => {
+  init_lyrics();
+  init_tags();
+  init_taste();
+  init_host();
+  TTL_FOUND = 180 * 24 * 3600000;
+  TTL_MISS = 14 * 24 * 3600000;
+  caches2 = new Map;
+  loading3 = new Map;
+});
+
 // src/backend/soundtrack/index.ts
 async function readJson2(path, fallback, userId) {
   if (!await host.userStorage.exists(path, userId))
@@ -22184,12 +22660,12 @@ async function directorHint(s, chatId, cs, reply, here) {
   ].filter(Boolean).join(`
 `);
   const text = await quiet([
-    sys(`You score scenes for a story's soundtrack. Read the scene and answer with JSON only: {"mood": one of ${MOODS.map((m) => `"${m}"`).join(", ")}, "colour": [up to two plain lower-case texture words for a music search, like "rain", "candlelit", "neon", "desert"]}. Tender is closeness and comfort, romantic is love said or shown, sensual is kissing and building desire, erotic is sex on the page. Judge only what has happened on the page; never anticipate what might come next.`),
+    sys(`You score scenes for a story's soundtrack. Read the scene and answer with JSON only: {"mood": one of ${MOODS.map((m) => `"${m}"`).join(", ")}, "colour": [up to two plain lower-case texture words for a music search, like "rain", "candlelit", "neon", "desert"], "themes": [one to three of ${THEMES.map((t) => `"${t}"`).join(", ")}: what the scene is about, for songs whose lyrics fit it]}. Tender is closeness and comfort, romantic is love said or shown, sensual is kissing and building desire, erotic is sex on the page. Judge only what has happened on the page; never anticipate what might come next.`),
     usr(`${scene}
 
 The scene so far (latest reply):
 ${reply.slice(0, 1600)}`)
-  ], { connectionId: s.config.connection || settings.summarizerConnection || undefined, userId: s.userId, reasoningOff: true, maxTokens: 80, timeoutMs: 15000, label: "soundtrack director" });
+  ], { connectionId: s.config.connection || settings.summarizerConnection || undefined, userId: s.userId, reasoningOff: true, maxTokens: 100, timeoutMs: 15000, label: "soundtrack director" });
   const m = /\{[\s\S]*\}/.exec(text);
   if (!m)
     return;
@@ -22198,7 +22674,8 @@ ${reply.slice(0, 1600)}`)
     if (!isMood(j.mood))
       return;
     const colour = (Array.isArray(j.colour) ? j.colour : []).map((c) => String(c).toLowerCase().trim()).filter((c) => VALID_COLOUR.test(c)).slice(0, 2);
-    cs.hint = { ...here, mood: j.mood, colour };
+    const themes = (Array.isArray(j.themes) ? j.themes : []).map((t) => String(t).toLowerCase().trim()).filter(isTheme).slice(0, 3);
+    cs.hint = { ...here, mood: j.mood, colour, themes };
     saveChat(chatId, s.userId);
   } catch {}
 }
@@ -22224,7 +22701,7 @@ async function cueFor(s, chatId) {
   if (s.config.director === "model" && !chosen && lastReply && !sameScene(cs.hint, here)) {
     await directorHint(s, chatId, cs, lastReply.content, here).catch((err) => warn(`soundtrack director: ${describe(err)}`));
   }
-  const hint = cs.hint && isMood(cs.hint.mood) ? { place: cs.hint.place, at: cs.hint.at, mood: cs.hint.mood, colour: cs.hint.colour ?? [] } : null;
+  const hint = cs.hint && isMood(cs.hint.mood) ? { place: cs.hint.place, at: cs.hint.at, mood: cs.hint.mood, colour: cs.hint.colour ?? [], themes: (cs.hint.themes ?? []).filter(isTheme) } : null;
   const g = cs.grief;
   const griefLive = g && path.some((m) => m.id === g.msgId && m.swipe === g.swipe) ? g : null;
   const cue = readCue({
@@ -22292,6 +22769,12 @@ async function choose(s, cue) {
       if (badKey.has(s.userId ?? ""))
         note(s, `Last.fm refused the API key: ${badKey.get(s.userId ?? "")}`);
     }
+    if (s.config.lyrics && taste.vocals !== "instrumental" && cue.themes?.length && scored.length > 1) {
+      const top = scored.slice(0, 12);
+      const profiles = await lyricsForMany(s.userId ?? "", top.map((x) => x.track));
+      if (profiles.size)
+        scored = [...relyric(top, profiles, cue.themes, cue.images ?? []), ...scored.slice(12)].sort((a, b) => b.score - a.score);
+    }
     const pick = draw(scored, `${s.chatId}|${cue.place}|${cue.mood}|${history.chat.length}|${salt}`);
     if (pick)
       return pick;
@@ -22338,7 +22821,8 @@ async function act(s, a) {
           await player.enqueue(t.videoId, true);
         const tagged = best.reasons.find((r) => r.startsWith("tagged ") || r.startsWith("but tagged "));
         const thumbs = best.reasons.find((r) => r.startsWith("you "));
-        const why = `${a.cue.why}${best.query.q ? ` \u2014 from "${best.query.q}"` : ""}${tagged ? ` \xB7 ${tagged}` : ""}${thumbs ? ` \xB7 ${thumbs}` : ""}`;
+        const words = best.reasons.filter((r) => r.startsWith("lyrics ") || r.startsWith("but lyrics ")).join(" \xB7 ");
+        const why = `${a.cue.why}${best.query.q ? ` \u2014 from "${best.query.q}"` : ""}${words ? ` \xB7 ${words}` : ""}${tagged ? ` \xB7 ${tagged}` : ""}${thumbs ? ` \xB7 ${thumbs}` : ""}`;
         s.picked.set(t.videoId, { track: t, why, reason: a.reason, query: best.query.q, genre: best.query.genre, key: best.query.key });
         if (s.picked.size > 80)
           s.picked.delete(s.picked.keys().next().value);
@@ -22537,6 +23021,7 @@ async function viewOf(s) {
     takeBack: s.config.takeBack,
     fade: s.config.fade,
     onlyPicks: s.config.onlyPicks,
+    lyrics: s.config.lyrics,
     taste: s.config.taste,
     lastfm: !!s.lastfmKey,
     lastfmBad: badKey.get(s.userId ?? "") ?? "",
@@ -22552,7 +23037,7 @@ async function viewOf(s) {
     origin: s.dir.origin,
     np: np ? { videoId: np.videoId, title: np.title, artist: np.artist, thumb: np.thumb, album: np.album, isPaused: np.isPaused, elapsedS: np.elapsedS, durationS: np.durationS, why: mine?.why ?? "", reason: mine?.reason ?? "", mood: npMood, vote: npMood ? voteOf(rated, np.videoId, npMood) : 0 } : null,
     next: next ? { title: next.track.title, artist: artistLine(next.track), why: next.why } : null,
-    cue: s.cue ? { mood: s.cue.mood, chosen: !!s.cue.chosen, read: s.cue.read ?? null, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place } : null,
+    cue: s.cue ? { mood: s.cue.mood, chosen: !!s.cue.chosen, read: s.cue.read ?? null, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place, themes: (s.cue.themes ?? []).map((t) => THEME_LABEL[t.t]) } : null,
     plays: (cs?.plays ?? []).slice(-15).reverse().map((p) => ({ ...p, vote: p.mood ? voteOf(rated, p.videoId, p.mood) : 0 })),
     ratings: { summary: ratingSummary(rated), recent: rated.slice(-12).reverse().map((r) => ({ videoId: r.track.videoId, title: r.track.title, artist: artistLine(r.track), mood: r.mood, vote: r.vote })), total: rated.length },
     note: s.lastNote
@@ -22588,7 +23073,7 @@ async function soundtrackAction(m, userId) {
         s.config.director = p.director;
       if (typeof p.connection === "string")
         s.config.connection = p.connection;
-      for (const k of ["cutOnSharp", "takeBack", "fade", "onlyPicks"])
+      for (const k of ["cutOnSharp", "takeBack", "fade", "onlyPicks", "lyrics"])
         if (typeof p[k] === "boolean")
           s.config[k] = p[k];
       if (was.url !== s.config.playerUrl)
@@ -22868,6 +23353,8 @@ var init_soundtrack = __esm(() => {
   init_pear();
   init_lastfm();
   init_tags();
+  init_lyrics();
+  init_lyrics2();
   init_ratings();
   DEFAULT_CONFIG = {
     enabled: false,
@@ -22880,6 +23367,7 @@ var init_soundtrack = __esm(() => {
     takeBack: true,
     fade: true,
     onlyPicks: false,
+    lyrics: true,
     taste: DEFAULT_TASTE
   };
   sessions = new Map;
@@ -26945,7 +27433,7 @@ function changedFields(e, was) {
   }
   return out;
 }
-async function save3(s, req, userId) {
+async function save4(s, req, userId) {
   if (!has("world_books"))
     throw new Error("the world_books permission is not granted");
   const d = s.draft;
@@ -27291,7 +27779,7 @@ async function creatorAction(req, userId) {
       case "save": {
         if (!S.draft)
           throw new Error("nothing is written yet");
-        await step2(S, userId, "Saving", () => save3(S, req.save ?? { target: "new" }, userId));
+        await step2(S, userId, "Saving", () => save4(S, req.save ?? { target: "new" }, userId));
         return {};
       }
       case "retry": {

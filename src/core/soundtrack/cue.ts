@@ -6,6 +6,7 @@ import type { WorldState } from "../types";
 import { absMinutes } from "../util";
 import { eraOf, placeKind } from "../plate";
 import { tierGuess } from "../recall";
+import { sceneImages, sceneThemes, type SceneTheme, type Theme } from "./lyrics";
 import { hourBand, isMood, MODE_BASE, MOOD_VEC, PLACE_COLOUR, type Mood } from "./moods";
 
 export interface Cue {
@@ -27,6 +28,10 @@ export interface Cue {
   /** The player chose the mood (Soundtrack page): `read` is what the scene itself reads as. */
   chosen?: boolean;
   read?: Mood;
+  /** What the scene is about, for songs whose words fit it (lyrics.ts), strongest first. */
+  themes?: SceneTheme[];
+  /** Concrete images the scene has (rain, candle, blood) that a song's words may share. */
+  images?: string[];
   /** The Ledger's scene number (display only: it turns over at every sub-place and title). */
   sceneNo: number;
   /** The room or spot the scene is in, as a key ("kitchen"), and when (absolute minutes): see sameScene. */
@@ -54,7 +59,7 @@ export interface CueInput {
   /** Where and when the scene was last sex on the page: it stays that while desire does. */
   heated?: SceneMark | null;
   /** A model's reading for this scene (design §5.4), already validated. */
-  hint?: (SceneMark & { mood: Mood; colour: string[] }) | null;
+  hint?: (SceneMark & { mood: Mood; colour: string[]; themes?: Theme[] }) | null;
   /** Session Zero's intimacy setting: "off", "fade", "sensual", "explicit" or "" (the preset's). */
   nsfw?: string;
   /** The mood the player chose on the Soundtrack page; null or absent is Auto (the scene decides). */
@@ -247,7 +252,8 @@ export function readCue(inp: CueInput): Cue {
 
   // A model's reading for this scene overrides the label, not the danger: it can't calm a fight.
   // It's read once a scene, so it can't hold back a scene that has since turned to sex either.
-  if (inp.hint && sameScene(inp.hint, here) && isMood(inp.hint.mood) && mood !== "grief" && mood !== "combat" && mood !== "erotic" && !(mood === "sensual" && inp.hint.mood !== "erotic")) {
+  const hintHere = !!inp.hint && sameScene(inp.hint, here);
+  if (inp.hint && hintHere && isMood(inp.hint.mood) && mood !== "grief" && mood !== "combat" && mood !== "erotic" && !(mood === "sensual" && inp.hint.mood !== "erotic")) {
     mood = inp.hint.mood;
     for (const c of inp.hint.colour) if (c && !colour.includes(c)) colour.unshift(c);
     why.push("director");
@@ -271,13 +277,17 @@ export function readCue(inp: CueInput): Cue {
   // Sex starting is a turn: the music shouldn't wait out the song that played over the talking.
   const sharp = death || (fight && (mode === "conflict" || mode === "crisis")) || (tier === "pivotal" && tension >= 0.7) || mood === "erotic";
   const explicit = mood === "erotic" && (nsfw === "" || nsfw === "explicit");
+  // What the scene is about, for the lyrics: the mood's own themes, the last exchange's, what the
+  // people present feel, and the model's reading of this scene.
+  const themes = sceneThemes({ mood, text: recent, feeling: feel, hint: hintHere ? inp.hint!.themes : undefined });
+  const images = sceneImages(recent, colour);
   if (chosen) {
     return {
-      mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp: false, death, heat, explicit, chosen: true, read, sceneNo, place: here.place, at: here.at,
+      mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp: false, death, heat, explicit, chosen: true, read, themes, images, sceneNo, place: here.place, at: here.at,
       why: `${mood} · chosen by you${read !== mood ? ` (the scene reads ${read})` : ""}`,
     };
   }
-  return { mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp, death, heat, explicit, sceneNo, place: here.place, at: here.at, why: `${mood} · ${why.join(" · ")}` };
+  return { mood, energy, valence, tension, intimacy, colour: colour.slice(0, 3), sharp, death, heat, explicit, themes, images, sceneNo, place: here.place, at: here.at, why: `${mood} · ${why.join(" · ")}` };
 }
 
 /** How far apart two cues are: the four numbers, plus .3 when the mood's name changed. */

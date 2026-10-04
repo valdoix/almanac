@@ -9,6 +9,7 @@ import { emptyState } from "../src/core/state";
 import { absMinutes } from "../src/core/util";
 import { cleanTags, lookupTitle, retag, tagFit } from "../src/core/soundtrack/tags";
 import { learnedFor, moodNear, rate, ratedPool, ratingBonus, ratingSummary, voteOf, type Rating } from "../src/core/soundtrack/ratings";
+import { lyricFit, plainLyrics, profileLyrics, relyric, sceneImages, sceneThemes } from "../src/core/soundtrack/lyrics";
 import type { WorldState } from "../src/core/types";
 
 // ---------------------------------------------------------------------------
@@ -722,5 +723,103 @@ describe("soundtrack thumbs", () => {
     expect(quiet.some((a) => a.type === "penalise")).toBe(false);
     expect(quiet.some((a) => a.type === "pick" && a.when === "now")).toBe(true);
     expect(step(s, { type: "user-skip", now: 5 }).actions.some((a) => a.type === "penalise")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lyrics
+// ---------------------------------------------------------------------------
+
+describe("soundtrack lyrics that fit the scene", () => {
+  // Made-up verses: what a song is about, in the words songs use.
+  const HOME = `Stay here with me, you're safe at home
+Hold me, it's okay, I've got you
+Warm in the rain, I'm in love with you
+Stay, stay, you're safe at home`;
+  const BREAKUP = `It's over now, goodbye
+You left me crying, tears on the floor
+You lied and I walked away
+Broken, it's over, goodbye`;
+  const CLUB = `Party all night, dance on the dance floor
+Shots, shots, drink till we're drunk
+DJ turn it up, let's go
+Party, dance, party`;
+  const WANT = `I want you, your body on my skin
+Your lips, your hands, come over
+In my bed, I need you, naked in the sheets
+I want you`;
+
+  test("lyrics read into themes; dropped g's and [Chorus] marks are no matter", () => {
+    expect(plainLyrics("[Chorus]\nDancin’ all night")).toBe("dancing all night");
+    const p = profileLyrics(HOME);
+    expect((p.themes.comfort ?? 0)).toBeGreaterThan(p.themes.heartbreak ?? 0);
+    expect(p.images).toContain("rain");
+    expect(profileLyrics(BREAKUP).themes.heartbreak).toBeGreaterThan(4);
+    expect(profileLyrics(CLUB).themes.party).toBeGreaterThan(4);
+  });
+
+  test("a tender scene wants comfort and love; a sex scene desire; the page adds its own", () => {
+    const tender = sceneThemes({ mood: "tender", text: "" }).map((t) => t.t);
+    expect(tender).toEqual(expect.arrayContaining(["comfort", "love"]));
+    expect(sceneThemes({ mood: "erotic", text: "" })).toEqual([{ t: "desire", w: 1 }]);
+    const secret = sceneThemes({ mood: "warm", text: "She lied to him. The secret was out, and the truth was worse than the lie." });
+    expect(secret.map((t) => t.t)).toContain("secrets");
+    // One word in a long reply is chance.
+    expect(sceneThemes({ mood: "warm", text: "He kept the secret." }).map((t) => t.t)).not.toContain("secrets");
+  });
+
+  test("the page can't pull a sex scene toward loss or family", () => {
+    const text = "Her burial dress rides up. Grave dirt behind her ear, the girl who died. Your parents are coming, your mom and dad.";
+    const th = sceneThemes({ mood: "erotic", text }).map((t) => t.t);
+    expect(th).not.toContain("grief");
+    expect(th).not.toContain("family");
+    expect(sceneThemes({ mood: "warm", text }).map((t) => t.t)).toContain("family");
+  });
+
+  test("the model's reading counts; images are the cue's colour and what the page names twice", () => {
+    expect(sceneThemes({ mood: "calm", text: "", hint: ["regret"] }).map((t) => t.t)).toContain("regret");
+    expect(sceneImages("A candle. Rain on the glass, more rain.", ["dusk"])).toEqual(["rain"]);
+    expect(sceneImages("", ["night", "rain"])).toEqual(["rain"]);
+  });
+
+  test("lyricFit: a song about the scene rises, one against it sinks, no lyrics change nothing", () => {
+    const tender = sceneThemes({ mood: "tender", text: "" });
+    const home = lyricFit(profileLyrics(HOME), tender, ["rain"]);
+    const breakup = lyricFit(profileLyrics(BREAKUP), tender);
+    const club = lyricFit(profileLyrics(CLUB), tender);
+    expect(home.fit).toBeGreaterThan(breakup.fit + 0.3);
+    expect(home.fit).toBeGreaterThan(club.fit + 0.3);
+    expect(home.reasons[0]).toMatch(/^lyrics about (comfort|love)$/);
+    expect(home.reasons).toContain("lyrics say rain");
+    expect(breakup.reasons).toContain("but lyrics about heartbreak");
+    expect(club.reasons).toContain("but lyrics about partying");
+    expect(lyricFit(null, tender).known).toBe(false);
+    expect(lyricFit(profileLyrics("la la la"), tender).known).toBe(false);
+    const erotic = sceneThemes({ mood: "erotic", text: "" });
+    expect(lyricFit(profileLyrics(WANT), erotic).fit).toBeGreaterThan(lyricFit(profileLyrics(HOME), erotic).fit);
+  });
+
+  test("relyric reorders around the middle: unknown lyrics sit there, untouched", () => {
+    const mk = (id: string, score: number) => ({ track: { videoId: id }, score, reasons: [] as string[] });
+    const tender = sceneThemes({ mood: "tender", text: "" });
+    const profiles = new Map([["club", profileLyrics(CLUB)], ["breakup", profileLyrics(BREAKUP)], ["home", profileLyrics(HOME)], ["inst", null]]);
+    const out = relyric([mk("club", 1.2), mk("breakup", 1.1), mk("unknown", 1.0), mk("home", 0.9), mk("inst", 0.85)], profiles, tender);
+    expect(out[0].track.videoId).toBe("home");
+    expect(out.find((x) => x.track.videoId === "unknown")!.score).toBe(1.0);
+    expect(out.find((x) => x.track.videoId === "inst")!.score).toBe(0.85);
+    // The middle of the three found (the club song) keeps its place; the breakup song sinks past the unknown one.
+    expect(out.find((x) => x.track.videoId === "club")!.score).toBe(1.2);
+    expect(out.findIndex((x) => x.track.videoId === "unknown")).toBeLessThan(out.findIndex((x) => x.track.videoId === "breakup"));
+  });
+
+  test("the cue carries the scene's themes, and the searches ask for them", () => {
+    const cue = readCue({ state: state({ mode: "intimacy" }), genres: [], reply: "She leans into his shoulder and he holds her while she cries." });
+    expect(cue.themes?.map((t) => t.t)).toEqual(expect.arrayContaining(["comfort", "love"]));
+    const taste: Taste = { ...DEFAULT_TASTE, genres: ["pop"], genreMode: "strict", variety: "focused", preferred: [{ name: "A" }, { name: "B" }, { name: "C" }] };
+    const qs = queriesFor(cueOf({ mood: "tender", themes: [{ t: "heartbreak", w: 0.6 }, { t: "love", w: 0.4 }] }), taste, []);
+    expect(qs.some((q) => q.q === "pop heartbreak")).toBe(true);
+    expect(qs.filter((q) => q.artist && q.q.endsWith("heartbreak")).length).toBe(1);
+    const inst = queriesFor(cueOf({ themes: [{ t: "heartbreak", w: 1 }] }), { ...taste, vocals: "instrumental" }, []);
+    expect(inst.some((q) => q.q.includes("heartbreak"))).toBe(false);
   });
 });

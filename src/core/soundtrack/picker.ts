@@ -2,6 +2,7 @@
 
 import { rng } from "../util";
 import type { Cue } from "./cue";
+import { THEME_SEARCH } from "./lyrics";
 import { MOOD_GENRES, MOOD_WORDS, suggestGenres } from "./moods";
 import { ratingBonus, type Learned, type Rating } from "./ratings";
 import { MOOD_TAGS } from "./tags";
@@ -28,7 +29,8 @@ export function genresFor(taste: Taste, storyGenres: string[]): string[] {
 
 /**
  * The searches for a cue: up to three genres (rotated by scene, the lead one always) × the mood word,
- * with one colour word, plus preferred artists with the mood word.
+ * with one colour word, the lead genre with what the scene is about ("pop heartbreak"), plus
+ * preferred artists with the mood word (every other one with the scene's theme instead).
  */
 export function queriesFor(cue: Cue, taste: Taste, storyGenres: string[], salt = 0): Query[] {
   const genres = genresFor(taste, storyGenres);
@@ -50,12 +52,18 @@ export function queriesFor(cue: Cue, taste: Taste, storyGenres: string[], salt =
     const q = `${g} ${word}${inst}`;
     out.push({ q, key: `m:${q.toLowerCase()}`, genre: g, rank: 0 });
   }
+  // Songs about what the scene is about, for the lyrics to choose among (no words in an instrumental taste).
+  const theme = taste.vocals !== "instrumental" && cue.themes?.length ? THEME_SEARCH[cue.themes[0].t] : "";
+  if (theme && pickGenres.length) {
+    const q = `${pickGenres[0]} ${theme}`;
+    out.push({ q, key: `m:${q.toLowerCase()}`, genre: pickGenres[0], rank: genres.indexOf(pickGenres[0]) });
+  }
   if (!out.length) out.push({ q: `${word} music${inst}`, key: `m:${word} music${inst}`, genre: "", rank: 9 });
   const prefCount = taste.variety === "focused" ? 3 : taste.variety === "balanced" ? 2 : 1;
-  for (const a of rotate(taste.preferred, cue.sceneNo + salt).slice(0, prefCount)) {
-    const q = `${a.name} ${words[0]}`;
-    out.push({ q, key: `a:${(a.id ?? normName(a.name))}:${words[0]}`, genre: "", rank: 0, artist: a.name });
-  }
+  rotate(taste.preferred, cue.sceneNo + salt).slice(0, prefCount).forEach((a, i) => {
+    const w = theme && i % 2 === 1 ? theme : words[0];
+    out.push({ q: `${a.name} ${w}`, key: `a:${(a.id ?? normName(a.name))}:${w}`, genre: "", rank: 0, artist: a.name });
+  });
   return out;
 }
 

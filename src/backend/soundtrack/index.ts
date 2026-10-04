@@ -17,6 +17,8 @@ import { forgetPools, poolFor, searchArtists, searchSongs } from "./catalog";
 import { PearPlayer, PlayerError, sleep, type PlayerStatus } from "./pear";
 import { badKey, checkKey, forgetTags, LASTFM_KEY, LastfmError, tagsForMany } from "./lastfm";
 import { retag } from "../../core/soundtrack/tags";
+import { isTheme, relyric, THEME_LABEL, THEMES } from "../../core/soundtrack/lyrics";
+import { lyricsForMany } from "./lyrics";
 import { learnedFor, rate, ratedPool, ratingSummary, voteOf, type Rating } from "../../core/soundtrack/ratings";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +42,8 @@ export interface SoundtrackConfig {
   fade: boolean;
   /** Only the Almanac's picks (and songs the player chooses): YouTube Music's autoplay and mixes never play on. */
   onlyPicks: boolean;
+  /** Songs whose words fit the scene: the best picks' lyrics are checked against what it's about. */
+  lyrics: boolean;
   taste: Taste;
 }
 
@@ -54,6 +58,7 @@ const DEFAULT_CONFIG: SoundtrackConfig = {
   takeBack: true,
   fade: true,
   onlyPicks: false,
+  lyrics: true,
   taste: DEFAULT_TASTE,
 };
 
@@ -83,7 +88,7 @@ interface ChatSoundtrack {
   /** The mood the player chose for this story's music; null or absent is Auto. */
   mood?: Mood | null;
   /** The model's reading of the current music scene. */
-  hint?: (SceneMark & { mood: string; colour: string[] }) | null;
+  hint?: (SceneMark & { mood: string; colour: string[]; themes?: string[] }) | null;
 }
 
 const CONFIG = "soundtrack/config.json";
@@ -214,10 +219,10 @@ async function directorHint(s: Session, chatId: string, cs: ChatSoundtrack, repl
   ].filter(Boolean).join("\n");
   const text = await quiet(
     [
-      sys(`You score scenes for a story's soundtrack. Read the scene and answer with JSON only: {"mood": one of ${MOODS.map((m) => `"${m}"`).join(", ")}, "colour": [up to two plain lower-case texture words for a music search, like "rain", "candlelit", "neon", "desert"]}. Tender is closeness and comfort, romantic is love said or shown, sensual is kissing and building desire, erotic is sex on the page. Judge only what has happened on the page; never anticipate what might come next.`),
+      sys(`You score scenes for a story's soundtrack. Read the scene and answer with JSON only: {"mood": one of ${MOODS.map((m) => `"${m}"`).join(", ")}, "colour": [up to two plain lower-case texture words for a music search, like "rain", "candlelit", "neon", "desert"], "themes": [one to three of ${THEMES.map((t) => `"${t}"`).join(", ")}: what the scene is about, for songs whose lyrics fit it]}. Tender is closeness and comfort, romantic is love said or shown, sensual is kissing and building desire, erotic is sex on the page. Judge only what has happened on the page; never anticipate what might come next.`),
       usr(`${scene}\n\nThe scene so far (latest reply):\n${reply.slice(0, 1600)}`),
     ],
-    { connectionId: s.config.connection || settings.summarizerConnection || undefined, userId: s.userId, reasoningOff: true, maxTokens: 80, timeoutMs: 15_000, label: "soundtrack director" },
+    { connectionId: s.config.connection || settings.summarizerConnection || undefined, userId: s.userId, reasoningOff: true, maxTokens: 100, timeoutMs: 15_000, label: "soundtrack director" },
   );
   const m = /\{[\s\S]*\}/.exec(text);
   if (!m) return;
@@ -225,7 +230,8 @@ async function directorHint(s: Session, chatId: string, cs: ChatSoundtrack, repl
     const j = JSON.parse(m[0]);
     if (!isMood(j.mood)) return;
     const colour = (Array.isArray(j.colour) ? j.colour : []).map((c: unknown) => String(c).toLowerCase().trim()).filter((c: string) => VALID_COLOUR.test(c)).slice(0, 2);
-    cs.hint = { ...here, mood: j.mood, colour };
+    const themes = (Array.isArray(j.themes) ? j.themes : []).map((t: unknown) => String(t).toLowerCase().trim()).filter(isTheme).slice(0, 3);
+    cs.hint = { ...here, mood: j.mood, colour, themes };
     saveChat(chatId, s.userId);
   } catch {
     /* not JSON: the engine's cue stands */
@@ -251,7 +257,7 @@ async function cueFor(s: Session, chatId: string): Promise<{ cue: Cue; stamp: st
   if (s.config.director === "model" && !chosen && lastReply && !sameScene(cs.hint, here)) {
     await directorHint(s, chatId, cs, lastReply.content, here).catch((err) => warn(`soundtrack director: ${describe(err)}`));
   }
-  const hint = cs.hint && isMood(cs.hint.mood) ? { place: cs.hint.place, at: cs.hint.at, mood: cs.hint.mood, colour: cs.hint.colour ?? [] } : null;
+  const hint = cs.hint && isMood(cs.hint.mood) ? { place: cs.hint.place, at: cs.hint.at, mood: cs.hint.mood, colour: cs.hint.colour ?? [], themes: (cs.hint.themes ?? []).filter(isTheme) } : null;
   // Grief holds only while the reply that filed the death is still the one on the path.
   const g = cs.grief;
   const griefLive = g && path.some((m) => m.id === g.msgId && m.swipe === g.swipe) ? g : null;
@@ -326,6 +332,12 @@ async function choose(s: Session, cue: Cue): Promise<Scored | null> {
       if (tags.size) scored = [...retag(top, tags, cue.mood, genresFor(taste, storyGenres), taste.genreMode === "strict" && taste.genres.length > 0), ...scored.slice(10)];
       if (badKey.has(s.userId ?? "")) note(s, `Last.fm refused the API key: ${badKey.get(s.userId ?? "")}`);
     }
+    // Lyrics: the best twelve, checked against what the scene is about (none for an instrumental taste).
+    if (s.config.lyrics && taste.vocals !== "instrumental" && cue.themes?.length && scored.length > 1) {
+      const top = scored.slice(0, 12);
+      const profiles = await lyricsForMany(s.userId ?? "", top.map((x) => x.track));
+      if (profiles.size) scored = [...relyric(top, profiles, cue.themes, cue.images ?? []), ...scored.slice(12)].sort((a, b) => b.score - a.score);
+    }
     const pick = draw(scored, `${s.chatId}|${cue.place}|${cue.mood}|${history.chat.length}|${salt}`);
     if (pick) return pick;
   }
@@ -372,7 +384,8 @@ async function act(s: Session, a: Action): Promise<void> {
         } else await player.enqueue(t.videoId, true);
         const tagged = best.reasons.find((r) => r.startsWith("tagged ") || r.startsWith("but tagged "));
         const thumbs = best.reasons.find((r) => r.startsWith("you "));
-        const why = `${a.cue.why}${best.query.q ? ` — from "${best.query.q}"` : ""}${tagged ? ` · ${tagged}` : ""}${thumbs ? ` · ${thumbs}` : ""}`;
+        const words = best.reasons.filter((r) => r.startsWith("lyrics ") || r.startsWith("but lyrics ")).join(" · ");
+        const why = `${a.cue.why}${best.query.q ? ` — from "${best.query.q}"` : ""}${words ? ` · ${words}` : ""}${tagged ? ` · ${tagged}` : ""}${thumbs ? ` · ${thumbs}` : ""}`;
         s.picked.set(t.videoId, { track: t, why, reason: a.reason, query: best.query.q, genre: best.query.genre, key: best.query.key });
         if (s.picked.size > 80) s.picked.delete(s.picked.keys().next().value!);
         s.history.recent[t.videoId] = Date.now();
@@ -573,6 +586,7 @@ async function viewOf(s: Session): Promise<Record<string, unknown>> {
     takeBack: s.config.takeBack,
     fade: s.config.fade,
     onlyPicks: s.config.onlyPicks,
+    lyrics: s.config.lyrics,
     taste: s.config.taste,
     lastfm: !!s.lastfmKey,
     lastfmBad: badKey.get(s.userId ?? "") ?? "",
@@ -588,7 +602,7 @@ async function viewOf(s: Session): Promise<Record<string, unknown>> {
     origin: s.dir.origin,
     np: np ? { videoId: np.videoId, title: np.title, artist: np.artist, thumb: np.thumb, album: np.album, isPaused: np.isPaused, elapsedS: np.elapsedS, durationS: np.durationS, why: mine?.why ?? "", reason: mine?.reason ?? "", mood: npMood, vote: npMood ? voteOf(rated, np.videoId, npMood) : 0 } : null,
     next: next ? { title: next.track.title, artist: artistLine(next.track), why: next.why } : null,
-    cue: s.cue ? { mood: s.cue.mood, chosen: !!s.cue.chosen, read: s.cue.read ?? null, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place } : null,
+    cue: s.cue ? { mood: s.cue.mood, chosen: !!s.cue.chosen, read: s.cue.read ?? null, why: s.cue.why, energy: s.cue.energy, valence: s.cue.valence, tension: s.cue.tension, colour: s.cue.colour, sceneNo: s.cue.sceneNo, place: s.cue.place, themes: (s.cue.themes ?? []).map((t) => THEME_LABEL[t.t]) } : null,
     plays: (cs?.plays ?? []).slice(-15).reverse().map((p) => ({ ...p, vote: p.mood ? voteOf(rated, p.videoId, p.mood) : 0 })),
     ratings: { summary: ratingSummary(rated), recent: rated.slice(-12).reverse().map((r) => ({ videoId: r.track.videoId, title: r.track.title, artist: artistLine(r.track), mood: r.mood, vote: r.vote })), total: rated.length },
     note: s.lastNote,
@@ -632,7 +646,7 @@ export async function soundtrackAction(m: Record<string, any>, userId?: string):
       if (typeof p.playerUrl === "string" && /^https?:\/\/[^\s/]+(?::\d+)?\/?$/i.test(p.playerUrl.trim())) s.config.playerUrl = p.playerUrl.trim().replace(/\/+$/, "");
       if (p.director === "engine" || p.director === "model") s.config.director = p.director;
       if (typeof p.connection === "string") s.config.connection = p.connection;
-      for (const k of ["cutOnSharp", "takeBack", "fade", "onlyPicks"] as const) if (typeof p[k] === "boolean") s.config[k] = p[k];
+      for (const k of ["cutOnSharp", "takeBack", "fade", "onlyPicks", "lyrics"] as const) if (typeof p[k] === "boolean") s.config[k] = p[k];
       if (was.url !== s.config.playerUrl) s.player = new PearPlayer(s.config.playerUrl, s.player?.token ?? null, s.config.clientId);
       if (!s.config.enabled) {
         s.dir = { ...s.dir, running: false };

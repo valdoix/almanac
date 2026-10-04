@@ -4,6 +4,14 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.27.0 (2026-10-04)
+
+**The Soundtrack picks songs whose lyrics fit the scene.** A mood search finds songs that sound right; now their words count too.
+- **What the scene is about.** Each scene is read for its themes as well as its mood: comfort, love, desire, heartbreak, missing someone, loss, loneliness, fear, fighting, winning, partying, hope, secrets, regret, getting away, night, family, magic, the past, self-doubt. They come from the mood (a tender scene is about comfort and love), from the last exchange (a lie and a secret said twice make it about secrets), from what the people present feel, and with **Engine + model** from the model's reading of the scene. What the page says can't pull a scene against its mood: a sex scene with a burial dress on the floor is still about desire. The Now card shows **About …**.
+- **What a song is about.** The best twelve songs a pick finds have their lyrics read (from LRCLIB, free, no key) into how much of the song is about each theme. Songs about the scene rise; songs about what works against it sink: a breakup song or a club anthem in a tender evening, a victory lap at a graveside. A song that names the scene's rain or smoke rises a little. A song with no lyrics found, or an instrumental, is left where it was. The **Why** line says what it heard ("lyrics about comfort", "but lyrics about heartbreak").
+- **Searches ask for it too:** the lead genre with the scene's main theme ("pop missing you"), and every other favourite artist with it.
+- Only what a song is about is kept (half a year; two weeks for a song with none found), never the words. A pick waits at most six seconds on lyrics; songs it didn't reach are read for the next one. Off with **Songs whose lyrics fit the scene** under How it plays, and never for an instrumental taste.
+
 ## 1.26.0 (2026-10-03)
 
 **Subplots bear on each other.** Two subplots in Elsewhere are tied when one is about someone the other has in it.
