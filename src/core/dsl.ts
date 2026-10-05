@@ -740,17 +740,18 @@ function readRung(main: string, cause?: string): Record<string, any> {
 
 const INJURY = /\b(wound(?:ed|s)?|cuts?|gash(?:es)?|lacerations?|concussion|stitch(?:es|ed)?|burns?|burned|bruis\w*|fractur\w*|broken\s+(?:arm|leg|ribs?|wrist|nose|hand|fingers?|ankle|jaw|collarbone)|sprain\w*|bites?|stab(?:bed)?|bullet|graze[sd]?|scrapes?|scraped|blisters?|welts?|slash(?:ed)?|puncture[sd]?|split lip|black eye)\b/i;
 const NOT_HURT = /^(no|not|healed|without|free of)\b|\bwound (?:up|tight)\b|\bhealed\b/i;
-const PART = /\b((?:left|right|lower|upper)\s+)?(head|scalp|temples?|brows?|face|cheeks?|lips?|mouth|jaw|nose|eyes?|ears?|neck|throat|shoulders?|arms?|forearms?|elbows?|wrists?|hands?|palms?|knuckles?|fingers?|thumbs?|chest|ribs?|side|flank|back|spine|stomach|belly|abdomen|hips?|legs?|thighs?|knees?|shins?|calf|calves|ankles?|foot|feet|soles?|arch(?:es)?|heels?|toes?)\b/i;
+const PART = /\b((?:left|right|lower|upper)\s+)?(head|scalp|forehead|hairline|temples?|brows?|face|cheeks?|lips?|mouth|jaw|nose|eyes?|ears?|neck|throat|shoulders?|arms?|forearms?|elbows?|wrists?|hands?|palms?|knuckles?|fingers?|thumbs?|chest|ribs?|side|flank|back|spine|stomach|belly|abdomen|hips?|legs?|thighs?|knees?|shins?|calf|calves|ankles?|foot|feet|soles?|arch(?:es)?|heels?|toes?)\b/i;
 const MILD = /\b(bruis|scrape|graze|blister|welt|scratch|split lip|minor|small|shallow|superficial|nick)/i;
 const BAD = /\b(fractur|broken(?!\s+(?:glass|skin|nail))|stab|bullet|puncture)/i;
 /** Care inside a line about a wound ("untreated" is not "treated"). */
-const TENDED = /(?<!un)(?:stitch|bandag|treated|dressed|splint|closed|sutur|cleaned|gauze|wrapped)/i;
+const TENDED = /(?<!un)(?:stitch|bandag|treated|tended|taped|dressed|splint|closed|sutur|cleaned|gauze|wrapped|ointment|salve|antiseptic|disinfect|iodine|band-?aid)/i;
 /** "needs stitches", "not yet bandaged": care that hasn't happened. */
 const NOT_YET = /\b(?:no|not|needs?|without|refus\w*|yet to be)\b[^,;]*$/i;
 /** Care named anywhere in a body, look or cast note: narrower, since "dressed" and "closed" mean other things there. */
-const CARE = /(?<!un)(?:bandag|treat(?:ed|ing)\b|stitch|sutur|splint|gauze|re-?wrapped)/i;
+// "tending the fire" and "taped the window" aren't care.
+const CARE = /(?<!un)(?:bandag|treat(?:ed|ing)\b|(?:tend(?:ed|ing)|taped)\b(?!\s+(?:the|a|an|to|up the|bar|fire|stove|hearth|garden|goats?|sheep|horses?|flock|shop|store|counter|windows?|doors?|box(?:es)?)\b)|stitch|sutur|splint|gauze|re-?wrapped|ointment|salve|antiseptic|disinfect\w*|iodine|band-?aid|first[- ]aid(?:ed)?\b|patched up|cauteri[sz]ed)/i;
 
-const REGION: Record<string, string> = { feet: "foot", calves: "calf", arch: "foot", arche: "foot", sole: "foot", heel: "foot", toe: "foot", palm: "hand", knuckle: "hand", scalp: "head", temple: "head", brow: "head" };
+const REGION: Record<string, string> = { forehead: "head", hairline: "head", feet: "foot", calves: "calf", arch: "foot", arche: "foot", sole: "foot", heel: "foot", toe: "foot", palm: "hand", knuckle: "hand", scalp: "head", temple: "head", brow: "head" };
 
 /** The body part a wound is on and its side: "right arch" and "feet" are both the foot. Null for a bare "wound". */
 function spot(where: string): { part: string; side: string } | null {
@@ -866,7 +867,18 @@ export function injuriesIn(flag: string): { where: string; severity: 1 | 2 | 3 |
  */
 export function careIn(text: string): { where?: string }[] {
   const out: { where?: string }[] = [];
-  for (const part of text.split(/\s*(?:[,;+&·]|\band\b|→|—)\s*/)) {
+  // "palms (tended, taped, his ointment)": the care in the brackets is for the palms.
+  for (const chunk of text.split(/\s*[;·]\s*|\s*,\s*(?![^()]*\))/)) {
+    const head = /^([^(]*)\(/.exec(chunk)?.[1];
+    const at = head ? PART.exec(head) : null;
+    for (const mark of careParts(chunk)) out.push(mark.where || !at ? mark : { where: `${(at[1] ?? "").toLowerCase()}${at[2].toLowerCase()}` });
+  }
+  return out;
+}
+
+function careParts(text: string): { where?: string }[] {
+  const out: { where?: string }[] = [];
+  for (const part of text.split(/\s*(?:[,;+&·()]|\band\b|→|—)\s*/)) {
     const m = CARE.exec(part);
     if (!m) continue;
     const lead = part.slice(0, m.index);

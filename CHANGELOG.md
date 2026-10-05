@@ -4,6 +4,13 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.27.3 (2026-10-05)
+
+**Wounds tended in plain words count as treated.** "palms (tended, taped, his ointment)" left the palms untreated: care was only bandages, stitches, sutures, splints, gauze or "treated".
+- Care now includes tended, taped, ointment, salve, antiseptic, disinfected, iodine, band-aid, first aid, patched up and cauterised. "Tending the fire" and "taped the window" don't count.
+- Care in brackets after a body part is for that part only. Before, "taped" inside "palms (…)" would have counted for every wound, ribs included.
+- Forehead and hairline are places on the body: "cut (hairline)" is a head wound.
+
 ## 1.27.2 (2026-10-05)
 
 **"To review" stays sorted.**

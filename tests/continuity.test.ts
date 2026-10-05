@@ -75,6 +75,18 @@ describe("state keeps what lasts and lets passing detail go", () => {
     const moved = fold([reply(0, "cast: Mara@spot\nat: Inn\nbody Mara: dripping, blind in one eye"), reply(1, "at: Harbour")]).state;
     expect(moved.chars.mara.flags).toEqual(["blind in one eye"]);
   });
+  test("care in brackets reaches that wound only: tended, taped, ointment", () => {
+    const st = fold([
+      reply(0, "cast: Jackie@spot\nbody Jackie: ribs (bruised, serious); palms (cut kissed, warm)"),
+      reply(1, "body Jackie: palms (tended, taped, his ointment); tears (held); ribs (serious); fatigue 4"),
+    ]).state;
+    const inj = st.chars.jackie.injuries;
+    expect(inj.find((i) => i.where === "palms")?.treated).toBe(true);
+    expect(inj.find((i) => i.where === "ribs")?.treated).toBe(false);
+    // Not care: the fire, the window.
+    const st2 = fold([reply(0, "cast: Mara@spot\nbody Mara: hands (cut)"), reply(1, "cast: Mara@spot(tending the fire)")]).state;
+    expect(st2.chars.mara.injuries[0].treated).toBe(false);
+  });
   test("one wound, written two ways, is one injury and stays treated", () => {
     const st = fold([reply(0, "cast: Kael@spot\nbody Kael: self-stitched wound closed"), reply(1, "body Kael: stitches loosening")]).state;
     expect(st.chars.kael.injuries).toHaveLength(1);
