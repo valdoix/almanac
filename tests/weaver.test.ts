@@ -35,6 +35,26 @@ describe("Dream Weaver books", () => {
     expect(weaverBook({ name: "William Peverell — persona depth", metadata: { source: "weaver", persona_depth: true } })).toEqual({ role: "persona", subject: "William Peverell" });
   });
 
+  test("reads a card's rules-and-depth book: rules pinned, depth as scenes and history", () => {
+    const book = { name: "Jackie Taylor — rules & depth", description: "Always-on rules that keep Jackie Taylor on-spec in any preset, plus depth entries that surface when their subject comes up.", metadata: { source: "character", auto_managed_by_character: true } };
+    const es = [
+      { id: "a", comment: "Re-anchor", key: ["Jackie Taylor"], constant: true, content: "Core: Jackie Taylor, 18, Yellowjackets captain, needs to be adored.\nDrives: She wants to matter." },
+      { id: "r", comment: "Governance · voice & anti-patterns", key: [], constant: true, content: "<weaver_craft>\nNarrate in {{char}}'s own voice.\n</weaver_craft>" },
+      { id: "d1", comment: "Depth · The Dock, Fourth of July 1994", key: ["dock", "fireworks"], content: "On the Fourth of July in 1994, at the end of the Holloways' dock, sixteen-year-old James leaned in to kiss Jackie and she stepped back." },
+      { id: "d2", comment: "Depth · When James Comes Out Into the Snow", key: ["first snow"], content: "When James comes out into the first snow for her, she doesn't turn around. \"Go back inside, Holloway.\"" },
+    ];
+    const wv = weaverBook(book, es)!;
+    expect(wv).toEqual({ role: "depth", subject: "Jackie Taylor" });
+    // Imported without the name: the titles still say so.
+    expect(weaverBook({ name: "Imported", metadata: {} }, es)?.role).toBe("depth");
+    const [a, r, d1, d2] = es.map((e) => classify(entry(e), wv));
+    expect(a).toMatchObject({ kind: "person", name: "Jackie Taylor", pinned: true });
+    expect(r).toMatchObject({ kind: "directive", name: "voice & anti-patterns", pinned: true });
+    expect(d1).toMatchObject({ kind: "history", name: "The Dock, Fourth of July 1994" });
+    expect(d2).toMatchObject({ kind: "playbook", name: "When James Comes Out Into the Snow" });
+    expect([a, r, d1, d2].every((c) => c.confidence >= 0.5)).toBe(true);
+  });
+
   test("leaves ordinary books alone", () => {
     expect(weaverBook({ name: "Sunnydale lore book", description: "My notes", metadata: {} }, [{ comment: "Location: The Bronze", content: "The Bronze is a nightclub." }])).toBeNull();
     expect(weaverBook({ name: "ALMANAC · 28 Sept", metadata: { almanac_chat_id: "x" } }, RULES)).toBeNull();

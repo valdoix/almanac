@@ -108,7 +108,14 @@ export interface ChatMeta {
     ceiling?: { limit: number; before: number; after: number; trimmed: string[] };
   }[];
   mirror: { bookId?: string; entries: Record<string, { entryId: string; hash: string; wrote?: string }> };
-  lore: { books: Record<string, LoreBookState>; review: { entryId: string; bookId: string; title: string; kind: string; confidence: number }[]; lastScan?: number; world?: WeaverWorld };
+  lore: {
+    books: Record<string, LoreBookState>;
+    review: { entryId: string; bookId: string; title: string; kind: string; confidence: number }[];
+    /** The model's reading of entries it sorted, kept while the entry is unchanged (its hash). */
+    sorted?: Record<string, { hash: string; reading: Record<string, any> }>;
+    lastScan?: number;
+    world?: WeaverWorld;
+  };
   arrivals: Arrival[];
   lastSimAbs?: number;
   /** Elsewhere: tick records, profiles, and what the note last showed. */

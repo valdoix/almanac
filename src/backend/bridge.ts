@@ -258,7 +258,8 @@ export function registerBridge() {
           } else if (m.action === "mode" && files.meta.lore.books[m.bookId] && ["native", "assisted", "managed"].includes(m.value)) {
             files.meta.lore.books[m.bookId].mode = m.value;
           } else if (m.action === "classify") {
-            toast(userId, "success", `Classified ${await classifyReview(m.chatId, userId)} entries.`);
+            const n = await classifyReview(m.chatId, userId);
+            toast(userId, n ? "success" : "warning", n ? `Sorted ${n} ${n === 1 ? "entry" : "entries"}.` : "The model didn't sort any entries (no usable answer). Try again, or check the summariser connection.");
           }
           save(m.chatId, "meta", userId, 0);
           onMutation(m.chatId, userId);

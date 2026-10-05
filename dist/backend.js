@@ -8199,7 +8199,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.27.1";
+var VERSION = "1.27.2";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -18953,11 +18953,11 @@ var init_loreformat = __esm(() => {
 function weaverEntry(e) {
   const c = (e.comment ?? "").trim();
   const body = (e.content ?? "").trimStart();
-  if (/^Weaver re-?anchor$/i.test(c))
+  if (/^Weaver re-?anchor$/i.test(c) || /^re-?anchor$/i.test(c) && /^\s*Core:/im.test(body))
     return "anchor";
   if (/^Weaver agency\b/i.test(c) || /^<weaver_agency>/i.test(body))
     return "agenda";
-  if (/^Weaver governance\b/i.test(c) || /^<weaver_[a-z_]+>/i.test(body))
+  if (/^Weaver governance\b/i.test(c) || /^governance\s*[\u00B7:|-]/i.test(c) || /^<weaver_[a-z_]+>/i.test(body))
     return "rule";
   return null;
 }
@@ -18974,7 +18974,7 @@ function weaverBook(book, entries = []) {
   if (!role && byName && (md.source === "weaver" || byName[1].test(book.description ?? "")))
     role = byName[2];
   if (!role && entries.some((e) => weaverEntry(e)))
-    role = "governance";
+    role = entries.some((e) => DEPTH_TITLE.test(e.comment ?? "")) ? "depth" : "governance";
   if (!role)
     return null;
   const world = entries.some((e) => WORLD_RULE.test(e.content ?? "") || weaverEntry(e) === "anchor" && /^\s*(Tension|Stance):/im.test(e.content ?? ""));
@@ -19046,7 +19046,7 @@ function classifyWeaverEntry(e, part, book) {
     }
     return { ...base, name: `${who || "World"} anchor`, summary: l.core ?? firstSentence2(e.content ?? "") };
   }
-  const title = (e.comment ?? "").replace(/^Weaver\s+(?:governance|agency)\s*[\u00B7:|-]\s*/i, "").trim();
+  const title = (e.comment ?? "").replace(/^(?:Weaver\s+)?(?:governance|agency)\s*[\u00B7:|-]\s*/i, "").trim();
   const tag = /^\s*<weaver_([a-z_]+)>/i.exec(e.content ?? "")?.[1]?.replace(/_/g, " ");
   const inner = (e.content ?? "").replace(/<\/?weaver_[a-z_]+>/gi, "").trim();
   const agency = part === "agenda" ? parseAgency(inner) : null;
@@ -19128,6 +19128,8 @@ function classify(e, book = null) {
   if (part)
     return classifyWeaverEntry(e, part, book);
   const meta = readLoreMeta(e.extensions);
+  if (book && DEPTH_TITLE.test(e.comment ?? ""))
+    e = { ...e, comment: e.comment.replace(DEPTH_TITLE, "") };
   const t = splitTitle(e.comment);
   const titleName = t.name;
   const content = e.content ?? "";
@@ -19186,7 +19188,7 @@ function classify(e, book = null) {
     } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess" && isScene(e.comment || titleName, content, book.role)) {
       Object.assign(base, { kind: "playbook", tense: "future", subject: book.subject, confidence: 0.8, via: "weaver", name: (e.comment ?? titleName).trim(), aliases: [], keys: e.key ?? [], summary: clip3(content.replace(/\s+/g, " ").trim(), 700) });
     } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess") {
-      const past = /\b(history|past|childhood|upbringing|backstory|origins?|before|years ago|used to)\b/i.test(`${titleName} ${(e.key ?? []).join(" ")}`);
+      const past = /\b(history|past|childhood|upbringing|backstory|origins?|before|years ago|used to)\b/i.test(`${titleName} ${(e.key ?? []).join(" ")}`) || /\b1\d{3}\b|\b20\d{2}\b/.test(titleName) || /^(?:In|On|Back in)\b[^.]{0,60}\b(?:1\d{3}|20\d{2})\b/.test(fs);
       Object.assign(base, { kind: past ? "history" : "texture", tense: past ? "past" : "timeless", subject: book.subject, confidence: 0.6, via: "weaver" });
     } else if (book.role === "lore" && base.via === "guess") {
       const hint = LORE_TITLE_HINTS.find(([re]) => re.test(titleName));
@@ -19562,7 +19564,7 @@ function seedOverlays(items, opts = {}) {
   }
   return out;
 }
-var WORLD_RULE, WEAVER_BOOKS, GROUP_HINT, OBJECT_HINT, PLACE_HINT, HISTORY_HINT, LAW_HINT, TEXTURE_HINT, LORE_TITLE_HINTS, BELIEF, MISTAKEN, PUBLIC, SECRET, SIGN, EVENT_NOUN, TITLE_VERB, PRESENT, PAST2, STOP_END, NAME, IS_ROLE, PERSON_NOUN, SCENE_OPEN, SCENE_TITLE, QUOTED2, TITLE_STOP, KIND_PREFIX;
+var WORLD_RULE, WEAVER_BOOKS, DEPTH_TITLE, GROUP_HINT, OBJECT_HINT, PLACE_HINT, HISTORY_HINT, LAW_HINT, TEXTURE_HINT, LORE_TITLE_HINTS, BELIEF, MISTAKEN, PUBLIC, SECRET, SIGN, EVENT_NOUN, TITLE_VERB, PRESENT, PAST2, STOP_END, NAME, IS_ROLE, PERSON_NOUN, SCENE_OPEN, SCENE_TITLE, QUOTED2, TITLE_STOP, KIND_PREFIX;
 var init_lore = __esm(() => {
   init_util();
   init_traits();
@@ -19574,8 +19576,10 @@ var init_lore = __esm(() => {
     [/^(.+?)\s+NPC book$/i, /trigger by name so the narrator can voice them/i, "npc"],
     [/^(.+?)\s+lore book$/i, /narrator consults canon instead of inventing it/i, "lore"],
     [/^(.+?)\s+depth book$/i, /Deepening answers from the Weaver interview/i, "depth"],
-    [/^(.+?)\s+[\u2014\u2013-]\s+persona depth$/i, /Triggered depth for the persona/i, "persona"]
+    [/^(.+?)\s+[\u2014\u2013-]\s+persona depth$/i, /Triggered depth for the persona/i, "persona"],
+    [/^(.+?)\s+[\u2014\u2013-]\s+rules\s*(?:&|and)\s*depth$/i, /on-spec|depth entries that surface/i, "depth"]
   ];
+  DEPTH_TITLE = /^Depth\s*[\u00B7:|]\s*/i;
   GROUP_HINT = /\b(?:guild|order|council|clan|famil(?:y|ies)|house of|crew|church|cult|company|companies|holdings|corporation|firm|watch|brotherhood|sisterhood|society|faction|court|union|gang|coven|syndicate|circle|knight|kingsguard|minion|network|loyalist|program|programme|agency|initiative|unit|army|legion|band|tribe|dynasty|cabal|league|alliance|senate|parliament|household|retinue|staff)(?:e?s)?\b/i;
   OBJECT_HINT = /\b(?:ledger|book|tome|handbook|scroll|key|sword|blade|dagger|axe|hammer|bow|wand|stake|ring|amulet|gem|orb|sphere|urn|chalice|grail|map|relic|artifact|artefact|crown|mask|lantern|bell|idol|stone|coin|chip|katra|device|potion|vial|crystal|locket|necklace|talisman|totem|egg)(?:e?s)?\b/i;
   PLACE_HINT = /\b(?:harbou?r|bay|port|dock|pier|market|street|road|drive|square|quarter|district|ward|tavern|inn|pub|bar|club|nightclub|hall|temple|shrine|chapel|sept|godswood|keep|holdfast|castle|tower|manor|mansion|house|residence|home|apartment|flat|crypt|grave|tomb|office|library|school|academy|university|college|campus|forest|wood|marsh|river|lake|sea|coast|shore|island|mountain|valley|cave|mine|ruin|gate|wall|bridge|lighthouse|cemetery|graveyard|farm|mill|shop|store|warehouse|station|village|town|city|palace|prison|asylum|hospital|chamber|yard|ground|dragonpit|facility|base|lab|laboratory|bunker|garden|park|church|cathedral|abbey|monastery|estate|villa|cottage|cabin|hotel|motel|restaurant|diner|caf[e\u00E9]|passage|tunnel|sewer|kingdom|princedom|duchy|province|territor(?:y|ies)|land)(?:e?s)?\b/i;
@@ -25936,6 +25940,8 @@ function scanLore(chatId, userId, force = false) {
       state.scope = b.scope;
       if (wv?.role === "governance" && !state.weaver)
         state.mode = "native";
+      else if (state.weaver === "governance" && wv?.role !== "governance" && state.mode === "native")
+        state.mode = settings.loreDefaultMode;
       state.weaver = wv?.role;
       state.count = entries.length;
       state.kinds = {};
@@ -25945,8 +25951,9 @@ function scanLore(chatId, userId, force = false) {
         if (e.disabled)
           continue;
         entryCount++;
-        const h = hash(`${e.comment}|${e.content}|${e.key.join(",")}|${JSON.stringify(e.extensions ?? {})}`);
-        const c = classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, position: e.position, extensions: e.extensions }, wv);
+        const h = entryHash(e);
+        const sorted = meta.lore.sorted?.[e.id];
+        const c = sorted?.hash === h ? modelReading(e, b.id, sorted.reading) : classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, position: e.position, extensions: e.extensions }, wv);
         classified.push(c);
         state.entryHashes[e.id] = h;
         state.kinds[c.kind] = (state.kinds[c.kind] ?? 0) + 1;
@@ -26006,7 +26013,27 @@ function scanLore(chatId, userId, force = false) {
     return { books: books.length, entries: entryCount, review: meta.lore.review.length };
   });
 }
-async function classifyReview(chatId, userId) {
+function entryHash(e) {
+  return hash(`${e.comment}|${e.content}|${(e.key ?? []).join(",")}|${JSON.stringify(e.extensions ?? {})}`);
+}
+function modelReading(e, bookId, r) {
+  const forecast = r.kind === "forecast";
+  const c = classify({
+    id: e.id,
+    world_book_id: bookId,
+    comment: e.comment,
+    content: e.content,
+    key: e.key ?? [],
+    extensions: { almanac: { lore: { kind: forecast ? "situation" : r.kind, tense: forecast ? "future" : r.tense, participants: r.participants, members: r.members, place: r.place, visibility: r.visibility } } }
+  });
+  if (r.name)
+    c.name = r.name;
+  return c;
+}
+function classifyReview(chatId, userId) {
+  return serial(`lore:${chatId}`, () => sortReview(chatId, userId));
+}
+async function sortReview(chatId, userId) {
   const files = await loadChat(chatId, userId);
   const settings = await loadSettings(userId);
   const queue = files.meta.lore.review.slice(0, 24);
@@ -26016,21 +26043,22 @@ async function classifyReview(chatId, userId) {
   for (const q of queue) {
     const e = await host.world_books.entries.get(q.entryId, userId).catch(() => null);
     if (e)
-      entries.push({ id: e.id, title: e.comment, content: e.content });
+      entries.push(e);
   }
-  const p = classifierPrompt(entries);
+  const p = classifierPrompt(entries.map((e) => ({ id: e.id, title: e.comment, content: e.content })));
   const text = await quiet([sys(p.system), usr(p.user)], { connectionId: settings.summarizerConnection || undefined, userId, reasoningOff: true, label: "lore classifier" });
   const arr = extractJson(text) ?? [];
   let n = 0;
   for (const r of arr) {
-    const q = queue.find((x) => x.entryId === r.id);
-    if (!q || !r.kind)
+    if (!r?.id || !r.kind)
       continue;
+    const q = queue.find((x) => x.entryId === r.id);
     const e = entries.find((x) => x.id === r.id);
-    const c = classify({ id: e.id, world_book_id: q.bookId, comment: e.title, content: e.content, key: [], extensions: { almanac: { lore: { kind: r.kind === "forecast" ? "situation" : r.kind, tense: r.kind === "forecast" ? "future" : r.tense, participants: r.participants, members: r.members, place: r.place, visibility: r.visibility } } } });
-    if (r.name)
-      c.name = r.name;
-    Object.assign(files.codex.overlays, seedOverlays([c]));
+    if (!q || !e)
+      continue;
+    const reading = { kind: r.kind, tense: r.tense, participants: r.participants, members: r.members, place: r.place, visibility: r.visibility, name: r.name };
+    Object.assign(files.codex.overlays, seedOverlays([modelReading(e, q.bookId, reading)]));
+    (files.meta.lore.sorted ??= {})[e.id] = { hash: entryHash(e), reading };
     files.meta.lore.review = files.meta.lore.review.filter((x) => x.entryId !== r.id);
     n++;
   }
@@ -28087,7 +28115,8 @@ function registerBridge() {
           } else if (m.action === "mode" && files.meta.lore.books[m.bookId] && ["native", "assisted", "managed"].includes(m.value)) {
             files.meta.lore.books[m.bookId].mode = m.value;
           } else if (m.action === "classify") {
-            toast(userId, "success", `Classified ${await classifyReview(m.chatId, userId)} entries.`);
+            const n = await classifyReview(m.chatId, userId);
+            toast(userId, n ? "success" : "warning", n ? `Sorted ${n} ${n === 1 ? "entry" : "entries"}.` : "The model didn't sort any entries (no usable answer). Try again, or check the summariser connection.");
           }
           save(m.chatId, "meta", userId, 0);
           onMutation(m.chatId, userId);

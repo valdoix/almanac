@@ -4,6 +4,12 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.27.2 (2026-10-05)
+
+**"To review" stays sorted.**
+- **The model's sorting is kept.** Every time the lorebooks were read again (each chat open, **Read them again**), the review list was rebuilt from scratch and the entries the model had sorted came back. Its reading is now kept with the entry and used until you change the entry. Sorting and a rescan no longer run at the same time, and a sort where the model gave no usable answer says so instead of "Classified 0 entries".
+- **Rules-and-depth books are read as the Weaver's.** A card's own book with the rules and the depth together ("Jackie Taylor — rules & depth", entries "Re-anchor", "Governance · …", "Depth · …") was guessed at as story texture. The re-anchor and rules are now pinned for the host, as in a rules book. The depth entries are read like a depth book's: scenes ("When James Comes Out Into the Snow") wait as playbooks, dated memories ("The Dock, Fourth of July 1994") are history, and the rest is about the character. The book is no longer forced to Native, so its depth entries don't fire on everyday words like "Shauna" every turn.
+
 ## 1.27.1 (2026-10-05)
 
 **Injuries recover on their own.** Wounds used to sit at full strength until a fixed day, and only healed while the person was in the scene.

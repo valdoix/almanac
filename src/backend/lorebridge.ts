@@ -86,6 +86,8 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
       state.name = book.name;
       state.scope = b.scope;
       if (wv?.role === "governance" && !state.weaver) state.mode = "native";
+      // Once taken for a rules book (and so left native), now known as more: back to the default.
+      else if (state.weaver === "governance" && wv?.role !== "governance" && state.mode === "native") state.mode = settings.loreDefaultMode;
       state.weaver = wv?.role;
       state.count = entries.length;
       state.kinds = {};
@@ -94,8 +96,12 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
       for (const e of entries) {
         if (e.disabled) continue;
         entryCount++;
-        const h = hash(`${e.comment}|${e.content}|${e.key.join(",")}|${JSON.stringify(e.extensions ?? {})}`);
-        const c = classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, position: e.position, extensions: e.extensions as any }, wv);
+        const h = entryHash(e);
+        // An entry the model already sorted keeps its reading until the entry changes.
+        const sorted = meta.lore.sorted?.[e.id];
+        const c = sorted?.hash === h
+          ? modelReading(e, b.id, sorted.reading)
+          : classify({ id: e.id, world_book_id: b.id, comment: e.comment, content: e.content, key: e.key, disabled: e.disabled, constant: e.constant, position: e.position, extensions: e.extensions as any }, wv);
         classified.push(c);
         state.entryHashes[e.id] = h;
         state.kinds[c.kind] = (state.kinds[c.kind] ?? 0) + 1;
@@ -155,28 +161,49 @@ export function scanLore(chatId: string, userId?: string, force = false): Promis
   });
 }
 
-/** LLM classifier for the review queue (batched). */
-export async function classifyReview(chatId: string, userId?: string): Promise<number> {
+function entryHash(e: WorldBookEntryDTO): string {
+  return hash(`${e.comment}|${e.content}|${(e.key ?? []).join(",")}|${JSON.stringify(e.extensions ?? {})}`);
+}
+
+/** An entry read the way the model sorted it. */
+function modelReading(e: WorldBookEntryDTO, bookId: string, r: Record<string, any>): Classified {
+  const forecast = r.kind === "forecast";
+  const c = classify({
+    id: e.id, world_book_id: bookId, comment: e.comment, content: e.content, key: e.key ?? [],
+    extensions: { almanac: { lore: { kind: forecast ? "situation" : r.kind, tense: forecast ? "future" : r.tense, participants: r.participants, members: r.members, place: r.place, visibility: r.visibility } } },
+  });
+  if (r.name) c.name = r.name;
+  return c;
+}
+
+/** LLM classifier for the review queue (batched); in turn with scans, so one can't undo the other. */
+export function classifyReview(chatId: string, userId?: string): Promise<number> {
+  return serial(`lore:${chatId}`, () => sortReview(chatId, userId));
+}
+
+async function sortReview(chatId: string, userId?: string): Promise<number> {
   const files = await loadChat(chatId, userId);
   const settings = await loadSettings(userId);
   const queue = files.meta.lore.review.slice(0, 24);
   if (!queue.length) return 0;
-  const entries: { id: string; title: string; content: string }[] = [];
+  const entries: WorldBookEntryDTO[] = [];
   for (const q of queue) {
     const e = await host.world_books.entries.get(q.entryId, userId).catch(() => null);
-    if (e) entries.push({ id: e.id, title: e.comment, content: e.content });
+    if (e) entries.push(e);
   }
-  const p = classifierPrompt(entries);
+  const p = classifierPrompt(entries.map((e) => ({ id: e.id, title: e.comment, content: e.content })));
   const text = await quiet([sys(p.system), usr(p.user)], { connectionId: settings.summarizerConnection || undefined, userId, reasoningOff: true, label: "lore classifier" });
   const arr = extractJson<any[]>(text) ?? [];
   let n = 0;
   for (const r of arr) {
+    if (!r?.id || !r.kind) continue;
     const q = queue.find((x) => x.entryId === r.id);
-    if (!q || !r.kind) continue;
-    const e = entries.find((x) => x.id === r.id)!;
-    const c = classify({ id: e.id, world_book_id: q.bookId, comment: e.title, content: e.content, key: [], extensions: { almanac: { lore: { kind: r.kind === "forecast" ? "situation" : r.kind, tense: r.kind === "forecast" ? "future" : r.tense, participants: r.participants, members: r.members, place: r.place, visibility: r.visibility } } } });
-    if (r.name) c.name = r.name;
-    Object.assign(files.codex.overlays, seedOverlays([c]));
+    const e = entries.find((x) => x.id === r.id);
+    if (!q || !e) continue;
+    const reading = { kind: r.kind, tense: r.tense, participants: r.participants, members: r.members, place: r.place, visibility: r.visibility, name: r.name };
+    Object.assign(files.codex.overlays, seedOverlays([modelReading(e, q.bookId, reading)]));
+    // Kept, so the next scan doesn't put it back in the queue.
+    (files.meta.lore.sorted ??= {})[e.id] = { hash: entryHash(e), reading };
     files.meta.lore.review = files.meta.lore.review.filter((x) => x.entryId !== r.id);
     n++;
   }

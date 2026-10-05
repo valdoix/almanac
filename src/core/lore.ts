@@ -95,15 +95,22 @@ const WEAVER_BOOKS: [RegExp, RegExp, WeaverRole][] = [
   [/^(.+?)\s+lore book$/i, /narrator consults canon instead of inventing it/i, "lore"],
   [/^(.+?)\s+depth book$/i, /Deepening answers from the Weaver interview/i, "depth"],
   [/^(.+?)\s+[—–-]\s+persona depth$/i, /Triggered depth for the persona/i, "persona"],
+  // A card's own book with the rules and the depth in one ("Jackie Taylor — rules & depth"):
+  // read as a depth book; its rules and re-anchor stay pinned for the host.
+  [/^(.+?)\s+[—–-]\s+rules\s*(?:&|and)\s*depth$/i, /on-spec|depth entries that surface/i, "depth"],
 ];
+
+/** "Depth · The Dock, Fourth of July 1994": a depth entry titled as one, in a rules-and-depth book. */
+const DEPTH_TITLE = /^Depth\s*[·:|]\s*/i;
 
 /** Which Weaver governance piece an entry is, if any (works on card-embedded copies too). */
 export function weaverEntry(e: { comment?: string; content?: string }): WeaverPart | null {
   const c = (e.comment ?? "").trim();
   const body = (e.content ?? "").trimStart();
-  if (/^Weaver re-?anchor$/i.test(c)) return "anchor";
+  // Newer Weaver books drop "Weaver" from the titles ("Re-anchor", "Governance · voice & anti-patterns").
+  if (/^Weaver re-?anchor$/i.test(c) || (/^re-?anchor$/i.test(c) && /^\s*Core:/im.test(body))) return "anchor";
   if (/^Weaver agency\b/i.test(c) || /^<weaver_agency>/i.test(body)) return "agenda";
-  if (/^Weaver governance\b/i.test(c) || /^<weaver_[a-z_]+>/i.test(body)) return "rule";
+  if (/^Weaver governance\b/i.test(c) || /^governance\s*[·:|-]/i.test(c) || /^<weaver_[a-z_]+>/i.test(body)) return "rule";
   return null;
 }
 
@@ -121,7 +128,7 @@ export function weaverBook(
   const tagged = WEAVER_BOOKS.find(([, , r]) => r === (md.persona_depth === true ? "persona" : md.weaver_role));
   let role: WeaverRole | null = tagged?.[2] ?? null;
   if (!role && byName && (md.source === "weaver" || byName[1].test(book.description ?? ""))) role = byName[2];
-  if (!role && entries.some((e) => weaverEntry(e))) role = "governance";
+  if (!role && entries.some((e) => weaverEntry(e))) role = entries.some((e) => DEPTH_TITLE.test(e.comment ?? "")) ? "depth" : "governance";
   if (!role) return null;
   const world = entries.some((e) => WORLD_RULE.test(e.content ?? "") || (weaverEntry(e) === "anchor" && /^\s*(Tension|Stance):/im.test(e.content ?? "")));
   return world ? { role, subject, world } : { role, subject };
@@ -197,7 +204,7 @@ function classifyWeaverEntry(e: LoreEntry, part: WeaverPart, book: WeaverBook | 
     }
     return { ...base, name: `${who || "World"} anchor`, summary: l.core ?? firstSentence(e.content ?? "") };
   }
-  const title = (e.comment ?? "").replace(/^Weaver\s+(?:governance|agency)\s*[·:|-]\s*/i, "").trim();
+  const title = (e.comment ?? "").replace(/^(?:Weaver\s+)?(?:governance|agency)\s*[·:|-]\s*/i, "").trim();
   const tag = /^\s*<weaver_([a-z_]+)>/i.exec(e.content ?? "")?.[1]?.replace(/_/g, " ");
   const inner = (e.content ?? "").replace(/<\/?weaver_[a-z_]+>/gi, "").trim();
   const agency = part === "agenda" ? parseAgency(inner) : null;
@@ -343,6 +350,8 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
   const part = weaverEntry(e);
   if (part) return classifyWeaverEntry(e, part, book);
   const meta = readLoreMeta(e.extensions);
+  // "Depth · When James Comes Out Into the Snow" is the scene "When James Comes Out Into the Snow".
+  if (book && DEPTH_TITLE.test(e.comment ?? "")) e = { ...e, comment: e.comment!.replace(DEPTH_TITLE, "") };
   const t = splitTitle(e.comment);
   const titleName = t.name;
   const content = e.content ?? "";
@@ -389,7 +398,8 @@ export function classify(e: LoreEntry, book: WeaverBook | null = null): Classifi
       Object.assign(base, { kind: "playbook", tense: "future", subject: book.subject, confidence: 0.8, via: "weaver", name: (e.comment ?? titleName).trim(), aliases: [], keys: e.key ?? [], summary: clip(content.replace(/\s+/g, " ").trim(), 700) });
     } else if ((book.role === "depth" || book.role === "persona") && base.via === "guess") {
       // Depth book: more about the card's character, or the persona's (history, bonds, secrets, daily texture).
-      const past = /\b(history|past|childhood|upbringing|backstory|origins?|before|years ago|used to)\b/i.test(`${titleName} ${(e.key ?? []).join(" ")}`);
+      // A dated memory ("The Dock, Fourth of July 1994"; "In May 1996, the night…") is history too.
+      const past = /\b(history|past|childhood|upbringing|backstory|origins?|before|years ago|used to)\b/i.test(`${titleName} ${(e.key ?? []).join(" ")}`) || /\b1\d{3}\b|\b20\d{2}\b/.test(titleName) || /^(?:In|On|Back in)\b[^.]{0,60}\b(?:1\d{3}|20\d{2})\b/.test(fs);
       Object.assign(base, { kind: past ? "history" : "texture", tense: past ? "past" : "timeless", subject: book.subject, confidence: 0.6, via: "weaver" });
     } else if (book.role === "lore" && base.via === "guess") {
       // A world's lore book: places, history, factions and customs under short plain titles.
