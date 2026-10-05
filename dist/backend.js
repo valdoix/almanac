@@ -4998,7 +4998,11 @@ class Folder {
         }
         for (const f of a.unflags)
           c.flags = c.flags.filter((x) => x !== f && !x.startsWith(f));
+        const now = st.time ? absMinutes(st.time) : null;
         for (const inj of a.injuries) {
+          const worseWord = WORSE.test(`${inj.note ?? ""} ${inj.where}`);
+          if (!worseWord && now != null && c.healed?.some((h) => sameSpot(h.where, inj.where) && inj.severity <= h.worst && now - h.at < HEALED_MEMORY))
+            continue;
           const ex = c.injuries.find((i) => sameSpot(i.where, inj.where));
           if (!ex && isBareWound(inj.where) && c.injuries.length) {
             if (inj.treated)
@@ -5011,16 +5015,26 @@ class Folder {
             kind.treated ||= inj.treated;
             continue;
           }
+          const worst = ex ? ex.worst ?? ex.severity : 0;
+          const worse = !!ex && (inj.severity > worst || worseWord && inj.severity > ex.severity);
           if (ex)
-            Object.assign(ex, inj, { where: ex.where, since: ex.since, treated: inj.treated || ex.treated, severity: Math.max(ex.severity, inj.severity) });
+            Object.assign(ex, inj, { where: ex.where, since: ex.since, treated: inj.treated || ex.treated, severity: worse ? inj.severity : ex.severity, worst: Math.max(worst, inj.severity), stageAt: worse && now != null ? now : ex.stageAt });
           else
             this.newWounds.add(c.injuries[c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null }) - 1]);
           bits.push(`injury: ${inj.where}`);
-          if (inj.severity >= 3)
+          if (inj.severity >= 3 && (!ex || worse))
             this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
         }
         for (const h of a.heals)
-          c.injuries = c.injuries.filter((i) => !i.where.toLowerCase().includes(h.toLowerCase()));
+          c.injuries = c.injuries.filter((i) => {
+            if (!i.where.toLowerCase().includes(h.toLowerCase()))
+              return true;
+            if (now != null)
+              (c.healed ??= []).push({ where: i.where, worst: i.worst ?? i.severity, at: now });
+            return false;
+          });
+        if ((c.healed?.length ?? 0) > 8)
+          c.healed.splice(0, c.healed.length - 8);
         for (const b of a.boosts ?? []) {
           if (!a.meters[b.need])
             c.meters[b.need] = Math.min(c.meters[b.need] ?? 1, 1);
@@ -5683,6 +5697,7 @@ class Folder {
         if (look !== c.look)
           look ? c.look = look : delete c.look;
       }
+      this.heal(c, fromAbs0, toAbs);
       const present = c.tier === "spot" || c.tier === "peri" || c.isUser;
       if (!present)
         continue;
@@ -5740,20 +5755,34 @@ class Folder {
           acc.intox -= n * 90;
         }
       }
-      c.injuries = c.injuries.filter((inj) => {
-        if (!inj.since)
-          return true;
-        const age = toAbs - absMinutes(inj.since);
-        const heal = [0, 2 * MIN_PER_DAY, 14 * MIN_PER_DAY, 42 * MIN_PER_DAY, Infinity][inj.severity];
-        const speed = c.stamina?.heal ?? 1;
-        if (speed > 0 && age >= heal * (inj.treated ? 1 : 1.5) / speed) {
-          if (inj.severity >= 3 && !c.flags.includes(`scar: ${inj.where}`))
-            c.flags.push(`scar: ${inj.where}`);
-          return false;
-        }
-        return true;
-      });
     }
+  }
+  heal(c, fromAbs, toAbs) {
+    const speed = c.stamina?.heal ?? 1;
+    if (speed <= 0 || !c.injuries.length)
+      return;
+    c.injuries = c.injuries.filter((inj) => {
+      inj.worst ??= inj.severity;
+      inj.stageAt ??= inj.since ? absMinutes(inj.since) : fromAbs;
+      for (;; ) {
+        if (inj.severity === 4 && !inj.treated)
+          return true;
+        const slow = inj.severity >= 2 && BONE.test(`${inj.where} ${inj.note ?? ""}`) ? 3 : 1;
+        const need = HEAL_STAGE[inj.severity] * slow * (inj.treated ? 1 : 1.5) / speed;
+        if (toAbs - inj.stageAt < need)
+          return true;
+        inj.stageAt += need;
+        if (inj.severity === 1)
+          break;
+        inj.severity = inj.severity - 1;
+      }
+      if (inj.worst >= 3 && !c.flags.includes(`scar: ${inj.where}`))
+        c.flags.push(`scar: ${inj.where}`);
+      (c.healed ??= []).push({ where: inj.where, worst: inj.worst, at: inj.stageAt });
+      if (c.healed.length > 8)
+        c.healed.shift();
+      return false;
+    });
   }
 }
 function fadeLook(look, ageMin) {
@@ -5840,7 +5869,7 @@ function parseDue(raw, now) {
     return { at: { day: now.day, minute: 21 * 60 }, raw };
   return { trigger: raw, raw };
 }
-var CONFIDENCE, PIVOTAL, escapeRe2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), HUNGER_RATE = 360, THIRST_RATE = 300, FATIGUE_RATE = 300, OFF_PAGE = 180, LOOK_WET, LOOK_POSE, MEALS, DEPRIVED, ASLEEP_NOW, ELSEWHERE, LADDER_FALL, LADDER_FALL_HARD, LADDER_WARM, LASTING, isLasting = (f) => LASTING.test(f), FIXTURE, NOT_A_PERSON = "-", ON_PERSON, ALIAS_SHAPE, RELATION, GROUP_HEAD, CHAR_OPS, STOP3;
+var CONFIDENCE, PIVOTAL, escapeRe2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), HEAL_STAGE, HEALED_MEMORY, BONE, WORSE, HUNGER_RATE = 360, THIRST_RATE = 300, FATIGUE_RATE = 300, OFF_PAGE = 180, LOOK_WET, LOOK_POSE, MEALS, DEPRIVED, ASLEEP_NOW, ELSEWHERE, LADDER_FALL, LADDER_FALL_HARD, LADDER_WARM, LASTING, isLasting = (f) => LASTING.test(f), FIXTURE, NOT_A_PERSON = "-", ON_PERSON, ALIAS_SHAPE, RELATION, GROUP_HEAD, CHAR_OPS, STOP3;
 var init_state = __esm(() => {
   init_types();
   init_facts();
@@ -5862,6 +5891,10 @@ var init_state = __esm(() => {
     extractor: 0.6
   };
   PIVOTAL = /betray|rescu|saved|save[sd]? (her|his|their|my) life|kill|murder|unforgiv|sacrific|confess|abandon|attack|lied about|revealed|died|death|oath|marri|propos/i;
+  HEAL_STAGE = [0, 2 * MIN_PER_DAY, 3 * MIN_PER_DAY, 7 * MIN_PER_DAY, 7 * MIN_PER_DAY];
+  HEALED_MEMORY = 7 * MIN_PER_DAY;
+  BONE = /\b(?:fractur\w*|broken|break|cracked)\b/i;
+  WORSE = /\b(?:reopen\w*|worse\w*|torn open|tore open|infect\w*|re-?injur\w*|bleeding again|aggravat\w*|festering)\b/i;
   LOOK_WET = /\b(?:damp|wet|dripping|soaked|towel[- ]?dried|sweat(?:y|ing)?|flush(?:ed)?|steam(?:ing)?|tear[- ]?streaked|teary|breathless|out of breath|glistening|fresh from the (?:bath|shower|pool))\b/i;
   LOOK_POSE = /^(?:sitting|standing|lying|kneeling|leaning|curled|perched|straddling|wrapped|beneath|under|over|on top|inside|holding|pinned|(?:hands?|nails|forehead|head|arms?|legs?|thighs?|fingers?)\s+(?:on|in|around|against))\b|\b(?:inside (?:her|him)|over (?:her|him)|on (?:the )?(?:counter|bed|sofa|couch|floor|pillow))\b/i;
   MEALS = [8 * 60, 13 * 60, 19 * 60];
@@ -8166,7 +8199,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.27.0";
+var VERSION = "1.27.1";
 
 // src/core/render.ts
 function slotColor(slot) {
@@ -8200,7 +8233,7 @@ function card(c, state, colors, opts) {
   const held = carried(state, c.id).map((i) => i.name);
   const tags = [
     ...c.flags.slice(-4).map((f) => `<span class="alm-tag">${escapeHtml(f)}</span>`),
-    ...c.injuries.map((i) => `<span class="alm-tag${i.severity >= 3 || !i.treated ? " warn" : ""}">${escapeHtml(i.where)} \xB7 ${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? "" : " \xB7 untreated"}</span>`),
+    ...c.injuries.map((i) => `<span class="alm-tag${i.severity >= 3 || !i.treated ? " warn" : ""}">${escapeHtml(i.where)} \xB7 ${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? "" : " \xB7 untreated"}${i.severity < (i.worst ?? i.severity) ? " \xB7 healing" : ""}</span>`),
     ...held.slice(0, 3).map((h) => `<span class="alm-tag">holds: ${escapeHtml(h)}</span>`)
   ];
   const wrong = Object.values(state.facts ?? {}).filter((f) => !f.hidden && (f.stances[c.id]?.status === "wrong" || f.truth === "false" && ["knows", "believes"].includes(f.stances[c.id]?.status ?? ""))).slice(0, 1);
@@ -14646,7 +14679,7 @@ function capsule(c, state, opts) {
   if (flags.length)
     bits.push(flags.slice(-3).join(", "));
   if (c.injuries.length)
-    bits.push(c.injuries.map((i) => `${i.where} (${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? ", treated" : ""})`).join(", "));
+    bits.push(c.injuries.map((i) => `${i.where} (${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? ", treated" : ""}${i.severity < (i.worst ?? i.severity) ? ", healing" : ""})`).join(", "));
   if (opts.full && c.look)
     bits.push(`wearing: ${c.look}`);
   const held = carried(state, c.id).map((i) => i.name);

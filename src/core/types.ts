@@ -104,6 +104,10 @@ export interface Injury {
   treated: boolean;
   since: StoryTime | null;
   note?: string;
+  /** The worst it has been; while severity is lower, it is healing. */
+  worst?: 1 | 2 | 3 | 4;
+  /** When it last stepped down (absolute minutes): the next step counts from here. */
+  stageAt?: number;
 }
 
 export interface CharacterState {
@@ -146,6 +150,8 @@ export interface CharacterState {
   stamina?: import("./stamina").ResolvedStamina;
   /** A potion or stimulant holding a need off until this minute (absolute). */
   boost?: { hunger?: number; thirst?: number; fatigue?: number };
+  /** Wounds that healed lately (absolute minutes): the story restating one doesn't bring it back. */
+  healed?: { where: string; worst: number; at: number }[];
   pressure?: string; // hidden pressure (narrator-only)
   /**
    * What doesn't change from scene to scene: eyes, hair, build, scars, voice, age. One entry per

@@ -202,9 +202,37 @@ bond Kael>Master of the Order: fear +1 — the old vampire looked at him
       expect(fold({}, "body Mara: fatigue 1", "body Mara: drank a Pepper-Up potion", ...night.slice(0, 12)).meters.fatigue).toBe(2);
     });
     test("a Slayer's wounds close sooner", () => {
-      const hurt = ["body Mara: injury: left arm, wound, bandaged", "clock: → Day 7 18:00"];
+      const hurt = ["body Mara: injury: left arm, wound, bandaged", "clock: → Day 3 18:00"];
       expect(fold({}, ...hurt).injuries.length).toBe(1);
       expect(fold({ stamina: { mara: { kind: "slayer", by: "card" } } }, ...hurt).injuries.length).toBe(0);
+    });
+  });
+
+  describe("injuries recover", () => {
+    const fold = (...rs: string[]) => new LedgerRuntime().fold(toPath([msg(0, R1), ...rs.map((r, i) => msg(i + 1, `<ledger>\n${r}\n</ledger>`))]), OPTS).state.chars.mara;
+    test("a wound mends a step at a time and is gone within a week", () => {
+      const cut = "body Mara: injury: left arm, wound, bandaged";
+      expect(fold(cut, "clock: → Day 3 08:00").injuries[0]).toMatchObject({ severity: 2 });
+      expect(fold(cut, "clock: → Day 5 08:00").injuries[0]).toMatchObject({ severity: 1, worst: 2 });
+      expect(fold(cut, "clock: → Day 7 08:00").injuries.length).toBe(0);
+      // Untreated takes longer.
+      expect(fold("body Mara: injury: left arm, wound", "clock: → Day 7 08:00").injuries.length).toBe(1);
+    });
+    test("off the page too", () => {
+      const m = fold("body Mara: injury: left arm, wound, bandaged", "cast: here Kael", "clock: → Day 8 08:00");
+      expect(m.injuries.length).toBe(0);
+    });
+    test("restating it doesn't undo the mending or bring it back; reopening does", () => {
+      const cut = "body Mara: injury: left arm, wound, bandaged";
+      expect(fold(cut, "clock: → Day 5 08:00", cut).injuries[0].severity).toBe(1);
+      expect(fold(cut, "clock: → Day 7 08:00", cut).injuries.length).toBe(0);
+      expect(fold(cut, "clock: → Day 5 08:00", "body Mara: injury: left arm, wound, reopened").injuries[0].severity).toBe(2);
+    });
+    test("serious wounds leave a scar; a critical one nobody treats doesn't mend", () => {
+      const m = fold("body Mara: injury: chest, serious, stitched", "clock: → Day 20 08:00");
+      expect(m.injuries.length).toBe(0);
+      expect(m.flags).toContain("scar: chest");
+      expect(fold("body Mara: injury: chest, critical", "clock: → Day 20 08:00").injuries[0].severity).toBe(4);
     });
   });
 

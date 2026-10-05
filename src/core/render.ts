@@ -48,7 +48,7 @@ function card(c: CharacterState, state: WorldState, colors: Record<string, strin
   const held = carried(state, c.id).map((i) => i.name);
   const tags = [
     ...c.flags.slice(-4).map((f) => `<span class="alm-tag">${e(f)}</span>`),
-    ...c.injuries.map((i) => `<span class="alm-tag${i.severity >= 3 || !i.treated ? " warn" : ""}">${e(i.where)} · ${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? "" : " · untreated"}</span>`),
+    ...c.injuries.map((i) => `<span class="alm-tag${i.severity >= 3 || !i.treated ? " warn" : ""}">${e(i.where)} · ${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? "" : " · untreated"}${i.severity < (i.worst ?? i.severity) ? " · healing" : ""}</span>`),
     ...held.slice(0, 3).map((h) => `<span class="alm-tag">holds: ${e(h)}</span>`),
   ];
   // One thing they're wrong about: their own version if they have one.

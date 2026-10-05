@@ -101,7 +101,7 @@ export function capsule(c: CharacterState, state: WorldState, opts: { sealed: bo
   if (shown.length) bits.push(shown.join(", "));
   const flags = c.flags.filter((f) => !f.startsWith("scar"));
   if (flags.length) bits.push(flags.slice(-3).join(", "));
-  if (c.injuries.length) bits.push(c.injuries.map((i) => `${i.where} (${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? ", treated" : ""})`).join(", "));
+  if (c.injuries.length) bits.push(c.injuries.map((i) => `${i.where} (${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? ", treated" : ""}${i.severity < (i.worst ?? i.severity) ? ", healing" : ""})`).join(", "));
   if (opts.full && c.look) bits.push(`wearing: ${c.look}`);
   const held = carried(state, c.id).map((i) => i.name);
   if (opts.full && held.length) bits.push(`holds ${held.slice(0, 4).join(", ")}`);

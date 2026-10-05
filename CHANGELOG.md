@@ -4,6 +4,14 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.27.1 (2026-10-05)
+
+**Injuries recover on their own.** Wounds used to sit at full strength until a fixed day, and only healed while the person was in the scene.
+- **A step at a time:** critical → serious → wound → scratch → gone. A treated wound is a scratch after three days and gone after five; a scratch or bruise clears in two; a serious wound is a plain wound again after a week. Untreated takes half as long again, broken bones three times as long, and a Slayer, vampire or anyone else who heals fast is quicker, as before. A critical wound nobody treats doesn't mend. A serious wound leaves a scar.
+- **Off the page too:** someone who has left the scene keeps healing.
+- **The story can't undo it by repeating itself.** A body line restating "left arm, wound" doesn't push a mending wound back up, and doesn't bring back one that healed in the last week. Only a wound worse than it ever was, or words like "reopened", "infected" or "worse", sets it back.
+- The note and the cast tags say **healing** while a wound is mending.
+
 ## 1.27.0 (2026-10-04)
 
 **The Soundtrack picks songs whose lyrics fit the scene.** A mood search finds songs that sound right; now their words count too.

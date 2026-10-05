@@ -788,7 +788,11 @@ export class Folder {
           bits.push(f);
         }
         for (const f of a.unflags as string[]) c.flags = c.flags.filter((x) => x !== f && !x.startsWith(f));
+        const now = st.time ? absMinutes(st.time) : null;
         for (const inj of a.injuries as any[]) {
+          const worseWord = WORSE.test(`${inj.note ?? ""} ${inj.where}`);
+          // A wound that mended lately, restated from an old line, stays mended; "reopened" is it back.
+          if (!worseWord && now != null && c.healed?.some((h) => sameSpot(h.where, inj.where) && inj.severity <= h.worst && now - h.at < HEALED_MEMORY)) continue;
           // "feet cut" and "right foot" are one wound; a bare "wound" is the one they already have.
           const ex = c.injuries.find((i) => sameSpot(i.where, inj.where));
           if (!ex && isBareWound(inj.where) && c.injuries.length) {
@@ -802,12 +806,22 @@ export class Folder {
             continue;
           }
           // A later word on the same wound keeps it treated once it was (stitches loosening are still stitches).
-          if (ex) Object.assign(ex, inj, { where: ex.where, since: ex.since, treated: inj.treated || ex.treated, severity: Math.max(ex.severity, inj.severity) });
+          // Restating a mending wound at its old severity doesn't undo the mending: only worse than
+          // it ever was, or a word that it got worse, sets it back (and restarts the clock).
+          const worst = ex ? ex.worst ?? ex.severity : 0;
+          const worse = !!ex && (inj.severity > worst || (worseWord && inj.severity > ex.severity));
+          if (ex) Object.assign(ex, inj, { where: ex.where, since: ex.since, treated: inj.treated || ex.treated, severity: worse ? inj.severity : ex.severity, worst: Math.max(worst, inj.severity), stageAt: worse && now != null ? now : ex.stageAt });
           else this.newWounds.add(c.injuries[c.injuries.push({ ...inj, since: st.time ? { ...st.time } : null }) - 1]);
           bits.push(`injury: ${inj.where}`);
-          if (inj.severity >= 3) this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
+          if (inj.severity >= 3 && (!ex || worse)) this.milestone(mi, "injury", `${c.name}: ${inj.where} (${["", "scratch", "wound", "serious", "critical"][inj.severity]})`);
         }
-        for (const h of a.heals as string[]) c.injuries = c.injuries.filter((i) => !i.where.toLowerCase().includes(h.toLowerCase()));
+        for (const h of a.heals as string[])
+          c.injuries = c.injuries.filter((i) => {
+            if (!i.where.toLowerCase().includes(h.toLowerCase())) return true;
+            if (now != null) (c.healed ??= []).push({ where: i.where, worst: i.worst ?? i.severity, at: now });
+            return false;
+          });
+        if ((c.healed?.length ?? 0) > 8) c.healed!.splice(0, c.healed!.length - 8);
         // A stamina potion or a stimulant: the need drops now and holds off for a while.
         for (const b of (a.boosts ?? []) as { need: "hunger" | "thirst" | "fatigue"; hours: number }[]) {
           if (!a.meters[b.need]) c.meters[b.need] = Math.min(c.meters[b.need] ?? 1, 1);
@@ -1419,6 +1433,8 @@ export class Folder {
         const look = fadeLook(c.look, toAbs - absMinutes(c.lookAt));
         if (look !== c.look) look ? (c.look = look) : delete c.look;
       }
+      // Wounds mend whether or not they're on the page.
+      this.heal(c, fromAbs0, toAbs);
       const present = c.tier === "spot" || c.tier === "peri" || c.isUser;
       if (!present) continue;
       const m = c.meters;
@@ -1475,25 +1491,48 @@ export class Folder {
           acc.intox -= n * 90;
         }
       }
-      // Healing by elapsed time.
-      c.injuries = c.injuries.filter((inj) => {
-        if (!inj.since) return true;
-        const age = toAbs - absMinutes(inj.since);
-        const heal = [0, 2 * MIN_PER_DAY, 14 * MIN_PER_DAY, 42 * MIN_PER_DAY, Infinity][inj.severity];
-        const speed = c.stamina?.heal ?? 1;
-        if (speed > 0 && age >= (heal * (inj.treated ? 1 : 1.5)) / speed) {
-          if (inj.severity >= 3 && !c.flags.includes(`scar: ${inj.where}`)) c.flags.push(`scar: ${inj.where}`);
-          return false;
-        }
-        return true;
-      });
     }
+  }
+
+  /**
+   * Wounds mend with time, a step at a time: critical to serious to a wound to a scratch to
+   * gone. Untreated is slower; a critical wound nobody treats doesn't mend; broken bones take
+   * longer; a Slayer heals faster. A serious wound that closes leaves a scar.
+   */
+  private heal(c: CharacterState, fromAbs: number, toAbs: number) {
+    const speed = c.stamina?.heal ?? 1;
+    if (speed <= 0 || !c.injuries.length) return;
+    c.injuries = c.injuries.filter((inj) => {
+      inj.worst ??= inj.severity;
+      inj.stageAt ??= inj.since ? absMinutes(inj.since) : fromAbs;
+      for (;;) {
+        if (inj.severity === 4 && !inj.treated) return true;
+        const slow = inj.severity >= 2 && BONE.test(`${inj.where} ${inj.note ?? ""}`) ? 3 : 1;
+        const need = (HEAL_STAGE[inj.severity] * slow * (inj.treated ? 1 : 1.5)) / speed;
+        if (toAbs - inj.stageAt < need) return true;
+        inj.stageAt += need;
+        if (inj.severity === 1) break;
+        inj.severity = (inj.severity - 1) as 1 | 2 | 3;
+      }
+      if (inj.worst >= 3 && !c.flags.includes(`scar: ${inj.where}`)) c.flags.push(`scar: ${inj.where}`);
+      (c.healed ??= []).push({ where: inj.where, worst: inj.worst, at: inj.stageAt });
+      if (c.healed.length > 8) c.healed.shift();
+      return false;
+    });
   }
 }
 
 type ThreadOpName = "new" | "advance" | "complicate" | "bridge" | "resolve" | "stall";
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Story minutes for a wound to mend one step, by severity: a scratch is gone in two days, a treated wound in five, a serious one is a wound again in a week. */
+const HEAL_STAGE = [0, 2 * MIN_PER_DAY, 3 * MIN_PER_DAY, 7 * MIN_PER_DAY, 7 * MIN_PER_DAY];
+/** How long a mended wound stays mended against the story restating it. */
+const HEALED_MEMORY = 7 * MIN_PER_DAY;
+const BONE = /\b(?:fractur\w*|broken|break|cracked)\b/i;
+/** Words that mean a wound got worse, not that the story is restating it. */
+const WORSE = /\b(?:reopen\w*|worse\w*|torn open|tore open|infect\w*|re-?injur\w*|bleeding again|aggravat\w*|festering)\b/i;
 
 /** Minutes awake per step of hunger, thirst and fatigue: from rested and fed, "hungry" is about 13 hours without a meal. */
 const HUNGER_RATE = 360;
