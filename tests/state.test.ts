@@ -206,6 +206,30 @@ bond Kael>Master of the Order: fear +1 — the old vampire looked at him
       expect(fold({}, ...hurt).injuries.length).toBe(1);
       expect(fold({ stamina: { mara: { kind: "slayer", by: "card" } } }, ...hurt).injuries.length).toBe(0);
     });
+    test("needs, mood and wounds set by hand hold from their message, and the story moves them on", () => {
+      const body = [{ at: 1, meters: { hunger: 4, arousal: 3, fatigue: null }, mood: { name: "giddy", a: 5 }, injuries: [{ where: "ribs", was: "left arm", severity: 3 as const, treated: false }, { where: "cheek", severity: 1 as const, treated: true }] }];
+      const m = fold({ castEdits: { mara: { body } } }, "body Mara: injury: left arm, wound, bandaged");
+      expect(m.meters).toMatchObject({ hunger: 4, arousal: 3 });
+      expect(m.meters.fatigue).toBeUndefined();
+      expect(m.mood).toMatchObject({ name: "giddy", prev: "guarded", v: -1, a: 5 });
+      expect(m.injuries.map((i) => [i.where, i.severity, i.treated])).toEqual([["ribs", 3, false], ["cheek", 1, true]]);
+      // Not before its message; and later lines still move it.
+      expect(fold({ castEdits: { mara: { body: [{ ...body[0], at: 5 }] } } }, "body Mara: hunger 1").meters.hunger).toBe(1);
+      expect(fold({ castEdits: { mara: { body } } }, "clock: +1m", "body Mara: hunger 0").meters.hunger).toBe(0);
+    });
+    test("a wound taken away by hand stays away when an old line restates it; a lowered one isn't pushed back up", () => {
+      const gone = { castEdits: { mara: { body: [{ at: 1, injuries: [] }] } } };
+      expect(fold(gone, "body Mara: injury: left arm, wound", "body Mara: injury: left arm, wound").injuries).toEqual([]);
+      const better = { castEdits: { mara: { body: [{ at: 1, injuries: [{ where: "left arm", was: "left arm", severity: 1 as const, treated: true }] }] } } };
+      const m = fold(better, "body Mara: injury: left arm, serious", "body Mara: injury: left arm, serious");
+      expect(m.injuries[0]).toMatchObject({ severity: 1, worst: 3, treated: true });
+    });
+    test("an edit on the reply being regenerated holds while it is left out", () => {
+      const rt = new LedgerRuntime();
+      const path = toPath([msg(0, R1), msg(1, "go", true)]);
+      const m = rt.fold(path, { ...OPTS, castEdits: { mara: { body: [{ at: 2, meters: { hunger: 5 } }] } } }).state.chars.mara;
+      expect(m.meters.hunger).toBe(5);
+    });
   });
 
   describe("injuries recover", () => {

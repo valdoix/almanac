@@ -21,6 +21,12 @@ const RANK: Record<string, number> = { chapter: 1, arc: 2, volume: 3 };
 // Chronicle levels, matching the coverage bar.
 const LEVEL_COLOR: Record<string, string> = { volume: "#7b5bd6", arc: "var(--alm-accent-2)", chapter: "var(--alm-accent)" };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+// Meters the Cast editor always offers, beside any the story has given someone.
+const BODY_METERS = ["hunger", "thirst", "fatigue", "pain", "arousal", "intox"];
+const SEVERITY = ["", "scratch", "wound", "serious", "critical"];
+/** One wound in the Cast editor (a blank one when `i` is null). */
+const injuryRow = (i: any | null) =>
+  `<div class="almx-inj" data-was="${e(i?.where ?? "")}" style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:8px;border:1px solid var(--alm-line);border-radius:10px"><input type="text" class="injWhere" value="${e(i?.where ?? "")}" placeholder="where (left arm, ribs)" aria-label="Where"><select class="injSev" aria-label="How bad" style="width:auto">${[1, 2, 3, 4].map((n) => `<option value="${n}"${(i?.severity ?? 2) === n ? " selected" : ""}>${SEVERITY[n]}</option>`).join("")}</select><button type="button" class="btn sm ghost" data-act="injDel" title="Take this wound away (healed, or never there)" aria-label="Remove">✕</button><input type="text" class="injNote" value="${e(i?.note ?? "")}" placeholder="note (stitched, bruised)" aria-label="Note" style="grid-column:1 / 3"><label class="row" style="gap:4px;white-space:nowrap"><input type="checkbox" class="injTreated"${i?.treated ? " checked" : ""}>treated</label></div>`;
 // Codex kinds as sticker tones, and bond axes as bar colours.
 const KIND_COLOR: Record<string, Tone> = { person: "acc", place: "acc2", object: "warn", group: "good", law: "ghost", history: "", situation: "g", texture: "ghost", forecast: "acc2" };
 const AXIS_COLOR: Record<string, string> = {
@@ -371,7 +377,7 @@ ${mood.name ? `<div class="almx-em" style="margin-top:10px">${e(mood.name)}</div
       const journal = c.journal?.length ? `<div class="almx-quote" style="margin-top:14px"><div class="almx-lbl">In their own words</div>${c.journal.slice(-2).map((j: any) => `<p>“${e(j.text)}”</p>`).join("")}</div>` : "";
       const diary = this.diaryHtml(v, c);
       const pressure = c.isUser ? "" : `<div style="margin-top:14px"><div class="almx-lbl">Hidden pressure · narrator only</div><div class="row" style="margin-top:6px;flex-wrap:nowrap"><span class="spoiler grow almx-inset" tabindex="0">${e(c.pressure || "none drawn yet")}</span><button class="btn sm" data-act="editPressure" data-id="${e(c.id)}">Edit</button></div></div>`;
-      const actions = `<div class="row" style="margin-top:14px"><button class="btn sm" data-act="charEdit" data-id="${e(c.id)}" title="${c.isUser ? "Age and appearance" : "Name, age and appearance"}">${ic("pencil", "sm")}Edit</button><label class="btn sm" title="${c.isUser ? "Your persona's colour" : "Voice colour"}"><input type="color" class="swatch" data-color="${e(c.id)}" value="${e(toHex(c.color))}" aria-label="${e(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}" style="width:18px;height:18px">Colour</label><span class="grow"></span>${closable ? `<button class="btn sm ghost" data-act="castOpen" data-id="${e(c.id)}">Close</button>` : ""}${c.isUser ? "" : `<button class="btn sm" data-act="castToFaction" data-name="${e(c.name)}" title="A group the story mistook for a person: it leaves the cast and becomes a faction">${ic("flag", "sm")}A faction</button>`}${c.isUser ? "" : `<button class="btn sm danger" data-act="notPerson" data-name="${e(c.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button>`}</div>`;
+      const actions = `<div class="row" style="margin-top:14px"><button class="btn sm" data-act="charEdit" data-id="${e(c.id)}" title="${c.isUser ? "Age, appearance, mood, needs and wounds" : "Name, age, appearance, mood, needs and wounds"}">${ic("pencil", "sm")}Edit</button><label class="btn sm" title="${c.isUser ? "Your persona's colour" : "Voice colour"}"><input type="color" class="swatch" data-color="${e(c.id)}" value="${e(toHex(c.color))}" aria-label="${e(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}" style="width:18px;height:18px">Colour</label><span class="grow"></span>${closable ? `<button class="btn sm ghost" data-act="castOpen" data-id="${e(c.id)}">Close</button>` : ""}${c.isUser ? "" : `<button class="btn sm" data-act="castToFaction" data-name="${e(c.name)}" title="A group the story mistook for a person: it leaves the cast and becomes a faction">${ic("flag", "sm")}A faction</button>`}${c.isUser ? "" : `<button class="btn sm danger" data-act="notPerson" data-name="${e(c.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button>`}</div>`;
       return this.castCard(c, false, `${journal}${diary}${pressure}${this.mergeRow(v, c)}${actions}`);
     };
     const open = away.filter((c: any) => this.castOpen.has(c.id) || this.editingChar === c.id);
@@ -402,8 +408,61 @@ ${v.cast.length ? "" : `<div class="empty">No one has appeared yet.</div>`}${thi
 <label class="f">Always<textarea id="almCharAlways" placeholder="Eyes, hair, build, what people notice first">${e(c?.fixed ?? "")}</textarea></label>
 <p class="muted"><small>Always is sent with them every turn while they're present, and holds whatever the story writes. Change or delete anything in it; empty it to go back to what the card, the lore and the story say.</small></p>
 <label class="f">Rooms<input type="text" id="almCharRooms" value="${e((c?.roomsSet ?? []).join("; "))}" placeholder="Their own rooms and places, separated by ; (her former chambers; the cottage)"></label>
+${c ? this.bodyEditor(c) : ""}
 ${this.staminaEditor(c)}
 <div class="row" style="margin-top:10px"><button class="btn primary" data-act="charSave" data-id="${e(id)}">${c ? "Save" : "Add"}</button><button class="btn" data-act="charCancel">Cancel</button></div></div>`;
+  }
+
+  /** How they are now: needs and the like (0–5), mood, and wounds, each row editable. Only what changes is saved. */
+  bodyEditor(c: any): string {
+    const mood = c.mood ?? {};
+    const pick = (id: string, cur: number | null, from: number) =>
+      `<select id="${id}" data-was="${cur ?? ""}"><option value="">—</option>${[0, 1, 2, 3, 4, 5].filter((n) => n >= from).map((n) => `<option value="${n}"${cur === n ? " selected" : ""}>${n}</option>`).join("")}</select>`;
+    const keys = [...new Set([...BODY_METERS, ...Object.keys(c.meters ?? {})])];
+    const meters = keys.map((k) => `<label class="f">${e(cap(k))}${pick(`almBody_${k}`, c.meters?.[k] != null ? Math.round(Number(c.meters[k])) : null, 0)}</label>`).join("");
+    // Mood, energy and control show as 1–5 dots on the card; the same scale here.
+    const dial = (id: string, label: string, x: number | undefined, lo: number, hi: number) =>
+      `<label class="f">${label}${pick(id, x != null ? 1 + Math.round(((x - lo) / (hi - lo)) * 4) : null, 1)}</label>`;
+    return `<div class="almx-lbl" style="margin-top:12px">How they are now</div>
+<label class="f">Mood<input type="text" id="almBodyMood" value="${e(mood.name ?? "")}" data-was="${e(mood.name ?? "")}" placeholder="wary, giddy, wrung out…"></label>
+<div class="almx-g3">${dial("almBodyV", "Mood (low–high)", mood.v, -3, 3)}${dial("almBodyA", "Energy", mood.a, 0, 5)}${dial("almBodyD", "Control", mood.d, -3, 3)}</div>
+<div class="almx-g3">${meters}</div>
+<div class="almx-lbl" style="margin-top:8px">Wounds</div>
+<div id="almInjList" class="almx-stack" style="gap:6px">${(c.injuries ?? []).map((i: any) => injuryRow(i)).join("")}</div>
+<div class="row" style="margin-top:6px"><button class="btn sm" data-act="injAdd">${ic("plus", "sm")}Add a wound</button></div>
+<p class="muted"><small>Set from the latest message on; the story moves them on from there (hunger builds, wounds heal). 0 is none, 5 the most; — isn't tracked. A wound taken away counts as healed, so an old line saying it again doesn't bring it back.</small></p>`;
+  }
+
+  /** What the body editor changed, set at the latest message; null when nothing did. */
+  bodyEdit(c: any): any | null {
+    const q = (sel: string) => this.root.querySelector(sel) as HTMLInputElement | HTMLSelectElement | null;
+    const changed = (el: HTMLInputElement | HTMLSelectElement | null) => !!el && el.value.trim() !== (el.dataset.was ?? "");
+    const out: any = {};
+    const meters: Record<string, number | null> = {};
+    for (const k of [...new Set([...BODY_METERS, ...Object.keys(c.meters ?? {})])]) {
+      const el = q(`#almBody_${CSS.escape(k)}`);
+      if (changed(el)) meters[k] = el!.value === "" ? null : Number(el!.value);
+    }
+    if (Object.keys(meters).length) out.meters = meters;
+    // 1–5 dots back to the mood's own scales.
+    const mood: any = {};
+    const nameEl = q("#almBodyMood");
+    if (changed(nameEl) && nameEl!.value.trim()) mood.name = nameEl!.value.trim();
+    for (const [k, sel, lo, hi] of [["v", "#almBodyV", -3, 3], ["a", "#almBodyA", 0, 5], ["d", "#almBodyD", -3, 3]] as const) {
+      const el = q(sel);
+      if (changed(el) && el!.value !== "") mood[k] = Math.round((lo + ((Number(el!.value) - 1) / 4) * (hi - lo)) * 10) / 10;
+    }
+    if (Object.keys(mood).length) out.mood = mood;
+    const rows = [...this.root.querySelectorAll<HTMLElement>("#almInjList .almx-inj")].map((r) => {
+      const where = (r.querySelector(".injWhere") as HTMLInputElement).value.trim();
+      const note = (r.querySelector(".injNote") as HTMLInputElement).value.trim();
+      return { where, ...(r.dataset.was ? { was: r.dataset.was } : {}), severity: Number((r.querySelector(".injSev") as HTMLSelectElement).value), treated: (r.querySelector(".injTreated") as HTMLInputElement).checked, ...(note ? { note } : {}) };
+    }).filter((r) => r.where);
+    const before = (c.injuries ?? []) as any[];
+    const same = rows.length === before.length && rows.every((r, i) => r.was === before[i].where && r.where === before[i].where && r.severity === before[i].severity && r.treated === !!before[i].treated && (r.note ?? "") === (before[i].note ?? ""));
+    if (!same) out.injuries = rows;
+    if (!Object.keys(out).length) return null;
+    return { at: Math.max(0, (this.view?.counts?.messages ?? 1) - 1), ...out };
   }
 
   /** Stamina: a kind (Auto reads the card, persona, lore and story) and each speed of their own. */
@@ -1174,6 +1233,8 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
       case "charAdd": this.editingChar = "__new"; this.render(); break;
       case "charEdit": this.editingChar = this.editingChar === id ? null : id ?? null; this.render(); break;
       case "charCancel": this.editingChar = null; this.render(); break;
+      case "injAdd": this.root.querySelector("#almInjList")?.insertAdjacentHTML("beforeend", injuryRow(null)); break;
+      case "injDel": t.closest(".almx-inj")?.remove(); break;
       case "facAdd": this.editingFaction = "__new"; this.render(); break;
       case "facEdit": this.editingFaction = this.editingFaction === id ? null : id ?? null; this.render(); break;
       case "facCancel": this.editingFaction = null; this.render(); break;
@@ -1311,6 +1372,8 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
             next.always = always;
             next.appearance = "";
           }
+          const body = c ? this.bodyEdit(c) : null;
+          if (body) next.body = [...((next.body ?? []) as any[]), body].slice(-40);
           edits[id] = next;
         }
         this.editingChar = null;

@@ -5511,6 +5511,64 @@ class Folder {
       else
         c.stamina = s;
     }
+    this.applyBodyEdits(mi);
+  }
+  applyBodyEdits(mi, upTo = mi) {
+    const st = this.state;
+    for (const [id, e] of Object.entries(this.opts.castEdits ?? {})) {
+      const c = st.chars[id];
+      if (!c || !e.body?.length)
+        continue;
+      e.body.forEach((b, n) => {
+        const key = `${id}:${n}:${b.at}`;
+        if (b.at > upTo || st.bodyDone?.includes(key))
+          return;
+        (st.bodyDone ??= []).push(key);
+        this.setBody(c, b, mi);
+      });
+    }
+  }
+  setBody(c, b, mi) {
+    const st = this.state;
+    const now = st.time ? absMinutes(st.time) : null;
+    for (const [k, v] of Object.entries(b.meters ?? {})) {
+      if (v == null)
+        delete c.meters[k];
+      else
+        c.meters[k] = clamp(Math.round(v), 0, 5);
+    }
+    if (b.mood) {
+      const name = b.mood.name?.trim() || c.mood?.name || "";
+      const prev = name !== c.mood?.name ? c.mood?.name : c.mood?.prev;
+      c.mood = { name, v: b.mood.v ?? c.mood?.v, a: b.mood.a ?? c.mood?.a, d: b.mood.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null, msg: mi };
+    }
+    if (b.injuries) {
+      const next = [];
+      const used = new Set;
+      for (const w of b.injuries) {
+        const where = w.where.trim();
+        if (!where)
+          continue;
+        const was = (w.was ?? where).toLowerCase();
+        const ex = c.injuries.find((i) => !used.has(i) && i.where.toLowerCase() === was);
+        const severity = clamp(Math.round(w.severity), 1, 4);
+        const note = w.note?.trim() || undefined;
+        if (ex) {
+          used.add(ex);
+          const moved = severity !== ex.severity;
+          next.push({ ...ex, where, severity, treated: !!w.treated, note, worst: Math.max(ex.worst ?? ex.severity, severity), stageAt: moved && now != null ? now : ex.stageAt });
+        } else
+          next.push({ where, severity, treated: !!w.treated, note, since: st.time ? { ...st.time } : null, worst: severity, ...now != null ? { stageAt: now } : {} });
+      }
+      for (const i of c.injuries) {
+        if (used.has(i) || now == null)
+          continue;
+        (c.healed ??= []).push({ where: i.where, worst: i.worst ?? i.severity, at: now });
+        if (c.healed.length > 8)
+          c.healed.shift();
+      }
+      c.injuries = next;
+    }
   }
   ensureChar(id, name, msgIndex, isUser) {
     let c = this.state.chars[id];
@@ -7199,6 +7257,8 @@ class LedgerRuntime {
           this.snapshots.shift();
       }
     }
+    if (upTo === path.length && upTo > 0)
+      folder.applyBodyEdits(path[upTo - 1].index, path[upTo - 1].index + 1);
     return { state: folder.state, events, chain };
   }
   stateAt(path, msgId, opts, side = {}) {
@@ -8856,7 +8916,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.28.1";
+var VERSION = "1.29.0";
 
 // src/core/render.ts
 function slotColor(slot) {

@@ -4,7 +4,7 @@
 // caller: only messages on the active path (current swipes) are folded.
 
 import type {
-  BondAxis, BondState, CastEdit, CharacterState, EventSource, FactEdit, FactionEdit, FactionState, KnowRow, LedgerEvent, MessageDelta,
+  BodyEdit, BondAxis, BondState, CastEdit, CharacterState, EventSource, FactEdit, FactionEdit, FactionState, Injury, KnowRow, LedgerEvent, MessageDelta,
   ItemState, ParsedLedger, ParsedOp, SpokenLine, ThoughtState, Trait, WorldState,
 } from "./types";
 import { KNOW_OPS } from "./types";
@@ -279,6 +279,66 @@ export class Folder {
       const s = resolveStamina(c, this.opts.stamina, this.opts.castEdits?.[c.id]?.stamina);
       if (s.kind === "ordinary" && !s.custom) delete c.stamina;
       else c.stamina = s;
+    }
+    this.applyBodyEdits(mi);
+  }
+
+  /**
+   * Needs, mood and wounds set by hand on the Cast page, each once, at the first message at or
+   * past the one it was set at. `upTo` past the last folded message (a regenerate folds without
+   * the reply being replaced) lets an edit made on that reply hold for its new take too.
+   */
+  applyBodyEdits(mi: number, upTo = mi): void {
+    const st = this.state;
+    for (const [id, e] of Object.entries(this.opts.castEdits ?? {})) {
+      const c = st.chars[id];
+      if (!c || !e.body?.length) continue;
+      e.body.forEach((b, n) => {
+        const key = `${id}:${n}:${b.at}`;
+        if (b.at > upTo || st.bodyDone?.includes(key)) return;
+        (st.bodyDone ??= []).push(key);
+        this.setBody(c, b, mi);
+      });
+    }
+  }
+
+  private setBody(c: CharacterState, b: BodyEdit, mi: number): void {
+    const st = this.state;
+    const now = st.time ? absMinutes(st.time) : null;
+    for (const [k, v] of Object.entries(b.meters ?? {})) {
+      if (v == null) delete c.meters[k];
+      else c.meters[k] = clamp(Math.round(v), 0, 5);
+    }
+    if (b.mood) {
+      const name = b.mood.name?.trim() || c.mood?.name || "";
+      const prev = name !== c.mood?.name ? c.mood?.name : c.mood?.prev;
+      c.mood = { name, v: b.mood.v ?? c.mood?.v, a: b.mood.a ?? c.mood?.a, d: b.mood.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null, msg: mi };
+    }
+    if (b.injuries) {
+      const next: Injury[] = [];
+      const used = new Set<Injury>();
+      for (const w of b.injuries) {
+        const where = w.where.trim();
+        if (!where) continue;
+        const was = (w.was ?? where).toLowerCase();
+        const ex = c.injuries.find((i) => !used.has(i) && i.where.toLowerCase() === was);
+        const severity = clamp(Math.round(w.severity), 1, 4) as Injury["severity"];
+        const note = w.note?.trim() || undefined;
+        if (ex) {
+          used.add(ex);
+          // Worse or better by hand, the next step of healing counts from now; the worst it was stays,
+          // so the story restating the old wound doesn't push it back up.
+          const moved = severity !== ex.severity;
+          next.push({ ...ex, where, severity, treated: !!w.treated, note, worst: Math.max(ex.worst ?? ex.severity, severity) as Injury["severity"], stageAt: moved && now != null ? now : ex.stageAt });
+        } else next.push({ where, severity, treated: !!w.treated, note, since: st.time ? { ...st.time } : null, worst: severity, ...(now != null ? { stageAt: now } : {}) });
+      }
+      // A wound taken away is healed: the story restating it from an old line doesn't bring it back.
+      for (const i of c.injuries) {
+        if (used.has(i) || now == null) continue;
+        (c.healed ??= []).push({ where: i.where, worst: i.worst ?? i.severity, at: now });
+        if (c.healed.length > 8) c.healed.shift();
+      }
+      c.injuries = next;
     }
   }
 

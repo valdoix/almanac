@@ -207,6 +207,8 @@ export class LedgerRuntime {
         if (this.snapshots.length > 40) this.snapshots.shift();
       }
     }
+    // A hand edit made on the reply a regenerate is replacing holds for the new take too.
+    if (upTo === path.length && upTo > 0) folder.applyBodyEdits(path[upTo - 1].index, path[upTo - 1].index + 1);
     return { state: folder.state, events, chain };
   }
 

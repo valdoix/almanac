@@ -4,6 +4,10 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.29.0 (2026-10-06)
+
+**Needs, mood and wounds are editable.** The Cast page's **Edit** now has *How they are now*: the mood's name, its Mood, Energy and Control dots (1–5), and hunger, thirst, fatigue, pain, arousal, intox and any other meter the story keeps (0–5, or — for not tracked). Below them, each wound can be renamed, made worse or better, marked treated, given a note or taken away (✕), and **Add a wound** adds one. Only what you change is saved, and it holds from the latest message on: the story moves it on from there, so hunger still builds and wounds still heal. A wound you take away counts as healed, so an old line restating it doesn't bring it back, and one you make better isn't pushed back up by the story repeating how bad it was. An edit made on the last reply holds for its regenerated takes too.
+
 ## 1.28.1 (2026-10-06)
 
 **Long thoughts show in full.** Thoughts in the Now window's Unspoken tab were cut off at 600 characters, so long ones stopped mid-sentence. They are now kept up to 4,000 characters. In chat 5b751a70, Graham's 910-character thought and Shauna's 965-character thought now show in full.

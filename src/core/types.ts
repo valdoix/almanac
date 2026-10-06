@@ -514,6 +514,8 @@ export interface ThoughtState {
 }
 
 export interface WorldState {
+  /** Hand edits to someone's body already applied in this fold ("id:n:at"). */
+  bodyDone?: string[];
   time: StoryTime | null;
   weather: WeatherState | null;
   /** The season as the story last set it, for calendars whose seasons the story keeps (Westeros, Roshar). */
@@ -810,6 +812,20 @@ export interface CastEdit {
   stamina?: StaminaEdit;
   /** Their own rooms and places, in the player's words ("her former chambers in Maegor's Holdfast"). */
   rooms?: string[];
+  /** How they are, set by hand on the Cast page: each holds from its message on, and the story moves it on. */
+  body?: BodyEdit[];
+}
+
+/** The player's word on someone's needs, mood and wounds at one message. Only what was changed is here. */
+export interface BodyEdit {
+  /** The last message when it was set: it takes hold there. */
+  at: number;
+  /** Meters 0–5 (hunger, fatigue, arousal…); null takes one away. */
+  meters?: Record<string, number | null>;
+  /** The mood's name, and valence (−3…3), energy (0…5), control (−3…3). */
+  mood?: { name?: string; v?: number; a?: number; d?: number };
+  /** Their wounds as the player left them: this list replaces the one they had. `was` is the wound a row edits. */
+  injuries?: { where: string; was?: string; severity: 1 | 2 | 3 | 4; treated: boolean; note?: string }[];
 }
 
 /** The player's say on a faction. */
