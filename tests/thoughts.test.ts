@@ -53,6 +53,10 @@ test("the last reply's thoughts are kept; a sealed persona's are dropped unless 
   expect(later.thoughts?.msgIndex).toBe(2);
   expect(later.thoughts?.list[0]).toMatchObject({ name: "Mara", kind: "inline", text: "Let the rain take the blame for the wax." });
   expect(new LedgerRuntime().fold(toPath([msg(0, R1), msg(1, "I nod.", true)]), OPTS).state.thoughts?.msgIndex).toBe(0);
+  // A long thought is kept whole (chat 5b751a70 had ones of 900+ characters cut at 600).
+  const long = "I keep counting the exits. ".repeat(40).trim();
+  const kept = new LedgerRuntime().fold(toPath([msg(0, R1.replace("Too easy.", long).replace('who="Mara#1" cue="her thumb keeps finding the locket\'s clasp">If he opens that letter he\'ll know I read it first.', `who="Mara#1" cue="exits">${long}`))]), OPTS).state;
+  expect(kept.thoughts?.list[0].text).toBe(long);
 });
 
 test("what the last reply changed: bond moves with old and new value, mood, a due debt", () => {

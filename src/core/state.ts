@@ -455,7 +455,7 @@ export class Folder {
       if (id && id !== "user") this.state.chars[id].lastSeen = msgIndex;
       // A sealed persona's mind is the player's own unless the preset asked for persona thoughts.
       if (id === "user" && this.opts.sealed && !this.opts.personaThoughts) continue;
-      if (thoughts.length < 8) thoughts.push({ who: id ?? t.who, name: id ? this.nm(id) : t.who, cue: t.cue, text: t.text.slice(0, 600), kind: t.kind ?? "register" });
+      if (thoughts.length < 8) thoughts.push({ who: id ?? t.who, name: id ? this.nm(id) : t.who, cue: t.cue, text: t.text.slice(0, 4000), kind: t.kind ?? "register" });
     }
     if (!fromUser) st.thoughts = { msgIndex, list: thoughts };
     for (const v of parsed.vtks ?? []) {

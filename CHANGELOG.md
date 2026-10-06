@@ -4,6 +4,10 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.28.1 (2026-10-06)
+
+**Long thoughts show in full.** Thoughts in the Now window's Unspoken tab were cut off at 600 characters, so long ones stopped mid-sentence. They are now kept up to 4,000 characters. In chat 5b751a70, Graham's 910-character thought and Shauna's 965-character thought now show in full.
+
 ## 1.28.0 (2026-10-06)
 
 **Continuity you used to keep by hand.** Ten additions, each aimed at something corrected in long chats: day counts, eye colours, AU rules against canon, keepsakes, running jokes, and regenerations for spoilers and invented events.

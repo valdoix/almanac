@@ -5691,7 +5691,7 @@ class Folder {
       if (id === "user" && this.opts.sealed && !this.opts.personaThoughts)
         continue;
       if (thoughts.length < 8)
-        thoughts.push({ who: id ?? t.who, name: id ? this.nm(id) : t.who, cue: t.cue, text: t.text.slice(0, 600), kind: t.kind ?? "register" });
+        thoughts.push({ who: id ?? t.who, name: id ? this.nm(id) : t.who, cue: t.cue, text: t.text.slice(0, 4000), kind: t.kind ?? "register" });
     }
     if (!fromUser)
       st.thoughts = { msgIndex, list: thoughts };
@@ -8856,7 +8856,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.28.0";
+var VERSION = "1.28.1";
 
 // src/core/render.ts
 function slotColor(slot) {
