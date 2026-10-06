@@ -5542,6 +5542,14 @@ class Folder {
       const prev = name !== c.mood?.name ? c.mood?.name : c.mood?.prev;
       c.mood = { name, v: b.mood.v ?? c.mood?.v, a: b.mood.a ?? c.mood?.a, d: b.mood.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null, msg: mi };
     }
+    if (b.look != null) {
+      c.look = b.look.trim() || undefined;
+      c.lookAt = st.time ? { ...st.time } : null;
+      if (c.look)
+        c.lookByUser = mi;
+      else
+        delete c.lookByUser;
+    }
     if (b.injuries) {
       const next = [];
       const used = new Set;
@@ -8916,7 +8924,7 @@ var init_speakers2 = __esm(() => {
 });
 
 // src/core/version.ts
-var VERSION = "1.29.0";
+var VERSION = "1.29.1";
 
 // src/core/render.ts
 function slotColor(slot) {

@@ -425,6 +425,7 @@ ${this.staminaEditor(c)}
       `<label class="f">${label}${pick(id, x != null ? 1 + Math.round(((x - lo) / (hi - lo)) * 4) : null, 1)}</label>`;
     return `<div class="almx-lbl" style="margin-top:12px">How they are now</div>
 <label class="f">Mood<input type="text" id="almBodyMood" value="${e(mood.name ?? "")}" data-was="${e(mood.name ?? "")}" placeholder="wary, giddy, wrung out…"></label>
+<label class="f">Wearing, how they look now<textarea id="almBodyLook" data-was="${e(c.look ?? "")}" placeholder="Gabriel's old hoodie, hair still damp">${e(c.look ?? "")}</textarea></label>
 <div class="almx-g3">${dial("almBodyV", "Mood (low–high)", mood.v, -3, 3)}${dial("almBodyA", "Energy", mood.a, 0, 5)}${dial("almBodyD", "Control", mood.d, -3, 3)}</div>
 <div class="almx-g3">${meters}</div>
 <div class="almx-lbl" style="margin-top:8px">Wounds</div>
@@ -435,8 +436,8 @@ ${this.staminaEditor(c)}
 
   /** What the body editor changed, set at the latest message; null when nothing did. */
   bodyEdit(c: any): any | null {
-    const q = (sel: string) => this.root.querySelector(sel) as HTMLInputElement | HTMLSelectElement | null;
-    const changed = (el: HTMLInputElement | HTMLSelectElement | null) => !!el && el.value.trim() !== (el.dataset.was ?? "");
+    const q = (sel: string) => this.root.querySelector(sel) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
+    const changed = (el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null) => !!el && el.value.trim() !== (el.dataset.was ?? "");
     const out: any = {};
     const meters: Record<string, number | null> = {};
     for (const k of [...new Set([...BODY_METERS, ...Object.keys(c.meters ?? {})])]) {
@@ -453,6 +454,8 @@ ${this.staminaEditor(c)}
       if (changed(el) && el!.value !== "") mood[k] = Math.round((lo + ((Number(el!.value) - 1) / 4) * (hi - lo)) * 10) / 10;
     }
     if (Object.keys(mood).length) out.mood = mood;
+    const lookEl = q("#almBodyLook");
+    if (changed(lookEl)) out.look = lookEl!.value.trim();
     const rows = [...this.root.querySelectorAll<HTMLElement>("#almInjList .almx-inj")].map((r) => {
       const where = (r.querySelector(".injWhere") as HTMLInputElement).value.trim();
       const note = (r.querySelector(".injNote") as HTMLInputElement).value.trim();

@@ -4,6 +4,10 @@ Extension versions (`spindle.json`), with the preset version where it changed. U
 extension with **Update** in Lumiverse's Extensions panel; re-import `preset/ALMANAC.json` when
 the preset version moves.
 
+## 1.29.1 (2026-10-06)
+
+**What they're wearing is editable too.** The Cast editor's *How they are now* has **Wearing, how they look now**. What you write there is your word, as if you'd said "she's wearing…" in a message: the next reply can't swap it, and a later reply that changes clothes still does. Empty it to take it away.
+
 ## 1.29.0 (2026-10-06)
 
 **Needs, mood and wounds are editable.** The Cast page's **Edit** now has *How they are now*: the mood's name, its Mood, Energy and Control dots (1–5), and hunger, thirst, fatigue, pain, arousal, intox and any other meter the story keeps (0–5, or — for not tracked). Below them, each wound can be renamed, made worse or better, marked treated, given a note or taken away (✕), and **Add a wound** adds one. Only what you change is saved, and it holds from the latest message on: the story moves it on from there, so hunger still builds and wounds still heal. A wound you take away counts as healed, so an old line restating it doesn't bring it back, and one you make better isn't pushed back up by the story repeating how bad it was. An edit made on the last reply holds for its regenerated takes too.

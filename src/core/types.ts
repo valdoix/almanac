@@ -824,6 +824,8 @@ export interface BodyEdit {
   meters?: Record<string, number | null>;
   /** The mood's name, and valence (−3…3), energy (0…5), control (−3…3). */
   mood?: { name?: string; v?: number; a?: number; d?: number };
+  /** What they're wearing and how they look right now ("" takes it away). */
+  look?: string;
   /** Their wounds as the player left them: this list replaces the one they had. `was` is the wound a row edits. */
   injuries?: { where: string; was?: string; severity: 1 | 2 | 3 | 4; treated: boolean; note?: string }[];
 }

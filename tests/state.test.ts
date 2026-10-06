@@ -217,6 +217,13 @@ bond Kael>Master of the Order: fear +1 — the old vampire looked at him
       expect(fold({ castEdits: { mara: { body: [{ ...body[0], at: 5 }] } } }, "body Mara: hunger 1").meters.hunger).toBe(1);
       expect(fold({ castEdits: { mara: { body } } }, "clock: +1m", "body Mara: hunger 0").meters.hunger).toBe(0);
     });
+    test("what they wear, set by hand, stands against the next reply and changes with a later one", () => {
+      const look = { castEdits: { mara: { body: [{ at: 1, look: "green pajamas" }] } } };
+      expect(fold(look, "clock: +1m").look).toBe("green pajamas");
+      expect(fold(look, "clock: +1m", "look Mara: blue dress").look).toBe("green pajamas");
+      expect(fold(look, "clock: +1m", "clock: +1m", "look Mara: blue dress").look).toBe("blue dress");
+      expect(fold({ castEdits: { mara: { body: [{ at: 1, look: "" }] } } }, "look Mara: cloak").look).toBeUndefined();
+    });
     test("a wound taken away by hand stays away when an old line restates it; a lowered one isn't pushed back up", () => {
       const gone = { castEdits: { mara: { body: [{ at: 1, injuries: [] }] } } };
       expect(fold(gone, "body Mara: injury: left arm, wound", "body Mara: injury: left arm, wound").injuries).toEqual([]);

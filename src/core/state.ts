@@ -314,6 +314,13 @@ export class Folder {
       const prev = name !== c.mood?.name ? c.mood?.name : c.mood?.prev;
       c.mood = { name, v: b.mood.v ?? c.mood?.v, a: b.mood.a ?? c.mood?.a, d: b.mood.d ?? c.mood?.d, prev, at: st.time ? { ...st.time } : null, msg: mi };
     }
+    // The player's word on what they wear: the next reply can't swap it, as with "she's wearing" in a message.
+    if (b.look != null) {
+      c.look = b.look.trim() || undefined;
+      c.lookAt = st.time ? { ...st.time } : null;
+      if (c.look) c.lookByUser = mi;
+      else delete c.lookByUser;
+    }
     if (b.injuries) {
       const next: Injury[] = [];
       const used = new Set<Injury>();
