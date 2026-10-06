@@ -5,6 +5,8 @@
 
 import type { ParsedOp } from "./types";
 import { traitsStated } from "./traits";
+import { recurringAside } from "./recurring";
+import { hash } from "./util";
 
 export interface PlayerCtx {
   /** Names the story knows (the player's persona included). */
@@ -148,6 +150,12 @@ export function playerOps(text: string, ctx: PlayerCtx): ParsedOp[] {
   for (const [who, { text: look, add }] of wears) ops.push({ op: "look", subject: who, args: { text: look, ...(add ? { add } : {}) }, raw: `(you said) look ${who}: ${add ? "+ " : ""}${look}` });
   // Pinned lines in an aside: ((truth: …)) · ((canon: …)) · ((bit: …))
   for (const a of asides(text)) {
+    // ((birthday: Buffy, 19 January)), ((every Friday: patrol night)): a day that comes round again.
+    const day = recurringAside(a);
+    if (day) {
+      ops.push({ op: "recur", args: day, raw: `(you said) ${a.trim()}` });
+      continue;
+    }
     const m = /^\s*(truth|canon|fact|bit|motif|running joke)\s*:\s*(.{3,300})$/i.exec(a.trim());
     if (!m) continue;
     const kind = m[1].toLowerCase();
@@ -155,4 +163,27 @@ export function playerOps(text: string, ctx: PlayerCtx): ParsedOp[] {
     else ops.push({ op: "canon", args: { text: m[2].trim(), pinned: kind === "truth" }, raw: `(you said) ${a.trim()}` });
   }
   return ops;
+}
+
+/** The key the player's undo goes by: the message, its swipe and the line. */
+export function filedKey(msgId: string, swipe: number, raw: string): string {
+  return `${msgId}:${swipe}:${hash(raw)}`;
+}
+
+/** A line read from the player's message, as the inbox says it: "day 26", "Daeron: violet eyes", "truth: …". */
+export function filedLine(op: ParsedOp, nm: (name: string) => string = (x) => x): string {
+  const a = op.args ?? {};
+  const hm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  switch (op.op) {
+    case "clock":
+      if (a.kind === "rel") return `the clock moves on ${a.minutes >= 1440 ? `${Math.round(a.minutes / 1440)} day(s)` : a.minutes >= 60 ? `${Math.round(a.minutes / 60)} hour(s)` : `${a.minutes} minutes`}`;
+      return [a.day != null ? `day ${a.day}` : "", a.minute != null && !(a.keepMinute && a.day != null && !/\d[:.]\d|[ap]\.?m/i.test(op.raw)) ? hm(a.minute) : ""].filter(Boolean).join(", ") || "the clock";
+    case "trait": return `${nm(op.subject ?? "")}: ${((a.traits ?? []) as { text: string }[]).map((t) => t.text).join(", ")}`;
+    case "look": return `${nm(op.subject ?? "")} ${a.add ? "also wears" : "wears"} ${a.text}`;
+    case "canon": return `${a.pinned ? "truth" : "canon"}: ${a.text}`;
+    case "motif": return `running bit: ${a.text}`;
+    case "recur": return `${a.name}: ${a.when}`;
+    case "item": return op.raw.replace(/^\(you said\)\s*/, "").replace(/^item\s+/i, "").replace(/\s+—\s+the player said$/i, "");
+    default: return op.raw.replace(/^\(you said\)\s*/, "");
+  }
 }

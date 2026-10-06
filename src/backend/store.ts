@@ -85,6 +85,8 @@ export interface LoreBookState {
 }
 
 import type { CheckIssue } from "../core/audit";
+import type { Lesson } from "../core/autopsy";
+import type { JournalEntry } from "../core/journals";
 export type { CheckIssue };
 
 export interface ChatMeta {
@@ -139,6 +141,14 @@ export interface ChatMeta {
   charterMiss?: number;
   /** Recent background failures, newest first (shown in the drawer). */
   problems?: Problem[];
+  /** Lessons from swipes the player set aside: offered, kept or dismissed (core/autopsy). */
+  lessons?: Lesson[];
+  /** Replies whose swipes were compared (msgId → the kept swipe and the swipes' hash). */
+  autopsied?: Record<string, string>;
+  /** Diary entries, by character id (core/journals). */
+  journals?: Record<string, JournalEntry[]>;
+  /** The suggested canon list is being written. */
+  cutoffBusy?: boolean;
 }
 
 export function emptyMeta(): ChatMeta {

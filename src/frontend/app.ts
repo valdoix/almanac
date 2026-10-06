@@ -168,9 +168,21 @@ export class AlmanacApp {
   }
 
   setView(v: any) {
+    // New lines read from the player's latest message: say what was filed (Undo is on Now).
+    const rows = ((v?.filed?.latest ?? []) as any[]).filter((r) => r.ok);
+    const sig = rows.map((r) => r.key).join("|");
+    if (v?.chatId && sig && this.filedSeen[v.chatId] !== sig) {
+      // The first view of a chat shows what's already there; only what's filed after it is news.
+      const first = this.filedSeen[v.chatId] === undefined;
+      this.filedSeen[v.chatId] = sig;
+      if (!first) this.notice = { tone: "info", text: `Filed from your message: ${rows.map((r) => r.line).join(" · ")}. Undo it on the Now page if that's wrong.`, at: Date.now() };
+    }
     this.view = v;
     this.render();
   }
+
+  /** The last lines filed from the player's message that a notice has shown, per chat. */
+  filedSeen: Record<string, string> = {};
 
   seenSet(): Set<string> {
     return new Set(this.view?.chatId ? this.engineSeen[this.view.chatId] ?? [] : []);
@@ -273,9 +285,10 @@ export class AlmanacApp {
       : "";
     const owed = v.world.cons.filter((c: any) => c.status === "open" || c.status === "due").slice(-8);
     const owedHtml = owed.length
-      ? `${sec("Owed and due", owed.length)}<div class="card almx-rows" style="padding:2px 16px">${owed.map((c: any) => `<div class="almx-row">${medal(c.whoName, this.colorOf(v, c.whoName), "sm")}<div class="grow"><b>${e(c.whoName)}${c.whomName ? ` → ${e(c.whomName)}` : ""}</b><div class="muted" style="font-size:13.5px">${e(c.what)}${c.dueText ? ` · by ${e(c.dueText)}` : ""}</div></div>${c.status === "due" ? stk("due", "bad") : stk("open", "ghost")}</div>`).join("")}</div>`
+      ? `${sec("Owed, promised and due", owed.length)}<div class="card almx-rows" style="padding:2px 16px">${owed.map((c: any) => this.owedRow(v, c)).join("")}</div>`
       : "";
-    return `<div class="almx-g2">${tiles.join("")}</div>
+    return `${this.filedCard(v)}<div class="almx-g2">${tiles.join("")}</div>
+${v.recurring?.today ? `<div class="almx-callout" style="margin:10px 0 0">${ic("cal")}<div>${e(v.recurring.today)}</div></div>` : ""}
 ${forecast}
 ${sec("In the room", present.length || null, "", `<a href="#" data-page="cast" style="color:inherit">whole cast</a>`)}
 ${present.length ? `<div class="almx-stack">${present.map((c: any) => this.castCard(c, true)).join("")}</div>` : `<div class="empty">No one else is here.</div>`}
@@ -285,6 +298,23 @@ ${v.note ? `<div class="card almx-hear"><pre>${e(v.note)}</pre></div>` : `<div c
 ${v.recall ? `<details class="card tight"><summary class="muted">Recall block</summary><pre>${e(v.recall)}</pre></details>` : ""}
 <div class="almx-g3" style="margin-top:16px"><button class="btn tile" data-act="sessionZero">${ic("dice")}Session Zero</button><button class="btn tile" data-act="repairLast">${ic("bandage")}Repair last ledger</button><button class="btn tile" data-act="rebuild">${ic("loop")}Rebuild from chat</button></div>
 <div class="almx-stats"><span>${v.counts.messages} messages</span><span>${v.counts.ledgers} ledgers</span><span>${v.counts.chapters} chapters</span>${v.counts.unverified ? `<b style="color:var(--alm-warn)">${v.counts.unverified} unverified turns</b>` : ""}</div>`;
+  }
+
+  /** A debt or a promise: who, to whom, what, when; a promise can be marked kept or broken, or taken away. */
+  owedRow(v: any, c: any): string {
+    const p = c.promise;
+    const tag = c.status === "due" ? stk(p ? "due now" : "due", "bad") : c.status === "paid" ? stk(p ? "kept" : "paid", "good") : c.status === "broken" ? stk("broken", "bad") : stk(p ? "promised" : "open", "ghost");
+    const when = p ? `${c.dueText}${c.leftText ? ` · ${c.leftText}` : ""}` : c.dueText ? `by ${c.dueText}` : "";
+    const btns = p ? `<div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" data-act="promise" data-id="${e(c.id)}" data-what="kept" title="It was kept">${ic("check", "sm")}Kept</button><button class="btn sm" data-act="promise" data-id="${e(c.id)}" data-what="broken" title="It was broken">Broken</button><button class="btn sm ghost" data-act="promise" data-id="${e(c.id)}" data-what="dropped" title="It wasn't a promise">Not a promise</button>${c.edit ? `<button class="btn sm ghost" data-act="promise" data-id="${e(c.id)}" data-what="" title="Let the story decide again">Undo</button>` : ""}</div>` : "";
+    return `<div><div class="almx-row">${medal(c.whoName, this.colorOf(v, c.whoName), "sm")}<div class="grow"><b>${e(c.whoName)}${c.whomName ? ` → ${e(c.whomName)}` : ""}</b><div class="muted" style="font-size:13.5px">${e(c.what)}${when ? ` · ${e(when)}` : ""}</div>${p?.said ? `<small class="muted" style="display:block">“${e(p.said)}”</small>` : ""}</div>${tag}</div>${btns}</div>`;
+  }
+
+  /** What the Almanac read from the player's last message, each line with Undo. */
+  filedCard(v: any): string {
+    const rows = (v.filed?.latest ?? []) as any[];
+    if (!rows.length) return "";
+    return `<div class="card flat almx-filed" style="margin-bottom:12px"><div class="almx-row"><b class="grow">Filed from your message</b><small class="muted">message ${v.filed.msg + 1}</small></div>
+<div class="almx-stack" style="gap:6px;margin-top:8px">${rows.map((r) => `<div class="almx-row" style="font-size:14px">${r.ok ? `<span style="color:var(--alm-good)">${ic("check", "sm")}</span>` : ic("warn", "sm")}<span class="grow">${e(r.line)}${!r.ok && r.reason ? ` <small class="muted">— not filed: ${e(r.reason)}</small>` : ""}</span>${r.ok ? `<button class="btn sm ghost" data-act="undoFact" data-key="${e(r.key)}" data-line="${e(r.line)}" title="The Almanac misread this: take it back">Undo</button>` : ""}</div>`).join("")}</div></div>`;
   }
 
   /** Someone's colour, found by name or alias. */
@@ -306,7 +336,8 @@ ${v.recall ? `<details class="card tight"><summary class="muted">Recall block</s
       ...Object.entries(c.meters ?? {}).filter(([, x]) => x != null).map(([k, x]) => [cap(k), Number(x)]),
     ].filter(Boolean) as [string, number][];
     const meterHtml = meters.length ? `<div class="almx-g3" style="margin-top:12px">${meters.map(([k, x]) => `<div class="almx-meter">${e(k)}${dots(x)}</div>`).join("")}</div>` : "";
-    const tags = [...(c.flags ?? []).slice(-4).map((f: string) => `<span class="alm-tag">${e(f)}</span>`), ...(c.injuries ?? []).map((i: any) => `<span class="alm-tag warn">${e(i.where)}</span>`), ...(c.held ?? []).slice(0, 3).map((h: string) => `<span class="alm-tag">holds: ${e(h)}</span>`)];
+    const ill = (c.conditions ?? []) as string[];
+    const tags = [...ill.map((x) => `<span class="alm-tag warn" title="Runs its course on the story clock">${e(x)}</span>`), ...(c.flags ?? []).filter((f: string) => !ill.length || !ill.some((x) => x.toLowerCase().includes(f.toLowerCase().split(/\s+/)[0]))).slice(-4).map((f: string) => `<span class="alm-tag">${e(f)}</span>`), ...(c.injuries ?? []).map((i: any) => `<span class="alm-tag warn">${e(i.where)}</span>`), ...(c.held ?? []).slice(0, 3).map((h: string) => `<span class="alm-tag">holds: ${e(h)}</span>`)];
     const rows = [
       c.fixed ? `<b title="Sent to the model every turn while they're present. Edit them to change it">Always</b><span>${e(c.fixed)} ${ic("lock", "sm")}</span>` : "",
       c.stamina?.words ? `<b title="How fast their hunger, thirst and tiredness build, and how fast they heal. Edit them to change it">Stamina</b><span>${e(c.stamina.words)}${c.stamina.by && c.stamina.by !== "user" ? ` <small class="muted">from the ${c.stamina.by === "card" ? (c.isUser ? "persona" : "card") : c.stamina.by}</small>` : ""}</span>` : "",
@@ -315,6 +346,8 @@ ${v.recall ? `<details class="card tight"><summary class="muted">Recall block</s
       !compact && c.appearance ? `<b>Looks</b><span>${e(c.appearance)}</span>` : "",
       !compact && c.look ? `<b>Wearing</b><span>${e(c.look)}</span>` : "",
       !compact && c.place ? `<b>Where</b><span>${e(c.place)}</span>` : "",
+      !compact && c.rooms?.length ? `<b title="Their own rooms and places: in one, the note mentions what they keep there">Rooms</b><span>${e(c.rooms.join(" · "))}</span>` : "",
+      !compact && c.belongings?.length ? `<b title="What's theirs, carried or put away, and where it is">Belongings</b><span>${c.belongings.map((b: any) => `${e(b.name)}${b.where ? ` <small class="muted">(${e(b.where)})</small>` : ""}`).join(" · ")}</span>` : "",
     ].filter(Boolean).join("");
     const kv = rows ? `<div class="kv" style="margin-top:12px">${rows}</div>` : "";
     const tagHtml = tags.length ? `<div class="alm-tags">${tags.join("")}</div>` : "";
@@ -336,15 +369,27 @@ ${mood.name ? `<div class="almx-em" style="margin-top:10px">${e(mood.name)}</div
     const full = (c: any, closable: boolean) => {
       if (this.editingChar === c.id) return `<div class="card almx-pcs"><div class="almx-row" style="margin-bottom:10px">${medal(c.name, c.color, "sm")}<b class="grow">${e(c.name)}</b></div>${this.charEditor(c)}</div>`;
       const journal = c.journal?.length ? `<div class="almx-quote" style="margin-top:14px"><div class="almx-lbl">In their own words</div>${c.journal.slice(-2).map((j: any) => `<p>“${e(j.text)}”</p>`).join("")}</div>` : "";
+      const diary = this.diaryHtml(v, c);
       const pressure = c.isUser ? "" : `<div style="margin-top:14px"><div class="almx-lbl">Hidden pressure · narrator only</div><div class="row" style="margin-top:6px;flex-wrap:nowrap"><span class="spoiler grow almx-inset" tabindex="0">${e(c.pressure || "none drawn yet")}</span><button class="btn sm" data-act="editPressure" data-id="${e(c.id)}">Edit</button></div></div>`;
       const actions = `<div class="row" style="margin-top:14px"><button class="btn sm" data-act="charEdit" data-id="${e(c.id)}" title="${c.isUser ? "Age and appearance" : "Name, age and appearance"}">${ic("pencil", "sm")}Edit</button><label class="btn sm" title="${c.isUser ? "Your persona's colour" : "Voice colour"}"><input type="color" class="swatch" data-color="${e(c.id)}" value="${e(toHex(c.color))}" aria-label="${e(c.isUser ? "Your persona's colour" : `${c.name}'s colour`)}" style="width:18px;height:18px">Colour</label><span class="grow"></span>${closable ? `<button class="btn sm ghost" data-act="castOpen" data-id="${e(c.id)}">Close</button>` : ""}${c.isUser ? "" : `<button class="btn sm" data-act="castToFaction" data-name="${e(c.name)}" title="A group the story mistook for a person: it leaves the cast and becomes a faction">${ic("flag", "sm")}A faction</button>`}${c.isUser ? "" : `<button class="btn sm danger" data-act="notPerson" data-name="${e(c.name)}" title="For a force, spell, place or thing the story mistook for a character. Lines about it stop creating a character; you can restore it below.">Not a person — remove</button>`}</div>`;
-      return this.castCard(c, false, `${journal}${pressure}${this.mergeRow(v, c)}${actions}`);
+      return this.castCard(c, false, `${journal}${diary}${pressure}${this.mergeRow(v, c)}${actions}`);
     };
     const open = away.filter((c: any) => this.castOpen.has(c.id) || this.editingChar === c.id);
     const rows = away.filter((c: any) => !open.includes(c)).map((c: any) => `<button type="button" class="almx-away" data-act="castOpen" data-id="${e(c.id)}">${medal(c.name, c.color, "sm", !!c.dead)}<span class="grow"><b>${e(c.name)}</b><small>${e([c.dead ? "dead" : c.place, c.mood?.name].filter(Boolean).join(" · ") || "away")}</small></span>${arcs.has(c.name.toLowerCase()) ? stk("subplot", "acc2") : ""}${ic("right", "sm")}</button>`).join("");
     return `${add}${here.length ? `<div class="almx-stack">${here.map((c: any) => full(c, false)).join("")}</div>` : ""}
 ${away.length ? `${sec("Away", away.length, "tap to open")}${open.map((c: any) => full(c, true)).join("")}${rows ? `<div class="card" style="padding:2px 14px">${rows}</div>` : ""}` : ""}
 ${v.cast.length ? "" : `<div class="empty">No one has appeared yet.</div>`}${this.removedRow(v)}`;
+  }
+
+  /** Their diary: the latest entry open, the older ones folded; "Write now" for the day just gone. */
+  diaryHtml(v: any, c: any): string {
+    const list = (c.diary ?? []) as any[];
+    const sealed = c.isUser && v.detected?.sealed !== false;
+    if (sealed) return "";
+    const head = `<div class="almx-row" style="margin-top:14px"><div class="almx-lbl grow">${ic("book", "sm")}Diary</div><button class="btn sm ghost" data-act="journalNow" data-id="${e(c.id)}" title="Write their entry for the day just gone (a quiet model call)">${ic("quill", "sm")}Write now</button></div>`;
+    if (!list.length) return v.settings?.journals === false ? "" : `${head}<p class="muted" style="margin:4px 0 0"><small>They write after a night's sleep when they carried the day.</small></p>`;
+    const [latest, ...older] = list;
+    return `${head}<div class="almx-quote almx-diary"><small class="muted">Day ${e(String(latest.day))}</small><p>${e(latest.text).replace(/\n+/g, "</p><p>")}</p></div>${older.length ? `<details style="margin-top:6px"><summary class="muted">Earlier entries (${older.length})</summary>${older.map((j) => `<div class="almx-quote almx-diary"><small class="muted">Day ${e(String(j.day))}</small><p>${e(j.text).replace(/\n+/g, "</p><p>")}</p></div>`).join("")}</details>` : ""}`;
   }
 
   /** Name, age and appearance (a new person when `c` is null). The persona's name comes from Lumiverse. */
@@ -356,6 +401,7 @@ ${v.cast.length ? "" : `<div class="empty">No one has appeared yet.</div>`}${thi
 <label class="f">Also called<input type="text" id="almCharAliases" value="${e((c?.aliases ?? []).join("; "))}" placeholder="Other names they go by, separated by ;"></label>
 <label class="f">Always<textarea id="almCharAlways" placeholder="Eyes, hair, build, what people notice first">${e(c?.fixed ?? "")}</textarea></label>
 <p class="muted"><small>Always is sent with them every turn while they're present, and holds whatever the story writes. Change or delete anything in it; empty it to go back to what the card, the lore and the story say.</small></p>
+<label class="f">Rooms<input type="text" id="almCharRooms" value="${e((c?.roomsSet ?? []).join("; "))}" placeholder="Their own rooms and places, separated by ; (her former chambers; the cottage)"></label>
 ${this.staminaEditor(c)}
 <div class="row" style="margin-top:10px"><button class="btn primary" data-act="charSave" data-id="${e(id)}">${c ? "Save" : "Add"}</button><button class="btn" data-act="charCancel">Cancel</button></div></div>`;
   }
@@ -494,7 +540,16 @@ ${kept}
     const person = who ? this.personKnowledge(v, who) : "";
     const hiddenHtml = hidden.length ? `${sec("Deleted", hidden.length, "gone from the page and the note")}<div class="row">${hidden.map((h: any) => `<span class="pill">${e(h.statement)} <button class="btn sm ghost" data-act="factRestore" data-id="${e(h.key)}" style="min-height:24px;padding:0 6px">restore</button></span>`).join("")}</div>` : "";
     const empty = this.factKind === "play" ? "No secrets or beliefs in play. <b>Shared</b> and <b>Noted</b> hold the rest." : "Nothing matches.";
-    return `${clerk}${ironyHtml}${filters}${search}${person}${adding}<div class="list">${cards || `<div class="empty">${empty}</div>`}</div>${hiddenHtml}`;
+    return `${clerk}${ironyHtml}${this.secretsHtml(v)}${filters}${search}${person}${adding}<div class="list">${cards || `<div class="empty">${empty}</div>`}</div>${hiddenHtml}`;
+  }
+
+  /** Secrets kept from someone: an exposure clock each, and who is closest to finding out, and how. */
+  secretsHtml(v: any): string {
+    const list = ((v.secrets ?? []) as any[]).slice(0, 6);
+    if (!list.length) return "";
+    const tone = (n: number) => (n >= 5 ? "var(--alm-danger)" : n >= 3 ? "var(--alm-warn)" : "var(--alm-accent-2)");
+    return `${sec("Secrets", list.length, "how close each is to coming out")}<div class="almx-stack" style="margin-bottom:14px">${list.map((x) => `<div class="card tight"><div class="almx-row" style="align-items:flex-start">${ring(x.clock, 6, tone(x.clock))}<div class="grow" style="min-width:0"><b>${e(x.statement)}</b><small class="muted" style="display:block">${x.keepers.length ? `kept by ${e(x.keepers.join(", "))} · ` : ""}from ${e(x.keptFrom.join(", "))}</small>${x.why.length ? `<small style="display:block;margin-top:4px">${e(x.why.join("; "))}</small>` : ""}</div></div>
+${x.closest.length ? `<div class="almx-lbl" style="margin-top:10px">Closest to finding out</div><div class="almx-stack" style="gap:4px;margin-top:6px">${x.closest.slice(0, 3).map((c: any) => `<div class="almx-row" style="font-size:13.5px">${medal(c.name, c.color, "xs")}<b>${e(c.name)}</b><span class="muted grow">${e(c.why.join(" · "))}</span></div>`).join("")}</div>` : ""}</div>`).join("")}</div>`;
   }
 
   /** One person: what they have, what they lack and why, and the gaps in their own words. */
@@ -646,8 +701,20 @@ ${shown.length ? `<div class="card almx-soft tight"><div class="almx-row">${stk(
       const when = m.at ? String(m.at).replace(/^Day\s+\d+\s*/, "") : `message ${m.msgIndex + 1}`;
       return `${head}<div class="almx-tl__ev" style="--k:${col}"><span class="almx-tl__dot">${ic(icon)}</span><div class="card tight"><small class="muted">${e(when || `message ${m.msgIndex + 1}`)} · ${e(m.kind)}</small><div><b>${e(m.text)}</b></div></div></div>`;
     }).join("");
-    return `${forecasts.length ? `${sec("Ahead", forecasts.length, "from the lore's forecasts")}<div class="almx-stack">${forecasts.map((f: any) => `<div class="card tight almx-row"${f.status === "diverged" ? ' style="opacity:.8"' : ""}><span class="almx-set__ic" style="--k:${f.status === "diverged" ? "var(--alm-muted)" : "var(--g)"}">${ic("crystal")}</span><span class="grow"${f.status === "diverged" ? ' style="text-decoration:line-through;text-decoration-color:var(--alm-warn)"' : ""}>${e(f.summary)}</span>${f.status === "diverged" ? stk("diverged", "warn") : ""}</div>`).join("")}</div>` : ""}
+    return `${this.recurringHtml(v)}${forecasts.length ? `${sec("Ahead", forecasts.length, "from the lore's forecasts")}<div class="almx-stack">${forecasts.map((f: any) => `<div class="card tight almx-row"${f.status === "diverged" ? ' style="opacity:.8"' : ""}><span class="almx-set__ic" style="--k:${f.status === "diverged" ? "var(--alm-muted)" : "var(--g)"}">${ic("crystal")}</span><span class="grow"${f.status === "diverged" ? ' style="text-decoration:line-through;text-decoration-color:var(--alm-warn)"' : ""}>${e(f.summary)}</span>${f.status === "diverged" ? stk("diverged", "warn") : ""}</div>`).join("")}</div>` : ""}
 ${sec("Milestones", ev.length || null, "newest first")}${ev.length ? `<div class="almx-tl">${items}</div>` : `<div class="empty">Nothing yet.</div>`}`;
+  }
+
+  /** Days that come round again: what falls in the coming weeks, the list, and a form to add one. */
+  recurringHtml(v: any): string {
+    const r = v.recurring ?? { list: [], upcoming: [] };
+    const KIND: Record<string, string> = { yearly: "each year", weekly: "each week", moon: "the moon", monthly: "each month", once: "once", anniversary: "anniversary" };
+    const up = (r.upcoming ?? []).slice(0, 12);
+    const when = (d: number) => (d === 0 ? "today" : d === 1 ? "tomorrow" : `in ${d} days`);
+    const upHtml = up.length ? `<div class="card almx-rows" style="padding:2px 16px">${up.map((o: any) => `<div class="almx-row" style="font-size:14px">${ic(o.kind === "moon" ? "moon" : o.kind === "anniversary" ? "flag" : "cal", "sm")}<span class="grow"><b>${e(o.name)}</b><small class="muted" style="display:block">Day ${e(String(o.day))}${o.date ? ` · ${e(o.date)}` : ""} · ${e(KIND[o.kind] ?? o.kind)}</small></span>${stk(when(o.inDays), o.inDays <= 1 ? "warn" : "ghost")}</div>`).join("")}</div>` : `<div class="empty">Nothing in the next six weeks.</div>`;
+    const list = (r.list ?? []).map((x: any) => `<span class="pill"${x.ok ? "" : ' title="The calendar has no such day: try “19 January”, “every Friday”, “full moon”, “the 1st of every month” or “day 12”" style="border-color:var(--alm-warn)"'}>${e(x.name)} · ${e(x.when)}${x.own ? ` <button class="btn sm ghost" data-act="recurRemove" data-id="${e(x.id)}" style="min-height:24px;padding:0 6px" aria-label="Remove ${e(x.name)}">✕</button>` : ""}</span>`).join("");
+    const form = `<details class="card tight" style="margin-top:8px"><summary class="muted">Add a day that comes round</summary><div class="row" style="margin-top:8px;gap:6px"><input type="text" id="almRecName" placeholder="Buffy's birthday" class="grow"><input type="text" id="almRecWhen" placeholder="19 January · every Friday · full moon" class="grow"><input type="text" id="almRecWho" placeholder="whose (optional)" style="width:30%"><button class="btn primary" data-act="recurAdd">Add</button></div><p class="muted" style="margin:6px 0 0"><small>Dates follow this story's calendar. From a message: <code>((birthday: Buffy, 19 January))</code> or <code>((every Friday: patrol night))</code>.</small></p></details>`;
+    return `${sec("Coming round", up.length || null, "birthdays, feasts, moons, anniversaries")}${upHtml}${list ? `<div class="row" style="gap:6px;margin-top:8px">${list}</div>` : ""}${form}`;
   }
 
   tab_world(v: any): string {
@@ -661,11 +728,11 @@ ${this.factionsSection(v)}
 ${w.gauges.length ? `${sec("Gauges")}<div class="alm-clocks">${w.gauges.map((g: any) => `<div class="card tight almx-row">${ring(g.cur, g.max, "var(--alm-accent-2)")}<div class="grow"><b style="font-size:14px">${e(g.name)}</b>${g.cause ? `<small class="muted" style="display:block">${e(g.cause)}</small>` : ""}</div></div>`).join("")}</div>` : ""}
 ${w.deadlines.length ? `${sec("Deadlines", w.deadlines.length)}<div class="almx-stack">${w.deadlines.map((d: any) => `<div class="card tight almx-row${d.passed && !d.done ? " almx-bad" : ""}">${ic("clock")}<div class="grow"><b>${e(d.title)}</b><small class="muted" style="display:block">${e(d.at)}</small></div>${d.done ? stk("done", "good") : d.passed ? stk("passed", "bad") : stk(`${d.left} left`, "warn")}</div>`).join("")}</div>` : ""}
 ${w.threads.length ? `${sec("Threads", w.threads.length)}<div class="card almx-rows" style="padding:2px 16px">${w.threads.map((t: any) => `<div><div class="almx-row"><b class="grow">${e(t.title)}</b>${stk(t.status, STATUS[String(t.status).toLowerCase()] ?? "g")}</div>${t.latest ? `<div class="muted" style="font-size:13.5px;margin-top:2px">${e(t.latest)}</div>` : ""}${t.blocker ? `<div style="font-size:13.5px;margin-top:4px;color:var(--alm-danger)">Blocked: ${e(t.blocker)}</div>` : ""}</div>`).join("")}</div>` : ""}
-${w.items.length ? `${sec("Things", w.items.length, "who has what")}<div class="alm-inv">${w.items.map((i: any) => `<div class="alm-it${i.gone ? " gone" : ""}"><span class="alm-it__ic">${i.gone ? "✗" : "✦"}</span><div><b>${e(i.name)}</b><span class="alm-it__h">${e(i.gone ? "gone" : i.holder || "?")}${i.where && !i.gone ? ` · ${e(i.where)}` : ""}</span>${i.custody.slice(-2).map((c: any) => `<small class="muted" style="display:block">${e(c.from || "?")} → ${e(c.to || "?")}${c.how ? ` (${e(c.how)})` : ""}</small>`).join("")}</div></div>`).join("")}</div>` : ""}
+${w.items.length ? `${sec("Things", w.items.length, "who has what")}<div class="alm-inv">${w.items.map((i: any) => `<div class="alm-it${i.gone ? " gone" : ""}"><span class="alm-it__ic">${i.gone ? "✗" : "✦"}</span><div><b>${e(i.name)}</b><span class="alm-it__h">${e(i.gone ? "gone" : i.holder || "?")}${i.where && !i.gone ? ` · ${e(i.where)}` : ""}${i.owner && i.owner !== i.holder ? ` · ${e(i.owner)}'s` : ""}</span>${i.custody.slice(-2).map((c: any) => `<small class="muted" style="display:block">${e(c.from || "?")} → ${e(c.to || "?")}${c.how ? ` (${e(c.how)})` : ""}</small>`).join("")}</div></div>`).join("")}</div>` : ""}
 ${w.rumors.length ? `${sec("Rumours", w.rumors.length)}<div class="almx-stack">${w.rumors.map((r: any) => `<div class="almx-row" style="align-items:flex-start"><div class="almx-bubble">${e(r.text)}</div>${stk(`${r.hops} hop${r.hops === 1 ? "" : "s"}`, r.hops > 1 ? "g" : "ghost")}</div>`).join("")}</div>` : ""}
 ${w.rep.length ? `${sec("Reputation")}<div class="card almx-stack">${w.rep.map((r: any) => `<div><div class="almx-row" style="font-size:14px"><b class="grow">${e(r.group)}</b><b style="color:${r.score < 0 ? "var(--alm-danger)" : "var(--alm-good)"}">${r.score > 0 ? "+" : ""}${r.score}${r.tags.length ? ` · ${e(r.tags.join(", "))}` : ""}</b></div><div class="bar" style="margin-top:6px"><i style="width:${Math.round(((r.score + 3) / 6) * 100)}%;background:${r.score < 0 ? "var(--alm-danger)" : "var(--alm-good)"}"></i></div></div>`).join("")}</div>` : ""}
 ${w.clues.length || w.plants.length ? `${sec("Clues, plants and payoffs")}<div class="card almx-rows" style="padding:2px 16px">${w.clues.map((c: any) => `<div class="almx-row" style="align-items:flex-start;font-size:14px">${ic("search", "sm")}<span class="grow">${e(c.text)}${c.pointsTo ? ` → <b>${e(c.pointsTo)}</b>` : ""}</span>${c.reliability ? `<small class="muted">${e(c.reliability)}</small>` : ""}</div>`).join("")}${w.plants.map((p: any) => `<div class="almx-row" style="align-items:flex-start;font-size:14px">${p.paidAt != null ? `<span style="color:var(--alm-good)">${ic("check", "sm")}</span>` : ic("sparkle", "sm")}<span class="grow"${p.paidAt != null ? ' style="color:var(--alm-muted)"' : ""}>${e(p.text)}</span>${p.payoff ? `<small class="muted">${e(p.payoff)}</small>` : stk(p.paidAt != null ? "paid off" : "planted", p.paidAt != null ? "good" : "ghost")}</div>`).join("")}</div>` : ""}
-${(v.bits ?? []).length ? `${sec("Running bits", v.bits.length, "offered as callbacks")}<div class="almx-bits">${v.bits.map((b: any, i: number) => stk(`${b.text}${b.uses > 1 ? ` ×${b.uses}` : ""}`, bitTones[i % bitTones.length], [b.who, b.by === "chronicle" ? "from a chapter summary" : ""].filter(Boolean).join(" · "))).join("")}</div>` : ""}
+${(v.bits ?? []).length ? `${sec("Running bits", v.bits.length, "due ones are offered as callbacks")}<div class="almx-bits">${v.bits.map((b: any, i: number) => stk(`${b.due ? "⟳ " : ""}${b.text}${b.uses > 1 ? ` ×${b.uses}` : ""}`, b.due ? "warn" : bitTones[i % bitTones.length], [b.who, b.by === "chronicle" ? "from a chapter summary" : "", b.due ? "due for a callback when the moment allows" : b.scenes != null ? `came up ${b.scenes} scene${b.scenes === 1 ? "" : "s"} ago` : ""].filter(Boolean).join(" · "))).join("")}</div>` : ""}
 ${w.canon.length ? `${sec("Minted canon", w.canon.length)}<div class="card"><ul class="alm-list">${w.canon.map((c: any) => `<li>${e(c.text)}</li>`).join("")}</ul></div>` : ""}
 <button class="btn wide" style="margin-top:16px" data-act="simulate">${ic("forward", "sm")}Move the world off the page now</button>`;
   }
@@ -777,7 +844,8 @@ ${v.lore.review?.length ? `${sec("To review", v.lore.review.length)}<div class="
     const via = (i: any) => (!i.injected ? "" : i.via === "mirror" ? `<span class="pill" title="Sent as a forced entry of the chat's mirror lorebook: the Prompt Breakdown lists it under World Info, not under ALMANAC · Recall">lorebook</span>` : i.via === "recall" ? `<span class="pill" title="Sent inside the ALMANAC · Recall block">recall</span>` : "");
     const ck = v.checks?.issues ?? [];
     const checkCard = `<div class="card"><div class="almx-row"><b class="grow" style="font:700 17px/1.2 var(--almo-font)">Check of the last reply</b><button class="btn sm" data-act="recheck" title="Run the check again on the latest reply">Check again</button></div>${ck.length ? `<div class="almx-stack" style="margin-top:12px;gap:8px">${ck.map((i: any) => `<div class="almx-callout ${i.level === "warn" ? "warn" : ""}" style="margin:0">${ic(i.level === "warn" ? "warn" : "info")}<div>${e(i.text)}${i.quote && !i.text.includes(i.quote) ? `<div class="almx-code" style="margin-top:4px;opacity:.85">«${e(i.quote)}»</div>` : ""}</div></div>`).join("")}</div><p class="muted" style="margin:10px 0 0"><small>The next turn tells the model about the warnings. If one matters now, swipe for a new take.</small></p>` : `<p class="muted" style="margin:8px 0 0">${v.settings?.replyCheck === "off" ? "The reply check is off (Settings › Knowledge)." : "Nothing found."}</p>`}</div>`;
-    if (!f) return `${checkCard}<div class="empty">No retrieval yet. It appears after the next reply.</div>${this.rejectedHtml(v)}`;
+    const extra = `${this.lessonsHtml(v)}${this.inboxHtml(v)}`;
+    if (!f) return `${checkCard}${extra}<div class="empty">No retrieval yet. It appears after the next reply.</div>${this.rejectedHtml(v)}`;
     const ceil = f.ceiling;
     const used = ceil ? ceil.after : f.tokens;
     const pct = ceil?.limit ? Math.round((used / ceil.limit) * 100) : null;
@@ -786,10 +854,36 @@ ${ceil?.limit ? `<div class="bar thick" style="margin-top:12px"><i style="width:
 <div class="row" style="margin-top:10px;gap:6px"><span class="pill">tier: ${e(f.tier)}</span><span class="pill">${f.items.filter((i: any) => i.injected).length} of ${f.items.length} sent</span><span class="pill">${new Date(f.at).toLocaleTimeString()}</span></div>
 ${ceil?.trimmed?.length ? `<p class="muted" style="margin:10px 0 0"><small>Trimmed to fit (≈${ceil.before} before): ${ceil.trimmed.map((t: string) => e(t)).join("; ")}.</small></p>` : ""}
 ${f.chronicle?.length ? `<p class="muted" style="margin:8px 0 0"><small>Story so far in this prompt: ${f.chronicle.map((c: any) => e(c.name)).join(" · ")}</small></p>` : ""}</div>`;
-    return `${checkCard}${budget}
+    return `${checkCard}${extra}${budget}
 ${sec("Considered", f.items.length, "green went in")}<p class="muted" style="margin:0 0 10px"><small>Records the chat's mirror lorebook holds go in as its entries (the Prompt Breakdown shows them under World Info); the rest go in the ALMANAC · Recall block.</small></p>
 <div class="almx-stack almx-feed" style="gap:8px">${f.items.map((i: any) => `<div class="card tight almx-row${i.injected ? " in" : ""}" style="margin:0"><span class="almx-score">${i.score}</span><div class="grow" style="min-width:0"><div class="row" style="gap:6px"><b>${e(i.name)}</b>${via(i)}</div><small class="muted" style="display:block;overflow-wrap:anywhere">${e(i.reasons.join(" · "))}</small></div>${i.injected ? `<span style="color:var(--alm-good)">${ic("check")}</span>` : ""}</div>`).join("")}</div>
 ${this.rejectedHtml(v)}`;
+  }
+
+  /** Lessons from swipes the player set aside: new ones to keep or dismiss, kept ones to edit, and one's own. */
+  lessonsHtml(v: any): string {
+    const all = (v.lessons ?? []) as any[];
+    const pending = all.filter((l) => l.status === "pending");
+    const kept = all.filter((l) => l.status === "kept");
+    const dismissed = all.filter((l) => l.status === "dismissed");
+    const off = v.settings?.swipeAutopsy === "off";
+    const row = (l: any, btns: string) => `<div class="card tight" style="margin:0"><div class="almx-row" style="align-items:flex-start"><span class="grow"><b>${e(l.text)}</b>${l.why && l.why !== l.text ? `<small class="muted" style="display:block">${e(l.why)}</small>` : ""}${l.quote ? `<div class="almx-code" style="margin-top:4px;opacity:.85">«${e(l.quote)}»</div>` : ""}<small class="muted" style="display:block;margin-top:2px">${l.by === "user" ? "yours" : `from a swipe you set aside${l.msgIndex >= 0 ? ` at message ${l.msgIndex + 1}` : ""}${l.by === "model" ? " (model read)" : ""}`}</small></span></div><div class="row" style="gap:6px;margin-top:6px">${btns}</div></div>`;
+    const pend = pending.map((l) => row(l, `<button class="btn sm primary" data-act="lesson" data-what="keep" data-id="${e(l.id)}">${ic("check", "sm")}Keep</button><button class="btn sm" data-act="lesson" data-what="dismiss" data-id="${e(l.id)}">Dismiss</button>`)).join("");
+    const keep = kept.map((l) => row(l, `<button class="btn sm" data-act="lessonEdit" data-id="${e(l.id)}" data-text="${e(l.text)}">${ic("pencil", "sm")}Edit</button><button class="btn sm ghost" data-act="lesson" data-what="dismiss" data-id="${e(l.id)}">Stop sending</button>`)).join("");
+    const add = `<div class="row" style="gap:6px;margin-top:8px;flex-wrap:nowrap"><input type="text" id="almLessonNew" class="grow" placeholder="A rule of your own: Spike doesn't know about the Initiative yet"><button class="btn" data-act="lessonAdd">Add</button></div>`;
+    if (!all.length && off) return "";
+    return `${sec("Lessons from swipes", kept.length || null, pending.length ? `${pending.length} to look at` : "sent every turn once kept")}
+${pending.length ? `<div class="almx-stack" style="gap:8px">${pend}</div>` : ""}${kept.length ? `<div class="almx-stack" style="gap:8px;margin-top:8px">${keep}</div>` : ""}${!all.length ? `<p class="muted" style="margin:0"><small>When you swipe past a reply and answer another, the Almanac compares the takes and offers what the ones you set aside got wrong.</small></p>` : ""}${add}${dismissed.length ? `<details style="margin-top:8px"><summary class="muted">Dismissed (${dismissed.length})</summary>${dismissed.slice(-10).reverse().map((l) => `<div class="almx-row" style="font-size:13.5px"><span class="grow muted">${e(l.text)}</span><button class="btn sm ghost" data-act="lesson" data-what="restore" data-id="${e(l.id)}">Restore</button></div>`).join("")}</details>` : ""}`;
+  }
+
+  /** Everything read from the player's own messages, each line with Undo; undone ones with Restore. */
+  inboxHtml(v: any): string {
+    const all = (v.filed?.all ?? []) as any[];
+    const undone = (v.filed?.undone ?? []) as any[];
+    if (!all.length && !undone.length) return "";
+    return `<details class="card tight" style="margin-top:12px"><summary><b>From your messages</b> <span class="muted">· ${all.length} line${all.length === 1 ? "" : "s"}${undone.length ? ` · ${undone.length} undone` : ""}</span></summary>
+<div class="almx-stack" style="gap:6px;margin-top:8px">${all.slice(0, 40).map((r) => `<div class="almx-row" style="font-size:13.5px">${r.ok ? `<span style="color:var(--alm-good)">${ic("check", "sm")}</span>` : ic("warn", "sm")}<span class="grow">${e(r.line)} <small class="muted">· message ${r.msg + 1}${!r.ok && r.reason ? ` · not filed: ${e(r.reason)}` : ""}</small></span>${r.ok ? `<button class="btn sm ghost" data-act="undoFact" data-key="${e(r.key)}" data-line="${e(r.line)}">Undo</button>` : ""}</div>`).join("")}</div>
+${undone.length ? `<div class="almx-lbl" style="margin-top:10px">Undone</div>${undone.map((u) => `<div class="almx-row" style="font-size:13.5px"><span class="grow muted" style="text-decoration:line-through">${e(u.line)}</span><button class="btn sm ghost" data-act="restoreFact" data-key="${e(u.key)}">Restore</button></div>`).join("")}` : ""}</details>`;
   }
 
   rejectedHtml(v: any): string {
@@ -839,6 +933,7 @@ ${t.openings.length ? `${sec("How replies open")}<div class="card almx-rows" sty
 <p class="muted" style="margin:8px 0 0"><small>Automatic: on while the chat uses the ALMANAC preset.</small></p>
 ${v.hiddenTurns ? `<div class="almx-inset almx-row" style="margin-top:12px"><span class="grow">${v.hiddenTurns} turn${v.hiddenTurns === 1 ? " is" : "s are"} hidden under summaries. Switching the chat off shows them again; so does this (do it before uninstalling).</span><button class="btn sm" data-act="releaseHidden">Show them</button></div>` : ""}</div>
 ${sec("Story truths", (v.config.truths ?? []).length || null, "sent every turn, above canon")}<div class="almx-truths"><textarea id="almTruths" rows="3" placeholder="Jaime and Cersei are strictly family.&#10;Rhaegar is bald and wears a wig." aria-label="Story truths, one a line">${e((v.config.truths ?? []).join("\n"))}</textarea><div class="almx-row" style="margin-top:8px"><small class="muted grow">One a line. Or pin one from a message: <code>((truth: …))</code></small><button class="btn primary" data-act="saveTruths">Save truths</button></div></div>
+${this.cutoffHtml(v)}
 ${sec("How it works")}
 ${set("core", "cog", "#c2c9de", "Core", `${s.enabled === "auto" ? "automatic" : s.enabled === "on" ? "every chat" : "off"} · ${s.strictness} · repairs ${s.autoRepair ? "on" : "off"}`, `<label class="f">Enable<select data-setting="enabled"><option value="auto"${s.enabled === "auto" ? " selected" : ""}>automatic (ALMANAC chats)</option><option value="on"${s.enabled === "on" ? " selected" : ""}>every chat</option><option value="off"${s.enabled === "off" ? " selected" : ""}>off</option></select></label>
 <label class="f">Validation${sel("strictness", [["strict", "strict — reject impossible changes"], ["lenient", "lenient — warn only"]])}</label>${chk("autoRepair", "Repair missing ledgers automatically")}${chk("speakerRead", "Mark who speaks the lines a reply left without speaker marks (a quiet model call after the reply)")}${chk("formatAid", "Show the model last turn's ledger as a format example")}${chk("debug", "Debug logging")}`)}
@@ -846,6 +941,8 @@ ${set("chronicle", "book", "#5fcfc0", "Chronicle", `${s.chronicle ? `${s.summary
 ${set("knowledge", "eye", "#ff8fa3", "Knowledge", `clerk ${s.knowledgeClerk === "off" ? "off" : s.knowledgeClerk === "always" ? "every reply" : "when needed"} · check ${s.replyCheck ?? "rules"}`, `<label class="f">Knowledge clerk${sel("knowledgeClerk", [["auto", "when a reply's lines need it (bundled, untagged, diary-like)"], ["always", "every reply"], ["off", "off"]])}</label><p class="muted"><small>After a reply, a quiet call rewrites its knowledge lines cleanly: one fact a line, the #keys in play, information rather than what someone noticed. It runs in the background; the next turn waits for it up to 8 seconds.</small></p><label class="f">Clerk connection${conn("clerkConnection", "same as the summariser")}</label>
 ${chk("secretsOffPage", "Keep secrets off the page when the model names words to avoid (<code>secret … | never say: …</code>)")}<p class="muted"><small>A secret you mark on the Knowledge page is always kept off the page until it comes out.</small></p>
 <label class="f">Check each reply${sel("replyCheck", [["rules", "rules: secrets named, leaks, the dead or absent speaking, looks contradicted"], ["model", "rules, plus a quiet model read for past events the record doesn't hold"], ["off", "off"]])}</label><label class="f">Check connection${conn("replyCheckConnection", "same as the summariser")}</label>
+<label class="f">When you swipe past a reply${sel("swipeAutopsy", [["model", "compare the takes: rules, plus a quiet model read"], ["rules", "compare the takes with the rules only"], ["off", "off"]])}</label><p class="muted"><small>Once you answer the take you kept, the ones you set aside are compared with it; what they got wrong waits on the Recall page as a lesson to keep or dismiss.</small></p>
+${chk("journals", "Characters keep diaries: after a night's sleep, the one or two who carried the day write a short entry (a quiet model call each; read on the Cast page)")}
 <label class="f">Facts in your own messages${sel("playerFacts", [["rules", "rules: dates (\"it's day 12\"), looks (\"X has violet eyes\"), ((truth: …))"], ["model", "rules, plus a quiet model read of what you state"], ["off", "off"]])}</label><p class="muted"><small>What you state is your word: the story can't overwrite a look you set, and a date you give moves the clock, even backwards.</small></p>`)}
 ${set("size", "bars", "#ffc46b", "Prompt size", s.injectCeiling ? `ceiling ${Math.round(s.injectCeiling / 1000)}K tokens` : "no ceiling", `<p class="muted" style="margin:0 0 10px"><small>A ceiling for everything the Almanac adds: the note, recall, the mirror lorebook's cards and the chapter summaries. Over it, summaries narrow to the ones this turn touches, then the oldest go, then the lowest-ranked recall. The note and the latest chapter always go in. With a 32K model, try 8K.</small></p><div class="row" style="gap:6px">${[["8000", "8K"], ["16000", "16K"], ["24000", "24K"], ["48000", "48K"], ["0", "None"]].map(([n, lab]) => `<button class="btn sm grow${String(s.injectCeiling) === n ? " primary" : ""}" data-act="ceiling" data-id="${n}">${lab}</button>`).join("")}</div><label class="f" style="margin-top:10px">Exact ceiling (tokens; 0 = none)${num("injectCeiling", 0, 1000000)}</label>${v.feed?.[0]?.ceiling ? `<p class="muted"><small>Last turn: ≈${v.feed[0].ceiling.after} tokens${v.feed[0].ceiling.before > v.feed[0].ceiling.after ? ` (≈${v.feed[0].ceiling.before} before trimming)` : ""}.</small></p>` : v.feed?.[0] ? `<p class="muted"><small>Last turn: ≈${v.feed[0].tokens} tokens.</small></p>` : ""}`)}
 ${set("recall", "search", "#ffc46b", "Recall", `${Number(s.recallBudget).toLocaleString()} tokens · ${s.recallPlacement === "depth4" ? "4 messages from the end" : "before the chat"}`, `<label class="f">Note and recall budget (tokens)${num("recallBudget", 400, 20000)}</label><label class="f">Recall placement${sel("recallPlacement", [["before_history", "before chat history"], ["depth4", "4 messages from the end"]])}</label>${chk("keyHeat", "Demote keys that fire without being used")}<label class="f">Max keys per record${num("maxKeys", 4, 24)}</label><label class="f">Words never used as keys <small class="muted">— comma-separated</small><input type="text" data-list-setting="stopList" value="${e((s.stopList ?? []).join(", "))}" placeholder="house, door, tea"></label>`)}
@@ -856,6 +953,15 @@ ${sec("Look")}<div class="card"><div class="almx-skins">${`<button type="button"
 <div class="almx-lbl" style="margin-top:14px">Light or dark</div><div style="margin-top:6px">${toggle("setting", s.skinMode ?? "auto", [["auto", "Follow Lumiverse", 'data-key="skinMode"'], ["light", "Light", 'data-key="skinMode"'], ["dark", "Dark", 'data-key="skinMode"']], "Light or dark")}</div>
 ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fonts from Google Fonts (your browser contacts Google)")}${chk("hud", "Floating Now widget")}${this.hudProblem === "permission" ? `<div class="almx-row"><span class="muted grow">The floating widget needs the <b>ui_panels</b> permission.</span><button class="btn sm" data-act="grantPanels">Grant</button></div>` : this.hudProblem ? `<p class="muted">The floating widget could not open: ${e(this.hudProblem)}</p>` : ""}${chk("narratorOnlyToTools", "Let LLM tools see narrator-only records")}</div>
 <p class="muted" style="margin:14px 0 0;text-align:center"><small>ALMANAC Ledger ${VERSION}${v.version && v.version !== VERSION ? ` · background process ${e(v.version)}` : ""}</small></p>`;
+  }
+
+  /** Where the story stands in its source, and the names and events from later that haven't happened. */
+  cutoffHtml(v: any): string {
+    const c = v.cutoff ?? { point: "", notYet: [], live: 0, busy: false };
+    return `${sec("Canon cutoff", c.point ? c.live || null : null, c.point ? "held back from the story" : "optional")}<div class="almx-truths">
+<input type="text" id="almCutPoint" value="${e(c.point)}" placeholder="Buffy, season 3, before Graduation · ASOIAF, after the Red Wedding (AU)" aria-label="Where the story stands in its source">
+<textarea id="almCutTerms" rows="4" style="margin-top:8px" placeholder="Names, events and reveals from later in the source, one a line:&#10;Glory&#10;the Initiative&#10;Joyce's death" aria-label="Not yet happened">${e((c.notYet ?? []).join("\n"))}</textarea>
+<div class="almx-row" style="margin-top:8px;gap:6px"><small class="muted grow">${c.notYet?.length ? `${c.live} of ${c.notYet.length} not reached yet; a term the chat or the card already has counts as reached.` : "The model is told where the story stands every turn; each reply is checked for these words."}</small><button class="btn" data-act="cutoffSuggest" ${c.busy ? "disabled" : ""} title="The model lists what comes after this point in the source (a quiet call)">${c.busy ? "Thinking…" : `${ic("sparkle", "sm")}Suggest`}</button><button class="btn primary" data-act="cutoffSave">Save</button></div></div>`;
   }
 
   /** The skin and palette on screen: the ones the colour pickers change. */
@@ -1158,6 +1264,7 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
         const age = val("#almCharAge") ?? "";
         const always = val("#almCharAlways") ?? "";
         const aliases = (val("#almCharAliases") ?? "").split(/\s*[;\n]\s*/).map((a) => a.trim()).filter(Boolean);
+        const rooms = (val("#almCharRooms") ?? "").split(/\s*[;\n]\s*/).map((a) => a.trim()).filter(Boolean);
         // Stamina: the kind and any speed set apart from it; all on Auto, the sources speak.
         const stamina: Record<string, string | number> = {};
         const kind = val("#almStamKind");
@@ -1185,6 +1292,8 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
           const next: any = { ...(edits[id] ?? {}) };
           if (name && !c?.isUser && name !== c?.name) next.name = name;
           next.age = age;
+          if (rooms.length) next.rooms = rooms;
+          else delete next.rooms;
           if (Object.keys(stamina).length) next.stamina = stamina;
           else delete next.stamina;
           // Aliases taken away stay away; ones given are kept, and giving one back undoes taking it.
@@ -1322,6 +1431,21 @@ ${this.skinColors(v)}${this.skinFonts(v)}${chk("fonts", "Load the skins' web fon
       case "fontScope": this.fontScope = id === "all" ? "all" : "skin"; this.render(); break;
       case "skinFontReset": if (id) this.saveSkinFonts(this.withSkinFont(id, null)); break;
       case "skinFontsReset": this.fontCustom.clear(); this.saveSkinFonts(this.withSkinFont(null, null)); break;
+      case "undoFact": this.send({ type: "undoFact", key: (t.closest("[data-key]") as HTMLElement | null)?.dataset.key, line: (t.closest("[data-line]") as HTMLElement | null)?.dataset.line }); break;
+      case "restoreFact": this.send({ type: "restoreFact", key: (t.closest("[data-key]") as HTMLElement | null)?.dataset.key }); break;
+      case "promise": this.send({ type: "promise", id, value: (t.closest("[data-what]") as HTMLElement | null)?.dataset.what || null }); break;
+      case "recurAdd": this.send({ type: "recurring", action: "add", name: val("#almRecName"), when: val("#almRecWhen"), who: val("#almRecWho") }); break;
+      case "recurRemove": this.send({ type: "recurring", action: "remove", id }); break;
+      case "cutoffSave": this.send({ type: "cutoff", point: val("#almCutPoint"), notYet: val("#almCutTerms") }); break;
+      case "cutoffSuggest": this.send({ type: "cutoffSuggest", point: val("#almCutPoint") }); if (this.view?.cutoff) this.view.cutoff.busy = true; this.render(); break;
+      case "lesson": this.send({ type: "lesson", id, action: (t.closest("[data-what]") as HTMLElement | null)?.dataset.what }); break;
+      case "lessonAdd": this.send({ type: "lesson", action: "add", text: val("#almLessonNew") }); break;
+      case "lessonEdit": {
+        const text = window.prompt("The rule, as the model should hold to it:", (t.closest("[data-text]") as HTMLElement | null)?.dataset.text ?? "");
+        if (text != null && text.trim()) this.send({ type: "lesson", id, action: "edit", text: text.trim() });
+        break;
+      }
+      case "journalNow": this.send({ type: "journal", charId: id }); break;
       case "saveTruths": this.send({ type: "config", patch: { truths: val("#almTruths").split("\n").map((s) => s.trim()).filter(Boolean) } }); break;
       case "loreClassify": this.send({ type: "lore", action: "classify" }); break;
       case "mirrorSync": this.send({ type: "mirrorSync" }); break;

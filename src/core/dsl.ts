@@ -695,6 +695,13 @@ const PARSERS: Record<OpName, LineParser> = {
     p.args = { verb: m[1].toLowerCase(), id: m[2].replace(/^arc:/, ""), head, fields };
     return p;
   },
+  // "recur: Buffy's birthday | 19 January | Buffy": a day that comes round again (from the player's asides).
+  recur(p, _s, rest) {
+    const [name, when, who] = rest.split(/\s*\|\s*/).map((x) => x?.trim());
+    if (!name || !when) return null;
+    p.args = { name: name.slice(0, 80), when: when.slice(0, 80), ...(who ? { who: who.slice(0, 60) } : {}) };
+    return p;
+  },
   whereabouts(p, s, rest) {
     if (!s) return null;
     const [place, ...more] = rest.split(/\s+\|\s+/);

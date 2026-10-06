@@ -4,6 +4,8 @@
 import { LedgerRuntime, toPath, type PathMessage, type RawChatMessage } from "../core/branch";
 import { buildCodex, type CodexRecord } from "../core/codex";
 import { almanacFor, calendarFor, type AlmanacConfig, type AlmanacReport } from "../core/engines/almanac";
+import { moonFor, moonOffset } from "../core/engines/astro";
+import { allRecurring, occurrences, type DayCtx, type Occurrence } from "../core/recurring";
 import { dayOfDate } from "../core/engines/calendar";
 import { KeyIndex, cleanKeys, DEFAULT_STOP } from "../core/keys";
 import { parseMessage } from "../core/dsl";
@@ -171,6 +173,8 @@ export class ChatLedger {
       factionEdits: meta.config.factionEdits,
       ...(Object.keys(this.staminaSources).length ? { stamina: this.staminaSources } : {}),
       playerFacts: settings.playerFacts ?? "rules",
+      ...(meta.config.ignoredFacts?.length ? { ignoredFacts: meta.config.ignoredFacts } : {}),
+      ...(meta.config.promiseEdits && Object.keys(meta.config.promiseEdits).length ? { promiseEdits: meta.config.promiseEdits } : {}),
       calendarKey: `${meta.config.calendar || settings.calendar || ""}|${meta.config.startPoint ?? ""}`,
       dayOfDate: (text, near) => {
         try {
@@ -257,6 +261,24 @@ export class ChatLedger {
       anchorDay,
       scheduled,
     };
+  }
+
+  /** The calendar and the moon, for finding the days birthdays, feasts and full moons fall on. */
+  dayCtx(meta: ChatMeta, settings: Settings): DayCtx {
+    const cfg = this.almanacConfig(meta, settings);
+    const cal = calendarFor(cfg);
+    const m = cal.moons?.[0];
+    const offset = moonOffset(m ? `${cfg.chatId}:${m.name}` : cfg.chatId, cfg.moonAnchor, m?.period);
+    return { cal, moonLit: (day) => moonFor(day, 12 * 60, offset, m?.period).illumination };
+  }
+
+  /** Recurring days on story days `from`..`to`: the player's, the asides', and the story's own anniversaries. */
+  daysAhead(meta: ChatMeta, settings: Settings, from: number, to: number): Occurrence[] {
+    try {
+      return occurrences(this.state, allRecurring(this.state, meta.config.recurring), this.dayCtx(meta, settings), from, to);
+    } catch {
+      return [];
+    }
   }
 
   climateFromLore(): string {

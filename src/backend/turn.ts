@@ -20,6 +20,12 @@ import { waitForClerk } from "./clerk";
 import { elsewhereNote } from "./elsewhere";
 import { loadChat, save, type ChatMeta } from "./store";
 import type { Settings } from "../core/types";
+import { cutoffLane, liveTerms } from "../core/canon";
+import { lessonsLane } from "../core/autopsy";
+import { dayLine } from "../core/recurring";
+import { bitsSeen, dueBits } from "../core/callbacks";
+import { keptHere, roomsOf } from "../core/belongings";
+import { partyName } from "../core/util";
 
 export interface TurnPlan {
   chatId: string;
@@ -161,6 +167,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     returning = `The player returns after ${fmtSpan(idle / 60000)} away. Open with a brief in-world re-entry (two lines at most: where we are and what is pressing), then continue.${lastUnit ? ` Last chapter: ${lastUnit.title}.` : ""}${open.length ? ` Open threads: ${open.join("; ")}.` : ""}`;
   }
   const lastDelta = exclude ? null : st.lastDelta;
+  const extras = noteExtras(L, meta, settings, tier, chronicleBits(files.chronicle));
   const noteRes = buildLedgerNote({
     state: st, almanac: al, records: L.records, userName: L.names.user, sealed: L.foldOptions(meta, settings).sealed,
     query: `${player} ${lastReply}`, player, craft: settings.telemetry ? meta.telemetry : null, genreNudge: genreNudge(st, leadGenre(meta), assistantIdx),
@@ -172,6 +179,7 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
     truths: meta.config.truths ?? [],
     offPageAuto: settings.secretsOffPage !== false,
     bits: chronicleBits(files.chronicle),
+    ...extras,
     checks: exclude ? [] : (meta.checks?.[L.lastAssistant() ? `${L.lastAssistant()!.id}:${L.lastAssistant()!.swipe}` : ""]?.issues ?? []).filter((i) => i.level !== "info").map((i) => i.text),
   });
   let formatExample: string | undefined;
@@ -301,6 +309,35 @@ export async function planTurn(chatId: string, genType: string, userId?: string,
   plans.set(chatId, plan);
   debug(`plan ${chatId}: note ${noteRes.tokens}t, recall ${rc.tokens}t, chronicle ${chronicle.length} (${chronMode}), mirror ${Object.keys(mirrorPicks).length}, lore ${lorePicks.size}`);
   return plan;
+}
+
+/**
+ * The note's newer lanes: where the story stands in its source, the player's kept lessons, what today
+ * holds, the running bits due for a callback, and what's kept in the room the scene is in.
+ */
+export function noteExtras(L: ChatLedger, meta: ChatMeta, settings: Settings, tier: string, chronBits: string[]) {
+  const st = L.state;
+  const nm = (id: string) => partyName(st, id, L.names.user);
+  const cut = meta.config.canonCutoff;
+  let canon = "";
+  if (cut?.point?.trim()) {
+    // A term the chat or the card already has is one the story reached (or the player brought in). Not the
+    // lore's: a lorebook for a whole series names everything, and the cutoff would hold nothing back.
+    const corpus = [L.names.charText ?? "", L.names.personaText ?? "", ...L.path.map((m) => m.content)].join("\n");
+    canon = cutoffLane(cut, liveTerms(cut, (re) => re.test(corpus)));
+  }
+  const today = st.time ? dayLine(L.daysAhead(meta, settings, st.time.day, st.time.day + 1), st.time.day) : "";
+  const bits = [...(st.motifs ?? []).map((m) => m.text), ...chronBits];
+  const seen = bitsSeen(L.path.slice(-400).map((m) => ({ index: m.index, content: plainProse(m.content) })), bits);
+  const due = dueBits(st, seen, { tier, extra: chronBits });
+  const kept = keptHere(st, roomsOf(st, meta.config.castEdits ?? {}), nm);
+  return {
+    ...(canon ? { canon } : {}),
+    lessons: lessonsLane(meta.lessons),
+    ...(today ? { today } : {}),
+    dueBits: due,
+    ...(kept.length ? { keptHere: kept } : {}),
+  };
 }
 
 function isUserRaw(m: { is_user?: boolean; role?: string } | undefined): boolean {

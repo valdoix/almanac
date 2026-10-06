@@ -16,6 +16,7 @@ import { clearRenderCache } from "./hooks";
 import { clerkWholeChat, stopClerk } from "./clerk";
 import { runCheck } from "./check";
 import { soundtrackAction } from "./soundtrack";
+import { CONTINUITY_TYPES, continuityAction } from "./continuity";
 
 type Msg = { type: string; [k: string]: any };
 
@@ -407,6 +408,12 @@ export function registerBridge() {
           await soundtrackAction({ ...(m as any), chatId: m.chatId ?? undefined }, userId);
           return;
         default:
+          if (CONTINUITY_TYPES.has(m.type)) {
+            const changed = await continuityAction(m.chatId, m as any, userId, (tone, text) => toast(userId, tone, text));
+            if (changed) onMutation(m.chatId, userId);
+            else pushState(m.chatId, userId);
+            return;
+          }
           log(`unknown frontend message ${m.type}`);
       }
     } catch (err) {

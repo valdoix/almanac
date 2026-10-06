@@ -181,7 +181,9 @@ export async function runElsewhere(chatId: string, userId?: string, opts: { forc
       }
       const waiting = E.proposals!.filter((p) => p.status === "pending");
       const al = L.almanac(meta, settings);
-      const named = al?.calendar?.named?.find((n) => al.date.includes(n.name) || al.clock.includes(n.name))?.name ?? null;
+      // A named day of the calendar, else a feast or holiday the player added (a birthday is that person's, below).
+      const today = st.time ? L.daysAhead(meta, settings, st.time.day, st.time.day) : [];
+      const named = al?.calendar?.named?.find((n) => al.date.includes(n.name) || al.clock.includes(n.name))?.name ?? today.find((o) => !o.who && o.kind !== "anniversary" && o.kind !== "weekly")?.name ?? null;
       const res = tick({
         chatId, tickId, state: st, records: L.records, userName: L.names.user, mode: mode === "off" ? "living" : mode,
         canonGravity: settings.canonGravity ?? "light", fates: settings.fates ?? "ask", genres: meta.detected.genres ?? meta.config.genres ?? [],
@@ -192,6 +194,12 @@ export async function runElsewhere(chatId: string, userId?: string, opts: { forc
         seeding: settings.elsewhereSeeding ?? "ask", pendingProposals: waiting.length,
         proposalKeys: [...E.declined!, ...waiting.map((p) => `lead:${p.lead.toLowerCase()}`)],
       });
+      // Someone's day (a birthday, an anniversary of a loss) stands for the steps that have them in it.
+      for (const o of today) {
+        const who = (o.who ?? (o.kind === "anniversary" ? o.name.replace(/^.* since (.+?) died$/, "$1") : "")).toLowerCase();
+        if (!who) continue;
+        for (const c of res.cards) if ([c.lead, ...c.cast].some((n) => n.toLowerCase() === who || n.toLowerCase().split(/\s+/)[0] === who.split(/\s+/)[0])) c.stands = [...(c.stands ?? []), `today is ${o.name}`];
+      }
       const id = `${SIM_ID}${tickId}`;
       putLines(files, target.index, id, res.lines);
       const list = arrivalsOf(meta);

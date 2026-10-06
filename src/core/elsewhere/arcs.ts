@@ -204,6 +204,18 @@ export function seedCandidates(ctx: SeedCtx): SeedCand[] {
   // Debts and consequences.
   for (const c of Object.values(st.cons)) {
     if (c.status === "paid" || c.status === "resolved" || c.status === "healed") continue;
+    // A promise said aloud isn't a debt to settle off the page; a broken one is a rift, from the side of the one let down.
+    if (c.promise) {
+      if (c.status !== "broken" || !c.whom) continue;
+      const hurt = r.actors.find((a) => a.charId === c.whom);
+      const by = r.actors.find((a) => a.charId === c.who);
+      if (!free(hurt) || !by) continue;
+      push({
+        kind: "rift", lead: hurt, cast: [by], premise: clip(`${by.name} promised ${hurt.name} to ${c.what.replace(/\.$/, "")} and didn't, and ${hurt.name} hasn't let it go.`, 200), want: "an apology, or a reason", fear: spec("rift").fear,
+        grounds: [c.id], secrecy: "private", weight: 2, heat: 1, clock: 4, by: "engine", why: "a broken promise",
+      });
+      continue;
+    }
     const lead = r.actors.find((a) => a.charId === c.who);
     if (!free(lead)) continue;
     const whom = c.whom ? r.actors.find((a) => a.charId === c.whom) : undefined;

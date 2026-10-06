@@ -13,6 +13,8 @@ import { absMinutes, estTokens, fmtSpan, fmtTime, partyName, truncateTokens } fr
 import { carried, LADDER_NAMES, normFact, overlap } from "./state";
 import { factsInPlay, gapsOf, lackOf, lackText, peopleHere, standsOn, stanceVerb } from "./facts";
 import { isOpen, parseHours } from "./engines/almanac";
+import { activeConditions, conditionWords } from "./conditions";
+import { exposures } from "./secrets";
 
 export interface NoteInput {
   state: WorldState;
@@ -45,6 +47,16 @@ export interface NoteInput {
   bits?: string[];
   /** What the check of the last reply found, for the model to put right. */
   checks?: string[];
+  /** The [CANON] lane: where the story stands in its source (core/canon). */
+  canon?: string;
+  /** The [LESSONS] lane: rules kept from swipes the player set aside (core/autopsy). */
+  lessons?: string;
+  /** What today and tomorrow hold: birthdays, feasts, the full moon (core/recurring). */
+  today?: string;
+  /** Running bits due for a callback now (core/callbacks); when given, only these are offered. */
+  dueBits?: { text: string; who?: string; scenes: number | null }[];
+  /** What's kept in the place the scene is in: a trunk still has the locket (core/belongings). */
+  keptHere?: string[];
 }
 
 const DEFAULT_BUDGETS = { now: 120, present: 330, constraints: 150, knowledge: 250, craft: 110 };
@@ -101,6 +113,9 @@ export function capsule(c: CharacterState, state: WorldState, opts: { sealed: bo
   if (shown.length) bits.push(shown.join(", "));
   const flags = c.flags.filter((f) => !f.startsWith("scar"));
   if (flags.length) bits.push(flags.slice(-3).join(", "));
+  const now = state.time ? absMinutes(state.time) : null;
+  const ill = activeConditions(c, now);
+  if (ill.length) bits.push(ill.map((x) => conditionWords(x, now)).join(", "));
   if (c.injuries.length) bits.push(c.injuries.map((i) => `${i.where} (${["", "scratch", "wound", "serious", "critical"][i.severity]}${i.treated ? ", treated" : ""}${i.severity < (i.worst ?? i.severity) ? ", healing" : ""})`).join(", "));
   if (opts.full && c.look) bits.push(`wearing: ${c.look}`);
   const held = carried(state, c.id).map((i) => i.name);
@@ -149,6 +164,11 @@ export function knowledgeBrief(state: WorldState, query: string, userName: strin
     if (keepers.length) parts.push(`kept by ${list(keepers.map(nm))}`);
     lines.push(`#${f.key} "${f.statement}"${truth} — ${parts.join("; ") || "no one here has it"}.`);
   }
+  // Secrets close to coming out, kept from someone here.
+  for (const x of exposures(state, nm).filter((x) => x.clock >= 4 && x.keptFrom.some((id) => here.includes(id))).slice(0, 2)) {
+    const near = x.closest.filter((c) => here.includes(c.id)).slice(0, 2).map((c) => `${nm(c.id)} (${c.why[0]})`);
+    lines.push(`#${x.key} is close to coming out (${x.clock}/6)${near.length ? `: nearest ${near.join(", ")}` : ""}. Let it press on the scene; it comes out only through what happens.`);
+  }
   const gaps = here.map((id) => ({ id, g: gapsOf(state, id, focus) })).filter((x) => x.g.length);
   if (gaps.length) lines.push(`Gaps — ${gaps.map((x) => `${nm(x.id)} doesn't know ${x.g.map((g) => g.text).join("; ")}`).join(" · ")}.`);
   if (lines.length) {
@@ -163,8 +183,20 @@ export function constraints(state: WorldState, records: CodexRecord[], userName:
   const now = state.time ? absMinutes(state.time) : null;
   const present = new Set(Object.values(state.chars).filter((c) => c.tier === "spot" || c.tier === "peri" || c.isUser).map((c) => c.id));
   const nm = (id?: string) => (!id ? "" : partyName(state, id, userName));
+  let promised = false;
   for (const c of Object.values(state.cons)) {
     if (c.status !== "open" && c.status !== "due") continue;
+    // A promise made aloud: due in its window, broken when it closes.
+    if (c.promise && now != null) {
+      const p = c.promise;
+      const to = c.whom ? ` ${nm(c.whom)}` : "";
+      const involves = present.has(c.who) || (c.whom ? present.has(c.whom) : false);
+      if (c.status === "due" || now >= p.from) out.push({ t: `PROMISE DUE: ${nm(c.who)} promised${to} to ${c.what} (${p.when}; it breaks after ${fmtSpan(Math.max(0, p.until - now))})`, w: 9 });
+      else if (p.from - now <= 360 || involves) out.push({ t: `${nm(c.who)} promised${to}: ${c.what} (${p.from - now <= 360 ? `due in ${fmtSpan(p.from - now)}` : p.when})`, w: p.from - now <= 360 ? 7 : 4 });
+      else continue;
+      promised = true;
+      continue;
+    }
     const due = c.due?.at ? absMinutes(c.due.at) : null;
     const involves = present.has(c.who) || (c.whom ? present.has(c.whom) : false);
     if (due != null && now != null && due <= now) out.push({ t: `DUE NOW: ${nm(c.who)}${c.whom ? " → " + nm(c.whom) : ""}: ${c.what}`, w: 10 });
@@ -203,6 +235,7 @@ export function constraints(state: WorldState, records: CodexRecord[], userName:
   for (const t of Object.values(state.threads)) {
     if (t.status === "stalled" && t.stalls >= 2) out.push({ t: `Thread “${t.title}” has stalled ${t.stalls}× (blocker: ${t.blocker ?? "unnamed"}) — the next turn must change evidence, position, stakes or resolution`, w: 5 });
   }
+  if (promised) out.push({ t: "(A promise kept or broken on the page: promise A>B: what | kept, or | broken.)", w: 3.5 });
   // World facts the story minted: the ones about this place, and the ones this turn talks about.
   const talk = normFact(query);
   const canonHere = state.canon.filter((c) => !c.pinned && ((here && overlap(normFact(c.text), normFact(here)) > 0.4) || (talk && overlap(normFact(c.text), talk) > 0.5))).slice(-3);
@@ -226,6 +259,7 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
     let now = `[NOW] ${parts.join(" · ")}`;
     if (al && (!al.sun.daylight || /golden|sunset|dusk|dawn/.test(al.band))) now += ` · ${al.band}; sun ${al.sun.text}; moon ${al.moon.name}`;
     if (state.mode && state.mode !== "social") now += ` · scene: ${state.mode}`;
+    if (input.today) now += ` · ${input.today}`;
     lanes.now = truncateTokens(now, B.now);
   } else lanes.now = "[NOW] The clock has not started. Seed it from the start point or the setting in this reply's header and ledger.";
 
@@ -256,7 +290,10 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
   const off = offPageFacts(state, input.offPageAuto ?? true);
   if (off.length) lanes.offPage = truncateTokens(`[OFF THE PAGE] ${offPageLines(off, nmAll).join("\n  ")}`, 180);
 
+  if (input.canon) lanes.canon = truncateTokens(input.canon, 220);
+  if (input.lessons) lanes.lessons = truncateTokens(input.lessons, 160);
   const cons = constraints(state, input.records, input.userName, input.query);
+  if (input.keptHere?.length) cons.push(`Kept here: ${input.keptHere.join("; ")}`);
   if (input.checks?.length) cons.unshift(`The last reply was checked: ${input.checks.slice(0, 3).join("; ")}. Don't carry it forward.`);
   const rejected = input.lastDelta?.rejected ?? [];
   if (rejected.length) cons.unshift(`Last reply's ledger was corrected: ${rejected.slice(0, 2).map((r) => `“${r.raw.slice(0, 60)}” (${r.reason})`).join("; ")}. The verified state here stands.`);
@@ -276,11 +313,15 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
     lanes.romance = `[ROMANCE] ${ladders.slice(0, 3).map((l) => `${nm(l.from)} → ${nm(l.to)}: ${LADDER_NAMES[l.tier]} (${l.tier}/7)${fresh(l) ? ` — ${truncateTokens(l.evidence!, 24)}` : ""}`).join(" · ")}`;
   }
 
-  // Running bits worth calling back: not used lately, most used first.
-  const recent = state.msgCount - 6;
-  const bitsFromState = (state.motifs ?? []).filter((m) => m.lastMsg < recent).sort((a, b) => b.uses - a.uses || a.lastMsg - b.lastMsg).map((m) => `${m.text}${m.who ? ` (${m.who})` : ""}`);
-  const allBits = [...new Set([...bitsFromState, ...(input.bits ?? [])])].slice(0, 5);
-  if (allBits.length) lanes.callbacks = truncateTokens(`[CALLBACKS] Running bits you may call back when it fits, never forced: ${allBits.join(" · ")}`, 110);
+  // Running bits: the ones due for a callback now (when the planner worked them out), else the old way.
+  if (input.dueBits) {
+    if (input.dueBits.length) lanes.callbacks = truncateTokens(`[CALLBACKS] Due for a callback if the moment allows (light, unforced, once): ${input.dueBits.map((b) => `${b.text}${b.who ? ` (${b.who})` : ""}${b.scenes != null ? ` — last came up ${b.scenes} scenes ago` : ""}`).join(" · ")}`, 110);
+  } else {
+    const recent = state.msgCount - 6;
+    const bitsFromState = (state.motifs ?? []).filter((m) => m.lastMsg < recent).sort((a, b) => b.uses - a.uses || a.lastMsg - b.lastMsg).map((m) => `${m.text}${m.who ? ` (${m.who})` : ""}`);
+    const allBits = [...new Set([...bitsFromState, ...(input.bits ?? [])])].slice(0, 5);
+    if (allBits.length) lanes.callbacks = truncateTokens(`[CALLBACKS] Running bits you may call back when it fits, never forced: ${allBits.join(" · ")}`, 110);
+  }
 
   if (input.craft && (input.craft.avoids.length || input.craft.agency.length)) {
     const parts: string[] = [];
@@ -294,7 +335,7 @@ export function buildLedgerNote(input: NoteInput): { text: string; tokens: numbe
   if (input.returning) lanes.returning = `[RETURNING] ${input.returning}`;
   if (input.notPeople?.length) lanes.notPeople = `[NOT PEOPLE] ${input.notPeople.join(", ")}: not characters (a force, power or thing). Keep them out of cast, mood, bond, ladder and know lines.`;
 
-  const order = ["now", "truths", "present", "constraints", "offPage", "knowledge", "romance", "arrived", "callbacks", "craft", "genre", "plants", "returning", "notPeople"];
+  const order = ["now", "truths", "canon", "lessons", "present", "constraints", "offPage", "knowledge", "romance", "arrived", "callbacks", "craft", "genre", "plants", "returning", "notPeople"];
   const text = `<ledger-note>\n${order.filter((k) => lanes[k]).map((k) => lanes[k]).join("\n")}\n</ledger-note>`;
   return { text, tokens: estTokens(text), lanes };
 }

@@ -5,7 +5,7 @@
 
 import type {
   BondAxis, BondState, CastEdit, CharacterState, EventSource, FactEdit, FactionEdit, FactionState, KnowRow, LedgerEvent, MessageDelta,
-  ItemState, ParsedLedger, ParsedOp, ThoughtState, Trait, WorldState,
+  ItemState, ParsedLedger, ParsedOp, SpokenLine, ThoughtState, Trait, WorldState,
 } from "./types";
 import { KNOW_OPS } from "./types";
 import { applyFactEdits, canHear, closeMetGaps, fileKnow, fileReveal, fileSecret, fileUnaware, type KnowCtx } from "./facts";
@@ -16,6 +16,9 @@ import { applyArcOp, applyWhereabouts } from "./elsewhere/fold";
 import type { KnowArgs } from "./knowparse";
 import { ALL_AXES, BIPOLAR_AXES, LADDER_NAMES } from "./types";
 import { absMinutes, addMinutes, clamp, fmtSpan, fromAbs, MIN_PER_DAY, slug, type StoryTime } from "./util";
+import { promisesIn, vocative } from "./promises";
+import { nextOwner } from "./belongings";
+import { conditionsIn, drinkFactor, hangover, noteConditions, runCourse } from "./conditions";
 
 export interface FoldOptions {
   userName: string;
@@ -42,6 +45,10 @@ export interface FoldOptions {
   dayOfDate?: (text: string, nearDay: number) => number | null;
   /** Identifies the calendar behind dayOfDate (functions don't survive the fold cache's key). */
   calendarKey?: string;
+  /** Lines read from the player's messages that the player undid (msgId:swipe:hash of the line). */
+  ignoredFacts?: string[];
+  /** The player's word on promises: kept, broken, or not a promise (by cons id). */
+  promiseEdits?: Record<string, "kept" | "broken" | "dropped">;
 }
 
 /** "Gabriel#0|flat", "“Mara”", "Kael's" → the bare lower-case name. */
@@ -463,6 +470,10 @@ export class Folder {
     const endAbs = st.time ? absMinutes(st.time) : null;
     delta.elapsed = startAbs != null && endAbs != null ? endAbs - startAbs : 0;
 
+    // Promises said aloud, and the ones whose window opened, was kept or closed.
+    if (parsed.speech?.length && st.time) delta.lines.push(...this.notePromises(parsed.speech, msgIndex, fromUser));
+    delta.lines.push(...this.tickPromises(msgIndex));
+
     // Scene boundary: place change, ≥60 min jump, new title, downtime.
     const newPlace = st.place.join(" › ");
     const boundary =
@@ -472,7 +483,7 @@ export class Folder {
       (st.mode === "downtime" && hadMode !== "downtime");
     if (boundary || st.sceneNo === 0) {
       // A new scene: poses and passing states ("dripping", "on her back") end; conditions stay.
-      if (st.sceneNo > 0) for (const c of Object.values(st.chars)) c.flags = c.flags.filter(isLasting);
+      if (st.sceneNo > 0) for (const c of Object.values(st.chars)) c.flags = c.flags.filter(keepsFlag);
       st.sceneNo++;
       st.sceneStartMsg = msgIndex;
       st.sceneStartAbs = endAbs;
@@ -770,11 +781,13 @@ export class Folder {
         const bits: string[] = [];
         for (const [k, v] of Object.entries(a.meters as Record<string, { v: number; rel: boolean }>)) {
           const before = c.meters[k] ?? 0;
-          c.meters[k] = clamp(v.rel ? before + v.v : v.v, 0, 5);
+          // Drink touches a Slayer less, a vampire hardly, an android not at all.
+          const val = k === "intox" && v.v > 0 ? Math.round(v.v * drinkFactor(c.stamina)) : v.v;
+          c.meters[k] = clamp(v.rel ? before + val : val, 0, 5);
           bits.push(`${k} ${c.meters[k]}`);
         }
         // A body line that lists states replaces the passing ones from before; lasting conditions stay.
-        if ((a.flags as string[]).some((f) => f !== "dead")) c.flags = c.flags.filter(isLasting);
+        if ((a.flags as string[]).some((f) => f !== "dead")) c.flags = c.flags.filter(keepsFlag);
         for (const f of a.flags as string[]) {
           if (f === "dead") {
             c.dead = true;
@@ -789,6 +802,8 @@ export class Folder {
         }
         for (const f of a.unflags as string[]) c.flags = c.flags.filter((x) => x !== f && !x.startsWith(f));
         const now = st.time ? absMinutes(st.time) : null;
+        // A cold, a hangover, a curse: it starts its course (or, for someone it can't touch, doesn't take).
+        if (now != null) for (const f of noteConditions(c, a.flags as string[], a.unflags as string[], now)) if (!bits.includes(f)) bits.push(f);
         for (const inj of a.injuries as any[]) {
           const worseWord = WORSE.test(`${inj.note ?? ""} ${inj.where}`);
           // A wound that mended lately, restated from an old line, stays mended; "reopened" is it back.
@@ -1024,6 +1039,8 @@ export class Folder {
           return { verdict: "accepted", line: `🎒 ${it.name}: ${this.nm(it.holder)}${it.where ? ` (${it.where})` : ""}` };
         }
         const toId = to.id;
+        // Whose it is: the name's owner ("Cersei's locket"), the first person to have it, or whom it was given to.
+        it.owner = nextOwner(it, toId, `${op.cause ?? ""} ${toRaw ?? ""}`, (n) => this.lookup(n), (id) => !!st.chars[id], to.where ?? "");
         if (toId !== it.holder || to.where !== it.where) {
           it.custody.push({ from: it.holder, to: toId, how: op.cause, at: st.time ? { ...st.time } : null, msgIndex: mi });
           if (it.custody.length > 20) it.custody = it.custody.slice(-20);
@@ -1073,7 +1090,9 @@ export class Folder {
         const who = this.partyId(op.subject!, mi)!;
         const whom = op.object ? this.partyId(op.object, mi) : undefined;
         const cid = `cons:${slug(`${who}_${whom ?? ""}_${a.what}`)}`;
-        const existing = st.cons[cid] ?? Object.values(st.cons).find((c) => c.who === who && c.whom === whom && overlap(normFact(c.what), normFact(a.what)) > 0.6);
+        // "promise Xander>Gabriel: call him | kept" settles the one promise still open between them, however it's worded.
+        const open = Object.values(st.cons).filter((c) => c.promise && c.who === who && c.whom === whom && (c.status === "open" || c.status === "due"));
+        const existing = st.cons[cid] ?? Object.values(st.cons).find((c) => c.who === who && c.whom === whom && overlap(normFact(c.what), normFact(a.what)) > 0.6) ?? (a.status !== "open" && open.length === 1 ? open[0] : undefined);
         const c = existing ?? { id: cid, kind: a.kind, who, whom, what: a.what, status: "open" as const, since: st.time ? { ...st.time } : null, msgIndex: mi };
         c.status = a.status;
         if (a.due) c.due = parseDue(a.due, st.time);
@@ -1245,6 +1264,15 @@ export class Folder {
         list.push({ id: `bit${mi}_${list.length}`, text, who: a.who, firstMsg: mi, lastMsg: mi, uses: 1, by: src === "user" ? "user" : "model" });
         if (list.length > 40) list.splice(0, list.length - 40);
         return { verdict: "accepted", line: `🔁 ${text}` };
+      }
+      case "recur": {
+        const list = (st.recurring ??= []);
+        const id = `rec:${slug(a.name)}`;
+        const r = { id, name: String(a.name), when: String(a.when), ...(a.who ? { who: String(a.who) } : {}), by: src === "user" ? ("user" as const) : ("story" as const) };
+        const i = list.findIndex((x) => x.id === id);
+        if (i >= 0) list[i] = r;
+        else list.push(r);
+        return { verdict: "accepted", line: `📅 ${r.name}: ${r.when}` };
       }
       case "pressure": {
         const id = this.charId(op.subject!, mi, false);
@@ -1433,8 +1461,9 @@ export class Folder {
         const look = fadeLook(c.look, toAbs - absMinutes(c.lookAt));
         if (look !== c.look) look ? (c.look = look) : delete c.look;
       }
-      // Wounds mend whether or not they're on the page.
+      // Wounds mend, and colds and curses run their course, whether or not they're on the page.
       this.heal(c, fromAbs0, toAbs);
+      runCourse(c, toAbs);
       const present = c.tier === "spot" || c.tier === "peri" || c.isUser;
       if (!present) continue;
       const m = c.meters;
@@ -1476,6 +1505,8 @@ export class Folder {
           bump(k, rate, Math.max(0, Math.min(awake, toAbs - meal)), deprived ? 5 : 3);
         } else bump(k, rate, awake, deprived ? 5 : 3);
       }
+      // A drunk night's sleep ends in a hangover, for those drink touches.
+      if (slept >= 180 && (m.intox ?? 0) >= 4) hangover(c, toAbs);
       if (slept >= 180 && m.fatigue != null) {
         // About one step for every ninety minutes; a short night leaves them tired.
         const rest = slept * (sta?.sleep ?? 1);
@@ -1484,11 +1515,13 @@ export class Folder {
         bump("fatigue", FATIGUE_RATE, awake, 4);
       } else bump("fatigue", FATIGUE_RATE, awake, 4);
       if (m.intox != null && m.intox > 0) {
+        // A fast healer sobers up faster.
+        const step = 90 / Math.max(1, Math.sqrt(sta?.heal ?? 1));
         acc.intox += span;
-        const n = Math.floor(acc.intox / 90);
+        const n = Math.floor(acc.intox / step);
         if (n > 0) {
           m.intox = clamp(m.intox - n, 0, 5);
-          acc.intox -= n * 90;
+          acc.intox -= n * step;
         }
       }
     }
@@ -1520,6 +1553,116 @@ export class Folder {
       return false;
     });
   }
+
+  /**
+   * Promises said aloud in this message ("I'll call you tomorrow", "meet me at nine"): each is
+   * a debt with a window on the clock. The player's own unmarked lines are the persona's; whom
+   * it's to is a name said with it, or the one other person here.
+   */
+  private notePromises(lines: SpokenLine[], mi: number, fromUser: boolean): string[] {
+    const st = this.state;
+    const now = absMinutes(st.time!);
+    const here = Object.values(st.chars).filter((c) => canHear(c));
+    const names = here.flatMap((c) => [c.name, c.name.split(/\s+/)[0], ...c.aliases]);
+    const speaker = (l: SpokenLine) => (l.who ? this.charId(l.who, mi, false) : fromUser ? (this.ensureChar("user", this.opts.userName || "You", mi, true), "user") : null);
+    const found = promisesIn(lines, now, speaker, (l, who) => {
+      const said = vocative(l.text, names);
+      const id = said ? this.lookup(said) : null;
+      if (id && id !== who) return id;
+      const others = here.filter((c) => c.id !== who).map((c) => c.id);
+      // The player is in the scene unless a cast line sent them off, filed as a person yet or not.
+      if (who !== "user" && !others.includes("user") && st.chars.user?.tier !== "off") others.push("user");
+      if (others.length !== 1) return undefined;
+      if (others[0] === "user") this.ensureChar("user", this.opts.userName || "You", mi, true);
+      return others[0];
+    });
+    const out: string[] = [];
+    for (const p of found.slice(0, 2)) {
+      // "I'll do it tomorrow" to no one in particular is a plan, not a promise; "I promise" always is.
+      if (p.kind === "do" && !p.whom && !/\bpromise\b/i.test(p.said)) continue;
+      const whom = p.whom;
+      const what = whom ? p.what.replace(new RegExp(`\\b${escapeRe(whom)}\\b`, "g"), this.nm(whom)) : p.what;
+      const ex = Object.values(st.cons).find((c) => c.promise && c.who === p.who && c.whom === whom && (c.status === "open" || c.status === "due") && overlap(normFact(c.what), normFact(what)) > 0.6);
+      if (ex) {
+        ex.promise = { ...ex.promise!, said: p.said, from: p.from, until: p.until, when: p.when };
+        continue;
+      }
+      const id = `cons:${slug(`${p.who}_${whom ?? ""}_${what}`)}`;
+      if (this.opts.promiseEdits?.[id] === "dropped") continue;
+      st.cons[id] = {
+        id, kind: "owe", who: p.who, ...(whom ? { whom } : {}), what, status: "open", since: { ...st.time! }, msgIndex: mi,
+        due: { at: fromAbs(p.from), raw: p.when },
+        promise: { said: p.said, kind: p.kind, from: p.from, until: p.until, when: p.when, by: fromUser ? "user" : "story" },
+      };
+      this.milestone(mi, "cons", `${this.nm(p.who)} promised${whom ? ` ${this.nm(whom)}` : ""}: ${what} (${p.when})`);
+      out.push(`🤞 ${this.nm(p.who)}${whom ? ` → ${this.nm(whom)}` : ""}: ${what} (${p.when})`);
+    }
+    return out;
+  }
+
+  /**
+   * Promises whose window opened (due), was kept (both people met inside it, a ledger line,
+   * or the player's word), or closed with nothing kept (broken). Keeping one warms the
+   * bond of the one it was made to; breaking it cools it. Each is felt once.
+   */
+  private tickPromises(mi: number): string[] {
+    const st = this.state;
+    const out: string[] = [];
+    const now = st.time ? absMinutes(st.time) : null;
+    for (const c of Object.values(st.cons)) {
+      const p = c.promise;
+      if (!p) continue;
+      const edit = this.opts.promiseEdits?.[c.id];
+      if (edit === "dropped") {
+        delete st.cons[c.id];
+        continue;
+      }
+      if (edit) {
+        c.status = edit === "kept" ? "paid" : "broken";
+        delete p.lapsed;
+      } else if ((c.status === "open" || c.status === "due") && now != null) {
+        const inWindow = now >= p.from - 60 && now <= p.until;
+        const here = (id?: string) => !!id && !!st.chars[id] && isHereNow(st.chars[id]);
+        if (p.kind === "meet" && inWindow && here(c.who) && here(c.whom)) c.status = "paid";
+        else {
+          // Stood up: the one it was made to is at the place it named, in its window, and the promiser isn't.
+          if (p.kind === "meet" && inWindow && here(c.whom) && !here(c.who) && namesPlace(c.what, st.place)) p.stoodUp = true;
+          if (now > p.until) {
+            // Broken only when the page showed it; otherwise the story didn't say, and it lapses.
+            if (p.stoodUp) c.status = "broken";
+            else {
+              c.status = "resolved";
+              p.lapsed = true;
+            }
+          } else if (now >= p.from) c.status = "due";
+        }
+      }
+      if ((c.status === "paid" || c.status === "broken") && p.felt !== c.status && c.whom && st.chars[c.whom] && st.chars[c.who]) {
+        p.felt = c.status;
+        const kept = c.status === "paid";
+        // The one it was made to feels it; a sealed persona's feelings are the player's own.
+        if (!(c.whom === "user" && this.opts.sealed)) {
+          const changes = kept ? [{ axis: "trust", delta: 1 }] : [{ axis: "trust", delta: -1 }, { axis: "resentment", delta: 1 }];
+          this.applyOp({ op: "bond", subject: st.chars[c.whom].name, object: st.chars[c.who].name, args: { changes }, cause: `${kept ? "kept" : "broke"} the promise: ${c.what}`, raw: "(promise)" }, mi, "engine", false);
+        }
+        this.milestone(mi, "cons", `${this.nm(c.who)} ${kept ? "kept" : "broke"} a promise to ${this.nm(c.whom)}: ${c.what}`);
+        out.push(`🤞 ${this.nm(c.who)} ${kept ? "kept" : "broke"} a promise: ${c.what}`);
+      }
+    }
+    return out;
+  }
+}
+
+/** A promise's words name the place the scene is in ("meet me at the Bronze" at Sunnydale › The Bronze). */
+function namesPlace(what: string, place: string[]): boolean {
+  const here = place.map((p) => normFact(p)).filter(Boolean);
+  const w = normFact(what);
+  return here.some((p) => p.length >= 3 && (` ${w} `.includes(` ${p} `) || p.split(" ").filter((x) => x.length >= 4 && x !== "home").some((x) => ` ${w} `.includes(` ${x} `))));
+}
+
+/** In the scene now (the player unless a cast line sent them off), alive. */
+function isHereNow(c: CharacterState): boolean {
+  return (c.tier === "spot" || c.tier === "peri" || (c.isUser && c.tier !== "off")) && !c.dead;
 }
 
 type ThreadOpName = "new" | "advance" | "complicate" | "bridge" | "resolve" | "stall";
@@ -1676,3 +1819,6 @@ function parseDue(raw: string, now: StoryTime | null): { at?: StoryTime; trigger
 
 export { fromAbs };
 export const _test = { parseDue, ALL_AXES };
+
+/** A flag that outlasts the scene: a lasting condition, or an illness running its course. */
+const keepsFlag = (f: string) => isLasting(f) || conditionsIn(f).length > 0;

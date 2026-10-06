@@ -27,6 +27,8 @@ import { clearRenderCache } from "./hooks";
 import { scheduleClerk } from "./clerk";
 import { runCheck } from "./check";
 import { readPlayerFacts } from "./playerfacts";
+import { runAutopsy } from "./autopsy";
+import { runJournals } from "./journals";
 import { readSpeakers } from "./speakers";
 import { confirmElsewhere, runElsewhere } from "./elsewhere";
 import { soundtrackChanged } from "./soundtrack";
@@ -79,6 +81,10 @@ export async function onReply(chatId: string, messageId: string | undefined, con
     runCheck(chatId, id, userId).then((issues) => issues && afterChange(chatId, userId, { background: false })).catch(() => undefined);
     readPlayerFacts(chatId, id, userId).then((n) => n && onMutation(chatId, userId)).catch(() => undefined);
   }
+  // Swipes the player set aside for the reply they answered: what was wrong with them (lessons to keep or dismiss).
+  runAutopsy(chatId, userId).then((n) => n && pushState(chatId, userId)).catch(() => undefined);
+  // The day turned over: the people who carried it write in their journals.
+  runJournals(chatId, userId).then((n) => n && pushState(chatId, userId)).catch(() => undefined);
 }
 
 /** Swipe navigation, edits, deletes: refold and refresh everything that projects state. */

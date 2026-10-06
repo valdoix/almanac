@@ -7,6 +7,8 @@ export type OpName =
   | "deadline" | "title" | "season" | "reveal" | "secret" | "unaware" | "trait" | "motif"
   // extension-only ops (never written by the model)
   | "forecast" | "pressure" | "diverge" | "entity" | "lock"
+  // read from the player's asides: a day that comes round again ((birthday: Buffy, 19 January))
+  | "recur"
   // Elsewhere (the world off the page): written by the engine or the player's controls
   | "arc" | "whereabouts";
 
@@ -150,6 +152,8 @@ export interface CharacterState {
   stamina?: import("./stamina").ResolvedStamina;
   /** A potion or stimulant holding a need off until this minute (absolute). */
   boost?: { hunger?: number; thirst?: number; fatigue?: number };
+  /** Illnesses and states with a course: a cold, a hangover, a fever, a curse (see core/conditions). */
+  conditions?: Condition[];
   /** Wounds that healed lately (absolute minutes): the story restating one doesn't bring it back. */
   healed?: { where: string; worst: number; at: number }[];
   pressure?: string; // hidden pressure (narrator-only)
@@ -159,6 +163,17 @@ export interface CharacterState {
    * story can't overwrite.
    */
   traits?: Trait[];
+}
+
+/** Something someone has that runs a course: it eases with time and ends, unless nothing ends it (a curse). */
+export interface Condition {
+  /** The kind, from core/conditions ("cold", "hangover", "fever", "curse"…). */
+  kind: string;
+  /** As the story wrote it ("hungover", "a streaming cold"). */
+  text: string;
+  /** When it began, and when it should be over (absolute minutes; null: only the story ends it). */
+  since: number;
+  until: number | null;
 }
 
 export type TraitKind = "eyes" | "hair" | "height" | "build" | "skin" | "face" | "scar" | "mark" | "voice" | "age" | "other";
@@ -354,6 +369,8 @@ export interface ItemState {
   gone?: boolean;
   /** The last message a line named it (moved or not): whether it's in someone's hands this scene. */
   lastMsg?: number;
+  /** Whose it is (a character id): the first person to have it, or whom it was given to. Lending isn't giving. */
+  owner?: string;
 }
 
 export type ThreadOp = "new" | "advance" | "complicate" | "bridge" | "resolve" | "stall";
@@ -379,6 +396,16 @@ export interface ConsState {
   due?: { at?: StoryTime; trigger?: string; raw: string };
   since: StoryTime | null;
   msgIndex: number;
+  /** A promise made aloud: what was said, and the window it's due in (absolute minutes). */
+  promise?: {
+    said: string; kind: "meet" | "call" | "do"; from: number; until: number; when: string; by?: "user" | "story";
+    /** The one it was made to was at the place it named, in its window, and the promiser wasn't. */
+    stoodUp?: boolean;
+    /** The window closed and the story never said: neither kept nor broken. */
+    lapsed?: boolean;
+    /** Kept or broken has reached the bond (once). */
+    felt?: string;
+  };
 }
 
 export interface FactionState {
@@ -545,9 +572,23 @@ export interface WorldState {
   ledgerCount: number;
   /** Elsewhere: the subplots running off the page (see core/elsewhere). */
   arcs?: Record<string, ArcState>;
+  /** Days that come round again, from the player's asides ((birthday: Buffy, 19 January)). */
+  recurring?: RecurringDay[];
   /** Elsewhere: where people off the page are (lower-case name → place). */
   whereabouts?: Record<string, { name: string; place: string; since: number | null; msgIndex: number }>;
   unverified: number[]; // msg indexes whose ledger came from repair/extractor
+}
+
+/** A day that comes round again: a birthday, a feast, patrol nights, the full moon, an anniversary. */
+export interface RecurringDay {
+  id: string;
+  name: string;
+  /** When, as written: "19 January", "Second Moon 7", "every Friday", "Tuesdays and Thursdays", "full moon", "day 12". */
+  when: string;
+  /** Whose day it is (a birthday). */
+  who?: string;
+  /** The player wrote it (Timeline page or an aside), or the story's own milestone (a death's anniversary). */
+  by: "user" | "story";
 }
 
 export interface Settings {
@@ -628,6 +669,10 @@ export interface Settings {
   speakerRead: boolean;
   /** Secrets stay off the page (narration, thoughts, summaries) until they come out. */
   secretsOffPage: boolean;
+  /** When a swipe is set aside for another, find what was wrong with it: rules only, rules plus a quiet model read, or off. */
+  swipeAutopsy: "off" | "rules" | "model";
+  /** After a night's sleep, the main characters write a short diary entry (a quiet model call each). */
+  journals: boolean;
   pressures: boolean;
   chekhov: boolean;
   debug: boolean;
@@ -693,6 +738,8 @@ export const DEFAULT_SETTINGS: Settings = {
   playerFacts: "rules",
   speakerRead: true,
   secretsOffPage: true,
+  swipeAutopsy: "model",
+  journals: true,
   pressures: true,
   chekhov: true,
   debug: false,
@@ -726,8 +773,26 @@ export interface ChatConfig {
   enabledOverride?: boolean;
   /** Story truths the player pinned, always in the note ("Jaime and Cersei are strictly family"). */
   truths?: string[];
+  /** Where the source canon stands in this story, and what from later in it hasn't happened. */
+  canonCutoff?: CanonCutoff;
+  /** Facts read from the player's messages that the player undid (msgId:swipe:hash of the line). */
+  ignoredFacts?: string[];
+  /** How each undone fact read, for the inbox's Restore (key → line). */
+  ignoredLines?: Record<string, string>;
+  /** The player's word on promises, by id: kept, broken, or not a promise at all. */
+  promiseEdits?: Record<string, "kept" | "broken" | "dropped">;
+  /** Days that come round again, added on the Timeline page. */
+  recurring?: RecurringDay[];
   /** Elsewhere, per chat: a mode of its own, and the player's word on people. */
   elsewhere?: ElsewhereConfig;
+}
+
+/** "Buffy, season 3, before Graduation": nothing in the source after this has happened or is known. */
+export interface CanonCutoff {
+  /** Where the story stands in the source, in the player's words. */
+  point: string;
+  /** Names, events and reveals from later in the source: none of them may appear until the story gets there itself. */
+  notYet: string[];
 }
 
 export interface CastEdit {
@@ -743,6 +808,8 @@ export interface CastEdit {
   added?: number;
   /** Their stamina: a kind ("slayer") and speeds of their own; absent, it's read from the sources. */
   stamina?: StaminaEdit;
+  /** Their own rooms and places, in the player's words ("her former chambers in Maegor's Holdfast"). */
+  rooms?: string[];
 }
 
 /** The player's say on a faction. */

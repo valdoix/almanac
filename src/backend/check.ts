@@ -8,6 +8,7 @@ import { storySoFar } from "../core/chronicle";
 import { offPageFacts, redact } from "../core/offpage";
 import { extractJson } from "../core/prompts";
 import { hash, plainProse } from "../core/util";
+import { liveTerms } from "../core/canon";
 import { debug, describe, serial, warn } from "./host";
 import { ledgerFor } from "./ledger";
 import { quiet, sys, usr } from "./llm";
@@ -36,7 +37,12 @@ export async function runCheck(chatId: string, msgId: string, userId?: string): 
       const res = L.runtime.fold(L.path, opts, files.side, i + 1);
       const player = [...L.path.slice(0, i)].reverse().find((x) => x.isUser)?.content ?? "";
       const offPage = offPageFacts(before, settings.secretsOffPage !== false);
+      // Where the story stands in its source: terms from later that the chat (before this reply) or the card hasn't reached.
+      const cut = meta.config.canonCutoff;
+      const corpus = cut?.notYet?.length ? [L.names.charText ?? "", L.names.personaText ?? "", ...L.path.slice(0, i).map((x) => x.content)].join("\n") : "";
+      const cutoff = cut?.point?.trim() ? { point: cut.point.trim(), live: liveTerms(cut, (re) => re.test(corpus)) } : undefined;
       const issues = checkReply({
+        cutoff,
         reply: m.content, parsed: L.runtime.parse(m.content), before, after: res.state, events: res.events.filter((e) => e.msgIndex === m.index),
         offPage, player, userName: L.names.user, seed: seedTraitsFor(L, meta), visiblePlan: meta.detected.cot === "visible",
       });
@@ -57,7 +63,8 @@ export async function runCheck(chatId: string, msgId: string, userId?: string): 
         const summaries = storySoFar(files.chronicle).map((u) => redact(`${u.title}: ${u.text}`, offPage));
         const sheets = redact([L.names.personaText && `${L.names.user} (the player's persona):\n${L.names.personaText.slice(0, 2500)}`, L.names.charText && `${L.names.char} (the card):\n${L.names.charText.slice(0, 2500)}`].filter(Boolean).join("\n\n"), offPage);
         const record = `${sheets ? `${sheets}\n\n` : ""}${checkRecord(before, summaries, L.names.user, 7000)}\n\nRecent turns:\n${recent.slice(-8000)}`;
-        const p = checkPrompt({ record, reply: plainProse(m.content).slice(0, 12000), userName: L.names.user });
+        const lessons = (meta.lessons ?? []).filter((l) => l.status === "kept").map((l) => l.text).slice(-10);
+        const p = checkPrompt({ record, reply: plainProse(m.content).slice(0, 12000), userName: L.names.user, cutoff: meta.config.canonCutoff?.point?.trim() || undefined, lessons });
         const conn = settings.replyCheckConnection || settings.summarizerConnection || undefined;
         const text = await quiet([sys(p.system), usr(p.user)], { userId, reasoningOff: true, timeoutMs: 90_000, connectionId: conn, label: "reply check" });
         const res = extractJson<{ issues?: { quote?: string; why?: string }[] }>(text);

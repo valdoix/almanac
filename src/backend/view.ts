@@ -23,6 +23,17 @@ import { isOffPage } from "../core/offpage";
 import { seedTraitsFor } from "./traitseed";
 import { resolveStamina, staminaWords, STAMINA_KINDS, type ResolvedStamina } from "../core/stamina";
 import type { CharacterState } from "../core/types";
+import { filedKey, filedLine } from "../core/player";
+import { exposures } from "../core/secrets";
+import { allRecurring, dayLine, ruleOf } from "../core/recurring";
+import { fmtDate } from "../core/engines/calendar";
+import { bitStatus, bitsSeen } from "../core/callbacks";
+import { belongingsOf, roomsOf } from "../core/belongings";
+import { activeConditions, conditionWords } from "../core/conditions";
+import { liveTerms } from "../core/canon";
+import { plainProse } from "../core/util";
+import type { Lesson } from "../core/autopsy";
+import { journalsOnPath } from "./journals";
 
 /** Someone's stamina for the Cast page: what holds, in words, and what the sources alone would say. */
 function staminaView(c: CharacterState, sources: Record<string, { kind: string; by: "card" | "lore" }>) {
@@ -86,6 +97,25 @@ export interface UIView {
   connections: { id: string; name: string; model: string; isDefault: boolean }[] | null;
   /** Elsewhere: the world off the page (subplots, the roster, arrivals, ticks). */
   elsewhere: ReturnType<typeof elsewhereView>;
+  /** What the Almanac read from the player's own messages: the latest message's lines, and the rest. */
+  filed: { msg: number; latest: FiledRow[]; all: FiledRow[]; undone: { key: string; line: string }[] };
+  /** Secrets kept from someone: how near each is to coming out, and who is closest to learning it. */
+  secrets: { key: string; statement: string; clock: number; why: string[]; keepers: string[]; keptFrom: string[]; closest: { id: string; name: string; color: string; score: number; why: string[] }[] }[];
+  /** Days that come round again (the player's and the asides'), and what falls in the next weeks. */
+  recurring: { list: { id: string; name: string; when: string; who?: string; by: string; own: boolean; ok: boolean }[]; upcoming: { day: number; date: string; name: string; kind: string; inDays: number }[]; today: string };
+  /** Lessons from swipes the player set aside. */
+  lessons: Lesson[];
+  /** The canon cutoff, and how many of its terms the story hasn't reached yet. */
+  cutoff: { point: string; notYet: string[]; live: number; busy: boolean };
+}
+
+export interface FiledRow {
+  key: string;
+  msg: number;
+  line: string;
+  op: string;
+  ok: boolean;
+  reason?: string;
 }
 
 const AUTO_THEME: Record<string, string> = {
@@ -193,6 +223,29 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
   const levelCounts: Record<string, number> = { chapter: 0, arc: 0, volume: 0 };
   for (const u of files.chronicle.units) if (!u.stale) levelCounts[u.level]++;
 
+  // The player's own messages: what was read from each, newest first.
+  const userIdx = new Set(L.path.filter((m) => m.isUser).map((m) => m.index));
+  const filedAll: FiledRow[] = L.events
+    .filter((e) => e.source === "user" && userIdx.has(e.msgIndex) && e.op.raw)
+    .map((e) => ({ key: filedKey(e.msgId, e.swipe, e.op.raw), msg: e.msgIndex, line: filedLine(e.op), op: e.op.op, ok: e.verdict !== "rejected", ...(e.reason ? { reason: e.reason } : {}) }))
+    .reverse();
+  const lastUser = [...L.path].reverse().find((m) => m.isUser)?.index ?? -1;
+  const rooms = roomsOf(st, meta.config.castEdits ?? {});
+  const onPath = new Set(L.path.map((m) => m.id));
+  const journals = journalsOnPath(meta.journals, (id) => onPath.has(id));
+  const bitTexts = [...(st.motifs ?? []).map((m) => m.text), ...chronicleBits(files.chronicle)];
+  const seen = bitsSeen(L.path.slice(-400).map((m) => ({ index: m.index, content: plainProse(m.content) })), bitTexts);
+  let dayCtx: ReturnType<typeof L.dayCtx> | null = null;
+  try {
+    dayCtx = L.dayCtx(meta, settings);
+  } catch {
+    dayCtx = null;
+  }
+  const recList = allRecurring(st, meta.config.recurring);
+  const ahead = st.time ? L.daysAhead(meta, settings, st.time.day, st.time.day + 45) : [];
+  const cut = meta.config.canonCutoff;
+  const corpus = cut?.notYet?.length ? [L.names.charText ?? "", L.names.personaText ?? "", ...L.path.map((m) => m.content)].join("\n") : "";
+
   return {
     version: VERSION,
     chatId,
@@ -224,6 +277,11 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       stamina: staminaView(c, L.staminaSources),
       moodFresh: !!c.mood?.prev && c.mood.prev !== c.mood.name && c.mood.msg != null && c.mood.msg === st.replyDelta?.msgIndex,
       toYou: bondToUser(st, c.id),
+      conditions: activeConditions(c, now).map((x) => conditionWords(x, now)),
+      belongings: belongingsOf(st, c.id, nm).slice(0, 12),
+      rooms: rooms[c.id] ?? [],
+      roomsSet: meta.config.castEdits?.[c.id]?.rooms ?? [],
+      diary: (journals[c.id] ?? []).slice(0, 6),
     })),
     bonds: Object.values(st.bonds).map((b) => ({ from: b.from, to: b.to, fromName: nm(b.from), toName: nm(b.to), axes: b.axes, label: b.label, tags: b.tags, history: b.history.slice(-6), ladder: st.ladders[`${b.from}>${b.to}`] ?? null, lastMsg: b.history.at(-1)?.msgIndex ?? 0 })),
     knowledge: facts,
@@ -239,11 +297,14 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
       factions: Object.values(st.factions).map((f) => ({ id: f.id, name: f.name, aliases: f.aliases ?? [], clocks: Object.values(f.clocks), edit: meta.config.factionEdits?.[f.id] ?? null })),
       rumors: st.rumors.slice(-12), rep: Object.values(st.rep), gauges: Object.values(st.gauges),
       deadlines: Object.values(st.deadlines).map((d) => ({ title: d.title, at: fmtTime(d.at), left: now != null ? fmtSpan(absMinutes(d.at) - now) : "", leftMin: now != null ? absMinutes(d.at) - now : null, done: !!d.done, passed: now != null && absMinutes(d.at) <= now })),
-      cons: Object.values(st.cons).map((c) => ({ ...c, whoName: nm(c.who), whomName: c.whom ? nm(c.whom) : undefined, dueText: c.due?.at ? fmtTime(c.due.at) : c.due?.trigger })),
+      cons: Object.values(st.cons).map((c) => ({
+        ...c, whoName: nm(c.who), whomName: c.whom ? nm(c.whom) : undefined, dueText: c.promise ? c.promise.when : c.due?.at ? fmtTime(c.due.at) : c.due?.trigger,
+        ...(c.promise ? { leftText: now != null ? (now < c.promise.from ? `in ${fmtSpan(c.promise.from - now)}` : now <= c.promise.until ? `${fmtSpan(c.promise.until - now)} left` : "") : "", edit: meta.config.promiseEdits?.[c.id] ?? null } : {}),
+      })),
       threads: Object.values(st.threads), clues: st.clues, plants: st.plants, canon: st.canon.slice(-20),
       calendar: al ? { weekday: al.weekday, date: al.date, season: al.season } : null,
       climate: L.almanacConfig(meta, settings).climate || "temperate maritime (default)",
-      items: Object.values(st.items).map((i) => ({ name: i.name, holder: i.holder ? nm(i.holder) : "", where: i.where, gone: !!i.gone, condition: i.condition, custody: i.custody.slice(-4).map((c) => ({ from: c.from ? nm(c.from) : "", to: c.to ? nm(c.to) : "", how: c.how })) })),
+      items: Object.values(st.items).map((i) => ({ name: i.name, holder: i.holder ? nm(i.holder) : "", owner: i.owner ? nm(i.owner) : "", where: i.where, gone: !!i.gone, condition: i.condition, custody: i.custody.slice(-4).map((c) => ({ from: c.from ? nm(c.from) : "", to: c.to ? nm(c.to) : "", how: c.how })) })),
     },
     // Per-entry hashes are bookkeeping for the scan; the page needs only counts and modes.
     lore: { ...meta.lore, books: Object.fromEntries(Object.entries(meta.lore.books).map(([id, b]) => [id, { ...b, entryHashes: {} }])) },
@@ -262,15 +323,37 @@ export async function buildView(chatId: string, userId?: string): Promise<UIView
     checks: { msg: lastReply?.index ?? -1, issues: lastReply ? checksFor(meta, lastReply.id, lastReply.swipe, lastReply.content) : [] },
     playbooks: L.records.filter((r) => r.kind === "playbook").map((r) => ({ id: r.id, name: r.name, subject: String(r.body.subject ?? ""), played: r.status !== "active", summary: r.summary })),
     bits: [
-      ...(st.motifs ?? []).map((m) => ({ text: m.text, who: m.who, uses: m.uses, by: m.by })),
-      ...chronicleBits(files.chronicle).map((t) => ({ text: t, uses: 0, by: "chronicle" })),
+      ...(st.motifs ?? []).map((m) => ({ text: m.text, who: m.who, uses: m.uses, by: m.by, ...bitStatus(st, m.text, m.lastMsg, seen) })),
+      ...chronicleBits(files.chronicle).map((t) => ({ text: t, uses: 0, by: "chronicle", ...bitStatus(st, t, -1, seen) })),
     ].slice(0, 30),
     problems: (meta.problems ?? []).filter((p) => Date.now() - p.at < 3 * 86_400_000),
     corrections: corrections(files.side),
     hiddenTurns: files.chronicle.hidden.length,
     connections,
     elsewhere: elsewhereView({ state: st, records: L.records, userName: L.names.user, meta, settings, fmt: (abs) => fmtTime(fromAbs(abs)) }),
+    filed: {
+      msg: lastUser,
+      latest: filedAll.filter((r) => r.msg === lastUser),
+      all: filedAll.slice(0, 80),
+      undone: (meta.config.ignoredFacts ?? []).map((key) => ({ key, line: meta.config.ignoredLines?.[key] ?? key })).reverse().slice(0, 40),
+    },
+    secrets: exposures(st, nm).map((x) => ({ ...x, keepers: x.keepers.map(nm), keptFrom: x.keptFrom.map(nm), closest: x.closest.map((c) => ({ ...c, name: nm(c.id), color: colorOf(c.id) })) })),
+    recurring: {
+      list: recList.map((r) => ({ id: r.id, name: r.name, when: r.when, ...(r.who ? { who: r.who } : {}), by: r.by, own: (meta.config.recurring ?? []).some((x) => x.id === r.id), ok: !!dayCtx && !!ruleOf(r.when, dayCtx.cal) })),
+      upcoming: ahead.slice(0, 40).map((o) => ({ day: o.day, date: dayCtx ? safeDate(dayCtx.cal, o.day) : "", name: o.name, kind: o.kind, inDays: o.day - (st.time?.day ?? o.day) })),
+      today: st.time ? dayLine(ahead, st.time.day) : "",
+    },
+    lessons: meta.lessons ?? [],
+    cutoff: { point: cut?.point ?? "", notYet: cut?.notYet ?? [], live: cut?.point ? liveTerms(cut, (re) => re.test(corpus)).length : 0, busy: !!meta.cutoffBusy },
   };
+}
+
+function safeDate(cal: Parameters<typeof fmtDate>[0], day: number): string {
+  try {
+    return fmtDate(cal, day);
+  } catch {
+    return "";
+  }
 }
 
 /** Where this person stands with the player: trust and affection now, and before the last reply moved them. */
